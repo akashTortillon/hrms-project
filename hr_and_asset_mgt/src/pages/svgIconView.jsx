@@ -5,7 +5,9 @@ import SvgIcon from "../components/svgIcon/svgView.jsx";
 export default function IconTester() {
   const [name, setName] = useState("");
 
+
   return (
+
     <div>
       <input
         type="text"
