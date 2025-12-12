@@ -1,16 +1,13 @@
 import { svgIcons } from "./svgViewModel.js";
+import "../../style/layout.css";
 
-export default function SvgIcon({ name, size = 24, ...props }) {
+export default function SvgIcon({ name, size = 24, className = "", ...props }) {
   const key = Object.keys(svgIcons).find((path) =>
-    path.includes(`${name}.svg`)
+    path.toLowerCase().includes(`${name}.svg`.toLowerCase())
   );
 
   if (!key) {
-    return (
-      <span style={{ color: "red", fontSize: 12 }}>
-        Icon "{name}" not found
-      </span>
-    );
+    return <span className="icon-missing">Icon "{name}" not found</span>;
   }
 
   const IconSrc = svgIcons[key];
@@ -21,6 +18,7 @@ export default function SvgIcon({ name, size = 24, ...props }) {
       width={size}
       height={size}
       alt={name}
+      className={`svg-icon ${className}`}
       {...props}
     />
   );

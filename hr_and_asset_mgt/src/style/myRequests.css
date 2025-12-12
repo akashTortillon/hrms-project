@@ -1,0 +1,91 @@
+.my-requests-page {
+  padding: 0 8px 24px;
+}
+
+.page-header {
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.page-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.requests-card .card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.request-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: #f9fafb;
+}
+
+.request-info {
+  display: grid;
+  gap: 4px;
+}
+
+.request-name {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.request-emp {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.request-type {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.request-dates {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.request-reason {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.request-actions {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .request-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .request-actions {
+    width: 100%;
+  }
+}
+

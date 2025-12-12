@@ -1,17 +1,24 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import SvgIcon from './components/svgIcon/svgView.jsx'
+import { useState } from "react";
+import NavigationBar from "./components/navigation/Navbar.jsx";
+import Sidebar from "./components/navigation/Sidebar.jsx";
+import MyRequests from "./pages/myRequests/MyRequests.jsx";
+import "bootstrap/dist/css/bootstrap.min.css";
 
-function App() {
-  
+import "./style/layout.css";
+import "./style/myRequests.css";
+
+export default function App() {
+  const [activeKey, setActiveKey] = useState("My Requests");
 
   return (
-    <>
-      <SvgIcon name="eye" size={48} />
-    </>
-  )
+    <div className="app-shell">
+      <Sidebar activeKey={activeKey} onSelect={setActiveKey} />
+      <div className="app-main">
+        <NavigationBar />
+        <div className="app-content">
+          <MyRequests />
+        </div>
+      </div>
+    </div>
+  );
 }
-
-export default App
