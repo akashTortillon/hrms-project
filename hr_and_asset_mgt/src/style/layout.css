@@ -137,7 +137,7 @@ body {
   align-items: center;
   gap: 14px;
   padding: 10px 14px;
-  color: var(--muted-dark);
+  color: var(--text);
   border-radius: 10px;
   font-weight: 500;
   transition: all 0.18s ease-in-out;
@@ -159,7 +159,7 @@ body {
 ----------------------------------*/
 .sidebar-link:hover {
   background: rgba(0, 114, 255, 0.08);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   color: var(--text); /* keep text dark */
 }
 
