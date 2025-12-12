@@ -7,9 +7,9 @@ export default function SvgIcon({ name, size = 24, ...props }) {
 
   if (!key) {
     return (
-      <div style={{ fontSize: 12, color: "red" }}>
+      <span style={{ color: "red", fontSize: 12 }}>
         Icon "{name}" not found
-      </div>
+      </span>
     );
   }
 
