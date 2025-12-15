@@ -495,3 +495,90 @@ body {
   }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ------------------------------
+   QUICK ACTION MENU
+--------------------------------*/
+.quick-action-wrapper {
+  position: relative;
+}
+
+.quick-action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+}
+
+.quick-action-btn:hover {
+  background: #f9fafb;
+  border-color: var(--border);
+}
+
+/* Dropdown card */
+.quick-action-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  border-radius: 12px;
+  padding: 6px 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  margin: 0;
+}
+
+.quick-action-menu .card-body {
+  padding: 0;
+}
+
+/* Menu items */
+.quick-action-item {
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease-in-out;
+  white-space: nowrap;
+}
+
+.quick-action-item:hover {
+  background: rgba(0, 114, 255, 0.08);
+}
+
+.quick-action-item:first-child {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.quick-action-item:last-child {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+

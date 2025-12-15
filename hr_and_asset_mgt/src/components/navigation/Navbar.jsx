@@ -8,6 +8,13 @@ import {
 import SvgView from "../svgIcon/svgView.jsx";
 import "../../style/layout.css";
 import SvgIcon from "../svgIcon/svgView.jsx";
+import QuickActionMenu from "../reusable/QuickActionMenu";
+
+const quickActions = [
+  { label: "Add Employee", key: "addEmployee" },
+  { label: "Add Asset", key: "addAsset" },
+  { label: "Upload Document", key: "uploadDocument" },
+];
 
 
 export default function NavigationBar() {
@@ -40,9 +47,17 @@ export default function NavigationBar() {
         </Form>
 
         <div className="topbar-actions">
-          <Button variant="light" className="icon-btn">
-            <span className="icon-plus"><SvgIcon name="plus" size={15} /></span>
-          </Button>
+          <QuickActionMenu
+            items={quickActions}
+            onSelect={(action) => {
+              console.log("Selected:", action.key);
+            }}
+          >
+            <SvgIcon name="plus" size={15} />
+          </QuickActionMenu>
+
+
+
           <Button variant="light" className="icon-btn notification-btn">
             <SvgView name="notification" size={20} />
             <span className="notification-dot" />
