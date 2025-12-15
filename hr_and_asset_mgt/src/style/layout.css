@@ -91,6 +91,16 @@ body {
   justify-content: center;
 }
 
+.collapse-arrow-btn {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  background: transparent;
+  border: none;
+}
+
 .brand-text-wrapper {
   flex: 1;
   min-width: 0;

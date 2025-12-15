@@ -26,23 +26,32 @@ export default function Sidebar({ activeKey, onSelect }) {
   return (
     <div className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
       <div className="sidebar-brand">
-        <div className="brand-icon">HR</div>
-        <div className="brand-text-wrapper">
-          <div className="brand-title">HRMS Pro</div>
-          <div className="brand-subtitle">UAE Edition</div>
-        </div>
-        <Button
-          variant="light"
-          className="icon-btn back-btn"
-          aria-label={isCollapsed ? "Expand" : "Collapse"}
-          onClick={toggleCollapse}
-        >
-          {isCollapsed ? (
-            <SvgIcon name="arrow-right" size={15} />
-          ) : (
-            <SvgIcon name="arrow-left" size={15} />
-          )}
-        </Button>
+        {isCollapsed ? (
+          <Button
+            variant="light"
+            className="icon-btn collapse-arrow-btn"
+            aria-label="Expand"
+            onClick={toggleCollapse}
+          >
+            <SvgIcon name="arrow-right" size={20} />
+          </Button>
+        ) : (
+          <>
+            <div className="brand-icon">HR</div>
+            <div className="brand-text-wrapper">
+              <div className="brand-title">HRMS Pro</div>
+              <div className="brand-subtitle">UAE Edition</div>
+            </div>
+            <Button
+              variant="light"
+              className="icon-btn back-btn"
+              aria-label="Collapse"
+              onClick={toggleCollapse}
+            >
+              <SvgIcon name="arrow-left" size={15} />
+            </Button>
+          </>
+        )}
       </div>
       <Nav
         className="flex-column sidebar-nav"
