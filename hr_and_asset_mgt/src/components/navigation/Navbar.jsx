@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import {
   Navbar,
   Container,
@@ -10,6 +11,7 @@ import "../../style/layout.css";
 import SvgIcon from "../svgIcon/svgView.jsx";
 import QuickActionMenu from "../reusable/QuickActionMenu";
 import NotificationDropdown from "../reusable/NotificationDropdown";
+import ProfileDropdown from "../reusable/ProfileDropdown";
 
 const quickActions = [
   { label: "Add Employee", key: "addEmployee" },
@@ -23,8 +25,10 @@ const notifications = [
   { title: "Payroll Processing Due", time: "1 day ago" },
 ];
 
-
 export default function NavigationBar() {
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileAnchorRef = useRef(null);
+
   return (
     <Navbar className="topbar" bg="white" expand="lg">
       <Container fluid className="topbar-container">
@@ -76,8 +80,15 @@ export default function NavigationBar() {
           >
             <SvgView name="notification" size={20} />
           </NotificationDropdown>
-          <div className="profile">
-            <div className="avatar"><SvgIcon name="user" size={22} style={{color:"white"}}/></div>
+          <div
+            className="profile"
+            ref={profileAnchorRef}
+            onClick={() => setProfileOpen((prev) => !prev)}
+            style={{ position: "relative" }}
+          >
+            <div className="avatar">
+              <SvgIcon name="user" size={22} style={{ color: "white" }} />
+            </div>
             <div className="profile-text">
               <div className="welcome">Welcome, Admin User</div>
               <div className="role">Admin</div>
@@ -85,6 +96,14 @@ export default function NavigationBar() {
             <span className="chevron" aria-hidden="true">
               ▾
             </span>
+            <ProfileDropdown
+              isOpen={profileOpen}
+              onClose={() => setProfileOpen(false)}
+              onProfile={() => console.log("My Profile")}
+              onSettings={() => console.log("Settings")}
+              onLogout={() => console.log("Logout")}
+              anchorRef={profileAnchorRef}
+            />
           </div>
         </div>
       </Container>
