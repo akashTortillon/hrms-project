@@ -108,9 +108,8 @@ export default function DashboardInfoCard({
                       }%`,
                     }}
                   />
-                </div>
 
-                {/* Leave */}
+                  {/* Leave */}
                 <div
                     className="dashboard-progress-leave"
                     style={{
@@ -125,6 +124,9 @@ export default function DashboardInfoCard({
                     width: `${(item.progress.absent / item.progress.total) * 100}%`,
                     }}
                 />
+                </div>
+
+                
 
                 <div className="dashboard-progress-legend">
                   <span>✓ {item.progress.present} Present</span>

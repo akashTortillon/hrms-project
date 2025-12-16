@@ -12,6 +12,8 @@ import SvgIcon from "../svgIcon/svgView.jsx";
 import QuickActionMenu from "../reusable/QuickActionMenu";
 import NotificationDropdown from "../reusable/NotificationDropdown";
 import ProfileDropdown from "../reusable/ProfileDropdown";
+import "../../style/Profile.css";
+
 
 const quickActions = [
   { label: "Add Employee", key: "addEmployee" },

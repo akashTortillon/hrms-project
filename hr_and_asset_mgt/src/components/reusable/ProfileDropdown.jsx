@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import "./ProfileDropdown.css";
+import "../../style/Profile.css";
 
 export default function ProfileDropdown({
   isOpen,
