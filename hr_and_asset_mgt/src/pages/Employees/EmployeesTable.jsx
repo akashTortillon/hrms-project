@@ -68,6 +68,7 @@ export default function EmployeesTable({ employees = [] }) {
               </td>
             </tr>
           ))}
+          
         </tbody>
       </table>
     </div>
