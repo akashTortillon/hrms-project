@@ -20,7 +20,7 @@ const attendanceStatsConfig = [
     title: "Absent",
     value: "1",
     percentage: "20%",
-    icon: "xCircle",
+    icon: "circle-xmark",
     iconColor: "#dc2626",
   },
   {
@@ -33,7 +33,7 @@ const attendanceStatsConfig = [
   {
     title: "Total",
     value: "5",
-    icon: "clock",
+    icon: "clock (1)",
     iconColor: "#2563eb",
     footerLabel: "Employees",
   },
