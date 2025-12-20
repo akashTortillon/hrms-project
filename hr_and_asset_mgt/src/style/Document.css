@@ -1,0 +1,84 @@
+/* ===== WRAPPER ===== */
+
+.document-library {
+  padding: 8px 0 24px;
+}
+
+/* ===== HEADER ===== */
+
+.document-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.document-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.document-subtitle {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Upload button */
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  height: 40px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ===== STATS GRID ===== */
+
+.document-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+/* ===== STAT CARD ===== */
+
+.document-stat-card {
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+/* Remove default card padding */
+.document-stat-card .card-body {
+  padding: 16px 18px;
+}
+
+/* ===== CONTENT ===== */
+
+.document-stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.document-stat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+}
