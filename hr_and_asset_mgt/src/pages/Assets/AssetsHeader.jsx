@@ -1,0 +1,83 @@
+
+
+import Card from "../../components/reusable/Card";
+import AppButton from "../../components/reusable/Button";
+import SvgIcon from "../../components/svgIcon/svgView.jsx";
+import "../../style/Assets.css";
+
+
+const stats = [
+  {
+    title: "Total Assets",
+    value: 6,
+    icon: "cube",
+    iconColor: "#2563eb",
+  },
+  {
+    title: "In Use",
+    value: 4,
+    icon: "cube",
+    iconColor: "#16a34a",
+  },
+  {
+    title: "Available",
+    value: 1,
+    icon: "cube",
+    iconColor: "#f59e0b",
+  },
+  {
+    title: "Maintenance",
+    value: 1,
+    icon: "spanner",
+    iconColor: "#dc2626",
+  },
+];
+
+export default function AssetsHeader() {
+  return (
+    <div className="document-library">
+      {/* Header */}
+      <div className="document-header">
+        <div>
+          <h2 className="document-title">Asset Register</h2>
+          <p className="document-subtitle">
+            Track and manage company assets and equipment
+          </p>
+        </div>
+
+        <button className="asset-import-btn">
+            <span>Import Assets</span>
+        </button>
+          
+        
+
+
+        <AppButton variant="primary" className="upload-btn">
+          <SvgIcon name="plus" size={18} />
+          <span>Add Asset</span>
+        </AppButton>
+
+      </div>
+
+      {/* Stats */}
+      <div className="document-stats">
+        {stats.map((item, index) => (
+          <Card key={index} className="document-stat-card">
+            <div className="document-stat-content">
+              <div className="document-stat-top">
+                <span className="stat-title">{item.title}</span>
+                <SvgIcon
+                  name={item.icon}
+                  size={20}
+                  color={item.iconColor}
+                />
+              </div>
+
+              <div className="stat-value">{item.value}</div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
