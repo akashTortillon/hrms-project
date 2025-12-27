@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { registerUser } from "../services/authService";
+import { registerUser } from "../../api/authService";
 import { Link, useNavigate } from "react-router-dom";
+import "../../style/loginAuth.css";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -15,23 +16,48 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // --------------------
+  // Handle Input Change
+  // --------------------
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError("");
   };
 
+  // --------------------
+  // Validation Logic
+  // --------------------
   const validate = () => {
-    if (!form.name.trim()) return "Name is required";
+    // Name: only alphabets, min 3 chars
+    if (!form.name.trim()) return "Full name is required";
+    if (!/^[A-Za-z ]+$/.test(form.name))
+      return "Name must contain only alphabets";
+    if (form.name.trim().length < 3)
+      return "Name must be at least 3 characters";
+
+    // Email: gmail format, not only numbers
     if (!form.email.trim()) return "Email is required";
-    if (!/\S+@\S+\.\S+/.test(form.email)) return "Invalid email format";
-    if (form.password.length < 6) return "Password must be at least 6 characters";
+    if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(form.email))
+      return "Email must be a valid @gmail.com address";
+
+    // Password: min 6 chars, letters + numbers
+    if (form.password.length < 6)
+      return "Password must be at least 6 characters";
+    if (!/(?=.*[A-Za-z])(?=.*\d)/.test(form.password))
+      return "Password must contain letters and numbers";
+
+    // Confirm password
     if (form.password !== form.confirmPassword)
       return "Passwords do not match";
+
     return null;
   };
 
+  // --------------------
+  // Submit Handler
+  // --------------------
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault(); // 🔒 prevent default submission
 
     const validationError = validate();
     if (validationError) {
@@ -48,7 +74,7 @@ export default function Register() {
       });
       navigate("/login");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -56,43 +82,58 @@ export default function Register() {
 
   return (
     <div className="auth-container">
-      <h2>Create Account</h2>
-      <p>Please sign up to continue</p>
+      {/* Left Image Section */}
+      <div className="auth-image"></div>
 
-      {error && <p className="error">{error}</p>}
+      {/* Right Form Section */}
+      <div className="auth-form-wrapper">
+        <div className="auth-card">
+          <h2>Create Account</h2>
+          <p>Please sign up to book appointment</p>
 
-      <form onSubmit={handleSubmit}>
-        <input
-          name="name"
-          placeholder="Full Name"
-          onChange={handleChange}
-        />
-        <input
-          name="email"
-          placeholder="Email"
-          onChange={handleChange}
-        />
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          onChange={handleChange}
-        />
-        <input
-          type="password"
-          name="confirmPassword"
-          placeholder="Confirm Password"
-          onChange={handleChange}
-        />
+          {error && <div className="auth-error">{error}</div>}
 
-        <button disabled={loading}>
-          {loading ? "Creating..." : "Create Account"}
-        </button>
-      </form>
+          <form onSubmit={handleSubmit} noValidate>
+            <input
+              name="name"
+              placeholder="Full Name"
+              value={form.name}
+              onChange={handleChange}
+            />
 
-      <p>
-        Already have an account? <Link to="/login">Login here</Link>
-      </p>
+            <input
+              name="email"
+              placeholder="Email"
+              value={form.email}
+              onChange={handleChange}
+            />
+
+            <input
+              type="password"
+              name="password"
+              placeholder="Password"
+              value={form.password}
+              onChange={handleChange}
+            />
+
+            <input
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirm Password"
+              value={form.confirmPassword}
+              onChange={handleChange}
+            />
+
+            <button type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create Account"}
+            </button>
+          </form>
+
+          <div className="auth-footer">
+            Already have an account? <Link to="/login">Login here</Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { loginUser } from "../services/authService";
+import { loginUser } from "../../api/authService";
 import { Link } from "react-router-dom";
 
 export default function Login() {

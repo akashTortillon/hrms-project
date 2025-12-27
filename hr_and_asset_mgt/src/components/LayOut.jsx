@@ -1,6 +1,6 @@
-import { useState } from "react";
 import Sidebar from "./navigation/Sidebar.jsx";
 import NavigationBar from "./navigation/Navbar.jsx";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import Dashboard from "../pages/Dashboard/DashboardView.jsx";
 import Employees from "../pages/Employees/EmployeesView.jsx";
@@ -12,45 +12,27 @@ import MyRequests from "../pages/MyRequests/MyRequests.jsx";
 import Reports from "../pages/Reports/ReportsView.jsx";
 import Masters from "../pages/Masters/MastersView.jsx";
 
-import "../style/layout.css";
-
 export default function Layout() {
-  const [activeKey, setActiveKey] = useState("Dashboard");
-
-  const renderContent = () => {
-    switch (activeKey) {
-      case "Dashboard":
-        return <Dashboard />;
-      case "Employees":
-        return <Employees />;
-      case "Payroll":
-        return <Payroll />;
-      case "Attendance":
-        return <Attendance />;
-      case "Documents":
-        return <Documents />;
-      case "Assets":
-        return <Assets />;
-      case "My Requests":
-        return <MyRequests />;
-      case "Reports":
-        return <Reports />;
-      case "Masters":
-        return <Masters />;
-      default:
-        return <MyRequests />;
-    }
-  };
-
   return (
     <div className="app-shell">
-      <Sidebar activeKey={activeKey} onSelect={setActiveKey} />
+      <Sidebar />
 
       <div className="app-main">
         <NavigationBar />
 
         <div className="app-content">
-          {renderContent()}
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/employees" element={<Employees />} />
+            <Route path="/payroll" element={<Payroll />} />
+            <Route path="/attendance" element={<Attendance />} />
+            <Route path="/documents" element={<Documents />} />
+            <Route path="/assets" element={<Assets />} />
+            <Route path="/requests" element={<MyRequests />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/masters" element={<Masters />} />
+          </Routes>
         </div>
       </div>
     </div>

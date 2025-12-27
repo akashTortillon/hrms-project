@@ -1,24 +1,25 @@
-import { useState } from "react";
-import { Nav,Button } from "react-bootstrap";
+import { Nav, Button } from "react-bootstrap";
+import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
-import "../../style/layout.css";
 import SvgIcon from "../svgIcon/svgView.jsx";
-import Layout from "../LayOut.jsx";
+import { useState } from "react";
 
 const navItems = [
-  { key: "Dashboard", icon: "dashboard", label: "Dashboard" },
-  { key: "Employees", icon: "users", label: "Employees" },
-  { key: "Payroll", icon: "dollar", label: "Payroll" },
-  { key: "Attendance", icon: "clock (1)", label: "Attendance" },
-  { key: "Documents", icon: "document (1)", label: "Documents" },
-  { key: "Assets", icon: "cube", label: "Assets" },
-  { key: "My Requests", icon: "document", label: "My Requests" },
-  { key: "Reports", icon: "reports", label: "Reports" },
-  { key: "Masters", icon: "settings", label: "Masters" },
+  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard" },
+  { path: "/app/employees", icon: "users", label: "Employees" },
+  { path: "/app/payroll", icon: "dollar", label: "Payroll" },
+  { path: "/app/attendance", icon: "clock (1)", label: "Attendance" },
+  { path: "/app/documents", icon: "document (1)", label: "Documents" },
+  { path: "/app/assets", icon: "cube", label: "Assets" },
+  { path: "/app/requests", icon: "document", label: "My Requests" },
+  { path: "/app/reports", icon: "reports", label: "Reports" },
+  { path: "/app/masters", icon: "settings", label: "Masters" },
 ];
 
-export default function Sidebar({ activeKey, onSelect }) {
+export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
@@ -26,12 +27,12 @@ export default function Sidebar({ activeKey, onSelect }) {
 
   return (
     <div className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
+      {/* Brand Header */}
       <div className="sidebar-brand">
         {isCollapsed ? (
           <Button
             variant="light"
             className="icon-btn collapse-arrow-btn"
-            aria-label="Expand"
             onClick={toggleCollapse}
           >
             <SvgIcon name="arrow-right" size={20} />
@@ -46,7 +47,6 @@ export default function Sidebar({ activeKey, onSelect }) {
             <Button
               variant="light"
               className="icon-btn back-btn"
-              aria-label="Collapse"
               onClick={toggleCollapse}
             >
               <SvgIcon name="arrow-left" size={15} />
@@ -54,16 +54,17 @@ export default function Sidebar({ activeKey, onSelect }) {
           </>
         )}
       </div>
-      <Nav
-        className="flex-column sidebar-nav"
-        activeKey={activeKey}
-        onSelect={onSelect}
-      >
+
+      {/* Navigation */}
+      <Nav className="flex-column sidebar-nav">
         {navItems.map((item) => (
           <Nav.Link
-            key={item.key}
-            eventKey={item.key}
-            className={`sidebar-link ${activeKey === item.key ? "active" : ""}`}
+            key={item.path}
+            onClick={() => navigate(item.path)}
+            active={location.pathname === item.path}
+            className={`sidebar-link ${
+              location.pathname === item.path ? "active" : ""
+            }`}
           >
             <SvgView name={item.icon} size={20} />
             <span className="nav-label">{item.label}</span>
@@ -73,4 +74,3 @@ export default function Sidebar({ activeKey, onSelect }) {
     </div>
   );
 }
-
