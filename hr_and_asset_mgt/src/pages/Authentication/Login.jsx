@@ -45,9 +45,12 @@ export default function Login() {
             <div className="login-image">
                     <img src={employeeImage} alt="login Banner" />  
             </div>
+
+            <div className="login-form-wrapper">
+                <div className="login-card">
             <h2>Login</h2>
 
-      {error && <p className="error">{error}</p>}
+      {error && <div className="error">{error}</div>}
 
       <form onSubmit={handleSubmit}>
         <input
@@ -72,6 +75,8 @@ export default function Login() {
       </div>
         
       
+    </div>
+    </div>
     </div>
     </div>
 
