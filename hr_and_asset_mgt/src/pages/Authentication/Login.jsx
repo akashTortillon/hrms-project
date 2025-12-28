@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
 import { Link } from "react-router-dom";
+import employeeImage from "../../assets/images/employee_onboard.webp";
+import "../../style/loginAuth.css";
+
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -36,8 +39,13 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-container">
-      <h2>Login</h2>
+    <div className="login-page">
+        <div className="login-container">
+
+            <div className="login-image">
+                    <img src={employeeImage} alt="login Banner" />  
+            </div>
+            <h2>Login</h2>
 
       {error && <p className="error">{error}</p>}
 
@@ -59,9 +67,13 @@ export default function Login() {
         </button>
       </form>
 
-      <p>
+      <div className="login-footer">
         Don’t have an account? <Link to="/register">Register</Link>
-      </p>
+      </div>
+        
+      
     </div>
+    </div>
+
   );
 }
