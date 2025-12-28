@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { registerUser } from "../../api/authService";
 import { Link, useNavigate } from "react-router-dom";
-import "../../style/loginAuth.css";
+import "../../style/registerAuth.css";
+import employeeImage from "../../assets/images/employee_onboard.webp";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -81,15 +82,18 @@ export default function Register() {
   };
 
   return (
-    <div className="auth-container">
+    <div className="auth-page" >
+
+        <div className="auth-container">
       {/* Left Image Section */}
-      <div className="auth-image"></div>
+      <div className="auth-image">
+        <img src={employeeImage} alt="Auth Banner" />  
+      </div>
 
       {/* Right Form Section */}
       <div className="auth-form-wrapper">
         <div className="auth-card">
           <h2>Create Account</h2>
-          <p>Please sign up to book appointment</p>
 
           {error && <div className="auth-error">{error}</div>}
 
@@ -134,6 +138,7 @@ export default function Register() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
