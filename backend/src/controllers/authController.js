@@ -1,21 +1,46 @@
 import bcrypt from "bcryptjs";
-import User from "../models/user.model.js";
+import User from "../models/userModel.js";
 import { generateToken } from "../utils/token.js";
 
 export const register = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { name, email, password, confirmPassword } = req.body;
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+    // Basic validation
+    if (!name || !email || !password || !confirmPassword) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
 
-  const user = await User.create({
-    email,
-    password: hashedPassword,
-  });
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
 
-  const token = generateToken(user._id);
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: "User already exists" });
+    }
 
-  res.status(201).json({ token });
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword
+    });
+
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      message: "User registered successfully",
+      token
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
 };
+
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
