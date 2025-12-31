@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
-import { Link } from "react-router-dom";
+import { Link,useNavigate } from "react-router-dom";
 import employeeImage from "../../assets/images/employee_onboard.webp";
 import "../../style/loginAuth.css";
+import { toast } from "react-toastify";
 
 
 export default function Login() {
+    const navigate = useNavigate();
+
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,9 +33,14 @@ export default function Login() {
       // Store token (later move to httpOnly cookie)
       localStorage.setItem("token", data.token);
 
-      alert("Login successful");
+      toast.success("Login successful 🎉");
+      
+        console.log("Navigating to dashboard...");
+      navigate("/app/dashboard");
+    
+
     } catch (err) {
-      setError(err.message);
+       toast.error(err.message || "Login failed ❌");
     } finally {
       setLoading(false);
     }

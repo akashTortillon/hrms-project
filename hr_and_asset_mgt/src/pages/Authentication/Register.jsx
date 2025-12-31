@@ -3,6 +3,7 @@ import { registerUser } from "../../api/authService";
 import { Link, useNavigate } from "react-router-dom";
 import "../../style/registerAuth.css";
 import employeeImage from "../../assets/images/employee_onboard.webp";
+import { toast } from "react-toastify";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -58,7 +59,7 @@ export default function Register() {
   // Submit Handler
   // --------------------
   const handleSubmit = async (e) => {
-    e.preventDefault(); // 🔒 prevent default submission
+    e.preventDefault(); // prevent default submission
 
     const validationError = validate();
     if (validationError) {
@@ -68,15 +69,20 @@ export default function Register() {
 
     try {
       setLoading(true);
-      await registerUser({
+         const res = await registerUser({
         name: form.name,
         email: form.email,
         password: form.password,
         confirmPassword: form.confirmPassword
       });
+      toast.success(res.message || "Account created successfully 🎉");
+
+      setTimeout(() => {
       navigate("/login");
+    }, 1500);
+
     } catch (err) {
-      setError(err.message || "Registration failed");
+      toast.error(err.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -85,7 +91,7 @@ export default function Register() {
   return (
     <div className="auth-page" >
 
-        <div className="auth-container">
+    <div className="auth-container">
       {/* Left Image Section */}
       <div className="auth-image">
         <img src={employeeImage} alt="Auth Banner" />  
