@@ -1,18 +1,27 @@
 import bcrypt from "bcryptjs";
 import User from "../models/userModel.js";
 import { generateToken } from "../utils/token.js";
+import { generateOtp } from "../utils/generateOtp.js";
+import { sendEmail } from "../utils/sendEmail.js";
 
 export const register = async (req, res) => {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    const { name, email,phone, password, confirmPassword } = req.body;
 
     // Basic validation
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name || !email || !phone || !password || !confirmPassword) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
     if (password !== confirmPassword) {
       return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    // Phone validation (normalized format)
+    if (!/^\+971\d{9}$/.test(phone)) {
+      return res.status(400).json({
+        message: "Invalid UAE phone number format"
+      });
     }
 
     // Check if user already exists
@@ -26,6 +35,7 @@ export const register = async (req, res) => {
     const user = await User.create({
       name,
       email,
+      phone,
       password: hashedPassword
     });
 
