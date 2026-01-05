@@ -9,11 +9,14 @@ const userSchema = new mongoose.Schema({
       required: true,
       unique: true,
       match: [
-        /^\+\d{12}$/,
-        "Phone number must include country code and be 12 digits (e.g. +971501234567)"
+        /^\+971\d{9}$/,
+        "Phone number must be a valid UAE number (e.g. +971501234567)"
       ]
     },
   password: { type: String, required: true },
+//   otp: String,
+//     otpExpiresAt: Date,
+//     isVerified: { type: Boolean, default: false },
 },
 { timestamps: true });
 
