@@ -1,203 +1,96 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Container, Row, Col } from "react-bootstrap";
 import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Dashboard.css";
 import DashboardInfoCard from "../../components/reusable/DashboardInfoCard.jsx";
+import {
+  fetchMetrics,
+  fetchCompanyDocuments,
+  fetchEmployeeVisas,
+  fetchPendingApprovals,
+  fetchTodaysAttendance
+} from "../../services/dashboardServices.js";
 
 function Dashboard() {
-  const metrics = [
-    {
-      title: "Total Employees",
-      value: "247",
-      subtext: "+12",
-      iconName: "users",
-      iconBgClass: "dashboard-icon-bg-blue",
-    },
-    {
-      title: "Documents Expiring",
-      value: "18",
-      subtext: "This Month",
-      iconName: "exclamation",
-      iconBgClass: "dashboard-icon-bg-yellow",
-    },
-    {
-      title: "Pending Approvals",
-      value: "7",
-      subtext: "3 Urgent",
-      iconName: "clock (1)",
-      iconBgClass: "dashboard-icon-bg-orange",
-    },
-    {
-      title: "Assets In Service",
-      value: "432",
-      subtext: "12 Due",
-      iconName: "cube",
-      iconBgClass: "dashboard-icon-bg-green",
-    },
-  ];
 
 
-  const companyDocumentExpiries = [
-  {
-    id: 1,
-    primaryText: "Trade License",
-    secondaryText: "Main Office",
-    badge: { text: "16 days", variant: "warning" },
-    dateText: "2025-12-15",
-  },
-  {
-    id: 2,
-    primaryText: "Insurance Policy",
-    secondaryText: "Branch RAK",
-    badge: { text: "9 days", variant: "danger" },
-    dateText: "2025-12-08",
-  },
-  {
-    id: 3,
-    primaryText: "VAT Certificate",
-    secondaryText: "Main Office",
-    badge: { text: "52 days", variant: "success" },
-    dateText: "2026-01-20",
-  },
-  {
-    id: 4,
-    primaryText: "Lease Agreement",
-    secondaryText: "Dubai Branch",
-    badge: { text: "26 days", variant: "warning" },
-    dateText: "2025-12-25",
-  },
-];
+const [metrics, setMetrics] = useState([]);
+const [companyDocumentExpiries, setCompanyDocumentExpiries] = useState([]);
+const [employeeVisaExpiries, setEmployeeVisaExpiries] = useState([]);
+const [pendingApprovals, setPendingApprovals] = useState([]);
+const [todaysAttendance, setTodaysAttendance] = useState([]);
 
-const employeeVisaExpiries = [
-  {
-    id: 1,
-    primaryText: "Ahmed Ali",
-    secondaryText: "Employment Visa",
-    badge: { text: "6 days", variant: "danger" },
-    dateText: "2025-12-05",
-  },
-  {
-    id: 2,
-    primaryText: "Sarah Johnson",
-    secondaryText: "Emirates ID",
-    badge: { text: "19 days", variant: "warning" },
-    dateText: "2025-12-18",
-  },
-  {
-    id: 3,
-    primaryText: "Mohammed Hassan",
-    secondaryText: "Employment Visa",
-    badge: { text: "47 days", variant: "success" },
-    dateText: "2026-01-10",
-  },
-  {
-    id: 4,
-    primaryText: "Lisa Chen",
-    secondaryText: "Emirates ID",
-    badge: { text: "23 days", variant: "warning" },
-    dateText: "2025-12-22",
-  },
-];
+// useEffect(() => {
+//   fetchMetrics().then(res => setMetrics(res.data));
+//   fetchCompanyDocuments().then(res => setCompanyDocumentExpiries(res.data));
+//   fetchEmployeeVisas().then(res => setEmployeeVisaExpiries(res.data));
+//   fetchPendingApprovals().then(res => setPendingApprovals(res.data));
+//   fetchTodaysAttendance().then(res => setTodaysAttendance(res.data));
+// }, []);
 
 
-const pendingApprovals = [
-  {
-    id: 1,
-    primaryText: "John Smith",
-    secondaryText: "Annual Leave",
-    actions: [
-      {
-        icon: "circle-tick",
-        variant: "success",
-        onClick: () => console.log("Approved John Smith"),
-      },
-      {
-        icon: "circle-xmark",
-        variant: "danger",
-        onClick: () => console.log("Rejected John Smith"),
-      },
-    ],
-  },
-  {
-    id: 2,
-    primaryText: "Emma Wilson",
-    secondaryText: "Salary Advance",
-    actions: [
-      {
-        icon: "circle-tick",
-        variant: "success",
-        onClick: () => console.log("Approved Emma Wilson"),
-      },
-      {
-        icon: "circle-xmark",
-        variant: "danger",
-        onClick: () => console.log("Rejected Emma Wilson"),
-      },
-    ],
-  },
-  {
-    id: 3,
-    primaryText: "David Brown",
-    secondaryText: "Sick Leave",
-    actions: [
-      {
-        icon: "circle-tick",
-        variant: "success",
-        onClick: () => console.log("Approved David Brown"),
-      },
-      {
-        icon: "circle-xmark",
-        variant: "danger",
-        onClick: () => console.log("Rejected David Brown"),
-      },
-    ],
-  },
-];
+useEffect(() => {
+  // Helper function to safely set array state
+  const safeSetArray = (setter, data, fallback = []) => {
+    if (Array.isArray(data)) {
+      setter(data);
+    } else {
+      console.error('Expected array but got:', data);
+      setter(fallback);
+    }
+  };
 
+  // Fetch metrics with error handling
+  fetchMetrics()
+    .then(res => {
+      safeSetArray(setMetrics, res.data);
+    })
+    .catch(err => {
+      console.error('Error fetching metrics:', err);
+      setMetrics([]); // Set to empty array on error
+    });
 
-const todaysAttendance = [
-  {
-    id: 1,
-    primaryText: "Sales",
-    progress: {
-      present: 42,
-      leave: 3,
-      absent: 2,
-      total: 47,
-    },
-  },
-  {
-    id: 2,
-    primaryText: "Operations",
-    progress: {
-      present: 68,
-      leave: 5,
-      absent: 1,
-      total: 74,
-    },
-  },
-  {
-    id: 3,
-    primaryText: "Finance",
-    progress: {
-      present: 28,
-      leave: 2,
-      absent: 0,
-      total: 30,
-    },
-  },
-  {
-    id: 4,
-    primaryText: "IT",
-    progress: {
-      present: 35,
-      leave: 1,
-      absent: 1,
-      total: 37,
-    },
-  },
-];
+  // Fetch company documents
+  fetchCompanyDocuments()
+    .then(res => {
+      safeSetArray(setCompanyDocumentExpiries, res.data);
+    })
+    .catch(err => {
+      console.error('Error fetching company documents:', err);
+      setCompanyDocumentExpiries([]);
+    });
+
+  // Fetch employee visas
+  fetchEmployeeVisas()
+    .then(res => {
+      safeSetArray(setEmployeeVisaExpiries, res.data);
+    })
+    .catch(err => {
+      console.error('Error fetching employee visas:', err);
+      setEmployeeVisaExpiries([]);
+    });
+
+  // Fetch pending approvals
+  fetchPendingApprovals()
+    .then(res => {
+      safeSetArray(setPendingApprovals, res.data);
+    })
+    .catch(err => {
+      console.error('Error fetching pending approvals:', err);
+      setPendingApprovals([]);
+    });
+
+  // Fetch today's attendance
+  fetchTodaysAttendance()
+    .then(res => {
+      safeSetArray(setTodaysAttendance, res.data);
+    })
+    .catch(err => {
+      console.error('Error fetching attendance:', err);
+      setTodaysAttendance([]);
+    });
+}, []);
 
 
 
