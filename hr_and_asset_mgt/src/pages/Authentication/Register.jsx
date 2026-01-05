@@ -11,6 +11,7 @@ export default function Register() {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     password: "",
     confirmPassword: "",
   });
@@ -42,6 +43,16 @@ export default function Register() {
     if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(form.email))
       return "Email must be a valid @gmail.com address";
 
+    // Phone: UAE format +971 50 123 4567
+if (!form.phone.trim()) return "Phone number is required";
+
+// Remove spaces before validating
+const normalizedPhone = form.phone.replace(/\s+/g, "");
+
+if (!/^\+971\d{9}$/.test(normalizedPhone)) {
+  return "Phone must be a valid UAE number (e.g. +971 50 123 4567)";
+}
+
     // Password: min 6 chars, letters + numbers
     if (form.password.length < 6)
       return "Password must be at least 6 characters";
@@ -72,6 +83,7 @@ export default function Register() {
          const res = await registerUser({
         name: form.name,
         email: form.email,
+        phone: form.phone.replace(/\s+/g, ""),
         password: form.password,
         confirmPassword: form.confirmPassword
       });
@@ -118,6 +130,14 @@ export default function Register() {
               value={form.email}
               onChange={handleChange}
             />
+
+            <input
+                name="phone"
+                placeholder="+971 50 123 4567"
+                value={form.phone}
+                onChange={handleChange}
+                />
+
 
             <input
               type="password"

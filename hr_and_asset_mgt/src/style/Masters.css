@@ -1,0 +1,691 @@
+
+
+/* =========================
+   Masters Page
+========================= */
+
+.masters-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Header */
+
+.masters-header {
+  margin-bottom: 8px;
+}
+
+.masters-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.masters-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Tabs */
+
+.masters-tabs {
+  display: flex;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 14px;
+}
+
+.masters-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.masters-tab:hover {
+  background: #f1f5f9;
+}
+
+.masters-tab.active {
+  background: #e0edff;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* Content Container */
+
+.masters-content {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .masters-tabs {
+    flex-wrap: wrap;
+  }
+}
+
+
+
+
+/* =========================
+   Company Structure
+========================= */
+
+.company-structure {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Header */
+
+.company-structure-header {
+  margin-bottom: 4px;
+}
+
+.company-structure-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.company-structure-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Cards */
+
+.structure-card {
+  position: relative;
+}
+
+/* Add button position */
+
+.structure-header-action {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+/* Pills */
+
+/* =========================
+   Structure List (Departments)
+========================= */
+
+.structure-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.structure-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  margin-top: 10px;
+}
+
+.structure-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+/* Right actions */
+.structure-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Icon buttons */
+.icon-btn {
+  border: none;
+  background: #f9fafb;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+/* Edit */
+.icon-btn.edit {
+  color: #2563eb;
+}
+
+.icon-btn.edit:hover {
+  background: #e0edff;
+}
+
+/* Delete */
+.icon-btn.delete {
+  color: #ef4444;
+}
+
+.icon-btn.delete:hover {
+  background: #fee2e2;
+}
+
+
+/* Roles & Permissions */
+
+.roles-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.roles-card p {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.role-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.role-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.role-desc {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Roles header layout */
+
+.roles-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.roles-header-text h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.roles-header-text p {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+
+/* Responsive */
+
+@media (max-width: 640px) {
+  .role-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+
+/* =========================
+   HR Management    
+   =====================*/
+
+.hr-management {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* Header */
+.masters-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.masters-header p {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Grid */
+.masters-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+/* Cards */
+.masters-card {
+  padding: 16px 18px;
+}
+
+.masters-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.masters-card-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Lists */
+.masters-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.masters-list li {
+  padding: 8px 0;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.masters-list li:last-child {
+  border-bottom: none;
+}
+
+/* Rules */
+.rules-card {
+  padding: 18px;
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rule-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.rule-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.rule-note {
+  font-size: 13px;
+  color: #2563eb;
+}
+
+/* Workflows */
+.workflow-card {
+  padding: 18px;
+}
+
+.workflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.workflow-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.workflow-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.workflow-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.edit-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.edit-link:hover {
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .masters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================
+   Asset Management 
+    =====================*/
+
+    .asset-management {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* Reuse Masters header styles */
+.masters-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.masters-header p {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Grid layout */
+.masters-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+/* Cards */
+.masters-card {
+  padding: 16px 18px;
+}
+
+.masters-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.masters-card-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* List styles */
+.masters-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.masters-list li {
+  padding: 8px 0;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.masters-list li:last-child {
+  border-bottom: none;
+}
+
+/* Vendors */
+.vendors-card {
+  padding: 18px;
+}
+
+.vendors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vendor-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vendor-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.vendor-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Service Types */
+.service-card {
+  padding: 18px;
+}
+
+/* Edit link */
+.edit-link {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.edit-link:hover {
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .masters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================
+system settings
+    =====================*/
+
+
+    .system-settings {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.masters-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.masters-header p {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Spacing helper */
+.mt-24 {
+  margin-top: 24px;
+}
+
+/* Global Settings grid */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.setting-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-field label {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.setting-field select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+/* Card header right action */
+.card-header-action {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+/* Editable list */
+.editable-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.editable-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+.editable-item:last-child {
+  border-bottom: none;
+}
+
+.edit-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Toggles */
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.toggle-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toggle-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.toggle-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Data management */
+.data-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.data-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.data-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.data-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-action {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
