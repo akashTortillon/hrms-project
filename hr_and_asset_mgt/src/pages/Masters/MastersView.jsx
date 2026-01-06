@@ -6,7 +6,7 @@ import HRManagement from "./HRManagement";
 import AssetManagement from "./AssetManagement";
 import SystemSettings from "./SystemSettings";
 
-import "../../style/masters.css";
+import "../../style/Masters.css";
 
 export default function MastersPage() {
   const [activeTab, setActiveTab] = useState("company");
