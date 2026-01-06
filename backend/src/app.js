@@ -8,7 +8,8 @@ const app = express();
 // ✅ Allowed frontend origins
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://hr-and-asset-management-zmpu.vercel.app"
+  "https://hr-and-asset-management-zmpu.vercel.app",
+  "https://hr-and-asset-management-7yzy.vercel.app"
 ];
 
 // ✅ CORS middleware (must be BEFORE routes)
