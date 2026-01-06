@@ -30,6 +30,13 @@ export default function Login() {
       setLoading(true);
       const data = await loginUser(form);
 
+      console.log("Login response:", data); // ✅ Add this
+
+      if (!data || !data.token) {
+        console.error("No token in response:", data); // ✅ Add this
+        throw new Error("Invalid response from server");
+      }
+
       // Store token (later move to httpOnly cookie)
       localStorage.setItem("token", data.token);
 
@@ -40,7 +47,9 @@ export default function Login() {
     
 
     } catch (err) {
+      console.error("Login error:", err); // ✅ Add this
        toast.error(err.message || "Login failed ❌");
+       setError(err.message || "Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
     }
