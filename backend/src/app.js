@@ -32,36 +32,45 @@ const app = express();
 // );
 
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://hr-and-asset-management-qc7j.vercel.app"
-];
+// const allowedOrigins = [
+//   "http://localhost:5173",
+//   "https://hr-and-asset-management-qc7j.vercel.app"
+// ];
+
+// app.use(
+//   cors({
+//     origin: (origin, callback) => {
+//       // Allow server-to-server, Postman, curl
+//       if (!origin) return callback(null, true);
+
+//       // Allow localhost
+//       if (origin.startsWith("http://localhost")) {
+//         return callback(null, true);
+//       }
+
+//       // Allow ALL Vercel deployments (preview + production)
+//       if (origin.endsWith(".vercel.app")) {
+//         return callback(null, true);
+//       }
+
+//       console.error("Blocked by CORS:", origin);
+//       return callback(new Error("Not allowed by CORS"));
+//     },
+//     credentials: true,
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"]
+//   })
+// );
+
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow server-to-server, Postman, curl
-      if (!origin) return callback(null, true);
-
-      // Allow localhost
-      if (origin.startsWith("http://localhost")) {
-        return callback(null, true);
-      }
-
-      // Allow ALL Vercel deployments (preview + production)
-      if (origin.endsWith(".vercel.app")) {
-        return callback(null, true);
-      }
-
-      console.error("Blocked by CORS:", origin);
-      return callback(new Error("Not allowed by CORS"));
-    },
+    origin: true, // 🔥 allow all origins (temporary)
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
-
 
 
 
