@@ -39,7 +39,8 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: function (origin, callback) {
+    origin: (origin, callback) => {
+      // Allow server-to-server, Postman, curl
       if (!origin) return callback(null, true);
 
       // Allow localhost
@@ -47,14 +48,12 @@ app.use(
         return callback(null, true);
       }
 
-      // Allow ALL Vercel preview & production URLs for this app
-      if (
-        origin.endsWith(".vercel.app") &&
-        origin.includes("hr-and-asset-management")
-      ) {
+      // Allow ALL Vercel deployments (preview + production)
+      if (origin.endsWith(".vercel.app")) {
         return callback(null, true);
       }
 
+      console.error("Blocked by CORS:", origin);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
@@ -62,6 +61,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
+
 
 
 
