@@ -55,63 +55,63 @@ const existingUser = await User.findOne({
 };
 
 
-// export const login = async (req, res) => {
-//   const { email, password } = req.body;
-
-// // ✅ Make email case-insensitive
-//   const user = await User.findOne({ 
-//     email: { $regex: new RegExp(`^${email}$`, 'i') } 
-//   });
-  
-//   if (!user) return res.status(401).json({ message: "Invalid credentials" });
-
-//   const isMatch = await bcrypt.compare(password, user.password);
-//   if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
-
-//   const token = generateToken(user._id);
-
-//   res.json({ token });
-// };
-
-
-
 export const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    // ✅ Case-insensitive email lookup
-    const user = await User.findOne({ 
-      email: { $regex: new RegExp(`^${email}$`, 'i') } 
-    });
-    
-    if (!user) {
-      console.log("Login failed: User not found for email:", email);
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
+// ✅ Make email case-insensitive
+  const user = await User.findOne({ 
+    email: { $regex: new RegExp(`^${email}$`, 'i') } 
+  });
+  
+  if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    // ✅ Check if password is hashed (starts with $2a$ or $2b$)
-    const isPasswordHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
-    
-    if (!isPasswordHashed) {
-      console.log("Login failed: Password not hashed for user:", email);
-      return res.status(401).json({ 
-        message: "Invalid credentials. Please reset your password." 
-      });
-    }
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    
-    if (!isMatch) {
-      console.log("Login failed: Password mismatch for user:", email);
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
+  const token = generateToken(user._id);
 
-    const token = generateToken(user._id);
-    console.log("Login successful for user:", email);
-    res.json({ token });
-    
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  res.json({ token });
 };
+
+
+
+// export const login = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     // ✅ Case-insensitive email lookup
+//     const user = await User.findOne({ 
+//       email: { $regex: new RegExp(`^${email}$`, 'i') } 
+//     });
+    
+//     if (!user) {
+//       console.log("Login failed: User not found for email:", email);
+//       return res.status(401).json({ message: "Invalid credentials" });
+//     }
+
+//     // ✅ Check if password is hashed (starts with $2a$ or $2b$)
+//     const isPasswordHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
+    
+//     if (!isPasswordHashed) {
+//       console.log("Login failed: Password not hashed for user:", email);
+//       return res.status(401).json({ 
+//         message: "Invalid credentials. Please reset your password." 
+//       });
+//     }
+
+//     const isMatch = await bcrypt.compare(password, user.password);
+    
+//     if (!isMatch) {
+//       console.log("Login failed: Password mismatch for user:", email);
+//       return res.status(401).json({ message: "Invalid credentials" });
+//     }
+
+//     const token = generateToken(user._id);
+//     console.log("Login successful for user:", email);
+//     res.json({ token });
+    
+//   } catch (error) {
+//     console.error("Login error:", error);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
