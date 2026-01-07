@@ -4,6 +4,10 @@ import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Dashboard.css";
 import DashboardInfoCard from "../../components/reusable/DashboardInfoCard.jsx";
+import { useNavigate } from "react-router-dom";
+
+
+
 import {
   fetchMetrics,
   fetchCompanyDocuments,
@@ -14,6 +18,8 @@ import {
 
 function Dashboard() {
 
+  const navigate = useNavigate(); 
+
 
 const [metrics, setMetrics] = useState([]);
 const [companyDocumentExpiries, setCompanyDocumentExpiries] = useState([]);
@@ -21,13 +27,6 @@ const [employeeVisaExpiries, setEmployeeVisaExpiries] = useState([]);
 const [pendingApprovals, setPendingApprovals] = useState([]);
 const [todaysAttendance, setTodaysAttendance] = useState([]);
 
-// useEffect(() => {
-//   fetchMetrics().then(res => setMetrics(res.data));
-//   fetchCompanyDocuments().then(res => setCompanyDocumentExpiries(res.data));
-//   fetchEmployeeVisas().then(res => setEmployeeVisaExpiries(res.data));
-//   fetchPendingApprovals().then(res => setPendingApprovals(res.data));
-//   fetchTodaysAttendance().then(res => setTodaysAttendance(res.data));
-// }, []);
 
 
 useEffect(() => {
@@ -123,7 +122,7 @@ useEffect(() => {
 
         <Card className="dashboard-quick-actions-wrapper">
           <div className="dashboard-quick-actions-grid">
-            <Card className="dashboard-quick-action-card">
+            <Card className="dashboard-quick-action-card" onClick={() => navigate("/employees")}>
               <SvgIcon name="users" size={22} />
               <span>Add Employee</span>
             </Card>
