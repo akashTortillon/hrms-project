@@ -3,6 +3,7 @@ import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
 import { getEmployees, addEmployee } from "../../services/employeeService.js";
+import { toast } from "react-toastify";
 
 export default function Employees() {
   // 🔹 Filters & search
@@ -19,22 +20,18 @@ export default function Employees() {
     fetchEmployees();
   }, []);
 
-  // const fetchEmployees = async () => {
-  //   try {
-  //     const data = await getEmployees();
-  //     setEmployees(data);
-  //   } catch (error) {
-  //     console.error("Failed to fetch employees", error);
-  //   }
-  // };
+  
 
 
   const fetchEmployees = async () => {
   try {
     const response = await getEmployees();
     
+    
+    const employeesArray = Array.isArray(response) ? response : [];
+    
     // Transform API data to match table format
-    const formattedEmployees = response.data.map((emp, index) => ({
+    const formattedEmployees = employeesArray.map((emp, index) => ({
       id: emp._id || index + 1,
       name: emp.name,
       code: emp.code,
@@ -49,25 +46,21 @@ export default function Employees() {
     setEmployees(formattedEmployees);
   } catch (error) {
     console.error("Failed to fetch employees", error);
+    setEmployees([]); 
   }
 };
 
-  // 🔹 Add new employee (called from modal)
-  // const handleAddEmployee = async (employeeData) => {
-  //   try {
-  //     const newEmployee = await addEmployee(employeeData);
-  //     setEmployees((prev) => [newEmployee, ...prev]);
-  //     setShowModal(false);
-  //   } catch (error) {
-  //     alert(error.message || "Failed to add employee");
-  //   }
-  // };
+  
 
 
   const handleAddEmployee = async (employeeData) => {
   try {
     const response = await addEmployee(employeeData);
-    const newEmployee = response.data.employee;
+    
+    const { message, employee: newEmployee } = response;
+    
+    // Show success toast with backend message
+    toast.success(message || "Employee added successfully 🎉");
     
     // Transform to match table format
     const formattedEmployee = {
@@ -85,7 +78,8 @@ export default function Employees() {
     setEmployees((prev) => [formattedEmployee, ...prev]);
     setShowModal(false);
   } catch (error) {
-    alert(error.response?.data?.message || error.message || "Failed to add employee");
+    const errorMessage = error.response?.data?.message || error.message || "Failed to add employee";
+    toast.error(errorMessage);
   }
 };
 
