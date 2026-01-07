@@ -75,5 +75,5 @@ export const getEmployees = async () => {
 // ✅ Add employee
 export const addEmployee = async (employee) => {
   const res = await api.post(EMPLOYEE_API, employee);
-  return res.data.employee;
+  return res.data;
 };
