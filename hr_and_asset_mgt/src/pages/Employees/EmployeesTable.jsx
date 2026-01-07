@@ -63,7 +63,8 @@ export default function EmployeesTable({ employees = [] }) {
               {/* Actions */}
               <td className="actions-col">
                 <button className="actions-btn">
-                  <SvgIcon name="dots" size={18} />
+                  <SvgIcon name="edit" size={18} style={{color:"#2563eb"}} />
+                  <SvgIcon name="delete" size={18} />
                 </button>
               </td>
             </tr>
