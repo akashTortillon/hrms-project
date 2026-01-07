@@ -44,7 +44,7 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find().sort({ createdAt: -1 });
+    const employees = await Employee.find().sort({ code: -1 });
     res.json(employees);
   } catch (error) {
     console.error(error);
