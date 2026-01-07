@@ -9,6 +9,14 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
+    // ✅ Code format validation (EMP001)
+    const codeRegex = /^EMP\d{3}$/;
+    if (!codeRegex.test(code)) {
+      return res.status(400).json({
+        message: "Employee code must be in EMP001 format"
+      });
+    }
+
     // Check if employee code already exists
     const existingEmployee = await Employee.findOne({ code });
     if (existingEmployee) {
@@ -44,7 +52,21 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find().sort({ code: -1 });
+    const employees = await Employee.aggregate([
+      {
+        $addFields: {
+          numericCode: {
+            $toInt: {
+              $substr: ["$code", 3, -1]
+            }
+          }
+        }
+      },
+      { $sort: { numericCode: 1 } },
+      { $project: { numericCode: 0 } }
+    ]);
+
+
     res.json(employees);
   } catch (error) {
     console.error(error);
