@@ -154,8 +154,8 @@ const AttendanceEditModal = ({
           <div>
             <label>Shift</label>
             <select value={shift} onChange={(e) => setShift(e.target.value)}>
-              <option>Day Shift | 08:00 AM - 05:00 PM</option>
-              <option>Night Shift | 08:00 PM - 05:00 AM</option>
+              <option value="Day Shift">Day Shift | 08:00 AM - 05:00 PM</option>
+              <option value="Night Shift">Night Shift | 08:00 PM - 05:00 AM</option>
             </select>
           </div>
 
