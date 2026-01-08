@@ -236,7 +236,7 @@ export default function Employees() {
         updatedEmployee
       );
 
-      toast.success("Employee updated successfully ✅");
+      toast.success("Employee updated successfully");
 
       setEmployees((prev) =>
         prev.map((emp) =>
@@ -279,7 +279,7 @@ const handleDeleteEmployee = async (emp) => {
       prev.filter((e) => e._id !== emp._id)
     );
 
-    toast.success("Employee removed successfully 🗑️");
+    toast.success("Employee removed successfully");
   } catch (error) {
     toast.error(
       error.response?.data?.message || "Failed to delete employee"
