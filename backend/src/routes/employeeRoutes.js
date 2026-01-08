@@ -2,7 +2,8 @@ import express from "express";
 import {
   addEmployee,
   getEmployees,
-  updateEmployee
+  updateEmployee,
+  deleteEmployee
 } from "../controllers/employeeController.js";
 import { protect } from "../middlewares/authMiddleware.js";
 
@@ -17,6 +18,9 @@ router.post("/", protect, addEmployee);
 console.log("✅ POST /api/employees route registered");
 
 router.put("/:id", protect, updateEmployee);
+
+// DELETE employee
+router.delete("/:id", protect, deleteEmployee);
 
 
 export default router;
