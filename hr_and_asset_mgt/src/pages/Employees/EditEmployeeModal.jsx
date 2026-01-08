@@ -31,6 +31,8 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate }) {
               <option>Sales</option>
               <option>HR</option>
               <option>IT</option>
+              <option>Finance</option>
+              <option>Operations</option>
             </select>
 
             <input name="email" value={form.email} onChange={handleChange} />
