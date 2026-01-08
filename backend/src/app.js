@@ -3,6 +3,7 @@ import cors from "cors";
 import authRoutes from "./routes/authRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoutes.js";
 
 const app = express();
 
@@ -31,8 +32,10 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/employees", employeeRoutes);
 console.log("✅ Employee routes registered at /api/employees");
 
-app.get("/", (req, res) => {
-  res.send("HR Asset Backend is running");
-});
+// 🔹 Attendance APIs
+app.use("/api/attendance", attendanceRoutes);
+console.log("✅ Attendance routes registered at /api/attendance");
+
+
 
 export default app;

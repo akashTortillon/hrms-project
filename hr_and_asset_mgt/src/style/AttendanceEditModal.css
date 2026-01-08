@@ -1,0 +1,79 @@
+.attendance-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.attendance-modal {
+  background: #ffffff;
+  width: 700px;
+  max-width: 95%;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.attendance-modal h2 {
+  margin-bottom: 20px;
+  font-size: 20px;
+  color: #1f2937;
+}
+
+.modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.modal-grid label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: #374151;
+}
+
+.modal-grid input,
+.modal-grid select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.modal-grid input:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.modal-actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+}
+
+.btn-save {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+.btn-save:hover {
+  background: #1d4ed8;
+}

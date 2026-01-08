@@ -1,105 +1,140 @@
+import React, { useState, useEffect } from "react";
 
-import React,{useState} from "react";
 import AttendanceHeader from "./AttendanceHeader";
 import AttendanceStats from "./AttendanceStats";
 import AttendanceFilters from "./AttendanceFilters";
 import AttendanceTable from "./AttendanceTable";
 import ShiftManagement from "./AttendanceShift";
 
+import AttendanceEditModal from "./AttendanceEditModal";
+import { getDailyAttendance, updateAttendance, markAttendance } from "../../services/attendanceService.js";
+import { toast } from "react-toastify";
 
-const attendanceData = [
-  {
-    id: 1,
-    name: "Ahmed Al Mansoori",
-    code: "EMP001",
-    department: "Sales",
-    shift: "Day Shift",
-    checkIn: "08:45",
-    checkOut: "17:30",
-    workHours: "8h 45m",
-    status: "Present",
-    statusClass: "status-present",
-    icon: "circle-tick",
-    iconColor: "#16a34a",
-  },
-  {
-    id: 2,
-    name: "Sarah Johnson",
-    code: "EMP002",
-    department: "HR",
-    shift: "Day Shift",
-    checkIn: "09:15",
-    checkOut: "18:00",
-    workHours: "8h 45m",
-    status: "Late",
-    statusClass: "status-late",
-    icon: "exclamation",
-    iconColor: "#f97316",
-  },
-  {
-    id: 3,
-    name: "Mohammed Hassan",
-    code: "EMP003",
-    department: "Operations",
-    shift: "Day Shift",
-    checkIn: "08:30",
-    checkOut: "17:15",
-    workHours: "8h 45m",
-    status: "Present",
-    statusClass: "status-present",
-    icon: "circle-tick",
-    iconColor: "#16a34a",
-  },
-  {
-    id: 4,
-    name: "Lisa Chen",
-    code: "EMP004",
-    department: "Finance",
-    shift: "Day Shift",
-    status: "On Leave",
-    statusClass: "status-leave",
-    icon: "calendar",
-    iconColor: "#f59e0b",
-  },
-  {
-    id: 5,
-    name: "David Brown",
-    code: "EMP005",
-    department: "IT",
-    shift: "Day Shift",
-    status: "Absent",
-    statusClass: "status-absent",
-    icon: "circle-xmark",
-    iconColor: "#dc2626",
-  },
-];
-
+// Utility → today's date
 const getTodayDate = () => {
   const today = new Date();
   return today.toISOString().split("T")[0];
 };
 
+// Helper function to map status to CSS class
+const getStatusClass = (status) => {
+  const statusMap = {
+    Present: "status-present",
+    Late: "status-late",
+    Absent: "status-absent",
+    "On Leave": "status-leave",
+  };
+  return statusMap[status] || "status-present";
+};
+
 function Attendance() {
+  const [selectedDate, setSelectedDate] = useState(getTodayDate());
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-    const [selectedDate, setSelectedDate] = useState(getTodayDate());
+  // 🔹 Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
+  // 🔹 Fetch attendance data when date changes
+  useEffect(() => {
+    fetchAttendanceData();
+  }, [selectedDate]);
 
+  const fetchAttendanceData = async () => {
+    setLoading(true);
+    try {
+      const data = await getDailyAttendance(selectedDate);
+      
+      // Format data to match table structure
+      const formattedRecords = data.map((record) => ({
+        id: record._id || record.employeeId,
+        _id: record._id,
+        employeeId: record.employeeId,
+        name: record.name,
+        code: record.code,
+        department: record.department,
+        shift: record.shift || "Day Shift",
+        checkIn: record.checkIn,
+        checkOut: record.checkOut,
+        workHours: record.workHours,
+        status: record.status || "Present",
+        statusClass: getStatusClass(record.status || "Present"),
+        icon: "user", // Default icon
+        iconColor: "#6b7280", // Default gray color
+      }));
 
-    return (
+      setAttendanceRecords(formattedRecords);
+    } catch (error) {
+      console.error("Failed to fetch attendance data", error);
+      toast.error("Failed to load attendance records");
+      setAttendanceRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔹 Open modal from table
+  const openAttendanceModal = (employee) => {
+    setSelectedEmployee(employee);
+    setShowModal(true);
+  };
+
+  // 🔹 Save attendance
+  const handleSaveAttendance = async (data) => {
+    try {
+      const { _id, employeeId, date, checkIn, checkOut, status } = data;
+      
+      // If attendance record exists, update it; otherwise create new one
+      if (_id) {
+        await updateAttendance(_id, { checkIn, checkOut, status });
+      } else {
+        await markAttendance({ employeeId, date, checkIn, checkOut, status });
+      }
+      
+      // Refresh attendance list after save
+      await fetchAttendanceData();
+      setShowModal(false);
+      setSelectedEmployee(null);
+      toast.success("Attendance saved successfully");
+    } catch (error) {
+      console.error("Failed to save attendance", error);
+      const errorMessage = error.response?.data?.message || "Failed to save attendance";
+      toast.error(errorMessage);
+    }
+  };
+
+  return (
     <div>
-        <AttendanceHeader />
-        <AttendanceStats />
-        <AttendanceFilters
+      <AttendanceHeader />
+
+      <AttendanceStats />
+
+      <AttendanceFilters
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
-        />
-        <AttendanceTable
-         date={selectedDate}
-        records={attendanceData}/>
-        <ShiftManagement />
+      />
+
+      {/* Attendance Table */}
+      <AttendanceTable
+        date={selectedDate}
+        records={attendanceRecords}
+        onEdit={openAttendanceModal}
+        loading={loading}
+      />
+
+      <ShiftManagement />
+
+      {/* Attendance Edit Modal */}
+      <AttendanceEditModal
+        isOpen={showModal}
+        employee={selectedEmployee}
+        date={selectedDate}
+        onClose={() => setShowModal(false)}
+        onSave={handleSaveAttendance}
+      />
     </div>
-    )
+  );
 }
 
 export default Attendance;
-
