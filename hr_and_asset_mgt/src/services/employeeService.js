@@ -84,3 +84,9 @@ export const updateEmployee = async (id, data) => {
   return res.data.employee;
 };
 
+// DELETE employee
+export const deleteEmployee = async (id) => {
+  const res = await api.delete(EMPLOYEE_API + `/${id}`);
+  return res.data;
+};
+
