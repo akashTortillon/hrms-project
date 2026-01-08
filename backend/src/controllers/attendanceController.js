@@ -77,38 +77,43 @@ export const markAttendance = async (req, res) => {
 export const updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const { checkIn, checkOut, status } = req.body;
+    const { checkIn, checkOut, shift } = req.body;
 
+    let status = "Absent";
     let workHours = null;
+
+    const lateAfter =
+      shift === "Night Shift" ? "21:00" : "09:00";
+
+    if (checkIn) {
+      status = checkIn <= lateAfter ? "Present" : "Late";
+    }
 
     if (checkIn && checkOut) {
       const [inH, inM] = checkIn.split(":").map(Number);
       const [outH, outM] = checkOut.split(":").map(Number);
 
-      const totalMinutes =
+      let totalMinutes =
         outH * 60 + outM - (inH * 60 + inM);
 
-      if (totalMinutes > 0) {
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-        workHours = `${hours}h ${minutes}m`;
-      }
+      if (totalMinutes < 0) totalMinutes += 1440;
+
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      workHours = `${h}h ${m}m`;
     }
 
     const updated = await Attendance.findByIdAndUpdate(
       id,
       {
-        checkIn: status === "Absent" ? null : checkIn,
-        checkOut: status === "Absent" ? null : checkOut,
+        shift,
+        checkIn,
+        checkOut,
         status,
         workHours
       },
       { new: true }
     );
-
-    if (!updated) {
-      return res.status(404).json({ message: "Attendance not found" });
-    }
 
     res.json(updated);
   } catch (error) {
