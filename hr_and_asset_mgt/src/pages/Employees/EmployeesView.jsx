@@ -137,7 +137,8 @@ import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import {
   getEmployees,
   addEmployee,
-  updateEmployee
+  updateEmployee,
+  deleteEmployee
 } from "../../services/employeeService.js";
 import { toast } from "react-toastify";
 
@@ -259,6 +260,34 @@ export default function Employees() {
     }
   };
 
+
+
+  // 🔹 DELETE employee
+const handleDeleteEmployee = async (emp) => {
+  const confirmDelete = window.confirm(
+    `Do you want to delete ${emp.name}?`
+  );
+
+  if (!confirmDelete) return;
+
+  try {
+    await deleteEmployee(emp._id || emp.id);
+
+    // 🔥 Remove employee instantly from UI
+    setEmployees((prev) =>
+      prev.filter((e) => e._id !== emp._id)
+    );
+
+    toast.success("Employee removed successfully 🗑️");
+  } catch (error) {
+    toast.error(
+      error.response?.data?.message || "Failed to delete employee"
+    );
+  }
+};
+
+
+
   // 🔹 Apply filters & search
   const filteredEmployees = employees.filter((emp) => {
     const departmentMatch =
@@ -307,6 +336,7 @@ export default function Employees() {
           employee={selectedEmployee}
           onClose={() => setShowEditModal(false)}
           onUpdate={handleUpdateEmployee}
+          onDelete={handleDeleteEmployee}
         />
       )}
     </div>

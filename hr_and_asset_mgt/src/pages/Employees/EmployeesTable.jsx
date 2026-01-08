@@ -3,7 +3,7 @@ import React from "react";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Employees.css";
 
-export default function EmployeesTable({ employees = [], onEdit }) {
+export default function EmployeesTable({ employees = [], onEdit,onDelete }) {
   return (
     <div className="employees-table-card">
       <table className="employees-table">
@@ -74,9 +74,9 @@ export default function EmployeesTable({ employees = [], onEdit }) {
 
                     <button
                       type="button"
-                      // className="icon-btn delete-btn"
-                      // onClick={() => onDelete && onDelete(emp)}
-                      // title="Delete Employee"
+                      className="icon-btn delete-btn"
+                      onClick={() => onDelete && onDelete(emp)}
+                      title="Delete Employee"
                     >
                       <SvgIcon name="delete" size={18} />
                     </button>
