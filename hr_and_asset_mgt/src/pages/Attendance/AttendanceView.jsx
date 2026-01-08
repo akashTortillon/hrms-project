@@ -83,11 +83,11 @@ function Attendance() {
   // 🔹 Save attendance
   const handleSaveAttendance = async (data) => {
     try {
-      const { _id, employeeId, date, checkIn, checkOut, status } = data;
+      const { _id, employeeId, date, checkIn, checkOut, status, shift } = data;
       
       // If attendance record exists, update it; otherwise create new one
       if (_id) {
-        await updateAttendance(_id, { checkIn, checkOut, status });
+        await updateAttendance(_id, { checkIn, checkOut, shift });
       } else {
         await markAttendance({ employeeId, date, checkIn, checkOut, status });
       }
