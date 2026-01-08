@@ -89,7 +89,7 @@ function Attendance() {
       if (_id) {
         await updateAttendance(_id, { checkIn, checkOut, shift });
       } else {
-        await markAttendance({ employeeId, date, checkIn, checkOut, status });
+        await markAttendance({ employeeId, date, checkIn, checkOut, shift });
       }
       
       // Refresh attendance list after save

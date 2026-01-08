@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
 
-// const SHIFT_RULES = {
-//   "Day Shift": {
-//     lateAfter: "08:00",
-//   },
-//   "Night Shift": {
-//     lateAfter: "20:00",
-//   }
-// };
+const SHIFT_RULES = {
+  "Day Shift": {
+    lateAfter: "08:00",
+  },
+  "Night Shift": {
+    lateAfter: "20:00",
+  }
+};
 
 const toMinutes = (time) => {
   const [h, m] = time.split(":").map(Number);
