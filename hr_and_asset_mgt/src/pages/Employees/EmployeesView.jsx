@@ -134,6 +134,7 @@ import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
+
 import {
   getEmployees,
   addEmployee,
@@ -320,6 +321,7 @@ const handleDeleteEmployee = async (emp) => {
       <EmployeesTable
         employees={filteredEmployees}
         onEdit={handleEditClick}
+        onDelete={handleDeleteEmployee}
       />
 
       {/* ADD MODAL */}
