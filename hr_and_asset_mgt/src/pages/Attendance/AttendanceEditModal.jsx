@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
 
+const SHIFT_RULES = {
+  "Day Shift": {
+    lateAfter: "09:00",
+  },
+  "Night Shift": {
+    lateAfter: "21:00",
+  }
+};
+
 const AttendanceEditModal = ({
   isOpen,
   onClose,
@@ -8,6 +17,7 @@ const AttendanceEditModal = ({
   date,
   onSave
 }) => {
+  const [shift, setShift] = useState("Day Shift");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [status, setStatus] = useState("Present");
@@ -15,23 +25,37 @@ const AttendanceEditModal = ({
 
   useEffect(() => {
     if (employee) {
+      setShift(employee.shift || "Day Shift");
       setCheckIn(employee.checkIn || "");
       setCheckOut(employee.checkOut || "");
-      setStatus(employee.status || "Present");
     }
   }, [employee]);
 
+  /** 🧠 Auto calculate status */
+  useEffect(() => {
+    if (!checkIn) {
+      setStatus("Absent");
+      return;
+    }
+
+    const rule = SHIFT_RULES[shift];
+    if (!rule) return;
+
+    setStatus(checkIn <= rule.lateAfter ? "Present" : "Late");
+  }, [checkIn, shift]);
+
+  /** ⏱ Work hours */
   useEffect(() => {
     if (checkIn && checkOut) {
       const start = new Date(`1970-01-01T${checkIn}`);
       const end = new Date(`1970-01-01T${checkOut}`);
-      const diff = (end - start) / 60000;
 
-      if (diff > 0) {
-        const h = Math.floor(diff / 60);
-        const m = diff % 60;
-        setWorkHours(`${h}h ${m}m`);
-      }
+      let diff = (end - start) / 60000;
+      if (diff < 0) diff += 1440; // night shift support
+
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      setWorkHours(`${h}h ${m}m`);
     } else {
       setWorkHours("0h 0m");
     }
@@ -41,17 +65,15 @@ const AttendanceEditModal = ({
 
   const handleSave = () => {
     onSave({
-      _id: employee._id, // Attendance record ID (null if new)
-      employeeId: employee.employeeId, // Employee ID
+      _id: employee._id,
+      employeeId: employee.employeeId,
       date,
-      checkIn,
-      checkOut,
+      shift,
+      checkIn: status === "Absent" ? null : checkIn,
+      checkOut: status === "Absent" ? null : checkOut,
       status
     });
   };
-
-  const disableTimeFields =
-    status === "Absent" || status === "On Leave";
 
   return (
     <div className="attendance-modal-overlay">
@@ -76,40 +98,33 @@ const AttendanceEditModal = ({
 
           <div>
             <label>Shift</label>
-            <input value="Day Shift (09:00 – 18:00)" disabled />
+            <select value={shift} onChange={(e) => setShift(e.target.value)}>
+              <option>Day Shift</option>
+              <option>Night Shift</option>
+            </select>
           </div>
 
           <div>
-            <label>Check-in Time</label>
+            <label>Check-in</label>
             <input
               type="time"
               value={checkIn}
-              disabled={disableTimeFields}
               onChange={(e) => setCheckIn(e.target.value)}
             />
           </div>
 
           <div>
-            <label>Check-out Time</label>
+            <label>Check-out</label>
             <input
               type="time"
               value={checkOut}
-              disabled={disableTimeFields}
               onChange={(e) => setCheckOut(e.target.value)}
             />
           </div>
 
           <div>
-            <label>Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option>Present</option>
-              <option>Late</option>
-              <option>Absent</option>
-              <option>On Leave</option>
-            </select>
+            <label>Status (Auto)</label>
+            <input value={status} disabled />
           </div>
 
           <div>
