@@ -1,26 +1,14 @@
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
 
-const SHIFT_RULES = {
-  "Day Shift": {
-    lateAfter: "08:00",
-  },
-  "Night Shift": {
-    lateAfter: "20:00",
-  }
-};
+/* =========================
+   Helpers
+========================= */
 
 const toMinutes = (time) => {
+  if (!time || !time.includes(":")) return null;
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
-};
-
-const normalizeMinutes = (time, shiftStart) => {
-  let mins = toMinutes(time);
-  if (shiftStart >= 720 && mins < shiftStart) {
-    mins += 1440; // night shift rollover
-  }
-  return mins;
 };
 
 const SHIFT_CONFIG = {
@@ -36,6 +24,9 @@ const SHIFT_CONFIG = {
   }
 };
 
+/* =========================
+   Component
+========================= */
 
 const AttendanceEditModal = ({
   isOpen,
@@ -50,72 +41,76 @@ const AttendanceEditModal = ({
   const [status, setStatus] = useState("Present");
   const [workHours, setWorkHours] = useState("0h 0m");
 
+  /* Load employee */
   useEffect(() => {
-    if (employee) {
-      setShift(employee.shift || "Day Shift");
-      setCheckIn(employee.checkIn || "");
-      setCheckOut(employee.checkOut || "");
-      setWorkHours("0h 0m")
-    }
+    if (!employee) return;
+    setShift(employee.shift || "Day Shift");
+    setCheckIn(employee.checkIn || "");
+    setCheckOut(employee.checkOut || "");
+    setWorkHours("0h 0m");
   }, [employee]);
 
-
-
-
-  /** 🧠 Auto calculate status */
-  
-  useEffect(() => {
-  if (!checkIn) {
-    setStatus("Absent");
-    return;
-  }
-
-  const rule = SHIFT_CONFIG[shift];
-  if (!rule) return;
-
-  const checkInMin = toMinutes(checkIn);
-  const lateMin = toMinutes(rule.lateAfter);
-
-  setStatus(checkInMin <= lateMin ? "Present" : "Late");
-}, [checkIn, shift]);
-
-
-
-
-  /** ⏱ Work hours */
+  /* =========================
+     Status Calculation
+  ========================= */
 
   useEffect(() => {
-  if (!checkIn || !checkOut) {
-    setWorkHours("0h 0m");
-    return;
-  }
+    if (!checkIn) {
+      setStatus("Absent");
+      return;
+    }
 
-  const rule = SHIFT_CONFIG[shift];
-  if (!rule) return;
+    const rule = SHIFT_CONFIG[shift];
+    if (!rule) return;
 
-  let shiftStart = toMinutes(rule.start);
-  let shiftEnd = toMinutes(rule.end);
+    const inMin = toMinutes(checkIn);
+    const lateMin = toMinutes(rule.lateAfter);
 
-  let inMin = normalizeMinutes(checkIn, shiftStart);
-  let outMin = normalizeMinutes(checkOut, shiftStart);
+    if (inMin === null || lateMin === null) {
+      setStatus("Absent");
+      return;
+    }
 
-  if (shiftEnd <= shiftStart) shiftEnd += 1440;
+    setStatus(inMin <= lateMin ? "Present" : "Late");
+  }, [checkIn, shift]);
 
-  const actualStart = Math.max(inMin, shiftStart);
-  const actualEnd = Math.min(outMin, shiftEnd);
+  /* =========================
+     ✅ WORK HOURS (FIXED)
+  ========================= */
 
-  const workMinutes = Math.max(actualEnd - actualStart, 0);
+  useEffect(() => {
+    if (!checkIn || !checkOut) {
+      setWorkHours("0h 0m");
+      return;
+    }
 
-  const h = Math.floor(workMinutes / 60);
-  const m = workMinutes % 60;
+    let inMin = toMinutes(checkIn);
+    let outMin = toMinutes(checkOut);
 
-  setWorkHours(`${h}h ${m}m`);
-}, [checkIn, checkOut, shift]);
+    if (inMin === null || outMin === null) {
+      setWorkHours("0h 0m");
+      return;
+    }
 
+    // Night shift crosses midnight
+    if (shift === "Night Shift" && outMin < inMin) {
+      outMin += 1440;
+    }
 
+    const diff = outMin - inMin;
 
+    if (diff <= 0) {
+      setWorkHours("0h 0m");
+      return;
+    }
 
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
 
+    setWorkHours(`${h}h ${m}m`);
+  }, [checkIn, checkOut, shift]);
+
+  /* ========================= */
 
   if (!isOpen || !employee) return null;
 
@@ -155,8 +150,8 @@ const AttendanceEditModal = ({
           <div>
             <label>Shift</label>
             <select value={shift} onChange={(e) => setShift(e.target.value)}>
-              <option value="Day Shift">Day Shift | 08:00 AM - 05:00 PM</option>
-              <option value="Night Shift">Night Shift | 08:00 PM - 05:00 AM</option>
+              <option value="Day Shift">Day Shift | 08:00 - 17:00</option>
+              <option value="Night Shift">Night Shift | 20:00 - 05:00</option>
             </select>
           </div>
 
