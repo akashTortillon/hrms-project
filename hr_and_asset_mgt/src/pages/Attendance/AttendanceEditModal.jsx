@@ -55,6 +55,7 @@ const AttendanceEditModal = ({
       setShift(employee.shift || "Day Shift");
       setCheckIn(employee.checkIn || "");
       setCheckOut(employee.checkOut || "");
+      setWorkHours("0h 0m")
     }
   }, [employee]);
 
