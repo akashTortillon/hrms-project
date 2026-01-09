@@ -79,52 +79,42 @@ const AttendanceEditModal = ({
   ========================= */
 
   useEffect(() => {
-    if (!checkIn || !checkOut) {
-      setWorkHours("0h 0m");
-      return;
-    }
+  if (!checkIn || !checkOut) {
+    setWorkHours("0h 0m");
+    return;
+  }
 
-    let inMin = toMinutes(checkIn);
-    let outMin = toMinutes(checkOut);
+  let inMin = toMinutes(checkIn);
+  let outMin = toMinutes(checkOut);
 
-    if (inMin === null || outMin === null) {
-      setWorkHours("0h 0m");
-      return;
-    }
+  if (inMin === null || outMin === null) {
+    setWorkHours("0h 0m");
+    return;
+  }
 
-    // Night shift crosses midnight
-    if (shift === "Night Shift" && outMin < inMin) {
-      outMin += 1440;
-    }
+  // ❌ Invalid Day Shift data
+  if (shift === "Day Shift" && outMin <= inMin) {
+    setWorkHours("0h 0m");
+    return;
+  }
 
-    const diff = outMin - inMin;
+  // 🌙 Night shift crosses midnight
+  if (shift === "Night Shift" && outMin < inMin) {
+    outMin += 1440;
+  }
 
-    if (diff <= 0) {
-      setWorkHours("0h 0m");
-      return;
-    }
+  const diff = outMin - inMin;
 
-    const h = Math.floor(diff / 60);
-    const m = diff % 60;
+  if (diff <= 0) {
+    setWorkHours("0h 0m");
+    return;
+  }
 
-    setWorkHours(`${h}h ${m}m`);
-  }, [checkIn, checkOut, shift]);
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
 
-  /* ========================= */
-
-  if (!isOpen || !employee) return null;
-
-  const handleSave = () => {
-    onSave({
-      _id: employee._id,
-      employeeId: employee.employeeId,
-      date,
-      shift,
-      checkIn: status === "Absent" ? null : checkIn,
-      checkOut: status === "Absent" ? null : checkOut,
-      status
-    });
-  };
+  setWorkHours(`${h}h ${m}m`);
+}, [checkIn, checkOut, shift]);
 
   return (
     <div className="attendance-modal-overlay">
