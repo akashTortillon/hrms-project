@@ -11,7 +11,7 @@ const AssetsTable = ({ assets }) => {
       render: (row) => (
         <div className="asset-cell">
           <div className="asset-icon">
-            <SvgIcon name="cube" size={20} />
+            <SvgIcon name="cube" size={18} />
           </div>
           <div>
             <div className="asset-name">{row.name}</div>
