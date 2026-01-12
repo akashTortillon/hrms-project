@@ -24,16 +24,16 @@ export default function Layout() {
 
           <div className="app-content">
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/employees" element={<Employees />} />
-              <Route path="/payroll" element={<Payroll />} />
-              <Route path="/attendance" element={<Attendance />} />
-              <Route path="/documents" element={<Documents />} />
-              <Route path="/assets" element={<Assets />} />
-              <Route path="/requests" element={<MyRequests />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/masters" element={<Masters />} />
+              <Route path="" element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="employees" element={<Employees />} />
+              <Route path="payroll" element={<Payroll />} />
+              <Route path="attendance" element={<Attendance />} />
+              <Route path="documents" element={<Documents />} />
+              <Route path="assets" element={<Assets />} />
+              <Route path="requests" element={<MyRequests />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="masters" element={<Masters />} />
             </Routes>
           </div>
         </div>
