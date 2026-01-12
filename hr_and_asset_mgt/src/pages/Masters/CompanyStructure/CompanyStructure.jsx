@@ -1,7 +1,5 @@
-import Card from "../../../components/reusable/Card.jsx";
+import MastersCard from "../components/MastersCard.jsx"; // New Card Component
 import CustomButton from "../../../components/reusable/Button.jsx";
-import SvgIcon from "../../../components/svgIcon/svgView.jsx";
-import { Modal, Form, Button } from "react-bootstrap";
 import useCompanyStructure from "./useCompanyStructure.js"; // Import the custom hook
 import "../../../style/Masters.css";
 import { RenderList } from "../components/RenderList.jsx";
@@ -23,8 +21,6 @@ export default function CompanyStructure() {
     handleDelete
   } = useCompanyStructure();
 
-
-
   return (
     <div className="company-structure">
 
@@ -38,39 +34,30 @@ export default function CompanyStructure() {
 
       <div className="structure-grid">
         {/* Departments */}
-        <Card
+        <MastersCard
           title="Departments"
-          className="structure-card"
-          rightAction={
-            <CustomButton size="sm" onClick={() => handleOpenAdd("Department")}>+ Add</CustomButton>
-          }
+          onAdd={() => handleOpenAdd("Department")}
         >
           <RenderList items={departments} type="Department" handleDelete={handleDelete} />
-        </Card>
+        </MastersCard>
 
         {/* Branches */}
-        <Card
+        <MastersCard
           title="Branches"
-          className="structure-card"
-          rightAction={
-            <CustomButton size="sm" onClick={() => handleOpenAdd("Branch")}>+ Add</CustomButton>
-          }
+          onAdd={() => handleOpenAdd("Branch")}
         >
           <RenderList items={branches} type="Branch" />
-        </Card>
+        </MastersCard>
       </div>
 
       {/* Designations (Full Width) */}
       <div className="mt-4">
-        <Card
+        <MastersCard
           title="Designations"
-          className="structure-card"
-          rightAction={
-            <CustomButton size="sm" onClick={() => handleOpenAdd("Designation")}>+ Add</CustomButton>
-          }
+          onAdd={() => handleOpenAdd("Designation")}
         >
           <RenderList items={designations} type="Designation" />
-        </Card>
+        </MastersCard>
       </div>
 
       {/* Add Modal */}

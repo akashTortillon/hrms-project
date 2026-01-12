@@ -71,3 +71,27 @@ export const deleteDesignation = async (id) => {
     const res = await api.delete(`${BASE_URL}/designations/${id}`);
     return res.data;
 };
+
+// --- HR MASTERS (Employee Types, Leave Types, etc) ---
+const HR_BASE_URL = '/api/masters/hr';
+
+// Helper for generic HR Master calls
+const createMasterService = (endpoint) => ({
+    getAll: async () => {
+        const res = await api.get(`${HR_BASE_URL}/${endpoint}`);
+        return res.data;
+    },
+    add: async (name) => {
+        const res = await api.post(`${HR_BASE_URL}/${endpoint}`, { name });
+        return res.data;
+    },
+    delete: async (id) => {
+        const res = await api.delete(`${HR_BASE_URL}/${endpoint}/${id}`);
+        return res.data;
+    }
+});
+
+export const employeeTypeService = createMasterService('employee-types');
+export const leaveTypeService = createMasterService('leave-types');
+export const documentTypeService = createMasterService('document-types');
+export const nationalityService = createMasterService('nationalities');
