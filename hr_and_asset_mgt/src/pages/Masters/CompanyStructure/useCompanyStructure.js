@@ -60,6 +60,8 @@ export default function useCompanyStructure() {
     };
 
     const handleSave = async () => {
+
+        console.log("LLLLL")
         if (!inputValue.trim()) return toast.warning("Please enter a name");
         setLoading(true);
         try {
