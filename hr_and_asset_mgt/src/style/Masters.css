@@ -703,27 +703,3 @@ system settings
 }
 
 /* Fix for Modal Backdrop Issue */
-.modal-backdrop {
-    z-index: 1040;
-}
-.modal-content {
-    z-index: 1050;
-    background-color: white !important;
-    opacity: 1 !important;
-}
-
-
-/* Stronger Fix for Dimmed Content */
-.modal-dialog {
-    z-index: 1055 !important;
-}
-.modal-content {
-    position: relative;
-    background-color: #fff;
-    background-clip: padding-box;
-    border: 1px solid rgba(0,0,0,.2);
-    border-radius: .3rem;
-    outline: 0;
-    z-index: 1060 !important;
-}
-
