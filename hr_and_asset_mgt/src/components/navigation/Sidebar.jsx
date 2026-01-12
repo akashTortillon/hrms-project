@@ -2,24 +2,32 @@ import { Nav, Button } from "react-bootstrap";
 import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
 import SvgIcon from "../svgIcon/svgView.jsx";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useRole } from "../../contexts/RoleContext.jsx";
 
-const navItems = [
-  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard" },
-  { path: "/app/employees", icon: "users", label: "Employees" },
-  { path: "/app/payroll", icon: "dollar", label: "Payroll" },
-  { path: "/app/attendance", icon: "clock (1)", label: "Attendance" },
-  { path: "/app/documents", icon: "document (1)", label: "Documents" },
-  { path: "/app/assets", icon: "cube", label: "Assets" },
-  { path: "/app/requests", icon: "document", label: "My Requests" },
-  { path: "/app/reports", icon: "reports", label: "Reports" },
-  { path: "/app/masters", icon: "settings", label: "Masters" },
+// All navigation items with their access roles
+const allNavItems = [
+  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", roles: ["Admin", "Manager", "Employee"] },
+  { path: "/app/employees", icon: "users", label: "Employees", roles: ["Admin", "Manager"] },
+  { path: "/app/payroll", icon: "dollar", label: "Payroll", roles: ["Admin", "Manager"] },
+  { path: "/app/attendance", icon: "clock (1)", label: "Attendance", roles: ["Admin", "Manager"] },
+  { path: "/app/documents", icon: "document (1)", label: "Documents", roles: ["Admin", "Manager", "Employee"] },
+  { path: "/app/assets", icon: "cube", label: "Assets", roles: ["Admin", "Manager"] },
+  { path: "/app/requests", icon: "document", label: "My Requests", roles: ["Admin", "Manager", "Employee"] },
+  { path: "/app/reports", icon: "reports", label: "Reports", roles: ["Admin", "Manager"] },
+  { path: "/app/masters", icon: "settings", label: "Masters", roles: ["Admin"] },
 ];
 
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = useRole();
+
+  // Filter navigation items based on user role
+  const navItems = useMemo(() => {
+    return allNavItems.filter((item) => item.roles.includes(role));
+  }, [role]);
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);

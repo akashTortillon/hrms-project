@@ -13,6 +13,7 @@ import QuickActionMenu from "../reusable/QuickActionMenu";
 import NotificationDropdown from "../reusable/NotificationDropdown";
 import ProfileDropdown from "../reusable/ProfileDropdown";
 import "../../style/Profile.css";
+import { useRole } from "../../contexts/RoleContext.jsx";
 
 
 const quickActions = [
@@ -29,6 +30,7 @@ const notifications = [
 
 export default function NavigationBar() {
   const [profileOpen, setProfileOpen] = useState(false);
+  const { role, setRole } = useRole();
   const profileAnchorRef = useRef(null);
 
   return (
@@ -36,13 +38,7 @@ export default function NavigationBar() {
       <Container fluid className="topbar-container">
         <div className="brand">
           
-          {/* <Button
-            variant="light"
-            className="icon-btn back-btn"
-            aria-label="Back"
-          >
-            <span className="arrow-left" />
-          </Button> */}
+          
         </div>
 
         <Form className="search-form">
@@ -82,32 +78,48 @@ export default function NavigationBar() {
           >
             <SvgView name="notification" size={20} />
           </NotificationDropdown>
-          <div
-            className="profile"
-            ref={profileAnchorRef}
-            onClick={() => setProfileOpen((prev) => !prev)}
-            style={{ position: "relative" }}
-          >
-            <div className="avatar">
-              <SvgIcon name="user" size={22} style={{ color: "white" }} />
+
+                      <div
+              className="profile"
+              ref={profileAnchorRef}
+              style={{ position: "relative" }}
+            >
+              <div
+                className="avatar"
+                onClick={() => setProfileOpen((prev) => !prev)}
+              >
+                <SvgIcon name="user" size={22} style={{ color: "white" }} />
+              </div>
+
+              <div
+                className="profile-text"
+                onClick={() => setProfileOpen((prev) => !prev)}
+              >
+                <div className="welcome">Welcome, Admin User</div>
+                <div className="role">{role}</div>
+              </div>
+
+              <span
+                className="chevron"
+                aria-hidden="true"
+                onClick={() => setProfileOpen((prev) => !prev)}
+              >
+                ▾
+              </span>
+
+              <ProfileDropdown
+                isOpen={profileOpen}
+                role={role}                 
+                onRoleChange={setRole}     
+                onClose={() => setProfileOpen(false)}
+                onProfile={() => console.log("My Profile")}
+                onSettings={() => console.log("Settings")}
+                onLogout={() => console.log("Logout")}
+                anchorRef={profileAnchorRef}
+              />
             </div>
-            <div className="profile-text">
-              <div className="welcome">Welcome, Admin User</div>
-              <div className="role">Admin</div>
-            </div>
-            <span className="chevron" aria-hidden="true">
-              ▾
-            </span>
-            <ProfileDropdown
-              isOpen={profileOpen}
-              onClose={() => setProfileOpen(false)}
-              onProfile={() => console.log("My Profile")}
-              onSettings={() => console.log("Settings")}
-              onLogout={() => console.log("Logout")}
-              anchorRef={profileAnchorRef}
-            />
-          </div>
-        </div>
+
+                    </div>
       </Container>
     </Navbar>
   );
