@@ -4,7 +4,9 @@ import {
     employeeTypeService,
     leaveTypeService,
     documentTypeService,
-    nationalityService
+    nationalityService,
+    payrollRuleService,
+    workflowTemplateService
 } from "../../../services/masterService";
 
 export default function useHRManagement() {
@@ -12,6 +14,8 @@ export default function useHRManagement() {
     const [leaveTypes, setLeaveTypes] = useState([]);
     const [documentTypes, setDocumentTypes] = useState([]);
     const [nationalities, setNationalities] = useState([]);
+    const [payrollRules, setPayrollRules] = useState([]);
+    const [workflowTemplates, setWorkflowTemplates] = useState([]);
 
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
@@ -27,6 +31,8 @@ export default function useHRManagement() {
         try { setLeaveTypes(await leaveTypeService.getAll()); } catch (e) { console.error(e); }
         try { setDocumentTypes(await documentTypeService.getAll()); } catch (e) { console.error(e); }
         try { setNationalities(await nationalityService.getAll()); } catch (e) { console.error(e); }
+        try { setPayrollRules(await payrollRuleService.getAll()); } catch (e) { console.error(e); }
+        try { setWorkflowTemplates(await workflowTemplateService.getAll()); } catch (e) { console.error(e); }
     };
 
     const handleOpenAdd = (type) => {
@@ -52,6 +58,12 @@ export default function useHRManagement() {
             } else if (modalType === "Nationality") {
                 await nationalityService.add(inputValue);
                 setNationalities(await nationalityService.getAll());
+            } else if (modalType === "Payroll Rule") {
+                await payrollRuleService.add(inputValue);
+                setPayrollRules(await payrollRuleService.getAll());
+            } else if (modalType === "Workflow Template") {
+                await workflowTemplateService.add(inputValue);
+                setWorkflowTemplates(await workflowTemplateService.getAll());
             }
             toast.success(`${modalType} added successfully`);
             setShowModal(false);
@@ -78,6 +90,12 @@ export default function useHRManagement() {
             } else if (type === "Nationality") {
                 await nationalityService.delete(id);
                 setNationalities(nationalities.filter(i => i._id !== id));
+            } else if (type === "Payroll Rule") {
+                await payrollRuleService.delete(id);
+                setPayrollRules(payrollRules.filter(i => i._id !== id));
+            } else if (type === "Workflow Template") {
+                await workflowTemplateService.delete(id);
+                setWorkflowTemplates(workflowTemplates.filter(i => i._id !== id));
             }
             toast.success("Deleted successfully");
         } catch (error) {
@@ -91,6 +109,8 @@ export default function useHRManagement() {
         leaveTypes,
         documentTypes,
         nationalities,
+        payrollRules,
+        workflowTemplates,
         showModal,
         setShowModal,
         modalType,

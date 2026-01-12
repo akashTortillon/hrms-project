@@ -11,6 +11,8 @@ export default function HRManagement() {
         leaveTypes,
         documentTypes,
         nationalities,
+        payrollRules,
+        workflowTemplates,
         showModal,
         setShowModal,
         modalType,
@@ -63,6 +65,34 @@ export default function HRManagement() {
                     onAdd={() => handleOpenAdd("Nationality")}
                 >
                     <RenderList items={nationalities} type="Nationality" handleDelete={handleDelete} />
+                </MastersCard>
+            </div>
+
+            <div className="masters-vertical-stack">
+                {/* Payroll Rules */}
+                <MastersCard
+                    title="Leave & Payroll Rules"
+                    description="Configure leave accrual and payroll components"
+                    headerAction={
+                        <CustomButton onClick={() => handleOpenAdd("Payroll Rule")}>
+                            Configure Rules
+                        </CustomButton>
+                    }
+                >
+                    <RenderList items={payrollRules} type="Payroll Rule" handleDelete={handleDelete} />
+                </MastersCard>
+
+                {/* Workflow Templates */}
+                <MastersCard
+                    title="Workflow Templates"
+                    onAdd={() => handleOpenAdd("Workflow Template")}
+                    headerAction={
+                        <button className="masters-add-btn" onClick={() => handleOpenAdd("Workflow Template")}>
+                            + Add Template
+                        </button>
+                    }
+                >
+                    <RenderList items={workflowTemplates} type="Workflow Template" handleDelete={handleDelete} />
                 </MastersCard>
             </div>
 

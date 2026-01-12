@@ -3,7 +3,9 @@ import {
     employeeTypeController,
     leaveTypeController,
     documentTypeController,
-    nationalityController
+    nationalityController,
+    payrollRuleController,
+    workflowTemplateController
 } from "../controllers/hrMasterController.js";
 
 const router = express.Router();
@@ -20,5 +22,7 @@ registerRoutes("employee-types", employeeTypeController);
 registerRoutes("leave-types", leaveTypeController);
 registerRoutes("document-types", documentTypeController);
 registerRoutes("nationalities", nationalityController);
+registerRoutes("payroll-rules", payrollRuleController);
+registerRoutes("workflow-templates", workflowTemplateController);
 
 export default router;

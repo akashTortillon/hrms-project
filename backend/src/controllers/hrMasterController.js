@@ -2,6 +2,8 @@ import EmployeeType from "../models/employeeTypeModel.js";
 import LeaveType from "../models/leaveTypeModel.js";
 import DocumentType from "../models/documentTypeModel.js";
 import Nationality from "../models/nationalityModel.js";
+import PayrollRule from "../models/payrollRuleModel.js";
+import WorkflowTemplate from "../models/workflowTemplateModel.js";
 
 // Generic Helper for CRUD
 const createHandler = (Model, name) => ({
@@ -53,3 +55,5 @@ export const employeeTypeController = createHandler(EmployeeType, "Employee Type
 export const leaveTypeController = createHandler(LeaveType, "Leave Type");
 export const documentTypeController = createHandler(DocumentType, "Document Type");
 export const nationalityController = createHandler(Nationality, "Nationality");
+export const payrollRuleController = createHandler(PayrollRule, "Payroll Rule");
+export const workflowTemplateController = createHandler(WorkflowTemplate, "Workflow Template");
