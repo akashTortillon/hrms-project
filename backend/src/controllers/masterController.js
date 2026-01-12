@@ -1,5 +1,6 @@
 import Department from "../models/departmentModel.js";
 import Branch from "../models/branchModel.js";
+import Designation from "../models/designationModel.js";
 
 // --- Departments ---
 
@@ -115,5 +116,62 @@ export const deleteBranch = async (req, res) => {
         res.status(200).json({ message: "Branch deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Error deleting branch", error: error.message });
+    }
+};
+
+// --- Designations ---
+
+export const getDesignations = async (req, res) => {
+    try {
+        const designations = await Designation.find().sort({ createdAt: -1 });
+        res.status(200).json(designations);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching designations", error: error.message });
+    }
+};
+
+export const addDesignation = async (req, res) => {
+    try {
+        const { name, status } = req.body;
+        const existing = await Designation.findOne({ name });
+        if (existing) {
+            return res.status(400).json({ message: "Designation already exists" });
+        }
+        const newDesig = new Designation({ name, status });
+        await newDesig.save();
+        res.status(201).json(newDesig);
+    } catch (error) {
+        res.status(500).json({ message: "Error adding designation", error: error.message });
+    }
+};
+
+export const updateDesignation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, status } = req.body;
+        const updated = await Designation.findByIdAndUpdate(
+            id,
+            { name, status },
+            { new: true }
+        );
+        if (!updated) {
+            return res.status(404).json({ message: "Designation not found" });
+        }
+        res.status(200).json(updated);
+    } catch (error) {
+        res.status(500).json({ message: "Error updating designation", error: error.message });
+    }
+};
+
+export const deleteDesignation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deleted = await Designation.findByIdAndDelete(id);
+        if (!deleted) {
+            return res.status(404).json({ message: "Designation not found" });
+        }
+        res.status(200).json({ message: "Designation deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Error deleting designation", error: error.message });
     }
 };
