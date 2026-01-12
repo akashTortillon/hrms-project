@@ -1,7 +1,7 @@
 import { useState } from "react";
 import MastersTabs from "./MastersTabs";
 
-import CompanyStructure from "./CompanyStructure";
+import CompanyStructure from "./CompanyStructure/CompanyStructure";
 import HRManagement from "./HRManagement";
 import AssetManagement from "./AssetManagement";
 import SystemSettings from "./SystemSettings";
