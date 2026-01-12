@@ -1,14 +1,14 @@
 import SvgIcon from "../../../components/svgIcon/svgView";
 
 // Reusable List Component
-export const RenderList = ({ items, type, handleDelete }) => (
+export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
     <div className="pill-list">
         {items.length === 0 ? <p className="text-muted small">No items found.</p> : null}
         {items.map((item) => (
             <div key={item._id} className="structure-item">
                 <span className="structure-name">{item.name}</span>
                 <div className="structure-actions">
-                    <button className="icon-btn edit">
+                    <button className="icon-btn edit" onClick={() => handleEdit(type, item)}>
                         <SvgIcon name="edit" size={16} />
                     </button>
                     <button

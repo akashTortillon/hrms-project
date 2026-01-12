@@ -20,7 +20,10 @@ export default function useHRManagement() {
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
+    const [editId, setEditId] = useState(null);
     const [loading, setLoading] = useState(false);
+
+    const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
     useEffect(() => {
         fetchAll();
@@ -38,6 +41,14 @@ export default function useHRManagement() {
     const handleOpenAdd = (type) => {
         setModalType(type);
         setInputValue("");
+        setEditId(null);
+        setShowModal(true);
+    };
+
+    const handleOpenEdit = (type, item) => {
+        setModalType(type);
+        setInputValue(item.name);
+        setEditId(item._id);
         setShowModal(true);
     };
 
@@ -47,36 +58,61 @@ export default function useHRManagement() {
 
         try {
             if (modalType === "Employee Type") {
-                await employeeTypeService.add(inputValue);
+                if (editId) await employeeTypeService.update(editId, inputValue);
+                else await employeeTypeService.add(inputValue);
                 setEmployeeTypes(await employeeTypeService.getAll());
             } else if (modalType === "Leave Type") {
-                await leaveTypeService.add(inputValue);
+                if (editId) await leaveTypeService.update(editId, inputValue);
+                else await leaveTypeService.add(inputValue);
                 setLeaveTypes(await leaveTypeService.getAll());
             } else if (modalType === "Document Type") {
-                await documentTypeService.add(inputValue);
+                if (editId) await documentTypeService.update(editId, inputValue);
+                else await documentTypeService.add(inputValue);
                 setDocumentTypes(await documentTypeService.getAll());
             } else if (modalType === "Nationality") {
-                await nationalityService.add(inputValue);
+                if (editId) await nationalityService.update(editId, inputValue);
+                else await nationalityService.add(inputValue);
                 setNationalities(await nationalityService.getAll());
             } else if (modalType === "Payroll Rule") {
-                await payrollRuleService.add(inputValue);
+                if (editId) await payrollRuleService.update(editId, inputValue);
+                else await payrollRuleService.add(inputValue);
                 setPayrollRules(await payrollRuleService.getAll());
             } else if (modalType === "Workflow Template") {
-                await workflowTemplateService.add(inputValue);
+                if (editId) await workflowTemplateService.update(editId, inputValue);
+                else await workflowTemplateService.add(inputValue);
                 setWorkflowTemplates(await workflowTemplateService.getAll());
             }
-            toast.success(`${modalType} added successfully`);
+            toast.success(`${modalType} ${editId ? "updated" : "added"} successfully`);
             setShowModal(false);
         } catch (error) {
             console.error(error);
-            toast.error(`Failed to add ${modalType}`);
+            toast.error(`Failed to ${editId ? "update" : "add"} ${modalType}`);
         } finally {
             setLoading(false);
+            setEditId(null);
         }
     };
 
-    const handleDelete = async (type, id) => {
-        if (!window.confirm("Are you sure?")) return;
+    // Opens the confirmation modal
+    const handleDelete = (type, id) => {
+        // Find the item name for better UX
+        let item = null;
+        if (type === "Employee Type") item = employeeTypes.find(i => i._id === id);
+        else if (type === "Leave Type") item = leaveTypes.find(i => i._id === id);
+        else if (type === "Document Type") item = documentTypes.find(i => i._id === id);
+        else if (type === "Nationality") item = nationalities.find(i => i._id === id);
+        else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
+        else if (type === "Workflow Template") item = workflowTemplates.find(i => i._id === id);
+
+        setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
+    };
+
+    // Actually executes the delete
+    const confirmDelete = async () => {
+        const { type, id } = deleteConfig;
+        if (!type || !id) return;
+
+        setLoading(true);
         try {
             if (type === "Employee Type") {
                 await employeeTypeService.delete(id);
@@ -98,9 +134,12 @@ export default function useHRManagement() {
                 setWorkflowTemplates(workflowTemplates.filter(i => i._id !== id));
             }
             toast.success("Deleted successfully");
+            setDeleteConfig({ ...deleteConfig, show: false });
         } catch (error) {
             console.error(error);
             toast.error("Failed to delete");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -118,7 +157,11 @@ export default function useHRManagement() {
         setInputValue,
         loading,
         handleOpenAdd,
+        handleOpenEdit,
         handleSave,
-        handleDelete
+        handleDelete, // This now opens the modal
+        confirmDelete, // New function for the modal
+        deleteConfig, // State for the modal
+        setDeleteConfig
     };
 }

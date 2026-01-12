@@ -15,7 +15,7 @@
 }
 
 .masters-title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   color: #111827;
   margin-bottom: 6px;
@@ -164,7 +164,7 @@
 }
 
 .structure-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: #111827;
 }
@@ -240,7 +240,7 @@
 }
 
 .role-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: #111827;
 }
@@ -328,7 +328,7 @@
 }
 
 .masters-card-header h4 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #111827;
 }
@@ -740,7 +740,7 @@ system settings
 
 .masters-card-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #374151;
 }
