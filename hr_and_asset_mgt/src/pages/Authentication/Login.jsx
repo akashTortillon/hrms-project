@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
-import { Link,useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import employeeImage from "../../assets/images/employee_onboard.webp";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
 
 
 export default function Login() {
-    const navigate = useNavigate();
+  const navigate = useNavigate();
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -37,19 +37,25 @@ export default function Login() {
         throw new Error("Invalid response from server");
       }
 
-      // Store token (later move to httpOnly cookie)
+      // Store token
       localStorage.setItem("token", data.token);
+      // Also store user info if available
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
 
       toast.success("Login successful 🎉");
-      
-        console.log("Navigating to dashboard...");
-      navigate("/app/dashboard");
-    
+
+      console.log("Token stored. Navigating to dashboard...");
+
+      // Navigate to the absolute path
+      navigate("/app/dashboard", { replace: true });
+
 
     } catch (err) {
       console.error("Login error:", err); // ✅ Add this
-       toast.error(err.message || "Login failed ❌");
-       setError(err.message || "Login failed. Please check your credentials.");
+      toast.error(err.message || "Login failed ❌");
+      setError(err.message || "Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
     }
@@ -57,44 +63,44 @@ export default function Login() {
 
   return (
     <div className="login-page">
-        <div className="login-container">
+      <div className="login-container">
 
-            <div className="login-image">
-                    <img src={employeeImage} alt="login Banner" />  
-            </div>
+        <div className="login-image">
+          <img src={employeeImage} alt="login Banner" />
+        </div>
 
-            <div className="login-form-wrapper">
-                <div className="login-card">
+        <div className="login-form-wrapper">
+          <div className="login-card">
             <h2>Login</h2>
 
-      {error && <div className="error">{error}</div>}
+            {error && <div className="error">{error}</div>}
 
-      <form onSubmit={handleSubmit}>
-        <input
-          name="email"
-          placeholder="Email"
-          onChange={handleChange}
-        />
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          onChange={handleChange}
-        />
+            <form onSubmit={handleSubmit}>
+              <input
+                name="email"
+                placeholder="Email"
+                onChange={handleChange}
+              />
+              <input
+                type="password"
+                name="password"
+                placeholder="Password"
+                onChange={handleChange}
+              />
 
-        <button disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
+              <button disabled={loading}>
+                {loading ? "Logging in..." : "Login"}
+              </button>
+            </form>
 
-      <div className="login-footer">
-        Don’t have an account? <Link to="/register">Register</Link>
+            <div className="login-footer">
+              Don’t have an account? <Link to="/register">Register</Link>
+            </div>
+
+
+          </div>
+        </div>
       </div>
-        
-      
-    </div>
-    </div>
-    </div>
     </div>
 
   );
