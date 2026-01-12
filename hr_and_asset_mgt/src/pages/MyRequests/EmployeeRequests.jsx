@@ -53,7 +53,7 @@ export default function EmployeeRequests() {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      PENDING: { label: "Pending", class: "status-pending", icon: "⏰" },
+      PENDING: { label: "Pending", class: "status-pending", icon: "!" },
       APPROVED: { label: "Approved", class: "status-approved", icon: "✓" },
       REJECTED: { label: "Rejected", class: "status-rejected", icon: "✗" },
       COMPLETED: { label: "Completed", class: "status-completed", icon: "✓" },
