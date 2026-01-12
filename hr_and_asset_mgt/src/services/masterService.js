@@ -95,3 +95,5 @@ export const employeeTypeService = createMasterService('employee-types');
 export const leaveTypeService = createMasterService('leave-types');
 export const documentTypeService = createMasterService('document-types');
 export const nationalityService = createMasterService('nationalities');
+export const payrollRuleService = createMasterService('payroll-rules');
+export const workflowTemplateService = createMasterService('workflow-templates');
