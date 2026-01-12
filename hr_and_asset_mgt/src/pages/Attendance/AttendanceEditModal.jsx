@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
 
@@ -9,19 +11,6 @@ const toMinutes = (time) => {
   if (!time || !time.includes(":")) return null;
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
-};
-
-const SHIFT_CONFIG = {
-  "Day Shift": {
-    start: "08:00",
-    end: "17:00",
-    lateAfter: "08:00"
-  },
-  "Night Shift": {
-    start: "20:00",
-    end: "05:00",
-    lateAfter: "20:00"
-  }
 };
 
 /* =========================
@@ -38,83 +27,114 @@ const AttendanceEditModal = ({
   const [shift, setShift] = useState("Day Shift");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
-  const [status, setStatus] = useState("Present");
+  const [status, setStatus] = useState("Absent");
   const [workHours, setWorkHours] = useState("0h 0m");
 
-  /* Load employee */
+  const [onLeave] = useState(false);
+
+  /* =========================
+     Load employee
+  ========================= */
+
   useEffect(() => {
     if (!employee) return;
+
     setShift(employee.shift || "Day Shift");
     setCheckIn(employee.checkIn || "");
     setCheckOut(employee.checkOut || "");
-    setWorkHours("0h 0m");
   }, [employee]);
 
   /* =========================
-     Status Calculation
+     STATUS CALCULATION (FIXED)
   ========================= */
 
   useEffect(() => {
-    if (!checkIn) {
-      setStatus("Absent");
+    if (onLeave) {
+      setStatus("On Leave");
       return;
     }
 
-    const rule = SHIFT_CONFIG[shift];
-    if (!rule) return;
+    if (!checkIn && !checkOut) {
+      setStatus("Absent");
+      return;
+    }
 
     const inMin = toMinutes(checkIn);
-    const lateMin = toMinutes(rule.lateAfter);
-
-    if (inMin === null || lateMin === null) {
+    if (inMin === null) {
       setStatus("Absent");
       return;
     }
 
-    setStatus(inMin <= lateMin ? "Present" : "Late");
-  }, [checkIn, shift]);
+    // ✅ DAY SHIFT
+    if (shift === "Day Shift") {
+      const dayLateMin = toMinutes("08:00");
+      setStatus(inMin > dayLateMin ? "Late" : "Present");
+      return;
+    }
+
+    // ✅ NIGHT SHIFT
+    if (shift === "Night Shift") {
+      const nightLateMin = toMinutes("08:00");
+      setStatus(inMin > nightLateMin ? "Late" : "Present");
+      return;
+    }
+  }, [checkIn, checkOut, shift, onLeave]);
 
   /* =========================
-     ✅ WORK HOURS (FIXED)
+     WORK HOURS CALCULATION
   ========================= */
 
   useEffect(() => {
-  if (!checkIn || !checkOut) {
-    setWorkHours("0h 0m");
-    return;
-  }
+    if (!checkIn || !checkOut) {
+      setWorkHours("0h 0m");
+      return;
+    }
 
-  let inMin = toMinutes(checkIn);
-  let outMin = toMinutes(checkOut);
+    let inMin = toMinutes(checkIn);
+    let outMin = toMinutes(checkOut);
 
-  if (inMin === null || outMin === null) {
-    setWorkHours("0h 0m");
-    return;
-  }
+    if (inMin === null || outMin === null) {
+      setWorkHours("0h 0m");
+      return;
+    }
 
-  // ❌ Invalid Day Shift data
-  if (shift === "Day Shift" && outMin <= inMin) {
-    setWorkHours("0h 0m");
-    return;
-  }
+    // Midnight rollover
+    if (outMin < inMin) {
+      outMin += 1440;
+    }
 
-  // 🌙 Night shift crosses midnight
-  if (shift === "Night Shift" && outMin < inMin) {
-    outMin += 1440;
-  }
+    let diff = outMin - inMin;
 
-  const diff = outMin - inMin;
+    // ⛔ Subtract 12 hours (720 mins)
+    diff -= 720;
 
-  if (diff <= 0) {
-    setWorkHours("0h 0m");
-    return;
-  }
+    if (diff <= 0) {
+      setWorkHours("0h 0m");
+      return;
+    }
 
-  const h = Math.floor(diff / 60);
-  const m = diff % 60;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
 
-  setWorkHours(`${h}h ${m}m`);
-}, [checkIn, checkOut, shift]);
+    setWorkHours(`${h}h ${m}m`);
+  }, [checkIn, checkOut]);
+
+  /* ========================= */
+
+  if (!isOpen || !employee) return null;
+
+  const handleSave = () => {
+    onSave({
+      _id: employee._id,
+      employeeId: employee.employeeId,
+      date,
+      shift,
+      checkIn: status === "Absent" ? null : checkIn,
+      checkOut: status === "Absent" ? null : checkOut,
+      status,
+      workHours
+    });
+  };
 
   return (
     <div className="attendance-modal-overlay">
@@ -140,8 +160,8 @@ const AttendanceEditModal = ({
           <div>
             <label>Shift</label>
             <select value={shift} onChange={(e) => setShift(e.target.value)}>
-              <option value="Day Shift">Day Shift | 08:00 - 17:00</option>
-              <option value="Night Shift">Night Shift | 20:00 - 05:00</option>
+              <option value="Day Shift">Day Shift</option>
+              <option value="Night Shift">Night Shift</option>
             </select>
           </div>
 
