@@ -3,7 +3,9 @@ import CustomButton from "../../../components/reusable/Button.jsx";
 import useCompanyStructure from "./useCompanyStructure.js"; // Import the custom hook
 import "../../../style/Masters.css";
 import { RenderList } from "../components/RenderList.jsx";
+import { RenderRolesGrid } from "../components/RenderRolesGrid.jsx";
 import CustomModal from "../../../components/reusable/CustomModal.jsx";
+import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirmationModal.jsx";
 
 export default function CompanyStructure() {
   const {
@@ -17,8 +19,12 @@ export default function CompanyStructure() {
     setInputValue,
     loading,
     handleOpenAdd,
+    handleOpenEdit,
     handleSave,
-    handleDelete
+    handleDelete,
+    confirmDelete,
+    deleteConfig,
+    setDeleteConfig
   } = useCompanyStructure();
 
   return (
@@ -38,7 +44,7 @@ export default function CompanyStructure() {
           title="Departments"
           onAdd={() => handleOpenAdd("Department")}
         >
-          <RenderList items={departments} type="Department" handleDelete={handleDelete} />
+          <RenderList items={departments} type="Department" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
         </MastersCard>
 
         {/* Branches */}
@@ -46,7 +52,7 @@ export default function CompanyStructure() {
           title="Branches"
           onAdd={() => handleOpenAdd("Branch")}
         >
-          <RenderList items={branches} type="Branch" />
+          <RenderList items={branches} type="Branch" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
         </MastersCard>
       </div>
 
@@ -56,7 +62,22 @@ export default function CompanyStructure() {
           title="Designations"
           onAdd={() => handleOpenAdd("Designation")}
         >
-          <RenderList items={designations} type="Designation" />
+          <RenderList items={designations} type="Designation" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+        </MastersCard>
+      </div>
+
+      {/* User Roles & Permissions (Full Width) */}
+      <div className="mt-4">
+        <MastersCard
+          title="User Roles & Permissions"
+          description="Manage access control and permissions"
+          headerAction={
+            <CustomButton onClick={() => handleOpenAdd("Role")}>
+              Configure Roles
+            </CustomButton>
+          }
+        >
+          <RenderRolesGrid />
         </MastersCard>
       </div>
 
@@ -89,6 +110,15 @@ export default function CompanyStructure() {
           />
         </div>
       </CustomModal>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        show={deleteConfig.show}
+        itemName={deleteConfig.name}
+        onClose={() => setDeleteConfig({ ...deleteConfig, show: false })}
+        onConfirm={confirmDelete}
+        loading={loading}
+      />
 
     </div>
   );

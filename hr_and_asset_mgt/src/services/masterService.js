@@ -35,6 +35,11 @@ export const addDepartment = async (name) => {
     return res.data;
 };
 
+export const updateDepartment = async (id, name) => {
+    const res = await api.put(`${BASE_URL}/departments/${id}`, { name });
+    return res.data;
+};
+
 export const deleteDepartment = async (id) => {
     const res = await api.delete(`${BASE_URL}/departments/${id}`);
     return res.data;
@@ -48,6 +53,11 @@ export const getBranches = async () => {
 
 export const addBranch = async (name) => {
     const res = await api.post(`${BASE_URL}/branches`, { name });
+    return res.data;
+};
+
+export const updateBranch = async (id, name) => {
+    const res = await api.put(`${BASE_URL}/branches/${id}`, { name });
     return res.data;
 };
 
@@ -67,6 +77,11 @@ export const addDesignation = async (name) => {
     return res.data;
 };
 
+export const updateDesignation = async (id, name) => {
+    const res = await api.put(`${BASE_URL}/designations/${id}`, { name });
+    return res.data;
+};
+
 export const deleteDesignation = async (id) => {
     const res = await api.delete(`${BASE_URL}/designations/${id}`);
     return res.data;
@@ -83,6 +98,10 @@ const createMasterService = (endpoint) => ({
     },
     add: async (name) => {
         const res = await api.post(`${HR_BASE_URL}/${endpoint}`, { name });
+        return res.data;
+    },
+    update: async (id, name) => {
+        const res = await api.put(`${HR_BASE_URL}/${endpoint}/${id}`, { name });
         return res.data;
     },
     delete: async (id) => {

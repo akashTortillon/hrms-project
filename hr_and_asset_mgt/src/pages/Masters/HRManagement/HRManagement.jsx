@@ -2,6 +2,7 @@ import MastersCard from "../components/MastersCard.jsx"; // New Card Component
 import CustomButton from "../../../components/reusable/Button.jsx";
 import { RenderList } from "../components/RenderList.jsx";
 import CustomModal from "../../../components/reusable/CustomModal.jsx";
+import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirmationModal.jsx";
 import useHRManagement from "./useHRManagement.js";
 import "../../../style/Masters.css";
 
@@ -20,8 +21,12 @@ export default function HRManagement() {
         setInputValue,
         loading,
         handleOpenAdd,
+        handleOpenEdit,
         handleSave,
-        handleDelete
+        handleDelete,
+        confirmDelete,
+        deleteConfig,
+        setDeleteConfig
     } = useHRManagement();
 
     return (
@@ -40,7 +45,7 @@ export default function HRManagement() {
                     title="Employee Types"
                     onAdd={() => handleOpenAdd("Employee Type")}
                 >
-                    <RenderList items={employeeTypes} type="Employee Type" handleDelete={handleDelete} />
+                    <RenderList items={employeeTypes} type="Employee Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Leave Types */}
@@ -48,7 +53,7 @@ export default function HRManagement() {
                     title="Leave Types"
                     onAdd={() => handleOpenAdd("Leave Type")}
                 >
-                    <RenderList items={leaveTypes} type="Leave Type" handleDelete={handleDelete} />
+                    <RenderList items={leaveTypes} type="Leave Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Document Types */}
@@ -56,7 +61,7 @@ export default function HRManagement() {
                     title="Document Types"
                     onAdd={() => handleOpenAdd("Document Type")}
                 >
-                    <RenderList items={documentTypes} type="Document Type" handleDelete={handleDelete} />
+                    <RenderList items={documentTypes} type="Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Nationalities */}
@@ -64,7 +69,7 @@ export default function HRManagement() {
                     title="Nationalities"
                     onAdd={() => handleOpenAdd("Nationality")}
                 >
-                    <RenderList items={nationalities} type="Nationality" handleDelete={handleDelete} />
+                    <RenderList items={nationalities} type="Nationality" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
             </div>
 
@@ -79,7 +84,7 @@ export default function HRManagement() {
                         </CustomButton>
                     }
                 >
-                    <RenderList items={payrollRules} type="Payroll Rule" handleDelete={handleDelete} />
+                    <RenderList items={payrollRules} type="Payroll Rule" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Workflow Templates */}
@@ -92,7 +97,7 @@ export default function HRManagement() {
                         </button>
                     }
                 >
-                    <RenderList items={workflowTemplates} type="Workflow Template" handleDelete={handleDelete} />
+                    <RenderList items={workflowTemplates} type="Workflow Template" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
             </div>
 
@@ -124,6 +129,15 @@ export default function HRManagement() {
                     />
                 </div>
             </CustomModal>
+
+            {/* Delete Confirmation Modal */}
+            <DeleteConfirmationModal
+                show={deleteConfig.show}
+                itemName={deleteConfig.name}
+                onClose={() => setDeleteConfig({ ...deleteConfig, show: false })}
+                onConfirm={confirmDelete}
+                loading={loading}
+            />
 
         </div>
     );

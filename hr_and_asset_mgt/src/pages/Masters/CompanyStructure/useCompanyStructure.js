@@ -3,12 +3,15 @@ import { toast } from "react-toastify";
 import {
     getDepartments,
     addDepartment,
+    updateDepartment,
     deleteDepartment,
     getBranches,
     addBranch,
+    updateBranch,
     deleteBranch,
     getDesignations,
     addDesignation,
+    updateDesignation,
     deleteDesignation
 } from "../../../services/masterService.js";
 
@@ -19,7 +22,10 @@ export default function useCompanyStructure() {
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
+    const [editId, setEditId] = useState(null);
     const [loading, setLoading] = useState(false);
+
+    const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
     useEffect(() => {
         fetchData();
@@ -28,7 +34,6 @@ export default function useCompanyStructure() {
     const fetchData = async () => {
         try {
             const data = await getDepartments();
-            console.log("✅ Departments fetched:", data);
             setDepartments(data);
         } catch (error) {
             console.error("❌ Error fetching departments:", error);
@@ -37,7 +42,6 @@ export default function useCompanyStructure() {
 
         try {
             const data = await getBranches();
-            console.log("✅ Branches fetched:", data);
             setBranches(data);
         } catch (error) {
             console.error("❌ Error fetching branches:", error);
@@ -45,7 +49,6 @@ export default function useCompanyStructure() {
 
         try {
             const data = await getDesignations();
-            console.log("✅ Designations fetched:", data);
             setDesignations(data);
         } catch (error) {
             console.error("❌ Error fetching designations:", error);
@@ -53,43 +56,64 @@ export default function useCompanyStructure() {
     };
 
     const handleOpenAdd = (type) => {
-        console.log(type)
         setModalType(type);
         setInputValue("");
+        setEditId(null);
+        setShowModal(true);
+    };
+
+    const handleOpenEdit = (type, item) => {
+        setModalType(type);
+        setInputValue(item.name);
+        setEditId(item._id);
         setShowModal(true);
     };
 
     const handleSave = async () => {
-
-        console.log("LLLLL")
         if (!inputValue.trim()) return toast.warning("Please enter a name");
         setLoading(true);
         try {
             if (modalType === "Department") {
-                await addDepartment(inputValue);
+                if (editId) await updateDepartment(editId, inputValue);
+                else await addDepartment(inputValue);
                 const data = await getDepartments();
                 setDepartments(data);
             } else if (modalType === "Branch") {
-                await addBranch(inputValue);
+                if (editId) await updateBranch(editId, inputValue);
+                else await addBranch(inputValue);
                 const data = await getBranches();
                 setBranches(data);
             } else if (modalType === "Designation") {
-                await addDesignation(inputValue);
+                if (editId) await updateDesignation(editId, inputValue);
+                else await addDesignation(inputValue);
                 const data = await getDesignations();
                 setDesignations(data);
             }
-            toast.success(`${modalType} added successfully!`);
+            toast.success(`${modalType} ${editId ? "updated" : "added"} successfully!`);
             setShowModal(false);
         } catch (error) {
             console.error(error);
-            toast.error(`Failed to add ${modalType}`);
+            toast.error(`Failed to ${editId ? "update" : "add"} ${modalType}`);
         } finally {
             setLoading(false);
+            setEditId(null);
         }
     };
 
-    const handleDelete = async (type, id) => {
-        if (!window.confirm(`Are you sure you want to delete this ${type}?`)) return;
+    const handleDelete = (type, id) => {
+        let item = null;
+        if (type === "Department") item = departments.find(i => i._id === id);
+        else if (type === "Branch") item = branches.find(i => i._id === id);
+        else if (type === "Designation") item = designations.find(i => i._id === id);
+
+        setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
+    };
+
+    const confirmDelete = async () => {
+        const { type, id } = deleteConfig;
+        if (!type || !id) return;
+
+        setLoading(true);
         try {
             if (type === "Department") {
                 await deleteDepartment(id);
@@ -102,9 +126,12 @@ export default function useCompanyStructure() {
                 setDesignations(designations.filter((d) => d._id !== id));
             }
             toast.success(`${type} deleted successfully`);
+            setDeleteConfig({ ...deleteConfig, show: false });
         } catch (error) {
             console.error(error);
             toast.error("Failed to delete item");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -119,7 +146,11 @@ export default function useCompanyStructure() {
         setInputValue,
         loading,
         handleOpenAdd,
+        handleOpenEdit,
         handleSave,
         handleDelete,
+        confirmDelete,
+        deleteConfig,
+        setDeleteConfig
     };
 }
