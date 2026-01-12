@@ -8,6 +8,8 @@ export default function ProfileDropdown({
   onSettings,
   onLogout,
   anchorRef,
+  role,
+  onRoleChange,
 }) {
   const menuRef = useRef(null);
 
@@ -33,10 +35,14 @@ export default function ProfileDropdown({
   if (!isOpen) return null;
 
   return (
-    <div className="profile-dropdown" ref={menuRef}>
+    <div className="profile-dropdown" ref={menuRef}
+    onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="profile-dropdown__section">
         <div className="profile-dropdown__label">Switch Role (Demo)</div>
-        <select className="profile-dropdown__select" defaultValue="Admin">
+        <select className="profile-dropdown__select" defaultValue="Admin" value={role}
+          onChange={(e) => onRoleChange(e.target.value)}>
           <option value="Admin">Admin</option>
           <option value="Manager">Manager</option>
           <option value="Employee">Employee</option>
