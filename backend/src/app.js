@@ -4,6 +4,7 @@ import authRoutes from "./routes/authRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
+import requestRoutes from "./routes/requestRoutes.js";
 
 const app = express();
 
@@ -35,6 +36,10 @@ console.log("✅ Employee routes registered at /api/employees");
 // 🔹 Attendance APIs
 app.use("/api/attendance", attendanceRoutes);
 console.log("✅ Attendance routes registered at /api/attendance");
+
+// 🔹 Request APIs
+app.use("/api/requests", requestRoutes);
+console.log("✅ Request routes registered at /api/requests");
 
 
 
