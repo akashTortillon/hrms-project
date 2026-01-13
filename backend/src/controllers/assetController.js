@@ -1,26 +1,38 @@
 import Asset from "../models/assetModel.js";
 
+// Generate next asset code (AST001, AST002, etc.)
+const generateAssetCode = async () => {
+  const lastAsset = await Asset.findOne().sort({ assetCode: -1 });
+  
+  if (!lastAsset || !lastAsset.assetCode) {
+    return "AST001";
+  }
+  
+  const lastNumber = parseInt(lastAsset.assetCode.replace("AST", ""));
+  const nextNumber = lastNumber + 1;
+  return `AST${nextNumber.toString().padStart(3, "0")}`;
+};
+
 export const createAsset = async (req, res) => {
   try {
-    const { assetCode, name, category, location, custodian, purchaseCost, purchaseDate, status } = req.body;
+    const { name, category, location, subLocation, custodian, department, purchaseCost, purchaseDate, status } = req.body;
 
-    // Validation
-    if (!assetCode || !name || !category || !location || !custodian || !purchaseCost || !purchaseDate) {
-      return res.status(400).json({ message: "All fields are required" });
+    // Validation (assetCode is auto-generated, so not required)
+    if (!name || !category || !location || !custodian || !purchaseCost || !purchaseDate) {
+      return res.status(400).json({ message: "All required fields must be provided" });
     }
 
-    // Check if asset code already exists
-    const existingAsset = await Asset.findOne({ assetCode });
-    if (existingAsset) {
-      return res.status(409).json({ message: "Asset code already exists" });
-    }
+    // Generate asset code automatically
+    const assetCode = await generateAssetCode();
 
     const asset = await Asset.create({
       assetCode,
       name,
       category,
       location,
+      subLocation: subLocation || "",
       custodian,
+      department: department || "",
       purchaseCost,
       purchaseDate,
       status: status || "Available"
