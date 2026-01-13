@@ -21,114 +21,60 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-const BASE_URL = "/api/masters";
+// --- UNIFIED MASTERS ---
+// All masters use the same endpoint structure: /api/masters/:type
 
-// --- DEPARTMENTS ---
-export const getDepartments = async () => {
-    const res = await api.get(`${BASE_URL}/departments`);
-    return res.data;
-};
+const UNIFIED_BASE = "/api/masters";
 
-export const addDepartment = async (name) => {
-    const res = await api.post(`${BASE_URL}/departments`, { name });
-    console.log(res)
-    return res.data;
-};
-
-export const updateDepartment = async (id, name) => {
-    const res = await api.put(`${BASE_URL}/departments/${id}`, { name });
-    return res.data;
-};
-
-export const deleteDepartment = async (id) => {
-    const res = await api.delete(`${BASE_URL}/departments/${id}`);
-    return res.data;
-};
-
-// --- BRANCHES ---
-export const getBranches = async () => {
-    const res = await api.get(`${BASE_URL}/branches`);
-    return res.data;
-};
-
-export const addBranch = async (name) => {
-    const res = await api.post(`${BASE_URL}/branches`, { name });
-    return res.data;
-};
-
-export const updateBranch = async (id, name) => {
-    const res = await api.put(`${BASE_URL}/branches/${id}`, { name });
-    return res.data;
-};
-
-export const deleteBranch = async (id) => {
-    const res = await api.delete(`${BASE_URL}/branches/${id}`);
-    return res.data;
-};
-
-// --- DESIGNATIONS ---
-export const getDesignations = async () => {
-    const res = await api.get(`${BASE_URL}/designations`);
-    return res.data;
-};
-
-export const addDesignation = async (name) => {
-    const res = await api.post(`${BASE_URL}/designations`, { name });
-    return res.data;
-};
-
-export const updateDesignation = async (id, name) => {
-    const res = await api.put(`${BASE_URL}/designations/${id}`, { name });
-    return res.data;
-};
-
-export const deleteDesignation = async (id) => {
-    const res = await api.delete(`${BASE_URL}/designations/${id}`);
-    return res.data;
-};
-
-// --- HR MASTERS (Employee Types, Leave Types, etc) ---
-const HR_BASE_URL = '/api/masters/hr';
-
-// --- ASSET MASTERS ---
-const ASSET_BASE_URL = '/api/masters/asset';
-
-// We reuse createMasterService but need to ensure it uses the correct BASE_URL.
-// Since createMasterService currently uses HR_BASE_URL hardcoded in the closure if not modified, 
-// we should refactor createMasterService to accept baseUrl.
-
-const createGenericService = (baseUrl, endpoint) => ({
+const createGenericService = (typeSlug) => ({
     getAll: async () => {
-        const res = await api.get(`${baseUrl}/${endpoint}`);
+        const res = await api.get(`${UNIFIED_BASE}/${typeSlug}`);
         return res.data;
     },
     add: async (data) => {
         // Handle both simple name string and complex object
         const payload = typeof data === 'string' ? { name: data } : data;
-        const res = await api.post(`${baseUrl}/${endpoint}`, payload);
+        const res = await api.post(`${UNIFIED_BASE}/${typeSlug}`, payload);
         return res.data;
     },
     update: async (id, data) => {
-        // Handle both simple name string and complex object
         const payload = typeof data === 'string' ? { name: data } : data;
-        const res = await api.put(`${baseUrl}/${endpoint}/${id}`, payload);
+        const res = await api.put(`${UNIFIED_BASE}/${typeSlug}/${id}`, payload);
         return res.data;
     },
     delete: async (id) => {
-        const res = await api.delete(`${baseUrl}/${endpoint}/${id}`);
+        const res = await api.delete(`${UNIFIED_BASE}/${typeSlug}/${id}`);
         return res.data;
     }
 });
 
-export const employeeTypeService = createGenericService(HR_BASE_URL, 'employee-types');
-export const leaveTypeService = createGenericService(HR_BASE_URL, 'leave-types');
-export const documentTypeService = createGenericService(HR_BASE_URL, 'document-types');
-export const nationalityService = createGenericService(HR_BASE_URL, 'nationalities');
-export const payrollRuleService = createGenericService(HR_BASE_URL, 'payroll-rules');
-export const workflowTemplateService = createGenericService(HR_BASE_URL, 'workflow-templates');
+// Explicit exports for backward compatibility with consuming components
+export const getDepartments = async () => (await createGenericService("departments").getAll());
+export const addDepartment = async (name) => (await createGenericService("departments").add(name));
+export const updateDepartment = async (id, name) => (await createGenericService("departments").update(id, name));
+export const deleteDepartment = async (id) => (await createGenericService("departments").delete(id));
 
-export const assetTypeService = createGenericService(ASSET_BASE_URL, 'asset-types');
-export const assetCategoryService = createGenericService(ASSET_BASE_URL, 'asset-categories');
-export const assetStatusService = createGenericService(ASSET_BASE_URL, 'status-labels');
-export const vendorService = createGenericService(ASSET_BASE_URL, 'vendors');
-export const serviceTypeService = createGenericService(ASSET_BASE_URL, 'service-types');
+export const getBranches = async () => (await createGenericService("branches").getAll());
+export const addBranch = async (name) => (await createGenericService("branches").add(name));
+export const updateBranch = async (id, name) => (await createGenericService("branches").update(id, name));
+export const deleteBranch = async (id) => (await createGenericService("branches").delete(id));
+
+export const getDesignations = async () => (await createGenericService("designations").getAll());
+export const addDesignation = async (name) => (await createGenericService("designations").add(name));
+export const updateDesignation = async (id, name) => (await createGenericService("designations").update(id, name));
+export const deleteDesignation = async (id) => (await createGenericService("designations").delete(id));
+
+// HR Masters
+export const employeeTypeService = createGenericService('employee-types');
+export const leaveTypeService = createGenericService('leave-types');
+export const documentTypeService = createGenericService('document-types');
+export const nationalityService = createGenericService('nationalities');
+export const payrollRuleService = createGenericService('payroll-rules');
+export const workflowTemplateService = createGenericService('workflow-templates');
+
+// Asset Masters
+export const assetTypeService = createGenericService('asset-types');
+export const assetCategoryService = createGenericService('asset-categories');
+export const assetStatusService = createGenericService('status-labels');
+export const vendorService = createGenericService('vendors');
+export const serviceTypeService = createGenericService('service-types');
