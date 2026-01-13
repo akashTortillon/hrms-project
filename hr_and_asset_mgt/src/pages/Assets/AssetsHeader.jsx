@@ -33,7 +33,7 @@ const stats = [
   },
 ];
 
-export default function AssetsHeader() {
+export default function AssetsHeader({ onAddAsset }) {
   return (
     <div className="document-library">
       {/* Header */}
@@ -52,7 +52,7 @@ export default function AssetsHeader() {
         
 
 
-        <AppButton variant="primary" className="upload-btn">
+        <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>
           <SvgIcon name="plus" size={18} />
           <span>Add Asset</span>
         </AppButton>
