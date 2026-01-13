@@ -3,6 +3,7 @@ import "../../style/EmployeeRequests.css";
 import SubmitRequestModal from "./SubmitRequestModal";
 import { getMyRequests, withdrawRequest } from "../../services/requestService.js";
 import { toast } from "react-toastify";
+import SvgIcon from "../../components/svgIcon/svgView";
 
 export default function EmployeeRequests() {
   const [openModal, setOpenModal] = useState(false);
@@ -53,7 +54,7 @@ export default function EmployeeRequests() {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      PENDING: { label: "Pending", class: "status-pending", icon: "!" },
+      PENDING: { label: "Pending", class: "status-pending", icon: <SvgIcon name="circle-tick" size={15}/> },
       APPROVED: { label: "Approved", class: "status-approved", icon: "✓" },
       REJECTED: { label: "Rejected", class: "status-rejected", icon: "✗" },
       COMPLETED: { label: "Completed", class: "status-completed", icon: "✓" },
