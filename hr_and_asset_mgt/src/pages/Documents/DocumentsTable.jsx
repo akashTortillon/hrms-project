@@ -16,7 +16,22 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const DocumentsTable = ({ documents = [] }) => {
+const DocumentsTable = ({ documents = [], onDelete }) => {
+  const getFileUrl = (path) => {
+    if (!path) return "#";
+    // Ensure correct URL construction. Backend serves uploads at /uploads
+    // path from DB is like "uploads/file.pdf"
+    const backendUrl = import.meta.env.VITE_API_BASE.replace("/api", "");
+    // If VITE_API_BASE is "http://localhost:5000/api", then we want "http://localhost:5000"
+    // But currently check your .env. Likely http://localhost:5000/api
+
+    // Safer way: assume VITE_API_BASE is just the base, e.g. http://localhost:5000
+    // If path is "uploads/foo.pdf", we want http://localhost:5000/uploads/foo.pdf
+
+    // Let's assume path is relative.
+    return `${import.meta.env.VITE_API_BASE.replace('/api', '')}/${path}`;
+  };
+
   const columns = [
     {
       key: "document",
@@ -76,11 +91,35 @@ const DocumentsTable = ({ documents = [] }) => {
       key: "actions",
       header: "ACTIONS",
       width: "14%",
-      render: () => (
+      render: (row) => (
         <div className="action-icons">
-          <SvgIcon name="eye" size={18} />
-          <SvgIcon name="download" size={18} />
-          <span className="danger">
+          <a
+            href={getFileUrl(row.filePath)}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ cursor: 'pointer', color: 'inherit' }}
+            title="View"
+          >
+            <SvgIcon name="eye" size={18} />
+          </a>
+
+          <a
+            href={getFileUrl(row.filePath)}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ cursor: 'pointer', color: 'inherit' }}
+            title="Download"
+          >
+            <SvgIcon name="download" size={18} />
+          </a>
+
+          <span
+            className="danger"
+            onClick={() => onDelete(row._id || row.id)}
+            style={{ cursor: 'pointer' }}
+            title="Delete"
+          >
             <SvgIcon name="delete" size={18} />
           </span>
         </div>
