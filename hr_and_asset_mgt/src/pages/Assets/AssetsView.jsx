@@ -4,13 +4,15 @@ import AssetsFilters from "./AssetsFilter";
 import AssetsTable from "./AssetsTable";
 import AssetActions from "./AssetActionCards";
 import AddAssetModal from "./AddAssetModal";
-import { getAssets, createAsset } from "../../services/assetService.js";
+import { getAssets, createAsset, updateAsset, deleteAsset } from "../../services/assetService.js";
 import { toast } from "react-toastify";
 
 function Assets() {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState(null);
 
   useEffect(() => {
     fetchAssets();
@@ -52,7 +54,8 @@ function Assets() {
           price: formattedPrice,
           purchaseDate: purchaseDate,
           status: asset.status,
-          statusKey: statusKeyMap[asset.status] || "available"
+          statusKey: statusKeyMap[asset.status] || "available",
+          isDeleted: asset.isDeleted || false
         };
       });
 
@@ -87,6 +90,58 @@ function Assets() {
     }
   };
 
+  // Handle edit click
+  const handleEditClick = (asset) => {
+    setSelectedAsset(asset);
+    setShowEditModal(true);
+  };
+
+  // Handle updating asset
+  const handleUpdateAsset = async (assetData) => {
+    try {
+      const response = await updateAsset(assetData._id, assetData);
+      const { message } = response;
+
+      toast.success(message || "Asset updated successfully");
+
+      // Refresh assets list
+      fetchAssets();
+
+      setShowEditModal(false);
+      setSelectedAsset(null);
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update asset";
+      toast.error(errorMessage);
+    }
+  };
+
+  // Handle delete asset
+  const handleDeleteAsset = async (asset) => {
+    const confirmDelete = window.confirm(
+      `Do you want to delete this asset?`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteAsset(asset._id || asset.id);
+
+      toast.success("Asset deleted successfully");
+
+      // Refresh assets list
+      fetchAssets();
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete asset";
+      toast.error(errorMessage);
+    }
+  };
+
   return (
     <div>
       <AssetsHeader onAddAsset={() => setShowAddModal(true)} />
@@ -94,7 +149,11 @@ function Assets() {
       {loading ? (
         <div style={{ padding: "20px", textAlign: "center" }}>Loading assets...</div>
       ) : (
-        <AssetsTable assets={assets} />
+        <AssetsTable 
+          assets={assets} 
+          onEdit={handleEditClick}
+          onDelete={handleDeleteAsset}
+        />
       )}
       <AssetActions />
 
@@ -103,6 +162,18 @@ function Assets() {
         <AddAssetModal
           onClose={() => setShowAddModal(false)}
           onAddAsset={handleAddAsset}
+        />
+      )}
+
+      {/* EDIT MODAL */}
+      {showEditModal && selectedAsset && (
+        <AddAssetModal
+          asset={selectedAsset}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedAsset(null);
+          }}
+          onUpdateAsset={handleUpdateAsset}
         />
       )}
     </div>
