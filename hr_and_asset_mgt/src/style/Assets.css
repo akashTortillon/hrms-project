@@ -317,6 +317,32 @@
   text-decoration: underline;
 }
 
+/* Action buttons container */
+.actions-btn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Edit button icon color */
+.edit-btn svg {
+  fill: #2563eb; /* blue-600 */
+}
+
+/* Delete button icon color */
+.delete-btn svg {
+  fill: #dc2626; /* red-600 */
+}
+
+/* Hover effects */
+.edit-btn:hover svg {
+  fill: #1d4ed8;
+}
+
+.delete-btn:hover svg {
+  fill: #b91c1c;
+}
+
 
 /* ---------- Layout ---------- */
 
