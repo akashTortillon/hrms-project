@@ -55,10 +55,10 @@ export default function EmployeeRequests() {
   const getStatusBadge = (status) => {
     const statusConfig = {
       PENDING: { label: "Pending", class: "status-pending", icon: <SvgIcon name="circle-tick" size={15}/> },
-      APPROVED: { label: "Approved", class: "status-approved", icon: "✓" },
-      REJECTED: { label: "Rejected", class: "status-rejected", icon: "✗" },
-      COMPLETED: { label: "Completed", class: "status-completed", icon: "✓" },
-      WITHDRAWN: { label: "Withdrawn", class: "status-withdrawn", icon: "↩" }
+      APPROVED: { label: "Approved", class: "status-approved", icon: <SvgIcon name="circle-tick" size={15}/> },
+      REJECTED: { label: "Rejected", class: "status-rejected", icon: <SvgIcon name="circle-xmark" size={15}/> },
+      COMPLETED: { label: "Completed", class: "status-completed", icon: <SvgIcon name="circle-tick" size={15}/> },
+      WITHDRAWN: { label: "Withdrawn", class: "status-withdrawn", icon: <SvgIcon name="arrow-uturn-cw-left" size={15}/> }
     };
     const config = statusConfig[status] || statusConfig.PENDING;
     return (

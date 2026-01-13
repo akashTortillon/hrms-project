@@ -5,7 +5,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import requestRoutes from "./routes/requestRoutes.js";
-// Legacy routes removed
+import assetRoutes from "./routes/assetRoutes.js";
 
 const app = express();
 
@@ -14,7 +14,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: true, // allow all origins (temporary)
+    origin: true, // allow all origins
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"]
@@ -55,6 +55,10 @@ import companyDocRoutes from "./routes/companyDocRoutes.js";
 app.use("/api/documents", companyDocRoutes);
 // Serve uploaded files statically
 app.use("/uploads", express.static("uploads"));
+
+// 🔹 Asset APIs
+app.use("/api/assets", assetRoutes);
+console.log("✅ Asset routes registered at /api/assets");
 
 
 
