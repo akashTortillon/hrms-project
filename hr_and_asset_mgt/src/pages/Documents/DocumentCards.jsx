@@ -5,34 +5,38 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Document.css";
 
 
-const stats = [
-  {
-    title: "Total Documents",
-    value: 6,
-    icon: "document (1)",
-    iconColor: "#2563eb",
-  },
-  {
-    title: "Valid",
-    value: 3,
-    icon: "document (1)",
-    iconColor: "#16a34a",
-  },
-  {
-    title: "Expiring Soon",
-    value: 3,
-    icon: "exclamation",
-    iconColor: "#f59e0b",
-  },
-  {
-    title: "Expired",
-    value: 0,
-    icon: "exclamation",
-    iconColor: "#dc2626",
-  },
-];
+export default function DocumentLibraryHeader({ stats = { total: 0, valid: 0, expiring: 0, expired: 0 }, onUploadClick }) {
 
-export default function DocumentLibraryHeader() {
+  // Use stats from props directly
+  const { total, valid, expiring, expired } = stats;
+
+  const statItems = [
+    {
+      title: "Total Documents",
+      value: total,
+      icon: "document (1)",
+      iconColor: "#2563eb",
+    },
+    {
+      title: "Valid",
+      value: valid,
+      icon: "document (1)",
+      iconColor: "#16a34a",
+    },
+    {
+      title: "Expiring Soon",
+      value: expiring,
+      icon: "exclamation",
+      iconColor: "#f59e0b",
+    },
+    {
+      title: "Expired",
+      value: expired,
+      icon: "exclamation",
+      iconColor: "#dc2626",
+    },
+  ];
+
   return (
     <div className="document-library">
       {/* Header */}
@@ -44,7 +48,7 @@ export default function DocumentLibraryHeader() {
           </p>
         </div>
 
-        <AppButton variant="primary" className="upload-btn">
+        <AppButton variant="primary" className="upload-btn" onClick={onUploadClick}>
           <SvgIcon name="upload" size={18} />
           <span>Upload Document</span>
         </AppButton>
@@ -52,7 +56,7 @@ export default function DocumentLibraryHeader() {
 
       {/* Stats */}
       <div className="document-stats">
-        {stats.map((item, index) => (
+        {statItems.map((item, index) => (
           <Card key={index} className="document-stat-card">
             <div className="document-stat-content">
               <div className="document-stat-top">

@@ -16,7 +16,7 @@ app.use(
   cors({
     origin: true, // allow all origins (temporary)
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
@@ -49,6 +49,12 @@ console.log("✅ Unified Master routes registered at /api/masters");
 import systemSettingsRoutes from "./routes/systemSettingsRoutes.js";
 app.use("/api/system-settings", systemSettingsRoutes);
 console.log("✅ System Settings routes registered at /api/system-settings");
+
+// 🔹 Company Documents API
+import companyDocRoutes from "./routes/companyDocRoutes.js";
+app.use("/api/documents", companyDocRoutes);
+// Serve uploaded files statically
+app.use("/uploads", express.static("uploads"));
 
 
 

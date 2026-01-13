@@ -1,5 +1,3 @@
-
-
 /* Dark overlay - lighter */
 .modal-backdrop {
   position: fixed;
@@ -28,7 +26,8 @@
 
 /* Header - normal padding */
 .modal-header {
-  padding: 16px 20px; /* ✅ Normalized padding */
+  padding: 16px 20px;
+  /* ✅ Normalized padding */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -62,19 +61,22 @@
 
 /* Body - normal padding */
 .modal-body {
-  padding: 20px; /* ✅ Normalized padding */
+  padding: 20px;
+  /* ✅ Normalized padding */
   background: #fff;
 }
 
 .modal-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px; /* ✅ Normalized gap */
+  gap: 16px;
+  /* ✅ Normalized gap */
 }
 
 .modal-grid input,
 .modal-grid select {
-  padding: 10px 12px; /* ✅ Normalized input padding */
+  padding: 10px 12px;
+  /* ✅ Normalized input padding */
   border-radius: 8px;
   border: 1px solid #d1d5db;
   font-size: 14px;
@@ -108,7 +110,8 @@
 
 /* Footer - normal padding */
 .modal-footer {
-  padding: 16px 20px; /* ✅ Normalized padding */
+  padding: 16px 20px;
+  /* ✅ Normalized padding */
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -163,6 +166,7 @@
     opacity: 0;
     transform: translateY(-10px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
