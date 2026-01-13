@@ -41,7 +41,7 @@ export default function ProfileDropdown({
     >
       <div className="profile-dropdown__section">
         <div className="profile-dropdown__label">Switch Role (Demo)</div>
-        <select className="profile-dropdown__select" defaultValue="Admin" value={role}
+        <select className="profile-dropdown__select" value={role}
           onChange={(e) => onRoleChange(e.target.value)}>
           <option value="Admin">Admin</option>
           <option value="Manager">Manager</option>

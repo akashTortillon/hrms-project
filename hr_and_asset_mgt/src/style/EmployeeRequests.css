@@ -156,9 +156,9 @@
 
 .request-item-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+    gap: 12px;
 }
 
 .request-item-title {
