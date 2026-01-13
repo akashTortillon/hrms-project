@@ -1,4 +1,4 @@
-import UnifiedMaster from "../models/unifiedMasterModel.js";
+import Master from "../models/masterModel.js";
 
 // Mapping frontend "slugs" to db types
 const TYPE_MAPPING = {
@@ -26,7 +26,7 @@ export const getItems = async (req, res) => {
         const { type } = req.params;
         const dbType = TYPE_MAPPING[type] || type.toUpperCase();
 
-        const items = await UnifiedMaster.find({ type: dbType, isActive: true })
+        const items = await Master.find({ type: dbType, isActive: true })
             .sort({ name: 1 });
 
         res.status(200).json(items);
@@ -46,7 +46,7 @@ export const addItem = async (req, res) => {
             type: dbType
         };
 
-        const newItem = new UnifiedMaster(payload);
+        const newItem = new Master(payload);
         await newItem.save();
         res.status(201).json(newItem);
     } catch (error) {
@@ -61,7 +61,7 @@ export const addItem = async (req, res) => {
 export const updateItem = async (req, res) => {
     try {
         const { id } = req.params;
-        const updated = await UnifiedMaster.findByIdAndUpdate(id, req.body, { new: true });
+        const updated = await Master.findByIdAndUpdate(id, req.body, { new: true });
         if (!updated) return res.status(404).json({ message: "Item not found" });
         res.status(200).json(updated);
     } catch (error) {
@@ -72,7 +72,7 @@ export const updateItem = async (req, res) => {
 export const deleteItem = async (req, res) => {
     try {
         const { id } = req.params;
-        const deleted = await UnifiedMaster.findByIdAndDelete(id);
+        const deleted = await Master.findByIdAndDelete(id);
         if (!deleted) return res.status(404).json({ message: "Item not found" });
         res.status(200).json({ message: "Deleted successfully" });
     } catch (error) {

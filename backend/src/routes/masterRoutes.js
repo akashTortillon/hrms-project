@@ -4,7 +4,8 @@ import {
     addItem,
     updateItem,
     deleteItem
-} from "../controllers/unifiedMasterController.js";
+} from "../controllers/masterController.js";
+
 const router = express.Router();
 
 router.get("/:type", getItems);
