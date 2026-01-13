@@ -29,7 +29,6 @@ const AssetsTable = ({ assets }) => {
       render: (row) => (
         <div className="cell-stack">
           <div className="cell-primary">{row.location}</div>
-          <div className="cell-secondary">{row.subLocation}</div>
         </div>
       ),
     },
@@ -40,7 +39,6 @@ const AssetsTable = ({ assets }) => {
       render: (row) => (
         <div className="cell-stack">
           <div className="cell-primary">{row.custodian}</div>
-          <div className="cell-secondary">{row.department}</div>
         </div>
       ),
     },
