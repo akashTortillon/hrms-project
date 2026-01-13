@@ -18,9 +18,17 @@ const assetSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  subLocation: {
+    type: String,
+    default: ""
+  },
   custodian: {
     type: String,
     required: true
+  },
+  department: {
+    type: String,
+    default: ""
   },
   purchaseCost: {
     type: Number,
