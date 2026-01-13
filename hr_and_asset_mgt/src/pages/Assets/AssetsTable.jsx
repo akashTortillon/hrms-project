@@ -2,7 +2,7 @@ import DataTable from "../../components/reusable/DataTable";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
 
-const AssetsTable = ({ assets }) => {
+const AssetsTable = ({ assets, onEdit, onDelete }) => {
   const columns = [
     {
       key: "asset",
@@ -73,10 +73,31 @@ const AssetsTable = ({ assets }) => {
       key: "actions",
       header: "ACTIONS",
       width: "12%",
-      render: () => (
-        <button className="action-link">
-          View Details
-        </button>
+      render: (row) => (
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {row.isDeleted ? (
+            <span style={{ color: "#dc2626", fontSize: "12px", fontWeight: "500" }}>Deleted</span>
+          ) : (
+            <div className="actions-btn">
+              <button
+                type="button"
+                className="icon-btn edit-btn"
+                onClick={() => onEdit && onEdit(row)}
+                title="Edit Asset"
+              >
+                <SvgIcon name="edit" size={18} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn delete-btn"
+                onClick={() => onDelete && onDelete(row)}
+                title="Delete Asset"
+              >
+                <SvgIcon name="delete" size={18} />
+              </button>
+            </div>
+          )}
+        </div>
       ),
     },
   ];

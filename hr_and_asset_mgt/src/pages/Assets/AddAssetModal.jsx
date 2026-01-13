@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
 
-export default function AddAssetModal({ onClose, onAddAsset }) {
+export default function AddAssetModal({ onClose, onAddAsset, onUpdateAsset, asset = null }) {
+  const isEditMode = !!asset;
+  
   const [form, setForm] = useState({
     name: "",
     category: "",
@@ -13,6 +15,27 @@ export default function AddAssetModal({ onClose, onAddAsset }) {
     purchaseDate: "",
     status: "Available",
   });
+
+  // Pre-fill form if editing
+  useEffect(() => {
+    if (asset) {
+      const purchaseDate = asset.purchaseDate
+        ? new Date(asset.purchaseDate).toISOString().split("T")[0]
+        : "";
+      
+      setForm({
+        name: asset.name || "",
+        category: asset.category || "",
+        location: asset.location || "",
+        subLocation: asset.subLocation || "",
+        custodian: asset.custodian || "",
+        department: asset.department || "",
+        purchaseCost: asset.purchaseCost || "",
+        purchaseDate: purchaseDate,
+        status: asset.status || "Available",
+      });
+    }
+  }, [asset]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -33,14 +56,18 @@ export default function AddAssetModal({ onClose, onAddAsset }) {
       return;
     }
 
-    onAddAsset(form);
+    if (isEditMode && onUpdateAsset) {
+      onUpdateAsset({ ...form, _id: asset._id });
+    } else {
+      onAddAsset(form);
+    }
   };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Add Asset</h3>
+          <h3>{isEditMode ? "Edit Asset" : "Add Asset"}</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -109,7 +136,7 @@ export default function AddAssetModal({ onClose, onAddAsset }) {
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={handleSubmit}>
-            Add Asset
+            {isEditMode ? "Update Asset" : "Add Asset"}
           </button>
         </div>
       </div>
