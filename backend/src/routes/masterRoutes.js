@@ -5,8 +5,12 @@ import {
     updateItem,
     deleteItem
 } from "../controllers/masterController.js";
+import { protect } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+// All routes here require authentication
+router.use(protect);
 
 router.get("/:type", getItems);
 router.post("/:type", addItem);

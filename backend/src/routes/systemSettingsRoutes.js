@@ -7,8 +7,12 @@ import {
     deleteHoliday,
     toggleNotification
 } from '../controllers/systemSettingsController.js';
+import { protect } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+// All routes here require authentication
+router.use(protect);
 
 router.get('/', getSettings);
 router.put('/global', updateGlobalSettings);
