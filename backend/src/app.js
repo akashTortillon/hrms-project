@@ -41,8 +41,8 @@ console.log("✅ Attendance routes registered at /api/attendance");
 // 🔹 Request APIs
 app.use("/api/requests", requestRoutes);
 // 🔹 Unified Master API
-import unifiedMasterRoutes from "./routes/unifiedMasterRoutes.js";
-app.use("/api/masters", unifiedMasterRoutes);
+import masterRoutes from "./routes/masterRoutes.js";
+app.use("/api/masters", masterRoutes);
 console.log("✅ Unified Master routes registered at /api/masters");
 
 // 🔹 System Settings API

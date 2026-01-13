@@ -28,4 +28,4 @@ const unifiedMasterSchema = new mongoose.Schema({
 // Compound index to ensure names are unique within a type
 unifiedMasterSchema.index({ type: 1, name: 1 }, { unique: true });
 
-export default mongoose.model("UnifiedMaster", unifiedMasterSchema);
+export default mongoose.model("Master", unifiedMasterSchema);
