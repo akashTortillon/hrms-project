@@ -3,12 +3,14 @@ import AssetsHeader from "./AssetsHeader";
 import AssetsFilters from "./AssetsFilter";
 import AssetsTable from "./AssetsTable";
 import AssetActions from "./AssetActionCards";
-import { getAssets } from "../../services/assetService.js";
+import AddAssetModal from "./AddAssetModal";
+import { getAssets, createAsset } from "../../services/assetService.js";
 import { toast } from "react-toastify";
 
 function Assets() {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     fetchAssets();
@@ -62,9 +64,30 @@ function Assets() {
     }
   };
 
+  // Handle adding new asset
+  const handleAddAsset = async (assetData) => {
+    try {
+      const response = await createAsset(assetData);
+      const { message, asset: newAsset } = response;
+
+      toast.success(message || "Asset added successfully 🎉");
+
+      // Refresh assets list
+      fetchAssets();
+
+      setShowAddModal(false);
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to add asset";
+      toast.error(errorMessage);
+    }
+  };
+
   return (
     <div>
-      <AssetsHeader />
+      <AssetsHeader onAddAsset={() => setShowAddModal(true)} />
       <AssetsFilters />
       {loading ? (
         <div style={{ padding: "20px", textAlign: "center" }}>Loading assets...</div>
@@ -72,6 +95,14 @@ function Assets() {
         <AssetsTable assets={assets} />
       )}
       <AssetActions />
+
+      {/* ADD MODAL */}
+      {showAddModal && (
+        <AddAssetModal
+          onClose={() => setShowAddModal(false)}
+          onAddAsset={handleAddAsset}
+        />
+      )}
     </div>
   );
 }
