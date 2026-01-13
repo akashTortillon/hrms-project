@@ -2,34 +2,28 @@ import Card from "../../components/reusable/Card";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
 
-const actions = [
-  {
-    id: "schedule",
-    icon: "spanner",
-    title: "Schedule Maintenance",
-    description: "Plan and schedule maintenance for assets",
-    buttonText: "Schedule",
-    variant: "primary",
-  },
-  {
-    id: "transfer",
-    icon: "cube",
-    title: "Transfer Asset",
-    description: "Transfer assets between employees or stores",
-    buttonText: "Transfer",
-    variant: "success",
-  },
-  {
-    id: "alerts",
-    icon: "exclamation",
-    title: "Service Due Alerts",
-    description: "View assets requiring maintenance",
-    buttonText: "View Alerts",
-    variant: "warning",
-  },
-];
+const AssetActions = ({ onTransferClick }) => {
+  const actions = [
+    {
+      id: "transfer",
+      icon: "cube",
+      title: "Transfer Asset",
+      description: "Transfer assets between employees or stores",
+      buttonText: "Transfer",
+      variant: "success",
+      onClick: onTransferClick
+    },
+    {
+      id: "history",
+      icon: "document",
+      title: "View Asset History",
+      description: "View assignment and transfer history (Coming Soon)",
+      buttonText: "View History",
+      variant: "primary",
+      onClick: null
+    },
+  ];
 
-const AssetActions = () => {
   return (
     <div className="asset-actions">
       {actions.map((action) => (
@@ -48,6 +42,9 @@ const AssetActions = () => {
 
             <button
               className={`action-btn action-btn-${action.variant}`}
+              onClick={action.onClick || undefined}
+              disabled={!action.onClick}
+              style={{ opacity: action.onClick ? 1 : 0.6, cursor: action.onClick ? "pointer" : "not-allowed" }}
             >
               {action.buttonText}
             </button>

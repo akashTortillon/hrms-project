@@ -4,7 +4,11 @@ import AssetsFilters from "./AssetsFilter";
 import AssetsTable from "./AssetsTable";
 import AssetActions from "./AssetActionCards";
 import AddAssetModal from "./AddAssetModal";
+import AssignAssetModal from "./AssignAssetModal";
+import TransferAssetModal from "./TransferAssetModal";
+import ReturnAssetModal from "./ReturnAssetModal";
 import { getAssets, createAsset, updateAsset, deleteAsset } from "../../services/assetService.js";
+import { assignAssetToEmployee, transferAsset, returnAssetToStore } from "../../services/assignmentService.js";
 import { toast } from "react-toastify";
 
 function Assets() {
@@ -12,6 +16,9 @@ function Assets() {
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
 
   useEffect(() => {
@@ -142,6 +149,81 @@ function Assets() {
     }
   };
 
+  // Handle assign asset
+  const handleAssignClick = (asset) => {
+    setSelectedAsset(asset);
+    setShowAssignModal(true);
+  };
+
+  const handleAssignAsset = async (data) => {
+    try {
+      const response = await assignAssetToEmployee(data);
+      toast.success(response.message || "Asset assigned successfully");
+
+      // Refresh assets list
+      fetchAssets();
+
+      setShowAssignModal(false);
+      setSelectedAsset(null);
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to assign asset";
+      toast.error(errorMessage);
+    }
+  };
+
+  // Handle transfer asset
+  const handleTransferClick = (asset) => {
+    setSelectedAsset(asset);
+    setShowTransferModal(true);
+  };
+
+  const handleTransferAsset = async (data) => {
+    try {
+      const response = await transferAsset(data);
+      toast.success(response.message || "Asset transferred successfully");
+
+      // Refresh assets list
+      fetchAssets();
+
+      setShowTransferModal(false);
+      setSelectedAsset(null);
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to transfer asset";
+      toast.error(errorMessage);
+    }
+  };
+
+  // Handle return asset
+  const handleReturnClick = (asset) => {
+    setSelectedAsset(asset);
+    setShowReturnModal(true);
+  };
+
+  const handleReturnAsset = async (data) => {
+    try {
+      const response = await returnAssetToStore(data);
+      toast.success(response.message || "Asset returned successfully");
+
+      // Refresh assets list
+      fetchAssets();
+
+      setShowReturnModal(false);
+      setSelectedAsset(null);
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to return asset";
+      toast.error(errorMessage);
+    }
+  };
+
   return (
     <div>
       <AssetsHeader onAddAsset={() => setShowAddModal(true)} />
@@ -153,9 +235,20 @@ function Assets() {
           assets={assets} 
           onEdit={handleEditClick}
           onDelete={handleDeleteAsset}
+          onAssign={handleAssignClick}
+          onTransfer={handleTransferClick}
+          onReturn={handleReturnClick}
         />
       )}
-      <AssetActions />
+      <AssetActions onTransferClick={() => {
+        // Find first asset that is "In Use" for transfer
+        const inUseAsset = assets.find(a => a.status === "In Use" && !a.isDeleted);
+        if (inUseAsset) {
+          handleTransferClick(inUseAsset);
+        } else {
+          toast.info("No assets are currently in use for transfer");
+        }
+      }} />
 
       {/* ADD MODAL */}
       {showAddModal && (
@@ -174,6 +267,42 @@ function Assets() {
             setSelectedAsset(null);
           }}
           onUpdateAsset={handleUpdateAsset}
+        />
+      )}
+
+      {/* ASSIGN MODAL */}
+      {showAssignModal && selectedAsset && (
+        <AssignAssetModal
+          asset={selectedAsset}
+          onClose={() => {
+            setShowAssignModal(false);
+            setSelectedAsset(null);
+          }}
+          onAssign={handleAssignAsset}
+        />
+      )}
+
+      {/* TRANSFER MODAL */}
+      {showTransferModal && selectedAsset && (
+        <TransferAssetModal
+          asset={selectedAsset}
+          onClose={() => {
+            setShowTransferModal(false);
+            setSelectedAsset(null);
+          }}
+          onTransfer={handleTransferAsset}
+        />
+      )}
+
+      {/* RETURN MODAL */}
+      {showReturnModal && selectedAsset && (
+        <ReturnAssetModal
+          asset={selectedAsset}
+          onClose={() => {
+            setShowReturnModal(false);
+            setSelectedAsset(null);
+          }}
+          onReturn={handleReturnAsset}
         />
       )}
     </div>
