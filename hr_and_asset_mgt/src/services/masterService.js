@@ -1,24 +1,4 @@
-import axios from "axios";
-
-// Create axios instance
-const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE,
-    headers: {
-        "Content-Type": "application/json",
-    },
-});
-
-// Interceptor for token
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-
-
-
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
+import api from "./getAxiosInstance";
 
 // --- UNIFIED MASTERS ---
 // All masters use the same endpoint structure: /api/masters/:type
