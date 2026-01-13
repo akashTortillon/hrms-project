@@ -8,6 +8,7 @@ import requestRoutes from "./routes/requestRoutes.js";
 import masterRoutes from "./routes/masterRoutes.js";
 import hrMasterRoutes from "./routes/hrMasterRoutes.js";
 import assetMasterRoutes from "./routes/assetMasterRoutes.js";
+import systemSettingsRoutes from "./routes/systemSettingsRoutes.js";
 
 const app = express();
 
@@ -45,10 +46,12 @@ app.use("/api/requests", requestRoutes);
 console.log("✅ Request routes registered at /api/requests");
 
 // 🔹 Master/Configuration APIs
+// 🔹 Master/Configuration APIs
 app.use("/api/masters", masterRoutes);
 app.use("/api/masters/hr", hrMasterRoutes);
 app.use("/api/masters/asset", assetMasterRoutes);
-console.log("✅ Master routes registered at /api/masters, /api/masters/hr, and /api/masters/asset");
+app.use("/api/system-settings", systemSettingsRoutes);
+console.log("✅ Master routes registered at /api/masters, /api/masters/hr, /api/masters/asset, and /api/system-settings");
 
 
 
