@@ -5,10 +5,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import requestRoutes from "./routes/requestRoutes.js";
-import masterRoutes from "./routes/masterRoutes.js";
-import hrMasterRoutes from "./routes/hrMasterRoutes.js";
-import assetMasterRoutes from "./routes/assetMasterRoutes.js";
-import systemSettingsRoutes from "./routes/systemSettingsRoutes.js";
+// Legacy routes removed
 
 const app = express();
 
@@ -43,15 +40,15 @@ console.log("✅ Attendance routes registered at /api/attendance");
 
 // 🔹 Request APIs
 app.use("/api/requests", requestRoutes);
-console.log("✅ Request routes registered at /api/requests");
+// 🔹 Unified Master API
+import unifiedMasterRoutes from "./routes/unifiedMasterRoutes.js";
+app.use("/api/masters", unifiedMasterRoutes);
+console.log("✅ Unified Master routes registered at /api/masters");
 
-// 🔹 Master/Configuration APIs
-// 🔹 Master/Configuration APIs
-app.use("/api/masters", masterRoutes);
-app.use("/api/masters/hr", hrMasterRoutes);
-app.use("/api/masters/asset", assetMasterRoutes);
+// 🔹 System Settings API
+import systemSettingsRoutes from "./routes/systemSettingsRoutes.js";
 app.use("/api/system-settings", systemSettingsRoutes);
-console.log("✅ Master routes registered at /api/masters, /api/masters/hr, /api/masters/asset, and /api/system-settings");
+console.log("✅ System Settings routes registered at /api/system-settings");
 
 
 
