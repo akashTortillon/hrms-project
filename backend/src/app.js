@@ -13,7 +13,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: true, // allow all origins (temporary)
+    origin: true, // allow all origins
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"]
