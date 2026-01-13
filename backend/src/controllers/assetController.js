@@ -102,13 +102,20 @@ export const deleteAsset = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const asset = await Asset.findByIdAndDelete(id);
+    const asset = await Asset.findByIdAndUpdate(
+      id,
+      { isDeleted: true },
+      { new: true }
+    );
 
     if (!asset) {
       return res.status(404).json({ message: "Asset not found" });
     }
 
-    res.json({ message: "Asset deleted successfully" });
+    res.json({ 
+      message: "Asset deleted successfully",
+      asset 
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });
