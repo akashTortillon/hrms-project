@@ -3,11 +3,12 @@ import "../../style/AddEmployeeModal.css";
 
 export default function AddAssetModal({ onClose, onAddAsset }) {
   const [form, setForm] = useState({
-    assetCode: "",
     name: "",
     category: "",
     location: "",
+    subLocation: "",
     custodian: "",
+    department: "",
     purchaseCost: "",
     purchaseDate: "",
     status: "Available",
@@ -19,10 +20,10 @@ export default function AddAssetModal({ onClose, onAddAsset }) {
   };
 
   const handleSubmit = () => {
-    const { assetCode, name, category, location, custodian, purchaseCost, purchaseDate } = form;
+    const { name, category, location, custodian, purchaseCost, purchaseDate } = form;
 
-    if (!assetCode || !name || !category || !location || !custodian || !purchaseCost || !purchaseDate) {
-      alert("All fields are required");
+    if (!name || !category || !location || !custodian || !purchaseCost || !purchaseDate) {
+      alert("All required fields must be provided");
       return;
     }
 
@@ -46,12 +47,6 @@ export default function AddAssetModal({ onClose, onAddAsset }) {
         <div className="modal-body">
           <div className="modal-grid">
             <input
-              name="assetCode"
-              placeholder="Asset Code (e.g., AST001)"
-              value={form.assetCode}
-              onChange={handleChange}
-            />
-            <input
               name="name"
               placeholder="Asset Name"
               value={form.name}
@@ -65,14 +60,26 @@ export default function AddAssetModal({ onClose, onAddAsset }) {
             />
             <input
               name="location"
-              placeholder="Location"
+              placeholder="Location (e.g., Main Office)"
               value={form.location}
               onChange={handleChange}
             />
             <input
+              name="subLocation"
+              placeholder="Sub Location (e.g., IT Store)"
+              value={form.subLocation}
+              onChange={handleChange}
+            />
+            <input
               name="custodian"
-              placeholder="Custodian"
+              placeholder="Custodian Name"
               value={form.custodian}
+              onChange={handleChange}
+            />
+            <input
+              name="department"
+              placeholder="Department"
+              value={form.department}
               onChange={handleChange}
             />
             <input
