@@ -42,6 +42,10 @@ const assetSchema = new mongoose.Schema({
     type: String,
     enum: ["Available", "In Use", "Under Maintenance"],
     default: "Available"
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 
