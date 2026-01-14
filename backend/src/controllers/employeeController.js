@@ -1,27 +1,28 @@
 import Employee from "../models/employeeModel.js";
+import User from "../models/userModel.js";
+import bcrypt from "bcryptjs";
 
 export const addEmployee = async (req, res) => {
   try {
     const { name, code, role, department, email, phone, joinDate, status } = req.body;
 
     // Validation
-    if (!name || !code || !role || !department || !email || !phone || !joinDate) {
+    if (!name || !role || !department || !email || !phone || !joinDate) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // ✅ Code format validation (EMP001)
-    const codeRegex = /^EMP\d{3}$/;
-    if (!codeRegex.test(code)) {
-      return res.status(400).json({
-        message: "Employee code must be in EMP001 format"
-      });
+    // Generate Auto Incremented EMP Code
+    const lastEmployee = await Employee.findOne().sort({ code: -1 });
+    let nextCode = "EMP001";
+
+    if (lastEmployee && lastEmployee.code) {
+      const lastNumber = parseInt(lastEmployee.code.replace("EMP", ""), 10);
+      if (!isNaN(lastNumber)) {
+        nextCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
+      }
     }
 
-    // Check if employee code already exists
-    const existingEmployee = await Employee.findOne({ code });
-    if (existingEmployee) {
-      return res.status(409).json({ message: "Employee code already exists" });
-    }
+    // Check if email already exists
 
     // Check if email already exists
     const existingEmail = await Employee.findOne({ email });
@@ -31,7 +32,7 @@ export const addEmployee = async (req, res) => {
 
     const employee = await Employee.create({
       name,
-      code,
+      code: nextCode,
       role,
       department,
       email,
@@ -40,13 +41,52 @@ export const addEmployee = async (req, res) => {
       status: status || "Active"
     });
 
+    // ✅ Auto-create User account for login
+    // Normalize phone for User model (+971 format)
+    let userPhone = phone.replace(/\s+/g, "");
+    if (userPhone.startsWith("0")) {
+      userPhone = "+971" + userPhone.substring(1);
+    } else if (userPhone.startsWith("971")) {
+      userPhone = "+" + userPhone;
+    }
+
+    const userExists = await User.findOne({ email });
+    let userCreated = false;
+    let userCreationError = "";
+
+    if (!userExists) {
+      try {
+        const hashedPassword = await bcrypt.hash("Password@123", 10);
+        await User.create({
+          name,
+          email,
+          phone: userPhone,
+          password: hashedPassword,
+          role: role
+        });
+        userCreated = true;
+      } catch (uErr) {
+        console.error("User creation failed:", uErr.message);
+        userCreationError = " (Login account failed: " + uErr.message + ")";
+      }
+    }
+
     res.status(201).json({
-      message: "Employee added successfully",
+      message: userCreated
+        ? "Employee added & User account created (Password: Password@123)"
+        : "Employee added" + userCreationError,
       employee
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Add Employee Error:", error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: error.message });
+    }
+    // Handle duplicate key checks if they slipped through
+    if (error.code === 11000) {
+      return res.status(409).json({ message: "Duplicate entry found (Email or Phone)" });
+    }
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 

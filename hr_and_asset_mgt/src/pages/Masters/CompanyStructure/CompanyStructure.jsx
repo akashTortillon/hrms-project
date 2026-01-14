@@ -7,11 +7,26 @@ import { RenderRolesGrid } from "../components/RenderRolesGrid.jsx";
 import CustomModal from "../../../components/reusable/CustomModal.jsx";
 import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirmationModal.jsx";
 
+const PERMISSIONS_LIST = [
+  "VIEW_DASHBOARD",
+  "MANAGE_EMPLOYEES",
+  "MANAGE_PAYROLL",
+  "MANAGE_ASSETS",
+  "MANAGE_DOCUMENTS",
+  "MANAGE_MASTERS",
+  "MANAGE_SETTINGS",
+  "APPROVE_REQUESTS",
+  "VIEW_REPORTS"
+];
+
 export default function CompanyStructure() {
   const {
     departments,
     branches,
     designations,
+    roles,
+    selectedPermissions,
+    setSelectedPermissions,
     showModal,
     setShowModal,
     modalType,
@@ -34,7 +49,7 @@ export default function CompanyStructure() {
       <div className="company-structure-header">
         <h2 className="company-structure-title">Company Structure Masters</h2>
         <p className="company-structure-subtitle">
-          Define departments, branches, and organizational hierarchy
+          Define departments, branches, organizational hierarchy, and roles
         </p>
       </div>
 
@@ -77,7 +92,7 @@ export default function CompanyStructure() {
             </CustomButton>
           }
         >
-          <RenderRolesGrid />
+          <RenderRolesGrid items={roles} />
         </MastersCard>
       </div>
 
@@ -85,7 +100,8 @@ export default function CompanyStructure() {
       {/* Custom Modal */}
       <CustomModal
         show={showModal}
-        title={`Add ${modalType}`}
+        title={inputValue ? `Edit ${modalType}` : `Add ${modalType}`}
+        titleContent={inputValue ? `Edit ${modalType}` : `Add ${modalType}`}
         onClose={() => setShowModal(false)}
         footer={
           <>
@@ -98,16 +114,43 @@ export default function CompanyStructure() {
           </>
         }
       >
-        <div className="form-group">
-          <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={`Enter ${modalType} Name`}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            autoFocus
-          />
+        <div className="form-group flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={`Enter ${modalType} Name`}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          {modalType === "Role" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
+                {PERMISSIONS_LIST.map((perm) => (
+                  <label key={perm} className="flex items-center space-x-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedPermissions.includes(perm)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPermissions([...selectedPermissions, perm]);
+                        } else {
+                          setSelectedPermissions(selectedPermissions.filter((p) => p !== perm));
+                        }
+                      }}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>{perm.replace(/_/g, " ")}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </CustomModal>
 

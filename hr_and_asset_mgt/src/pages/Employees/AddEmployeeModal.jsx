@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { roleService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 export default function AddEmployeeModal({ onClose, onAddEmployee }) {
@@ -12,7 +13,21 @@ export default function AddEmployeeModal({ onClose, onAddEmployee }) {
     joinDate: "",
     status: "Active",
   });
-  
+  const [roles, setRoles] = useState([]);
+
+  useEffect(() => {
+    fetchRoles();
+  }, []);
+
+  const fetchRoles = async () => {
+    try {
+      const data = await roleService.getAll();
+      setRoles(data);
+    } catch (error) {
+      console.error("Failed to fetch roles", error);
+    }
+  };
+
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -21,7 +36,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee }) {
   const handleSubmit = () => {
     const { name, code, role, department, email, phone, joinDate } = form;
 
-    if (!name || !code || !role || !department || !email || !phone || !joinDate) {
+    if (!name || !role || !department || !email || !phone || !joinDate) {
       alert("All fields are required");
       return;
     }
@@ -40,8 +55,14 @@ export default function AddEmployeeModal({ onClose, onAddEmployee }) {
         <div className="modal-body">
           <div className="modal-grid">
             <input name="name" placeholder="Employee Name" onChange={handleChange} />
-            <input name="code" placeholder="Employee ID" onChange={handleChange} />
-            <input name="role" placeholder="Job Role" onChange={handleChange} />
+
+
+            <select name="role" onChange={handleChange} value={form.role}>
+              <option value="">Select Role</option>
+              {roles.map((r) => (
+                <option key={r._id} value={r.name}>{r.name}</option>
+              ))}
+            </select>
 
             <select name="department" onChange={handleChange}>
               <option value="">Department</option>

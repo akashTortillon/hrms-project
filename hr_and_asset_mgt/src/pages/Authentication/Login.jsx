@@ -42,6 +42,9 @@ export default function Login() {
       // Also store user info if available
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
+        localStorage.setItem("userRole", data.role || "Employee");
+      } else if (data.role) {
+        localStorage.setItem("userRole", data.role);
       }
 
       toast.success("Login successful 🎉");

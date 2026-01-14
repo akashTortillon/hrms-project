@@ -1,20 +1,19 @@
 import { Nav, Button } from "react-bootstrap";
 import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
-import SvgIcon from "../svgIcon/svgView.jsx";
 import { useState, useMemo } from "react";
 import { useRole } from "../../contexts/RoleContext.jsx";
 
 // All navigation items with their access roles
 const allNavItems = [
-  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", roles: ["Admin", "Manager", "Employee"] },
-  { path: "/app/employees", icon: "users", label: "Employees", roles: ["Admin", "Manager"] },
-  { path: "/app/payroll", icon: "dollar", label: "Payroll", roles: ["Admin", "Manager"] },
-  { path: "/app/attendance", icon: "clock (1)", label: "Attendance", roles: ["Admin", "Manager"] },
-  { path: "/app/documents", icon: "document (1)", label: "Documents", roles: ["Admin", "Manager", "Employee"] },
-  { path: "/app/assets", icon: "cube", label: "Assets", roles: ["Admin", "Manager"] },
-  { path: "/app/requests", icon: "document", label: "My Requests", roles: ["Admin", "Manager", "Employee"] },
-  { path: "/app/reports", icon: "reports", label: "Reports", roles: ["Admin", "Manager"] },
+  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", roles: ["Admin", "HR Manager", "Employee"] },
+  { path: "/app/employees", icon: "users", label: "Employees", roles: ["Admin", "HR Manager"] },
+  { path: "/app/payroll", icon: "dollar", label: "Payroll", roles: ["Admin", "HR Manager"] },
+  { path: "/app/attendance", icon: "clock (1)", label: "Attendance", roles: ["Admin", "HR Manager"] },
+  { path: "/app/documents", icon: "document (1)", label: "Documents", roles: ["Admin", "HR Manager", "Employee"] },
+  { path: "/app/assets", icon: "cube", label: "Assets", roles: ["Admin", "HR Manager"] },
+  { path: "/app/requests", icon: "document", label: "My Requests", roles: ["Admin", "HR Manager", "Employee"] },
+  { path: "/app/reports", icon: "reports", label: "Reports", roles: ["Admin", "HR Manager"] },
   { path: "/app/masters", icon: "settings", label: "Masters", roles: ["Admin"] },
 ];
 
@@ -43,7 +42,7 @@ export default function Sidebar() {
             className="icon-btn collapse-arrow-btn"
             onClick={toggleCollapse}
           >
-            <SvgIcon name="arrow-right" size={20} />
+            <SvgView name="arrow-right" size={20} />
           </Button>
         ) : (
           <>
@@ -57,7 +56,7 @@ export default function Sidebar() {
               className="icon-btn back-btn"
               onClick={toggleCollapse}
             >
-              <SvgIcon name="arrow-left" size={15} />
+              <SvgView name="arrow-left" size={15} />
             </Button>
           </>
         )}
@@ -70,9 +69,8 @@ export default function Sidebar() {
             key={item.path}
             onClick={() => navigate(item.path)}
             active={location.pathname === item.path}
-            className={`sidebar-link ${
-              location.pathname === item.path ? "active" : ""
-            }`}
+            className={`sidebar-link ${location.pathname === item.path ? "active" : ""
+              }`}
           >
             <SvgView name={item.icon} size={20} />
             <span className="nav-label">{item.label}</span>

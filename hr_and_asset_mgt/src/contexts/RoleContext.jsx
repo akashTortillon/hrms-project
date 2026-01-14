@@ -11,7 +11,7 @@ export const useRole = () => {
 };
 
 export const RoleProvider = ({ children }) => {
-  const [role, setRole] = useState("Admin");
+  const [role, setRole] = useState(localStorage.getItem("userRole") || "Admin");
 
   return (
     <RoleContext.Provider value={{ role, setRole }}>
