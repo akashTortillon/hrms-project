@@ -25,7 +25,7 @@ export const RenderVendorList = ({ items, assetTypes, handleEdit, handleDelete }
                         </div>
                         <div className="structure-actions">
                             <button className="icon-btn edit" onClick={() => handleEdit("Vendor", item)}>
-                                <SvgIcon name="edit" size={16} />
+                                {/* <SvgIcon name="edit" size={16} /> */} Edit
                             </button>
                             <button className="icon-btn delete" onClick={() => handleDelete("Vendor", item._id)}>
                                 <SvgIcon name="delete" size={16} />
