@@ -1,11 +1,11 @@
-import MastersCard from "./components/MastersCard.jsx";
-import CustomButton from "../../components/reusable/Button";
-import { RenderList } from "./components/RenderList.jsx";
-import { RenderVendorList } from "./components/RenderVendorList.jsx";
-import CustomModal from "../../components/reusable/CustomModal.jsx";
-import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal.jsx";
-import useAssetManagement from "./AssetManagement/useAssetManagement.js";
-import "../../style/Masters.css";
+import MastersCard from "../components/MastersCard.jsx";
+import CustomButton from "../../../components/reusable/Button.jsx";
+import { RenderList } from "../components/RenderList.jsx";
+import { RenderVendorList } from "../components/RenderVendorList.jsx";
+import CustomModal from "../../../components/reusable/CustomModal.jsx";
+import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirmationModal.jsx";
+import useAssetManagement from "./useAssetManagement.js";
+import "../../../style/Masters.css";
 
 export default function AssetManagement() {
   const {
@@ -21,6 +21,8 @@ export default function AssetManagement() {
     setInputValue,
     inputDesc,
     setInputDesc,
+    selectedAssetType,
+    setSelectedAssetType,
     loading,
     handleOpenAdd,
     handleOpenEdit,
@@ -94,13 +96,14 @@ export default function AssetManagement() {
           title="Vendors & Service Providers"
           description="Manage suppliers and maintenance providers"
           headerAction={
-            <CustomButton onClick={() => handleOpenAdd("Vendor")}>
+            <button className="masters-add-btn" onClick={() => handleOpenAdd("Vendor")}>
               + Add Vendor
-            </CustomButton>
+            </button>
           }
         >
           <RenderVendorList
             items={vendors}
+            assetTypes={assetTypes} // Pass fetched Asset Types for lookup
             handleDelete={handleDelete}
             handleEdit={handleOpenEdit}
           />
@@ -129,21 +132,21 @@ export default function AssetManagement() {
         onClose={() => setShowModal(false)}
         footer={
           <>
-            <CustomButton variant="secondary" onClick={() => setShowModal(false)} className="bg-gray-200 text-gray-700 hover:bg-gray-300">
+            <button className="modal-btn modal-btn-secondary" onClick={() => setShowModal(false)}>
               Cancel
-            </CustomButton>
-            <CustomButton onClick={handleSave} disabled={loading}>
+            </button>
+            <button className="modal-btn modal-btn-primary" onClick={handleSave} disabled={loading}>
               {loading ? "Saving..." : "Save"}
-            </CustomButton>
+            </button>
           </>
         }
       >
         <div className="form-group flex flex-col gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
+            <label className="modal-form-label">{modalType} Name</label>
             <input
               type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="modal-form-input"
               placeholder={`Enter ${modalType} Name`}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -151,12 +154,32 @@ export default function AssetManagement() {
             />
           </div>
 
+
+          {/* Show Asset Type dropdown only for Vendor */}
+          {modalType === "Vendor" && (
+            <div>
+              <label className="modal-form-label">Related Asset Type</label>
+              <select
+                className="modal-form-input"
+                value={selectedAssetType}
+                onChange={(e) => setSelectedAssetType(e.target.value)}
+              >
+                <option value="">-- Select Asset Type --</option>
+                {assetTypes.map((type) => (
+                  <option key={type._id} value={type._id}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Show Description field only for Vendor */}
           {modalType === "Vendor" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description / Services</label>
+              <label className="modal-form-label">Description / Services</label>
               <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="modal-form-input"
                 placeholder="E.g. IT Equipment Supplier"
                 value={inputDesc}
                 onChange={(e) => setInputDesc(e.target.value)}
