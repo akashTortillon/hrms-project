@@ -2,11 +2,12 @@ import { useSearchParams } from "react-router-dom";
 import MastersTabs from "./MastersTabs";
 
 import CompanyStructure from "./CompanyStructure/CompanyStructure";
+import AssetManagement from "./AssetManagement/AssetManagement";
 import HRManagement from "./HRManagement/HRManagement";
-import AssetManagement from "./AssetManagement";
 import SystemSettings from "./SystemSettings";
 
 import "../../style/Masters.css";
+
 
 export default function MastersPage() {
   const [searchParams, setSearchParams] = useSearchParams();

@@ -23,6 +23,8 @@ export default function useAssetManagement() {
     const [loading, setLoading] = useState(false);
     const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
+    const [selectedAssetType, setSelectedAssetType] = useState(""); // For linking Asset Type to Vendor
+
     useEffect(() => {
         fetchAll();
     }, []);
@@ -39,6 +41,7 @@ export default function useAssetManagement() {
         setModalType(type);
         setInputValue("");
         setInputDesc("");
+        setSelectedAssetType("");
         setEditId(null);
         setShowModal(true);
     };
@@ -47,6 +50,8 @@ export default function useAssetManagement() {
         setModalType(type);
         setInputValue(item.name);
         setInputDesc(item.description || "");
+        // If Vendor, check if they have a linked Asset Type (stored in assetTypeId)
+        setSelectedAssetType(item.assetTypeId || "");
         setEditId(item._id);
         setShowModal(true);
     };
@@ -71,8 +76,13 @@ export default function useAssetManagement() {
                 else await assetStatusService.add(inputValue);
                 setAssetStatuses(await assetStatusService.getAll());
             } else if (modalType === "Vendor") {
-                if (editId) await vendorService.update(editId, payload);
-                else await vendorService.add(payload);
+                // Include assetTypeId for Asset Type link
+                const vendorPayload = {
+                    ...payload,
+                    assetTypeId: selectedAssetType
+                };
+                if (editId) await vendorService.update(editId, vendorPayload);
+                else await vendorService.add(vendorPayload);
                 setVendors(await vendorService.getAll());
             } else if (modalType === "Service Type") {
                 // Service Type currently just name, but we can pass payload if desc needed
@@ -147,6 +157,8 @@ export default function useAssetManagement() {
         setInputValue,
         inputDesc,
         setInputDesc,
+        selectedAssetType,
+        setSelectedAssetType,
         loading,
         handleOpenAdd,
         handleOpenEdit,

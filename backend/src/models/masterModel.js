@@ -23,7 +23,7 @@ const unifiedMasterSchema = new mongoose.Schema({
         default: true
     },
     metadata: { type: mongoose.Schema.Types.Mixed }, // Flexible JSON field
-    relatedId: {
+    assetTypeId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Master',
         index: true
