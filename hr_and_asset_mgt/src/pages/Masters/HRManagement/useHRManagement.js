@@ -4,6 +4,7 @@ import {
     employeeTypeService,
     leaveTypeService,
     documentTypeService,
+    companyDocumentTypeService,
     nationalityService,
     payrollRuleService,
     workflowTemplateService
@@ -12,7 +13,8 @@ import {
 export default function useHRManagement() {
     const [employeeTypes, setEmployeeTypes] = useState([]);
     const [leaveTypes, setLeaveTypes] = useState([]);
-    const [documentTypes, setDocumentTypes] = useState([]);
+    const [documentTypes, setDocumentTypes] = useState([]); // Employee Document Types
+    const [companyDocumentTypes, setCompanyDocumentTypes] = useState([]); // Company Document Types
     const [nationalities, setNationalities] = useState([]);
     const [payrollRules, setPayrollRules] = useState([]);
     const [workflowTemplates, setWorkflowTemplates] = useState([]);
@@ -43,6 +45,7 @@ export default function useHRManagement() {
         try { setEmployeeTypes(await employeeTypeService.getAll()); } catch (e) { console.error(e); }
         try { setLeaveTypes(await leaveTypeService.getAll()); } catch (e) { console.error(e); }
         try { setDocumentTypes(await documentTypeService.getAll()); } catch (e) { console.error(e); }
+        try { setCompanyDocumentTypes(await companyDocumentTypeService.getAll()); } catch (e) { console.error(e); }
         try { setNationalities(await nationalityService.getAll()); } catch (e) { console.error(e); }
         try { setPayrollRules(await payrollRuleService.getAll()); } catch (e) { console.error(e); }
         try { setWorkflowTemplates(await workflowTemplateService.getAll()); } catch (e) { console.error(e); }
@@ -104,10 +107,14 @@ export default function useHRManagement() {
                 if (editId) await leaveTypeService.update(editId, inputValue);
                 else await leaveTypeService.add(inputValue);
                 setLeaveTypes(await leaveTypeService.getAll());
-            } else if (modalType === "Document Type") {
+            } else if (modalType === "Employee Document Type") {
                 if (editId) await documentTypeService.update(editId, inputValue);
                 else await documentTypeService.add(inputValue);
                 setDocumentTypes(await documentTypeService.getAll());
+            } else if (modalType === "Company Document Type") {
+                if (editId) await companyDocumentTypeService.update(editId, inputValue);
+                else await companyDocumentTypeService.add(inputValue);
+                setCompanyDocumentTypes(await companyDocumentTypeService.getAll());
             } else if (modalType === "Nationality") {
                 if (editId) await nationalityService.update(editId, inputValue);
                 else await nationalityService.add(inputValue);
@@ -172,7 +179,8 @@ export default function useHRManagement() {
         let item = null;
         if (type === "Employee Type") item = employeeTypes.find(i => i._id === id);
         else if (type === "Leave Type") item = leaveTypes.find(i => i._id === id);
-        else if (type === "Document Type") item = documentTypes.find(i => i._id === id);
+        else if (type === "Employee Document Type") item = documentTypes.find(i => i._id === id);
+        else if (type === "Company Document Type") item = companyDocumentTypes.find(i => i._id === id);
         else if (type === "Nationality") item = nationalities.find(i => i._id === id);
         else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
         else if (type === "Workflow Template") item = workflowTemplates.find(i => i._id === id);
@@ -193,9 +201,12 @@ export default function useHRManagement() {
             } else if (type === "Leave Type") {
                 await leaveTypeService.delete(id);
                 setLeaveTypes(leaveTypes.filter(i => i._id !== id));
-            } else if (type === "Document Type") {
+            } else if (type === "Employee Document Type") {
                 await documentTypeService.delete(id);
                 setDocumentTypes(documentTypes.filter(i => i._id !== id));
+            } else if (type === "Company Document Type") {
+                await companyDocumentTypeService.delete(id);
+                setCompanyDocumentTypes(companyDocumentTypes.filter(i => i._id !== id));
             } else if (type === "Nationality") {
                 await nationalityService.delete(id);
                 setNationalities(nationalities.filter(i => i._id !== id));
@@ -219,7 +230,8 @@ export default function useHRManagement() {
     return {
         employeeTypes,
         leaveTypes,
-        documentTypes,
+        documentTypes, // Employee Document Types
+        companyDocumentTypes, // Company Document Types
         nationalities,
         payrollRules,
         workflowTemplates,
