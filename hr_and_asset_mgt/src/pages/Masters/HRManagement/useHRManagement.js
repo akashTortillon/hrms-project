@@ -25,6 +25,16 @@ export default function useHRManagement() {
 
     const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
+    // State for the advanced Leave/Payroll Modal
+    const [payrollState, setPayrollState] = useState({
+        step: 'SELECTION', // SELECTION, LEAVE_FORM, PAYROLL_FORM
+        subType: '',       // LEAVE or PAYROLL
+        leaveTypeId: '',
+        ruleName: '',
+        days: '',
+        description: ''
+    });
+
     useEffect(() => {
         fetchAll();
     }, []);
@@ -42,13 +52,40 @@ export default function useHRManagement() {
         setModalType(type);
         setInputValue("");
         setEditId(null);
+        // Reset payroll state
+        setPayrollState({
+            step: 'SELECTION',
+            subType: '',
+            leaveTypeId: '',
+            ruleName: '',
+            days: '',
+            description: ''
+        });
         setShowModal(true);
     };
 
     const handleOpenEdit = (type, item) => {
         setModalType(type);
-        setInputValue(item.name);
         setEditId(item._id);
+
+        if (type === "Payroll Rule") {
+            // Rehydrate form based on stored metadata
+            const meta = item.metadata || {};
+            const isLeave = meta.type === 'LEAVE_CONFIG';
+
+            setPayrollState({
+                step: isLeave ? 'LEAVE_FORM' : 'PAYROLL_FORM',
+                subType: isLeave ? 'LEAVE' : 'PAYROLL',
+                leaveTypeId: meta.leaveTypeId || '',
+                ruleName: isLeave ? '' : item.name,
+                days: meta.days || '',
+                description: item.description || ''
+            });
+            // We don't rely on inputValue for Payroll Rules edit, but setting it safely
+            setInputValue(item.name);
+        } else {
+            setInputValue(item.name);
+        }
         setShowModal(true);
     };
 
@@ -74,8 +111,41 @@ export default function useHRManagement() {
                 else await nationalityService.add(inputValue);
                 setNationalities(await nationalityService.getAll());
             } else if (modalType === "Payroll Rule") {
-                if (editId) await payrollRuleService.update(editId, inputValue);
-                else await payrollRuleService.add(inputValue);
+                let payload;
+                // Determine if we are saving a complex Payroll/Leave Object or a simple edit
+                // If it's the new flow (payrollState is active)
+                if (payrollState.subType) {
+                    if (payrollState.subType === 'LEAVE') {
+                        // Find the leave type name for the main 'name' field
+                        const selectedLeave = leaveTypes.find(l => l._id === payrollState.leaveTypeId);
+                        const name = selectedLeave ? `${selectedLeave.name} Policy` : "Leave Policy";
+
+                        payload = {
+                            name: name,
+                            description: payrollState.description,
+                            metadata: {
+                                type: 'LEAVE_CONFIG',
+                                leaveTypeId: payrollState.leaveTypeId,
+                                days: payrollState.days
+                            }
+                        };
+                    } else {
+                        // PAYROLL
+                        payload = {
+                            name: payrollState.ruleName,
+                            description: payrollState.description,
+                            metadata: {
+                                type: 'PAYROLL_CONFIG'
+                            }
+                        };
+                    }
+                } else {
+                    // Fallback for simple edits or legacy data if accessed differently
+                    payload = { name: inputValue };
+                }
+
+                if (editId) await payrollRuleService.update(editId, payload);
+                else await payrollRuleService.add(payload);
                 setPayrollRules(await payrollRuleService.getAll());
             } else if (modalType === "Workflow Template") {
                 if (editId) await workflowTemplateService.update(editId, inputValue);
@@ -162,6 +232,8 @@ export default function useHRManagement() {
         handleDelete, // This now opens the modal
         confirmDelete, // New function for the modal
         deleteConfig, // State for the modal
-        setDeleteConfig
+        setDeleteConfig,
+        payrollState,
+        setPayrollState
     };
 }
