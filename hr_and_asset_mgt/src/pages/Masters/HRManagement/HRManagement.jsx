@@ -11,6 +11,7 @@ export default function HRManagement() {
         employeeTypes,
         leaveTypes,
         documentTypes,
+        companyDocumentTypes,
         nationalities,
         payrollRules,
         workflowTemplates,
@@ -58,12 +59,20 @@ export default function HRManagement() {
                     <RenderList items={leaveTypes} type="Leave Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
-                {/* Document Types */}
+                {/* Employee Document Types */}
                 <MastersCard
-                    title="Document Types"
-                    onAdd={() => handleOpenAdd("Document Type")}
+                    title="Employee Document Types"
+                    onAdd={() => handleOpenAdd("Employee Document Type")}
                 >
-                    <RenderList items={documentTypes} type="Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                    <RenderList items={documentTypes} type="Employee Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                </MastersCard>
+
+                {/* Company Document Types */}
+                <MastersCard
+                    title="Company Document Types"
+                    onAdd={() => handleOpenAdd("Company Document Type")}
+                >
+                    <RenderList items={companyDocumentTypes} type="Company Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Nationalities */}
