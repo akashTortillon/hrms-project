@@ -90,7 +90,9 @@ export default function useHRManagement() {
     };
 
     const handleSave = async () => {
-        if (!inputValue.trim()) return toast.warning("Please enter a name");
+        // Validation: For standard masters check inputValue, for Payroll Rule skip this check
+        if (modalType !== "Payroll Rule" && !inputValue.trim()) return toast.warning("Please enter a name");
+
         setLoading(true);
 
         try {
@@ -123,6 +125,7 @@ export default function useHRManagement() {
                         payload = {
                             name: name,
                             description: payrollState.description,
+                            relatedId: payrollState.leaveTypeId, // Strong DB Link
                             metadata: {
                                 type: 'LEAVE_CONFIG',
                                 leaveTypeId: payrollState.leaveTypeId,

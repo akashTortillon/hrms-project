@@ -106,7 +106,11 @@ export default function HRManagement() {
             {/* Custom Modal */}
             <CustomModal
                 show={showModal}
-                title={`Add ${modalType}`}
+                title={
+                    modalType === "Payroll Rule"
+                        ? (payrollState.step === 'LEAVE_FORM' ? "Add Leave Rules" : payrollState.step === 'PAYROLL_FORM' ? "Add Payroll Rules" : "Add Leave & Payroll Rules")
+                        : `Add ${modalType}`
+                }
                 onClose={() => setShowModal(false)}
                 footer={
                     <>
@@ -126,20 +130,20 @@ export default function HRManagement() {
                     <div className="space-y-4">
                         {/* Step 1: Selection */}
                         {payrollState.step === 'SELECTION' && (
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="payroll-selection-container">
                                 <div
                                     onClick={() => setPayrollState({ ...payrollState, step: 'LEAVE_FORM', subType: 'LEAVE' })}
-                                    className="cursor-pointer border-2 border-transparent hover:border-blue-500 bg-gray-50 hover:bg-white p-6 rounded-xl text-center shadow-sm hover:shadow-md transition-all duration-200"
+                                    className="payroll-selection-card"
                                 >
-                                    <h4 className="font-semibold text-gray-800">Leave Config</h4>
-                                    <p className="text-xs text-gray-500 mt-1">Configure days and policies for leave types</p>
+                                    <h4 className="payroll-selection-title">Leave Config</h4>
+                                    <p className="payroll-selection-desc">Configure days and policies for leave types</p>
                                 </div>
                                 <div
                                     onClick={() => setPayrollState({ ...payrollState, step: 'PAYROLL_FORM', subType: 'PAYROLL' })}
-                                    className="cursor-pointer border-2 border-transparent hover:border-blue-500 bg-gray-50 hover:bg-white p-6 rounded-xl text-center shadow-sm hover:shadow-md transition-all duration-200"
+                                    className="payroll-selection-card"
                                 >
-                                    <h4 className="font-semibold text-gray-800">Payroll Rule</h4>
-                                    <p className="text-xs text-gray-500 mt-1">Set up payroll calculation rules</p>
+                                    <h4 className="payroll-selection-title">Payroll Rule</h4>
+                                    <p className="payroll-selection-desc">Set up payroll calculation rules</p>
                                 </div>
                             </div>
                         )}
@@ -148,12 +152,12 @@ export default function HRManagement() {
                         {payrollState.step === 'LEAVE_FORM' && (
                             <div className="space-y-4 animate-fadeIn">
                                 <div className="form-group">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Leave Type</label>
+                                    <label className="modal-form-label">Select Leave Type</label>
                                     <select
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        className="modal-form-input"
                                         value={payrollState.leaveTypeId}
                                         onChange={(e) => setPayrollState({ ...payrollState, leaveTypeId: e.target.value })}
-                                        disabled={!!useHRManagement.editId} // If editing, maybe lock type? Or allow change.
+                                        disabled={!!useHRManagement.editId}
                                     >
                                         <option value="">-- Select Type --</option>
                                         {leaveTypes.map(lt => (
@@ -162,19 +166,19 @@ export default function HRManagement() {
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Days</label>
+                                    <label className="modal-form-label">Number of Days</label>
                                     <input
                                         type="number"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="modal-form-input"
                                         placeholder="e.g. 10"
                                         value={payrollState.days}
                                         onChange={(e) => setPayrollState({ ...payrollState, days: e.target.value })}
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                    <label className="modal-form-label">Description</label>
                                     <textarea
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="modal-form-input"
                                         placeholder="Policy details..."
                                         rows="3"
                                         value={payrollState.description}
@@ -184,7 +188,7 @@ export default function HRManagement() {
                                 <div className="text-right">
                                     <button
                                         onClick={() => setPayrollState({ ...payrollState, step: 'SELECTION', subType: '' })}
-                                        className="text-xs text-blue-600 hover:underline"
+                                        className="modal-back-btn"
                                     >
                                         Back to Selection
                                     </button>
@@ -196,19 +200,19 @@ export default function HRManagement() {
                         {payrollState.step === 'PAYROLL_FORM' && (
                             <div className="space-y-4 animate-fadeIn">
                                 <div className="form-group">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Rule Name</label>
+                                    <label className="modal-form-label">Rule Name</label>
                                     <input
                                         type="text"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="modal-form-input"
                                         placeholder="e.g. Basic Salary Calculation"
                                         value={payrollState.ruleName}
                                         onChange={(e) => setPayrollState({ ...payrollState, ruleName: e.target.value })}
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description / Formula</label>
+                                    <label className="modal-form-label">Description / Formula</label>
                                     <textarea
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="modal-form-input"
                                         placeholder="Describe the rule..."
                                         rows="3"
                                         value={payrollState.description}
@@ -218,7 +222,7 @@ export default function HRManagement() {
                                 <div className="text-right">
                                     <button
                                         onClick={() => setPayrollState({ ...payrollState, step: 'SELECTION', subType: '' })}
-                                        className="text-xs text-blue-600 hover:underline"
+                                        className="modal-back-btn"
                                     >
                                         Back to Selection
                                     </button>

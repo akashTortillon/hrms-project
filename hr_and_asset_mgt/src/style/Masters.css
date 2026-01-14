@@ -803,8 +803,23 @@ system settings
 .masters-vertical-stack {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
 
 /* Animation */
 @keyframes fadeIn {
@@ -821,4 +836,120 @@ system settings
 
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Modal Selection Styles */
+.payroll-selection-container {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+}
+
+.payroll-selection-card {
+  flex: 1;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background-color: #f9fafb;
+  /* gray-50 */
+  padding: 24px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.payroll-selection-card:hover {
+  border-color: #2563eb;
+  /* blue-500 */
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.payroll-selection-title {
+  font-weight: 600;
+  color: #1f2937;
+  /* gray-800 */
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+
+.payroll-selection-desc {
+  font-size: 12px;
+  color: #6b7280;
+  /* gray-500 */
+  margin-top: 4px;
+}
+
+/* Form Styles Override for Modal */
+.modal-form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.modal-form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  transition: box-shadow 0.2s;
+}
+
+.modal-form-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.modal-back-btn {
+  font-size: 12px;
+  color: #2563eb;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-back-btn:hover {
+  text-decoration: underline;
+}
+
+/* Default List Layout (Vertical) */
+.pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Update: Specific Grid Layout for Payroll Rules only */
+.pill-list.grid-view {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .pill-list.grid-view {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.structure-item {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  border: 1px solid #f1f1f1;
+  border-radius: 8px;
+  background: #ffffff;
+  margin-top: 0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
