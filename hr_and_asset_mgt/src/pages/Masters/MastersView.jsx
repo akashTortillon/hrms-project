@@ -42,12 +42,14 @@ export default function MastersPage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <MastersTabs activeTab={activeTab} onChange={handleTabChange} />
-
       {/* Content Container */}
       <div className="masters-content">
-        {renderContent()}
+        {/* Tabs */}
+        <MastersTabs activeTab={activeTab} onChange={handleTabChange} />
+
+        <div className="masters-tab-content">
+          {renderContent()}
+        </div>
       </div>
 
     </div>
