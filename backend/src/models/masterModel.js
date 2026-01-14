@@ -22,7 +22,11 @@ const unifiedMasterSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
-    metadata: { type: Map, of: String } // Flexible field for extra data like colors, icons etc
+    metadata: { type: Map, of: String }, // Flexible field for extra data like colors, icons etc
+    permissions: {
+        type: [String],
+        default: []
+    }
 }, { timestamps: true });
 
 // Compound index to ensure names are unique within a type
