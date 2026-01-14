@@ -5,20 +5,22 @@
 .masters-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 8px;
 }
 
 /* Header */
 
 .masters-header {
-  margin-bottom: 8px;
+  margin-bottom: 0px;
+  /* Let gap handle spacing */
 }
 
 .masters-title {
-  font-size: 20px;
+  font-size: 22px;
+  /* Slightly larger */
   font-weight: 600;
   color: #111827;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .masters-subtitle {
@@ -30,33 +32,44 @@
 
 .masters-tabs {
   display: flex;
-  gap: 12px;
+  gap: 20px;
+  /* Increased gap between tabs */
   border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
+  /* Increased padding */
+  margin-bottom: 0;
 }
 
 .masters-tab {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 16px;
+  /* Slightly more compact vertically */
+  border-radius: 6px;
+  /* Rounded rect instead of pill? Figma looks like pill though. Keeping pill but refined. */
   border-radius: 999px;
   border: none;
   background: transparent;
   font-size: 14px;
-  color: #374151;
+  color: #4b5563;
+  /* Gray-600 */
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: 500;
 }
 
 .masters-tab:hover {
-  background: #f1f5f9;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .masters-tab.active {
-  background: #e0edff;
+  background: #eff6ff;
+  /* Blue-50 */
   color: #2563eb;
-  font-weight: 500;
+  /* Blue-600 */
+  font-weight: 600;
 }
 
 /* Content Container */
@@ -66,6 +79,11 @@
   border-radius: 16px;
   padding: 24px;
   border: 1px solid #e5e7eb;
+}
+
+.masters-tab-content {
+  margin-top: 20px;
+  /* Replaces mt-12 */
 }
 
 /* Button as text link */
