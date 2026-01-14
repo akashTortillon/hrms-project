@@ -43,8 +43,11 @@ export default function Login() {
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
         localStorage.setItem("userRole", data.role || "Employee");
+        // Store Permissions from Backend
+        localStorage.setItem("userPermissions", JSON.stringify(data.permissions || []));
       } else if (data.role) {
         localStorage.setItem("userRole", data.role);
+        localStorage.setItem("userPermissions", JSON.stringify(data.permissions || []));
       }
 
       toast.success("Login successful 🎉");

@@ -6,27 +6,27 @@ import { useRole } from "../../contexts/RoleContext.jsx";
 
 // All navigation items with their access roles
 const allNavItems = [
-  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", roles: ["Admin", "HR Manager", "Employee"] },
-  { path: "/app/employees", icon: "users", label: "Employees", roles: ["Admin", "HR Manager"] },
-  { path: "/app/payroll", icon: "dollar", label: "Payroll", roles: ["Admin", "HR Manager"] },
-  { path: "/app/attendance", icon: "clock (1)", label: "Attendance", roles: ["Admin", "HR Manager"] },
-  { path: "/app/documents", icon: "document (1)", label: "Documents", roles: ["Admin", "HR Manager", "Employee"] },
-  { path: "/app/assets", icon: "cube", label: "Assets", roles: ["Admin", "HR Manager"] },
-  { path: "/app/requests", icon: "document", label: "My Requests", roles: ["Admin", "HR Manager", "Employee"] },
-  { path: "/app/reports", icon: "reports", label: "Reports", roles: ["Admin", "HR Manager"] },
-  { path: "/app/masters", icon: "settings", label: "Masters", roles: ["Admin"] },
+  { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", permission: "VIEW_DASHBOARD" },
+  { path: "/app/employees", icon: "users", label: "Employees", permission: "MANAGE_EMPLOYEES" },
+  { path: "/app/payroll", icon: "dollar", label: "Payroll", permission: "MANAGE_PAYROLL" },
+  { path: "/app/attendance", icon: "clock (1)", label: "Attendance", permission: "MANAGE_EMPLOYEES" }, // Assuming linked to employee mgmt
+  { path: "/app/documents", icon: "document (1)", label: "Documents", permission: "MANAGE_DOCUMENTS" },
+  { path: "/app/assets", icon: "cube", label: "Assets", permission: "MANAGE_ASSETS" },
+  { path: "/app/requests", icon: "document", label: "My Requests", permission: "VIEW_DASHBOARD" }, // Basic access
+  { path: "/app/reports", icon: "reports", label: "Reports", permission: "VIEW_REPORTS" },
+  { path: "/app/masters", icon: "settings", label: "Masters", permission: "MANAGE_MASTERS" },
 ];
 
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { role } = useRole();
+  const { role, hasPermission } = useRole();
 
   // Filter navigation items based on user role
   const navItems = useMemo(() => {
-    return allNavItems.filter((item) => item.roles.includes(role));
-  }, [role]);
+    return allNavItems.filter((item) => hasPermission(item.permission));
+  }, [role, hasPermission]);
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
