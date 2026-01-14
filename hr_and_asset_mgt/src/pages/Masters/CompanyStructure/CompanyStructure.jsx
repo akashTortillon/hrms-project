@@ -92,7 +92,11 @@ export default function CompanyStructure() {
             </CustomButton>
           }
         >
-          <RenderRolesGrid items={roles} />
+          <RenderRolesGrid
+            items={roles}
+            handleEdit={handleOpenEdit}
+            handleDelete={handleDelete}
+          />
         </MastersCard>
       </div>
 
