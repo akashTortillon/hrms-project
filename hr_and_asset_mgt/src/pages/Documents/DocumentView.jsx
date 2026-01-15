@@ -15,12 +15,12 @@ import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmatio
 function Documents() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [documents, setDocuments] = useState([]);
-  const [stats, setStats] = useState({ total: 0, valid: 0, expiring: 0, expired: 0 }); // New Stats State
+  const [stats, setStats] = useState({ total: 0, valid: 0, expiring: 0, critical: 0, expired: 0 }); // New Stats State
   const [view, setView] = useState("list");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [typeOptions, setTypeOptions] = useState(["All Types"]);
   // Static status options since backend calculates them
-  const statusOptions = ["All Status", "Valid", "Expiring Soon", "Expired"];
+  const statusOptions = ["All Status", "Valid", "Expiring Soon", "Critical", "Expired"];
 
   // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -80,20 +80,32 @@ function Documents() {
       const data = await getDocuments(params);
 
       // Transform backend data to frontend model
-      const formatted = data.map(doc => ({
-        _id: doc._id,
-        id: doc._id,
-        title: doc.name,
-        type: doc.type,
-        location: doc.location || "Main Office",
-        department: "General",
-        issueDate: doc.issueDate
-          ? new Date(doc.issueDate).toISOString().split("T")[0]
-          : "N/A",
-        expiryDate: new Date(doc.expiryDate).toISOString().split("T")[0],
-        status: doc.status,
-        filePath: doc.filePath
-      }));
+      // Transform backend data to frontend model
+      const formatted = data.map(doc => {
+        let daysLeft = null;
+        let expiryStr = "N/A";
+
+        if (doc.expiryDate) {
+          daysLeft = Math.ceil((new Date(doc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
+          expiryStr = new Date(doc.expiryDate).toISOString().split("T")[0];
+        }
+
+        return {
+          _id: doc._id,
+          id: doc._id,
+          title: doc.name,
+          type: doc.type,
+          location: doc.location || "Main Office",
+          department: doc.uploaderRole || "Admin", // Showing Role here as requested
+          issueDate: doc.issueDate
+            ? new Date(doc.issueDate).toISOString().split("T")[0]
+            : "N/A",
+          expiryDate: expiryStr,
+          status: doc.status,
+          daysLeft: daysLeft, // Add this for UI
+          filePath: doc.filePath
+        };
+      });
       setDocuments(formatted);
     } catch (error) {
       console.error(error);
