@@ -67,8 +67,8 @@ api.interceptors.request.use((config) => {
 const EMPLOYEE_API = "/api/employees";
 
 // ✅ Fetch employees
-export const getEmployees = async () => {
-  const res = await api.get(EMPLOYEE_API);
+export const getEmployees = async (params = {}) => {
+  const res = await api.get(EMPLOYEE_API, { params });
   return res.data;
 };
 
