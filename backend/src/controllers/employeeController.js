@@ -1,4 +1,79 @@
+import * as XLSX from "xlsx";
 import Employee from "../models/employeeModel.js";
+
+export const exportEmployees = async (req, res) => {
+  try {
+    const { department, status, search } = req.query;
+
+    let matchStage = {};
+
+    // Filter by Department
+    if (department && department !== "All Departments") {
+      matchStage.department = department;
+    }
+
+    // Filter by Status
+    if (status && status !== "All Status") {
+      matchStage.status = status;
+    }
+
+    // Filter by Search (Name, Email, Code)
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const employees = await Employee.aggregate([
+      { $match: matchStage },
+      { $sort: { code: 1 } },
+      {
+        $project: {
+          _id: 0,
+          "Employee ID": "$code",
+          "Full Name": "$name",
+          "Role": "$role",
+          "Department": "$department",
+          "Email": "$email",
+          "Contact Number": "$phone",
+          "Joining Date": {
+            $dateToString: { format: "%Y-%m-%d", date: "$joinDate" }
+          },
+          "Status": "$status"
+        }
+      }
+    ]);
+
+    const worksheet = XLSX.utils.json_to_sheet(employees);
+    // Auto-width columns
+    const maxWidth = employees.reduce((w, r) => Math.max(w, r["Full Name"] ? r["Full Name"].length : 10), 10);
+    worksheet["!cols"] = [
+      { wch: 10 }, // ID
+      { wch: 25 }, // Name
+      { wch: 20 }, // Role
+      { wch: 15 }, // Dept
+      { wch: 30 }, // Email
+      { wch: 15 }, // Phone
+      { wch: 15 }, // Date
+      { wch: 10 }  // Status
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
+
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader("Content-Disposition", 'attachment; filename="Employees.xlsx"');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+
+  } catch (error) {
+    console.error("Export Error:", error);
+    res.status(500).json({ message: "Export failed" });
+  }
+};
 import User from "../models/userModel.js";
 import bcrypt from "bcryptjs";
 

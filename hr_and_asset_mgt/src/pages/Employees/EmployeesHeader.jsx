@@ -11,7 +11,9 @@ export default function EmployeesHeader({
   setStatus,
   search,
   setSearch,
-  deptOptions = []
+  deptOptions = [],
+  onExport,
+  count = 0
 }) {
   return (
     <div className="employees-header">
@@ -69,14 +71,14 @@ export default function EmployeesHeader({
           </select>
 
           {/* Export */}
-          <button className="employees-export-btn">
+          <button className="employees-export-btn" onClick={onExport}>
             <SvgIcon name="download" size={16} />
             Export
           </button>
         </div>
 
         <div className="employees-count">
-          Showing 6 of 6 employees
+          Showing {count} Employees
         </div>
       </div>
     </div>
