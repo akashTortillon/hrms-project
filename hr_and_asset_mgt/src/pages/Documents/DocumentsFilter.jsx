@@ -12,6 +12,8 @@ const DocumentsFilter = ({
   total = 0,
   view = "list",
   onViewChange,
+  typeOptions = ["All Types"],
+  statusOptions = ["All Status"]
 }) => {
   return (
     <div className="documents-filter">
@@ -30,18 +32,16 @@ const DocumentsFilter = ({
 
         {/* Type Filter */}
         <select value={type} onChange={(e) => onTypeChange(e.target.value)}>
-          <option>All Types</option>
-          <option>Policy</option>
-          <option>Certificate</option>
-          <option>License</option>
+          {typeOptions.map((opt, idx) => (
+            <option key={idx} value={opt}>{opt}</option>
+          ))}
         </select>
 
         {/* Status Filter */}
         <select value={status} onChange={(e) => onStatusChange(e.target.value)}>
-          <option>All Status</option>
-          <option>Valid</option>
-          <option>Expiring Soon</option>
-          <option>Expired</option>
+          {statusOptions.map((opt, idx) => (
+            <option key={idx} value={opt}>{opt}</option>
+          ))}
         </select>
       </div>
 
