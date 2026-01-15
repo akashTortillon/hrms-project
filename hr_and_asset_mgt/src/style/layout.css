@@ -694,3 +694,11 @@ body {
 .svg-icon-blue {
   filter: invert(30%) sepia(83%) saturate(2326%) hue-rotate(204deg) brightness(96%) contrast(92%);
 }
+
+.svg-icon-green {
+  filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(86deg) brightness(118%) contrast(119%);
+}
+
+.svg-icon-white {
+  filter: brightness(0) invert(1);
+}
