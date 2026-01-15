@@ -39,7 +39,8 @@ const existingUser = await User.findOne({
       name,
       email,
       phone,
-      password: hashedPassword
+      password: hashedPassword,
+      role: req.body.role || "Employee"
     });
 
     const token = generateToken(user._id);
@@ -55,22 +56,50 @@ const existingUser = await User.findOne({
 };
 
 
+import Master from "../models/masterModel.js";
+
+// ... existing code ...
+
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-// ✅ Make email case-insensitive
-  const user = await User.findOne({ 
-    email: { $regex: new RegExp(`^${email}$`, 'i') } 
-  });
-  
-  if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    // ✅ Make email case-insensitive
+    const user = await User.findOne({ 
+      email: { $regex: new RegExp(`^${email}$`, 'i') } 
+    });
+    
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-  const token = generateToken(user._id);
+    // Fetch Permissions from Master DB
+    let permissions = [];
+    if (user.role === 'Admin') {
+        permissions = ["ALL"];
+    } else {
+        const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
+        permissions = roleDef ? roleDef.permissions : [];
+    }
 
-  res.json({ token });
+    const token = generateToken(user._id);
+
+    res.json({ 
+      token,
+      role: user.role,
+      permissions, // <--- Optimized: Send permissions directly
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 

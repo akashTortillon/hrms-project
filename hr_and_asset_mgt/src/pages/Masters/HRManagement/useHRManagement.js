@@ -4,6 +4,7 @@ import {
     employeeTypeService,
     leaveTypeService,
     documentTypeService,
+    companyDocumentTypeService,
     nationalityService,
     payrollRuleService,
     workflowTemplateService
@@ -12,7 +13,8 @@ import {
 export default function useHRManagement() {
     const [employeeTypes, setEmployeeTypes] = useState([]);
     const [leaveTypes, setLeaveTypes] = useState([]);
-    const [documentTypes, setDocumentTypes] = useState([]);
+    const [documentTypes, setDocumentTypes] = useState([]); // Employee Document Types
+    const [companyDocumentTypes, setCompanyDocumentTypes] = useState([]); // Company Document Types
     const [nationalities, setNationalities] = useState([]);
     const [payrollRules, setPayrollRules] = useState([]);
     const [workflowTemplates, setWorkflowTemplates] = useState([]);
@@ -25,6 +27,16 @@ export default function useHRManagement() {
 
     const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
+    // State for the advanced Leave/Payroll Modal
+    const [payrollState, setPayrollState] = useState({
+        step: 'SELECTION', // SELECTION, LEAVE_FORM, PAYROLL_FORM
+        subType: '',       // LEAVE or PAYROLL
+        leaveTypeId: '',
+        ruleName: '',
+        days: '',
+        description: ''
+    });
+
     useEffect(() => {
         fetchAll();
     }, []);
@@ -33,6 +45,7 @@ export default function useHRManagement() {
         try { setEmployeeTypes(await employeeTypeService.getAll()); } catch (e) { console.error(e); }
         try { setLeaveTypes(await leaveTypeService.getAll()); } catch (e) { console.error(e); }
         try { setDocumentTypes(await documentTypeService.getAll()); } catch (e) { console.error(e); }
+        try { setCompanyDocumentTypes(await companyDocumentTypeService.getAll()); } catch (e) { console.error(e); }
         try { setNationalities(await nationalityService.getAll()); } catch (e) { console.error(e); }
         try { setPayrollRules(await payrollRuleService.getAll()); } catch (e) { console.error(e); }
         try { setWorkflowTemplates(await workflowTemplateService.getAll()); } catch (e) { console.error(e); }
@@ -42,18 +55,47 @@ export default function useHRManagement() {
         setModalType(type);
         setInputValue("");
         setEditId(null);
+        // Reset payroll state
+        setPayrollState({
+            step: 'SELECTION',
+            subType: '',
+            leaveTypeId: '',
+            ruleName: '',
+            days: '',
+            description: ''
+        });
         setShowModal(true);
     };
 
     const handleOpenEdit = (type, item) => {
         setModalType(type);
-        setInputValue(item.name);
         setEditId(item._id);
+
+        if (type === "Payroll Rule") {
+            // Rehydrate form based on stored metadata
+            const meta = item.metadata || {};
+            const isLeave = meta.type === 'LEAVE_CONFIG';
+
+            setPayrollState({
+                step: isLeave ? 'LEAVE_FORM' : 'PAYROLL_FORM',
+                subType: isLeave ? 'LEAVE' : 'PAYROLL',
+                leaveTypeId: meta.leaveTypeId || '',
+                ruleName: isLeave ? '' : item.name,
+                days: meta.days || '',
+                description: item.description || ''
+            });
+            // We don't rely on inputValue for Payroll Rules edit, but setting it safely
+            setInputValue(item.name);
+        } else {
+            setInputValue(item.name);
+        }
         setShowModal(true);
     };
 
     const handleSave = async () => {
-        if (!inputValue.trim()) return toast.warning("Please enter a name");
+        // Validation: For standard masters check inputValue, for Payroll Rule skip this check
+        if (modalType !== "Payroll Rule" && !inputValue.trim()) return toast.warning("Please enter a name");
+
         setLoading(true);
 
         try {
@@ -65,17 +107,55 @@ export default function useHRManagement() {
                 if (editId) await leaveTypeService.update(editId, inputValue);
                 else await leaveTypeService.add(inputValue);
                 setLeaveTypes(await leaveTypeService.getAll());
-            } else if (modalType === "Document Type") {
+            } else if (modalType === "Employee Document Type") {
                 if (editId) await documentTypeService.update(editId, inputValue);
                 else await documentTypeService.add(inputValue);
                 setDocumentTypes(await documentTypeService.getAll());
+            } else if (modalType === "Company Document Type") {
+                if (editId) await companyDocumentTypeService.update(editId, inputValue);
+                else await companyDocumentTypeService.add(inputValue);
+                setCompanyDocumentTypes(await companyDocumentTypeService.getAll());
             } else if (modalType === "Nationality") {
                 if (editId) await nationalityService.update(editId, inputValue);
                 else await nationalityService.add(inputValue);
                 setNationalities(await nationalityService.getAll());
             } else if (modalType === "Payroll Rule") {
-                if (editId) await payrollRuleService.update(editId, inputValue);
-                else await payrollRuleService.add(inputValue);
+                let payload;
+                // Determine if we are saving a complex Payroll/Leave Object or a simple edit
+                // If it's the new flow (payrollState is active)
+                if (payrollState.subType) {
+                    if (payrollState.subType === 'LEAVE') {
+                        // Find the leave type name for the main 'name' field
+                        const selectedLeave = leaveTypes.find(l => l._id === payrollState.leaveTypeId);
+                        const name = selectedLeave ? `${selectedLeave.name} Policy` : "Leave Policy";
+
+                        payload = {
+                            name: name,
+                            description: payrollState.description,
+                            relatedId: payrollState.leaveTypeId, // Strong DB Link
+                            metadata: {
+                                type: 'LEAVE_CONFIG',
+                                leaveTypeId: payrollState.leaveTypeId,
+                                days: payrollState.days
+                            }
+                        };
+                    } else {
+                        // PAYROLL
+                        payload = {
+                            name: payrollState.ruleName,
+                            description: payrollState.description,
+                            metadata: {
+                                type: 'PAYROLL_CONFIG'
+                            }
+                        };
+                    }
+                } else {
+                    // Fallback for simple edits or legacy data if accessed differently
+                    payload = { name: inputValue };
+                }
+
+                if (editId) await payrollRuleService.update(editId, payload);
+                else await payrollRuleService.add(payload);
                 setPayrollRules(await payrollRuleService.getAll());
             } else if (modalType === "Workflow Template") {
                 if (editId) await workflowTemplateService.update(editId, inputValue);
@@ -99,7 +179,8 @@ export default function useHRManagement() {
         let item = null;
         if (type === "Employee Type") item = employeeTypes.find(i => i._id === id);
         else if (type === "Leave Type") item = leaveTypes.find(i => i._id === id);
-        else if (type === "Document Type") item = documentTypes.find(i => i._id === id);
+        else if (type === "Employee Document Type") item = documentTypes.find(i => i._id === id);
+        else if (type === "Company Document Type") item = companyDocumentTypes.find(i => i._id === id);
         else if (type === "Nationality") item = nationalities.find(i => i._id === id);
         else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
         else if (type === "Workflow Template") item = workflowTemplates.find(i => i._id === id);
@@ -120,9 +201,12 @@ export default function useHRManagement() {
             } else if (type === "Leave Type") {
                 await leaveTypeService.delete(id);
                 setLeaveTypes(leaveTypes.filter(i => i._id !== id));
-            } else if (type === "Document Type") {
+            } else if (type === "Employee Document Type") {
                 await documentTypeService.delete(id);
                 setDocumentTypes(documentTypes.filter(i => i._id !== id));
+            } else if (type === "Company Document Type") {
+                await companyDocumentTypeService.delete(id);
+                setCompanyDocumentTypes(companyDocumentTypes.filter(i => i._id !== id));
             } else if (type === "Nationality") {
                 await nationalityService.delete(id);
                 setNationalities(nationalities.filter(i => i._id !== id));
@@ -146,7 +230,8 @@ export default function useHRManagement() {
     return {
         employeeTypes,
         leaveTypes,
-        documentTypes,
+        documentTypes, // Employee Document Types
+        companyDocumentTypes, // Company Document Types
         nationalities,
         payrollRules,
         workflowTemplates,
@@ -162,6 +247,8 @@ export default function useHRManagement() {
         handleDelete, // This now opens the modal
         confirmDelete, // New function for the modal
         deleteConfig, // State for the modal
-        setDeleteConfig
+        setDeleteConfig,
+        payrollState,
+        setPayrollState
     };
 }

@@ -5,20 +5,22 @@
 .masters-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 8px;
 }
 
 /* Header */
 
 .masters-header {
-  margin-bottom: 8px;
+  margin-bottom: 0px;
+  /* Let gap handle spacing */
 }
 
 .masters-title {
-  font-size: 20px;
+  font-size: 22px;
+  /* Slightly larger */
   font-weight: 600;
   color: #111827;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .masters-subtitle {
@@ -30,33 +32,44 @@
 
 .masters-tabs {
   display: flex;
-  gap: 12px;
+  gap: 20px;
+  /* Increased gap between tabs */
   border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
+  /* Increased padding */
+  margin-bottom: 0;
 }
 
 .masters-tab {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 16px;
+  /* Slightly more compact vertically */
+  border-radius: 6px;
+  /* Rounded rect instead of pill? Figma looks like pill though. Keeping pill but refined. */
   border-radius: 999px;
   border: none;
   background: transparent;
   font-size: 14px;
-  color: #374151;
+  color: #4b5563;
+  /* Gray-600 */
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: 500;
 }
 
 .masters-tab:hover {
-  background: #f1f5f9;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .masters-tab.active {
-  background: #e0edff;
+  background: #eff6ff;
+  /* Blue-50 */
   color: #2563eb;
-  font-weight: 500;
+  /* Blue-600 */
+  font-weight: 600;
 }
 
 /* Content Container */
@@ -66,6 +79,11 @@
   border-radius: 16px;
   padding: 24px;
   border: 1px solid #e5e7eb;
+}
+
+.masters-tab-content {
+  margin-top: 20px;
+  /* Replaces mt-12 */
 }
 
 /* Button as text link */
@@ -584,7 +602,7 @@ system settings
 /* Global Settings grid */
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -609,7 +627,7 @@ system settings
   border: 1px solid #d1d5db;
   font-size: 14px;
   color: #111827;
-  background-color: #f9fafb;
+  background-color: #ffffff;
   outline: none;
   transition: all 0.2s;
   width: 100%;
@@ -785,5 +803,286 @@ system settings
 .masters-vertical-stack {
   display: flex;
   flex-direction: column;
+  gap: 32px;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Modal Selection Styles */
+.payroll-selection-container {
+  display: flex;
   gap: 24px;
+  width: 100%;
+}
+
+.payroll-selection-card {
+  flex: 1;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background-color: #f9fafb;
+  /* gray-50 */
+  padding: 24px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.payroll-selection-card:hover {
+  border-color: #2563eb;
+  /* blue-500 */
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.payroll-selection-title {
+  font-weight: 600;
+  color: #1f2937;
+  /* gray-800 */
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+
+.payroll-selection-desc {
+  font-size: 12px;
+  color: #6b7280;
+  /* gray-500 */
+  margin-top: 4px;
+}
+
+/* Form Styles Override for Modal */
+.modal-form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.modal-form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  transition: box-shadow 0.2s;
+}
+
+.modal-form-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.modal-back-btn {
+  font-size: 12px;
+  color: #2563eb;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-back-btn:hover {
+  text-decoration: underline;
+}
+
+/* Default List Layout (Vertical) */
+.pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Update: Specific Grid Layout for Payroll Rules only */
+.pill-list.grid-view {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .pill-list.grid-view {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.structure-item {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  border: 1px solid #f1f1f1;
+  border-radius: 8px;
+  background: #ffffff;
+  margin-top: 0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  /* Vendor List UI (Custom Design) */
+  .vendor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .vendor-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 24px;
+    transition: box-shadow 0.2s;
+  }
+
+  .vendor-card:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .vendor-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .vendor-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: #374151;
+    /* gray-700 */
+  }
+
+  .vendor-desc {
+    font-size: 13px;
+    color: #6b7280;
+    /* gray-500 */
+  }
+
+  .vendor-edit-btn {
+    background: none;
+    border: none;
+    color: #2563eb;
+    /* blue-600 */
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .vendor-edit-btn:hover {
+    text-decoration: underline;
+    background: none;
+  }
+
+  .add-vendor-link {
+    background: none;
+    border: none;
+    color: #2563eb;
+    font-size: 14px;
+    /* Matched to masters-add-btn */
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .add-vendor-link:hover {
+    text-decoration: underline;
+  }
+}
+
+
+/* Modal Buttons */
+.modal-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.modal-btn-primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.modal-btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.modal-btn-secondary {
+  background-color: #f3f4f6;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.modal-btn-secondary:hover {
+  background-color: #e5e7eb;
+}
+
+/* Modal Form Styles */
+.modal-form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  /* gray-700 */
+  margin-bottom: 4px;
+}
+
+.modal-form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  /* gray-300 */
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  background-color: #fff;
+  box-sizing: border-box;
+  /* Ensure padding doesn't break width */
+}
+
+.modal-form-input:focus {
+  border-color: #3b82f6;
+  /* blue-500 */
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }

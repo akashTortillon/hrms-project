@@ -11,6 +11,7 @@ export default function HRManagement() {
         employeeTypes,
         leaveTypes,
         documentTypes,
+        companyDocumentTypes,
         nationalities,
         payrollRules,
         workflowTemplates,
@@ -26,7 +27,9 @@ export default function HRManagement() {
         handleDelete,
         confirmDelete,
         deleteConfig,
-        setDeleteConfig
+        setDeleteConfig,
+        payrollState,
+        setPayrollState
     } = useHRManagement();
 
     return (
@@ -56,12 +59,20 @@ export default function HRManagement() {
                     <RenderList items={leaveTypes} type="Leave Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
-                {/* Document Types */}
+                {/* Employee Document Types */}
                 <MastersCard
-                    title="Document Types"
-                    onAdd={() => handleOpenAdd("Document Type")}
+                    title="Employee Document Types"
+                    onAdd={() => handleOpenAdd("Employee Document Type")}
                 >
-                    <RenderList items={documentTypes} type="Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                    <RenderList items={documentTypes} type="Employee Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                </MastersCard>
+
+                {/* Company Document Types */}
+                <MastersCard
+                    title="Company Document Types"
+                    onAdd={() => handleOpenAdd("Company Document Type")}
+                >
+                    <RenderList items={companyDocumentTypes} type="Company Document Type" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Nationalities */}
@@ -104,31 +115,145 @@ export default function HRManagement() {
             {/* Custom Modal */}
             <CustomModal
                 show={showModal}
-                title={`Add ${modalType}`}
+                title={
+                    modalType === "Payroll Rule"
+                        ? (payrollState.step === 'LEAVE_FORM' ? "Add Leave Rules" : payrollState.step === 'PAYROLL_FORM' ? "Add Payroll Rules" : "Add Leave & Payroll Rules")
+                        : `Add ${modalType}`
+                }
                 onClose={() => setShowModal(false)}
                 footer={
                     <>
                         <CustomButton variant="secondary" onClick={() => setShowModal(false)} className="bg-gray-200 text-gray-700 hover:bg-gray-300">
                             Cancel
                         </CustomButton>
-                        <CustomButton onClick={handleSave} disabled={loading}>
-                            {loading ? "Saving..." : "Save"}
-                        </CustomButton>
+                        {/* Hide Save button during Selection Step for Payroll Rule */}
+                        {!(modalType === "Payroll Rule" && payrollState.step === 'SELECTION') && (
+                            <CustomButton onClick={handleSave} disabled={loading}>
+                                {loading ? "Saving..." : "Save"}
+                            </CustomButton>
+                        )}
                     </>
                 }
             >
-                <div className="form-group">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
-                    <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={`Enter ${modalType} Name`}
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        autoFocus
-                    />
-                </div>
-            </CustomModal>
+                {modalType === "Payroll Rule" ? (
+                    <div className="space-y-4">
+                        {/* Step 1: Selection */}
+                        {payrollState.step === 'SELECTION' && (
+                            <div className="payroll-selection-container">
+                                <div
+                                    onClick={() => setPayrollState({ ...payrollState, step: 'LEAVE_FORM', subType: 'LEAVE' })}
+                                    className="payroll-selection-card"
+                                >
+                                    <h4 className="payroll-selection-title">Leave Config</h4>
+                                    <p className="payroll-selection-desc">Configure days and policies for leave types</p>
+                                </div>
+                                <div
+                                    onClick={() => setPayrollState({ ...payrollState, step: 'PAYROLL_FORM', subType: 'PAYROLL' })}
+                                    className="payroll-selection-card"
+                                >
+                                    <h4 className="payroll-selection-title">Payroll Rule</h4>
+                                    <p className="payroll-selection-desc">Set up payroll calculation rules</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Step 2: Leave Form */}
+                        {payrollState.step === 'LEAVE_FORM' && (
+                            <div className="space-y-4 animate-fadeIn">
+                                <div className="form-group">
+                                    <label className="modal-form-label">Select Leave Type</label>
+                                    <select
+                                        className="modal-form-input"
+                                        value={payrollState.leaveTypeId}
+                                        onChange={(e) => setPayrollState({ ...payrollState, leaveTypeId: e.target.value })}
+                                        disabled={!!useHRManagement.editId}
+                                    >
+                                        <option value="">-- Select Type --</option>
+                                        {leaveTypes.map(lt => (
+                                            <option key={lt._id} value={lt._id}>{lt.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="modal-form-label">Number of Days</label>
+                                    <input
+                                        type="number"
+                                        className="modal-form-input"
+                                        placeholder="e.g. 10"
+                                        value={payrollState.days}
+                                        onChange={(e) => setPayrollState({ ...payrollState, days: e.target.value })}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="modal-form-label">Description</label>
+                                    <textarea
+                                        className="modal-form-input"
+                                        placeholder="Policy details..."
+                                        rows="3"
+                                        value={payrollState.description}
+                                        onChange={(e) => setPayrollState({ ...payrollState, description: e.target.value })}
+                                    />
+                                </div>
+                                <div className="text-right">
+                                    <button
+                                        onClick={() => setPayrollState({ ...payrollState, step: 'SELECTION', subType: '' })}
+                                        className="modal-back-btn"
+                                    >
+                                        Back to Selection
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Step 2: Payroll Form */}
+                        {payrollState.step === 'PAYROLL_FORM' && (
+                            <div className="space-y-4 animate-fadeIn">
+                                <div className="form-group">
+                                    <label className="modal-form-label">Rule Name</label>
+                                    <input
+                                        type="text"
+                                        className="modal-form-input"
+                                        placeholder="e.g. Basic Salary Calculation"
+                                        value={payrollState.ruleName}
+                                        onChange={(e) => setPayrollState({ ...payrollState, ruleName: e.target.value })}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="modal-form-label">Description / Formula</label>
+                                    <textarea
+                                        className="modal-form-input"
+                                        placeholder="Describe the rule..."
+                                        rows="3"
+                                        value={payrollState.description}
+                                        onChange={(e) => setPayrollState({ ...payrollState, description: e.target.value })}
+                                    />
+                                </div>
+                                <div className="text-right">
+                                    <button
+                                        onClick={() => setPayrollState({ ...payrollState, step: 'SELECTION', subType: '' })}
+                                        className="modal-back-btn"
+                                    >
+                                        Back to Selection
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    // Generic Form for other Masters
+                    <div className="form-group">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
+                        <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder={`Enter ${modalType} Name`}
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                )}
+            </CustomModal >
 
             {/* Delete Confirmation Modal */}
             <DeleteConfirmationModal
@@ -139,6 +264,6 @@ export default function HRManagement() {
                 loading={loading}
             />
 
-        </div>
+        </div >
     );
 }

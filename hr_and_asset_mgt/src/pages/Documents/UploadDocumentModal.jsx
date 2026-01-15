@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "../../style/UploadDocumentModal.css";
-import { getBranches } from "../../services/masterService";
+import { getBranches, companyDocumentTypeService } from "../../services/masterService";
 import { toast } from "react-toastify";
 
 export default function UploadDocumentModal({ onClose, onUpload }) {
@@ -14,18 +14,22 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
     });
 
     const [branches, setBranches] = useState([]);
+    const [docTypes, setDocTypes] = useState([]);
 
     useEffect(() => {
-        loadBranches();
+        loadMasters();
     }, []);
 
-    const loadBranches = async () => {
+    const loadMasters = async () => {
         try {
-            const data = await getBranches();
-            setBranches(data);
+            const [branchesData, typesData] = await Promise.all([
+                getBranches(),
+                companyDocumentTypeService.getAll()
+            ]);
+            setBranches(branchesData);
+            setDocTypes(typesData);
         } catch (err) {
-            console.error("Failed to load branches", err);
-            // Fallback or silent fail
+            console.error("Failed to load form data", err);
         }
     };
 
@@ -38,8 +42,8 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
     };
 
     const handleSubmit = () => {
-        if (!form.name || !form.expiryDate || !form.file) {
-            alert("Name, Expiry Date and File are required!");
+        if (!form.name || !form.file || !form.type) {
+            alert("Name, Type and File are required!");
             return;
         }
 
@@ -76,13 +80,17 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
                         </div>
 
                         <div className="input-wrapper">
-                            <label className="input-label">Description / Subtitle</label>
-                            <input
+                            <label className="input-label">Company Document Type</label>
+                            <select
                                 name="type"
-                                placeholder="e.g. Main Office License"
                                 value={form.type}
                                 onChange={handleChange}
-                            />
+                            >
+                                <option value="">Select Type</option>
+                                {docTypes.map(type => (
+                                    <option key={type._id} value={type.name}>{type.name}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="input-wrapper">
@@ -99,13 +107,6 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
                             </select>
                         </div>
 
-                        {/* Empty spacer div to align dates on new row if needed, or just let grid flow */}
-                        {/* Grid is 2 columns. 3 items above. Next item "Issue Date" will be 2nd row right? No.
-                Item 1: Name, Item 2: Desc
-                Item 3: Location, Item 4: Issue Date
-                Item 5: Expiry, Item 6: File (span 2)
-            */}
-
                         <div className="input-wrapper">
                             <label className="input-label">Issue Date (Optional)</label>
                             <input
@@ -117,7 +118,7 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
                         </div>
 
                         <div className="input-wrapper">
-                            <label className="input-label">Expiry Date <span style={{ color: 'red' }}>*</span></label>
+                            <label className="input-label">Expiry Date</label>
                             <input
                                 name="expiryDate"
                                 type="date"

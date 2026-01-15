@@ -2,11 +2,12 @@ import { useSearchParams } from "react-router-dom";
 import MastersTabs from "./MastersTabs";
 
 import CompanyStructure from "./CompanyStructure/CompanyStructure";
+import AssetManagement from "./AssetManagement/AssetManagement";
 import HRManagement from "./HRManagement/HRManagement";
-import AssetManagement from "./AssetManagement";
 import SystemSettings from "./SystemSettings";
 
 import "../../style/Masters.css";
+
 
 export default function MastersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,12 +43,14 @@ export default function MastersPage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <MastersTabs activeTab={activeTab} onChange={handleTabChange} />
-
       {/* Content Container */}
       <div className="masters-content">
-        {renderContent()}
+        {/* Tabs */}
+        <MastersTabs activeTab={activeTab} onChange={handleTabChange} />
+
+        <div className="masters-tab-content">
+          {renderContent()}
+        </div>
       </div>
 
     </div>

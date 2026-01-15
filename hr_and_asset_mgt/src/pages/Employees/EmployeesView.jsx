@@ -20,16 +20,16 @@
 //     fetchEmployees();
 //   }, []);
 
-  
+
 
 
 //   const fetchEmployees = async () => {
 //   try {
 //     const response = await getEmployees();
-    
-    
+
+
 //     const employeesArray = Array.isArray(response) ? response : [];
-    
+
 //     // Transform API data to match table format
 //     const formattedEmployees = employeesArray.map((emp, index) => ({
 //       id: emp._id || index + 1,
@@ -42,7 +42,7 @@
 //       joinDate: emp.joinDate ? new Date(emp.joinDate).toISOString().split('T')[0] : emp.joinDate,
 //       status: emp.status
 //     }));
-    
+
 //     setEmployees(formattedEmployees);
 //   } catch (error) {
 //     console.error("Failed to fetch employees", error);
@@ -50,18 +50,18 @@
 //   }
 // };
 
-  
+
 
 
 //   const handleAddEmployee = async (employeeData) => {
 //   try {
 //     const response = await addEmployee(employeeData);
-    
+
 //     const { message, employee: newEmployee } = response;
-    
+
 //     // Show success toast with backend message
 //     toast.success(message || "Employee added successfully 🎉");
-    
+
 //     // Transform to match table format
 //     const formattedEmployee = {
 //       id: newEmployee._id,
@@ -74,7 +74,7 @@
 //       joinDate: newEmployee.joinDate ? new Date(newEmployee.joinDate).toISOString().split('T')[0] : newEmployee.joinDate,
 //       status: newEmployee.status
 //     };
-    
+
 //     setEmployees((prev) => [formattedEmployee, ...prev]);
 //     setShowModal(false);
 //   } catch (error) {
@@ -130,6 +130,7 @@
 
 
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
@@ -139,35 +140,91 @@ import {
   getEmployees,
   addEmployee,
   updateEmployee,
-  deleteEmployee
+  deleteEmployee,
+  exportEmployees
 } from "../../services/employeeService.js";
 import { toast } from "react-toastify";
 
-export default function Employees() {
-  // 🔹 Filters & search
-  const [department, setDepartment] = useState("All Departments");
-  const [status, setStatus] = useState("All Status");
-  const [search, setSearch] = useState("");
+import { getDepartments } from "../../services/masterService";
 
-  // 🔹 Data & UI
+export default function Employees() {
+  // 🔹 URL Filters (Source of Truth)
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const department = searchParams.get("department") || "All Departments";
+  const status = searchParams.get("status") || "All Status";
+  const urlSearch = searchParams.get("search") || "";
+
+  // 🔹 Local Search State (for Debounce)
+  const [searchInput, setSearchInput] = useState(urlSearch);
+
+  // 🔹 Options & Data
+  const [deptOptions, setDeptOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
-  // 🔹 Fetch employees on page load
+  // 🔹 Sync Local Search with URL (e.g. back button)
+  useEffect(() => {
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  // 🔹 Debounce Search -> Update URL
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== urlSearch) {
+        setSearchParams((prev) => {
+          if (searchInput) prev.set("search", searchInput);
+          else prev.delete("search");
+          return prev;
+        });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput, setSearchParams, urlSearch]);
+
+  // 🔹 Fetch Departments on Mount
+  useEffect(() => {
+    loadDepartments();
+  }, []);
+
+  const loadDepartments = async () => {
+    try {
+      const data = await getDepartments();
+      if (data) {
+        setDeptOptions(data.map(d => d.name));
+      }
+    } catch (err) {
+      console.error("Failed to load departments", err);
+    }
+  };
+
+  // 🔹 Fetch Employees when URL Params change
   useEffect(() => {
     fetchEmployees();
-  }, []);
+  }, [searchParams]);
 
   const fetchEmployees = async () => {
     try {
-      const response = await getEmployees();
+      // Prepare params for backend
+      // Backend expects 'department' string, 'status' string, 'search' string
+      // If "All Departments", backend ignores or we send empty?
+      // Backend logic: if (department && department !== "All Departments")
+      // So sending "All Departments" is SAFE and handled.
+
+      const params = {
+        department,
+        status,
+        search: urlSearch
+      };
+
+      const response = await getEmployees(params);
       const employeesArray = Array.isArray(response) ? response : [];
 
       const formattedEmployees = employeesArray.map((emp) => ({
         _id: emp._id,
-        id: emp._id, // used by table key
+        id: emp._id,
         name: emp.name,
         code: emp.code,
         role: emp.role,
@@ -188,36 +245,41 @@ export default function Employees() {
     }
   };
 
+  // 🔹 Filter Handlers
+  const handleSetDepartment = (val) => {
+    setSearchParams(prev => {
+      prev.set("department", val);
+      // If val is "All Departments", we can keep it or delete it. 
+      // Keeping it makes UI state explicit in URL: ?department=All%20Departments
+      return prev;
+    });
+  };
+
+  const handleSetStatus = (val) => {
+    setSearchParams(prev => {
+      prev.set("status", val);
+      return prev;
+    });
+  };
+
   // 🔹 ADD employee
   const handleAddEmployee = async (employeeData) => {
     try {
       const response = await addEmployee(employeeData);
-      const { message, employee: newEmployee } = response;
+      const { message } = response;
 
       toast.success(message || "Employee added successfully 🎉");
+      fetchEmployees(); // URL hasn't changed, but data has.
 
-      const formattedEmployee = {
-        _id: newEmployee._id,
-        id: newEmployee._id,
-        name: newEmployee.name,
-        code: newEmployee.code,
-        role: newEmployee.role,
-        department: newEmployee.department,
-        email: newEmployee.email,
-        phone: newEmployee.phone,
-        joinDate: new Date(newEmployee.joinDate)
-          .toISOString()
-          .split("T")[0],
-        status: newEmployee.status
-      };
-
-      setEmployees((prev) => [formattedEmployee, ...prev]);
       setShowAddModal(false);
     } catch (error) {
+      console.error("Add Employee Error Details:", error);
       const errorMessage =
         error.response?.data?.message ||
+        error.response?.data?.error ||
         error.message ||
         "Failed to add employee";
+
       toast.error(errorMessage);
     }
   };
@@ -231,28 +293,13 @@ export default function Employees() {
   // 🔹 UPDATE employee
   const handleUpdateEmployee = async (updatedEmployee) => {
     try {
-      const updated = await updateEmployee(
+      await updateEmployee(
         updatedEmployee._id,
         updatedEmployee
       );
 
       toast.success("Employee updated successfully");
-
-      setEmployees((prev) =>
-        prev.map((emp) =>
-          emp._id === updated._id
-            ? {
-                ...emp,
-                ...updated,
-                joinDate: updated.joinDate
-                  ? new Date(updated.joinDate)
-                      .toISOString()
-                      .split("T")[0]
-                  : emp.joinDate
-              }
-            : emp
-        )
-      );
+      fetchEmployees();
 
       setShowEditModal(false);
       setSelectedEmployee(null);
@@ -264,45 +311,48 @@ export default function Employees() {
 
 
   // 🔹 DELETE employee
-const handleDeleteEmployee = async (emp) => {
-  const confirmDelete = window.confirm(
-    `Do you want to delete ${emp.name}?`
-  );
-
-  if (!confirmDelete) return;
-
-  try {
-    await deleteEmployee(emp._id || emp.id);
-
-    // 🔥 Remove employee instantly from UI
-    setEmployees((prev) =>
-      prev.filter((e) => e._id !== emp._id)
+  const handleDeleteEmployee = async (emp) => {
+    const confirmDelete = window.confirm(
+      `Do you want to delete ${emp.name}?`
     );
 
-    toast.success("Employee removed successfully");
-  } catch (error) {
-    toast.error(
-      error.response?.data?.message || "Failed to delete employee"
-    );
-  }
-};
+    if (!confirmDelete) return;
 
+    try {
+      await deleteEmployee(emp._id || emp.id);
+      fetchEmployees();
+      toast.success("Employee removed successfully");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to delete employee"
+      );
+    }
+  };
 
+  // 🔹 EXPORT to Excel (Backend)
+  const handleExport = async () => {
+    try {
+      const params = {
+        department,
+        status,
+        search: searchInput
+      };
+      const blob = await exportEmployees(params);
 
-  // 🔹 Apply filters & search
-  const filteredEmployees = employees.filter((emp) => {
-    const departmentMatch =
-      department === "All Departments" || emp.department === department;
-
-    const statusMatch = status === "All Status" || emp.status === status;
-
-    const searchMatch =
-      emp.name.toLowerCase().includes(search.toLowerCase()) ||
-      emp.email.toLowerCase().includes(search.toLowerCase()) ||
-      emp.code.toLowerCase().includes(search.toLowerCase());
-
-    return departmentMatch && statusMatch && searchMatch;
-  });
+      // Trigger download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Employees_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed", err);
+      toast.error("Failed to export report");
+    }
+  };
 
   return (
     <div className="employees-page">
@@ -310,16 +360,19 @@ const handleDeleteEmployee = async (emp) => {
       <EmployeesHeader
         onAddEmployee={() => setShowAddModal(true)}
         department={department}
-        setDepartment={setDepartment}
+        setDepartment={handleSetDepartment}
         status={status}
-        setStatus={setStatus}
-        search={search}
-        setSearch={setSearch}
+        setStatus={handleSetStatus}
+        search={searchInput}
+        setSearch={setSearchInput}
+        deptOptions={deptOptions}
+        onExport={handleExport}
+        count={employees.length}
       />
 
-      {/* TABLE */}
+      {/* TABLE - Use 'employees' directly as it is now filtered from backend */}
       <EmployeesTable
-        employees={filteredEmployees}
+        employees={employees}
         onEdit={handleEditClick}
         onDelete={handleDeleteEmployee}
       />
@@ -327,6 +380,7 @@ const handleDeleteEmployee = async (emp) => {
       {/* ADD MODAL */}
       {showAddModal && (
         <AddEmployeeModal
+          deptOptions={deptOptions}
           onClose={() => setShowAddModal(false)}
           onAddEmployee={handleAddEmployee}
         />
@@ -335,6 +389,7 @@ const handleDeleteEmployee = async (emp) => {
       {/* EDIT MODAL */}
       {showEditModal && selectedEmployee && (
         <EditEmployeeModal
+          deptOptions={deptOptions}
           employee={selectedEmployee}
           onClose={() => setShowEditModal(false)}
           onUpdate={handleUpdateEmployee}

@@ -18,7 +18,8 @@ const TYPE_MAPPING = {
     "asset-categories": "ASSET_CATEGORY",
     "status-labels": "ASSET_STATUS",
     "vendors": "VENDOR",
-    "service-types": "SERVICE_TYPE"
+    "service-types": "SERVICE_TYPE",
+    "roles": "ROLE"
 };
 
 export const getItems = async (req, res) => {

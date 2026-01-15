@@ -12,13 +12,16 @@ import {
     getDesignations,
     addDesignation,
     updateDesignation,
-    deleteDesignation
+    deleteDesignation,
+    roleService
 } from "../../../services/masterService.js";
 
 export default function useCompanyStructure() {
     const [departments, setDepartments] = useState([]);
     const [branches, setBranches] = useState([]);
     const [designations, setDesignations] = useState([]);
+    const [roles, setRoles] = useState([]);
+    const [selectedPermissions, setSelectedPermissions] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
@@ -53,11 +56,19 @@ export default function useCompanyStructure() {
         } catch (error) {
             console.error("❌ Error fetching designations:", error);
         }
+
+        try {
+            const data = await roleService.getAll();
+            setRoles(data);
+        } catch (error) {
+            console.error("❌ Error fetching roles:", error);
+        }
     };
 
     const handleOpenAdd = (type) => {
         setModalType(type);
         setInputValue("");
+        setSelectedPermissions([]);
         setEditId(null);
         setShowModal(true);
     };
@@ -65,6 +76,9 @@ export default function useCompanyStructure() {
     const handleOpenEdit = (type, item) => {
         setModalType(type);
         setInputValue(item.name);
+        if (type === "Role") {
+            setSelectedPermissions(item.permissions || []);
+        }
         setEditId(item._id);
         setShowModal(true);
     };
@@ -88,6 +102,15 @@ export default function useCompanyStructure() {
                 else await addDesignation(inputValue);
                 const data = await getDesignations();
                 setDesignations(data);
+            } else if (modalType === "Role") {
+                const payload = {
+                    name: inputValue,
+                    permissions: selectedPermissions
+                };
+                if (editId) await roleService.update(editId, payload);
+                else await roleService.add(payload);
+                const data = await roleService.getAll();
+                setRoles(data);
             }
             toast.success(`${modalType} ${editId ? "updated" : "added"} successfully!`);
             setShowModal(false);
@@ -105,6 +128,7 @@ export default function useCompanyStructure() {
         if (type === "Department") item = departments.find(i => i._id === id);
         else if (type === "Branch") item = branches.find(i => i._id === id);
         else if (type === "Designation") item = designations.find(i => i._id === id);
+        else if (type === "Role") item = roles.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -124,6 +148,9 @@ export default function useCompanyStructure() {
             } else if (type === "Designation") {
                 await deleteDesignation(id);
                 setDesignations(designations.filter((d) => d._id !== id));
+            } else if (type === "Role") {
+                await roleService.delete(id);
+                setRoles(roles.filter((r) => r._id !== id));
             }
             toast.success(`${type} deleted successfully`);
             setDeleteConfig({ ...deleteConfig, show: false });
@@ -139,6 +166,9 @@ export default function useCompanyStructure() {
         departments,
         branches,
         designations,
+        roles,
+        selectedPermissions,
+        setSelectedPermissions,
         showModal,
         setShowModal,
         modalType,
