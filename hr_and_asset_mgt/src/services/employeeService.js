@@ -90,3 +90,12 @@ export const deleteEmployee = async (id) => {
   return res.data;
 };
 
+// EXPORT employees (Excel)
+export const exportEmployees = async (params = {}) => {
+  const res = await api.get(EMPLOYEE_API + "/export", {
+    params,
+    responseType: 'blob'
+  });
+  return res.data;
+};
+
