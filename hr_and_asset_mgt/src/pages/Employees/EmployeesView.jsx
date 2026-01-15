@@ -273,10 +273,13 @@ export default function Employees() {
 
       setShowAddModal(false);
     } catch (error) {
+      console.error("Add Employee Error Details:", error);
       const errorMessage =
         error.response?.data?.message ||
+        error.response?.data?.error ||
         error.message ||
         "Failed to add employee";
+
       toast.error(errorMessage);
     }
   };
