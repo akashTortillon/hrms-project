@@ -32,6 +32,24 @@ const DocumentsTable = ({ documents = [], onDelete }) => {
     return `${import.meta.env.VITE_API_BASE.replace('/api', '')}/${path}`;
   };
 
+  const handleDownload = async (url, filename) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename || 'document';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download failed", error);
+    }
+  };
+
   const columns = [
     {
       key: "document",
@@ -99,22 +117,27 @@ const DocumentsTable = ({ documents = [], onDelete }) => {
             href={getFileUrl(row.filePath)}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ cursor: 'pointer', color: 'inherit' }}
+            className="primary"
+            style={{ cursor: 'pointer' }}
             title="View"
           >
             <SvgIcon name="eye" size={18} />
           </a>
 
-          <a
-            href={getFileUrl(row.filePath)}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ cursor: 'pointer', color: 'inherit' }}
+          <span
+            onClick={() => {
+              const url = getFileUrl(row.filePath);
+              // Extract extension or default to .pdf
+              const ext = row.filePath?.split('.').pop() || 'pdf';
+              const filename = `${row.title}.${ext}`;
+              handleDownload(url, filename);
+            }}
+            className="success"
+            style={{ cursor: 'pointer' }}
             title="Download"
           >
             <SvgIcon name="download" size={18} />
-          </a>
+          </span>
 
           <span
             className="danger"

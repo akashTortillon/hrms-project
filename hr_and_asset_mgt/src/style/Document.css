@@ -85,10 +85,6 @@
 
 .upload-btn
 
-
-
-
-
 /* ===== DOCUMENT LIST ===== */
 .doc-info {
   display: flex;
@@ -113,7 +109,7 @@
 
 .doc-sub {
   font-size: 12px;
-  color:black;
+  color: black;
 }
 
 .primary {
@@ -153,21 +149,33 @@
 .action-icons {
   display: flex;
   gap: 14px;
-  align-items: center;     
+  align-items: center;
   justify-content: center;
   color: #2563eb;
   cursor: pointer;
 }
 
 .action-icons svg {
-  display: block;          
+  display: block;
 }
 
 
 .action-icons .danger {
-    display: flex;           
+  display: flex;
   align-items: center;
   color: #dc2626;
+}
+
+.action-icons .primary {
+  display: flex;
+  align-items: center;
+  color: #2563eb;
+}
+
+.action-icons .success {
+  display: flex;
+  align-items: center;
+  color: #16a34a;
 }
 
 
@@ -455,8 +463,3 @@
   color: #667085;
   margin-top: auto;
 }
-
-
-
-
-
