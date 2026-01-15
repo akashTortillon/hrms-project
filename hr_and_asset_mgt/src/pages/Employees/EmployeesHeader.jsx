@@ -11,6 +11,7 @@ export default function EmployeesHeader({
   setStatus,
   search,
   setSearch,
+  deptOptions = []
 }) {
   return (
     <div className="employees-header">
@@ -49,12 +50,10 @@ export default function EmployeesHeader({
             value={department}
             onChange={(e) => setDepartment(e.target.value)}
           >
-            <option>All Departments</option>
-            <option>Sales</option>
-            <option>HR</option>
-            <option>Operations</option>
-            <option>Finance</option>
-            <option>IT</option>
+            <option value="All Departments">All Departments</option>
+            {deptOptions.map((dept, idx) => (
+              <option key={idx} value={dept}>{dept}</option>
+            ))}
           </select>
 
           {/* Status */}

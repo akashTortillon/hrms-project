@@ -6,12 +6,41 @@ export const addEmployee = async (req, res) => {
   try {
     const { name, code, role, department, email, phone, joinDate, status } = req.body;
 
-    // Validation
-    if (!name || !role || !department || !email || !phone || !joinDate) {
-      return res.status(400).json({ message: "All fields are required" });
+    // 1. Strict Validation
+    if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
+    if (!role) return res.status(400).json({ message: "Role is required" });
+    if (!department) return res.status(400).json({ message: "Department is required" });
+    if (!joinDate) return res.status(400).json({ message: "Joining Date is required" });
+
+    // Email Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ message: "Valid Email is required" });
     }
 
-    // Generate Auto Incremented EMP Code
+    // Phone Validation (UAE Format)
+    // Relaxed to support various lengths (landline, mobile, potential extra prefixing)
+    // Checks for UAE prefix (+971, 00971, 971, 0) followed by 7-12 digits
+    const uaePhoneRegex = /^(?:\+971|00971|971|0)?\d{7,12}$/;
+
+    // Sanitize spaces/dashes before check
+    const cleanPhone = phone ? phone.replace(/[\s-]/g, '') : '';
+
+    if (!cleanPhone || !uaePhoneRegex.test(cleanPhone)) {
+      return res.status(400).json({ message: "Valid UAE Phone Number is required" });
+    }
+
+    // 2. Check for Duplicates (Email or Phone)
+    const existingEmployee = await Employee.findOne({
+      $or: [{ email: email }, { phone: phone }]
+    });
+
+    if (existingEmployee) {
+      if (existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
+      if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
+    }
+
+    // 3. Generate Auto Incremented EMP Code
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
     let nextCode = "EMP001";
 
@@ -22,14 +51,7 @@ export const addEmployee = async (req, res) => {
       }
     }
 
-    // Check if email already exists
-
-    // Check if email already exists
-    const existingEmail = await Employee.findOne({ email });
-    if (existingEmail) {
-      return res.status(409).json({ message: "Email already exists" });
-    }
-
+    // 4. Create Employee
     const employee = await Employee.create({
       name,
       code: nextCode,
@@ -41,7 +63,7 @@ export const addEmployee = async (req, res) => {
       status: status || "Active"
     });
 
-    // ✅ Auto-create User account for login
+    // 5. Auto-create User account for login
     // Normalize phone for User model (+971 format)
     let userPhone = phone.replace(/\s+/g, "");
     if (userPhone.startsWith("0")) {
@@ -82,7 +104,6 @@ export const addEmployee = async (req, res) => {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ message: error.message });
     }
-    // Handle duplicate key checks if they slipped through
     if (error.code === 11000) {
       return res.status(409).json({ message: "Duplicate entry found (Email or Phone)" });
     }
@@ -92,7 +113,31 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
+    const { department, status, search } = req.query;
+
+    let matchStage = {};
+
+    // Filter by Department
+    if (department && department !== "All Departments") {
+      matchStage.department = department;
+    }
+
+    // Filter by Status
+    if (status && status !== "All Status") {
+      matchStage.status = status;
+    }
+
+    // Filter by Search (Name, Email, Code)
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } }
+      ];
+    }
+
     const employees = await Employee.aggregate([
+      { $match: matchStage }, // Apply filters first
       {
         $addFields: {
           numericCode: {
