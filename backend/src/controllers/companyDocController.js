@@ -37,24 +37,32 @@ export const uploadDoc = async (req, res) => {
         }
 
         const { name, type, location, issueDate, expiryDate } = req.body;
+        const uploaderId = req.user.id || req.user._id;
+        const uploaderRole = req.user.role || "Admin"; // Fallback to Admin if undefined
 
         // Calculate Status
-        const today = new Date();
-        const expiry = new Date(expiryDate);
-        const diffTime = expiry - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
         let status = "Valid";
-        if (diffDays < 0) status = "Expired";
-        else if (diffDays <= 30) status = "Expiring Soon";
+
+        if (expiryDate) {
+            const today = new Date();
+            const expiry = new Date(expiryDate);
+            const diffTime = expiry - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 0) status = "Expired";
+            else if (diffDays <= 10) status = "Critical";
+            else if (diffDays <= 30) status = "Expiring Soon";
+        }
 
         const newDoc = new CompanyDocument({
             name,
             type,
             location,
             issueDate,
-            expiryDate,
+            expiryDate: expiryDate || null,
             status, // Save calculated status
+            uploadedBy: uploaderId,
+            uploaderRole: uploaderRole,
             filePath: req.file.path.replace(/\\/g, "/"), // normalize path
         });
 
@@ -85,12 +93,14 @@ export const getDocStats = async (req, res) => {
         const valid = await CompanyDocument.countDocuments({ status: "Valid" });
         const expiring = await CompanyDocument.countDocuments({ status: "Expiring Soon" });
         const expired = await CompanyDocument.countDocuments({ status: "Expired" });
+        const critical = await CompanyDocument.countDocuments({ status: "Critical" });
 
         res.json({
             total,
             valid,
             expiring,
-            expired
+            expired,
+            critical
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -8,7 +8,7 @@ import "../../style/Document.css";
 export default function DocumentLibraryHeader({ stats = { total: 0, valid: 0, expiring: 0, expired: 0 }, onUploadClick }) {
 
   // Use stats from props directly
-  const { total, valid, expiring, expired } = stats;
+  const { total, valid, expiring, expired, critical } = stats;
 
   const statItems = [
     {
@@ -32,8 +32,8 @@ export default function DocumentLibraryHeader({ stats = { total: 0, valid: 0, ex
     {
       title: "Expired",
       value: expired,
-      icon: "exclamation",
-      iconColor: "#dc2626",
+      icon: "exclamation", // or reuse exclamation
+      iconColor: "#991b1b",
     },
   ];
 

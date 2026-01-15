@@ -73,8 +73,10 @@ const DocumentsTable = ({ documents = [], onDelete }) => {
       render: (row) => (
         <>
           <div className="primary">{row.expiryDate}</div>
-          {row.daysLeft && (
-            <div className="secondary">
+          {row.daysLeft !== undefined && row.daysLeft !== null && (
+            <div className="secondary" style={{
+              color: row.daysLeft < 0 ? 'var(--destructive)' : row.daysLeft <= 30 ? 'var(--warning-dark)' : 'inherit'
+            }}>
               {row.daysLeft} days left
             </div>
           )}
