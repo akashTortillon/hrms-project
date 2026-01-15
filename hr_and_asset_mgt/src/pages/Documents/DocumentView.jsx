@@ -8,6 +8,7 @@ import DocumentsGrid from "./DocumentsGrid";
 import ExpiryReminders from "./DocumentExpiryCards";
 import UploadDocumentModal from "./UploadDocumentModal";
 import { getDocuments, uploadDocument, deleteDocument, getDocumentStats } from "../../services/documentService";
+import { companyDocumentTypeService } from "../../services/masterService";
 import { toast } from "react-toastify";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal";
 
@@ -17,6 +18,9 @@ function Documents() {
   const [stats, setStats] = useState({ total: 0, valid: 0, expiring: 0, expired: 0 }); // New Stats State
   const [view, setView] = useState("list");
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [typeOptions, setTypeOptions] = useState(["All Types"]);
+  // Static status options since backend calculates them
+  const statusOptions = ["All Status", "Valid", "Expiring Soon", "Expired"];
 
   // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -33,7 +37,19 @@ function Documents() {
   // FETCH DATA
   useEffect(() => {
     fetchStats(); // Fetch initial stats
+    fetchMasters();
   }, []); // Run once on mount
+
+  const fetchMasters = async () => {
+    try {
+      const types = await companyDocumentTypeService.getAll();
+      if (types && types.length > 0) {
+        setTypeOptions(["All Types", ...types.map(t => t.name)]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch filter options", err);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -161,6 +177,8 @@ function Documents() {
         total={documents.length}
         view={view}
         onViewChange={setView}
+        typeOptions={typeOptions}
+        statusOptions={statusOptions}
       />
 
       {loading ? (
