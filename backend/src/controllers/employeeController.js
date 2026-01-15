@@ -126,19 +126,9 @@ export const addEmployee = async (req, res) => {
       }
     }
 
-    // 4. Create Employee
-    const employee = await Employee.create({
-      name,
-      code: nextCode,
-      role,
-      department,
-      email,
-      phone,
-      joinDate,
-      status: status || "Active"
-    });
+    // 4. Auto-create User account for login (CRITICAL STEP)
+    // If this fails, Employee will NOT be added
 
-    // 5. Auto-create User account for login
     // Normalize phone for User model (+971 format)
     let userPhone = phone.replace(/\s+/g, "");
     if (userPhone.startsWith("0")) {
@@ -148,8 +138,7 @@ export const addEmployee = async (req, res) => {
     }
 
     const userExists = await User.findOne({ email });
-    let userCreated = false;
-    let userCreationError = "";
+    let createdUser = false;
 
     if (!userExists) {
       try {
@@ -161,17 +150,29 @@ export const addEmployee = async (req, res) => {
           password: hashedPassword,
           role: role
         });
-        userCreated = true;
+        createdUser = true;
       } catch (uErr) {
         console.error("User creation failed:", uErr.message);
-        userCreationError = " (Login account failed: " + uErr.message + ")";
+        return res.status(500).json({ message: "Failed to create User account. Employee not added." });
       }
     }
 
+    // 5. Create Employee (Only if User valid)
+    const employee = await Employee.create({
+      name,
+      code: nextCode,
+      role,
+      department,
+      email,
+      phone,
+      joinDate,
+      status: status || "Active"
+    });
+
     res.status(201).json({
-      message: userCreated
+      message: createdUser
         ? "Employee added & User account created (Password: Password@123)"
-        : "Employee added" + userCreationError,
+        : "Employee added (User account already existed)",
       employee
     });
   } catch (error) {
@@ -239,6 +240,7 @@ export const getEmployees = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
+    const { role } = req.body;
 
     const updatedEmployee = await Employee.findByIdAndUpdate(
       id,
@@ -248,6 +250,15 @@ export const updateEmployee = async (req, res) => {
 
     if (!updatedEmployee) {
       return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Sync Role with User account
+    if (role) {
+      // Find linked User by email and update role
+      await User.findOneAndUpdate(
+        { email: updatedEmployee.email },
+        { role: role }
+      );
     }
 
     res.json({ employee: updatedEmployee });
