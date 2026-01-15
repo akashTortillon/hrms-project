@@ -11,6 +11,9 @@ export default function EmployeesHeader({
   setStatus,
   search,
   setSearch,
+  deptOptions = [],
+  onExport,
+  count = 0
 }) {
   return (
     <div className="employees-header">
@@ -49,12 +52,10 @@ export default function EmployeesHeader({
             value={department}
             onChange={(e) => setDepartment(e.target.value)}
           >
-            <option>All Departments</option>
-            <option>Sales</option>
-            <option>HR</option>
-            <option>Operations</option>
-            <option>Finance</option>
-            <option>IT</option>
+            <option value="All Departments">All Departments</option>
+            {deptOptions.map((dept, idx) => (
+              <option key={idx} value={dept}>{dept}</option>
+            ))}
           </select>
 
           {/* Status */}
@@ -70,14 +71,14 @@ export default function EmployeesHeader({
           </select>
 
           {/* Export */}
-          <button className="employees-export-btn">
+          <button className="employees-export-btn" onClick={onExport}>
             <SvgIcon name="download" size={16} />
             Export
           </button>
         </div>
 
         <div className="employees-count">
-          Showing 6 of 6 employees
+          Showing {count} Employees
         </div>
       </div>
     </div>

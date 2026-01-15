@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Navbar,
   Container,
@@ -32,13 +33,22 @@ export default function NavigationBar() {
   const [profileOpen, setProfileOpen] = useState(false);
   const { role, setRole } = useRole();
   const profileAnchorRef = useRef(null);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userRole");
+    // navigate("/login");
+    window.location.href = "/login"; // Force full reload to clear all states
+  };
 
   return (
     <Navbar className="topbar" bg="white" expand="lg">
       <Container fluid className="topbar-container">
         <div className="brand">
-          
-          
+
+
         </div>
 
         <Form className="search-form">
@@ -79,47 +89,47 @@ export default function NavigationBar() {
             <SvgView name="notification" size={20} />
           </NotificationDropdown>
 
-                      <div
-              className="profile"
-              ref={profileAnchorRef}
-              style={{ position: "relative" }}
+          <div
+            className="profile"
+            ref={profileAnchorRef}
+            style={{ position: "relative" }}
+          >
+            <div
+              className="avatar"
+              onClick={() => setProfileOpen((prev) => !prev)}
             >
-              <div
-                className="avatar"
-                onClick={() => setProfileOpen((prev) => !prev)}
-              >
-                <SvgIcon name="user" size={22} style={{ color: "white" }} />
-              </div>
-
-              <div
-                className="profile-text"
-                onClick={() => setProfileOpen((prev) => !prev)}
-              >
-                <div className="welcome">Welcome, Admin User</div>
-                <div className="role">{role}</div>
-              </div>
-
-              <span
-                className="chevron"
-                aria-hidden="true"
-                onClick={() => setProfileOpen((prev) => !prev)}
-              >
-                ▾
-              </span>
-
-              <ProfileDropdown
-                isOpen={profileOpen}
-                role={role}                 
-                onRoleChange={setRole}     
-                onClose={() => setProfileOpen(false)}
-                onProfile={() => console.log("My Profile")}
-                onSettings={() => console.log("Settings")}
-                onLogout={() => console.log("Logout")}
-                anchorRef={profileAnchorRef}
-              />
+              <SvgIcon name="user" size={22} style={{ color: "white" }} />
             </div>
 
-                    </div>
+            <div
+              className="profile-text"
+              onClick={() => setProfileOpen((prev) => !prev)}
+            >
+              <div className="welcome">Welcome, {JSON.parse(localStorage.getItem("user") || "{}").name || "User"}</div>
+              <div className="role">{role}</div>
+            </div>
+
+            <span
+              className="chevron"
+              aria-hidden="true"
+              onClick={() => setProfileOpen((prev) => !prev)}
+            >
+              ▾
+            </span>
+
+            <ProfileDropdown
+              isOpen={profileOpen}
+              role={role}
+              onRoleChange={setRole}
+              onClose={() => setProfileOpen(false)}
+              onProfile={() => console.log("My Profile")}
+              onSettings={() => console.log("Settings")}
+              onLogout={handleLogout}
+              anchorRef={profileAnchorRef}
+            />
+          </div>
+
+        </div>
       </Container>
     </Navbar>
   );

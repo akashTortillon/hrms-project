@@ -57,3 +57,6 @@ export const assetCategoryService = createGenericService('asset-categories');
 export const assetStatusService = createGenericService('status-labels');
 export const vendorService = createGenericService('vendors');
 export const serviceTypeService = createGenericService('service-types');
+export const roleService = createGenericService('roles');
+
+export const companyDocumentTypeService = createGenericService('company-document-types');

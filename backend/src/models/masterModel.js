@@ -22,7 +22,16 @@ const unifiedMasterSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
-    metadata: { type: Map, of: String } // Flexible field for extra data like colors, icons etc
+    metadata: { type: mongoose.Schema.Types.Mixed }, // Flexible JSON field
+    assetTypeId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Master',
+        index: true
+    },
+    permissions: {
+        type: [String],
+        default: []
+    }
 }, { timestamps: true });
 
 // Compound index to ensure names are unique within a type

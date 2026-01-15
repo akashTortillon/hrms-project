@@ -5,13 +5,15 @@ const companyDocSchema = new mongoose.Schema({
     type: { type: String, required: true }, // License, Tax, Insurance
     location: { type: String }, // e.g. "Main Office"
     issueDate: { type: Date },
-    expiryDate: { type: Date, required: true },
+    expiryDate: { type: Date }, // Optional now
     filePath: { type: String, required: true }, // saved filename
     status: {
         type: String,
-        enum: ["Valid", "Expiring Soon", "Expired"],
+        enum: ["Valid", "Expiring Soon", "Expired", "Critical"],
         default: "Valid"
     },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    uploaderRole: { type: String }, // e.g. "Admin", "HR"
     uploadedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

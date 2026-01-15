@@ -1,37 +1,166 @@
+import * as XLSX from "xlsx";
 import Employee from "../models/employeeModel.js";
+
+export const exportEmployees = async (req, res) => {
+  try {
+    const { department, status, search } = req.query;
+
+    let matchStage = {};
+
+    // Filter by Department
+    if (department && department !== "All Departments") {
+      matchStage.department = department;
+    }
+
+    // Filter by Status
+    if (status && status !== "All Status") {
+      matchStage.status = status;
+    }
+
+    // Filter by Search (Name, Email, Code)
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const employees = await Employee.aggregate([
+      { $match: matchStage },
+      { $sort: { code: 1 } },
+      {
+        $project: {
+          _id: 0,
+          "Employee ID": "$code",
+          "Full Name": "$name",
+          "Role": "$role",
+          "Department": "$department",
+          "Email": "$email",
+          "Contact Number": "$phone",
+          "Joining Date": {
+            $dateToString: { format: "%Y-%m-%d", date: "$joinDate" }
+          },
+          "Status": "$status"
+        }
+      }
+    ]);
+
+    const worksheet = XLSX.utils.json_to_sheet(employees);
+    // Auto-width columns
+    const maxWidth = employees.reduce((w, r) => Math.max(w, r["Full Name"] ? r["Full Name"].length : 10), 10);
+    worksheet["!cols"] = [
+      { wch: 10 }, // ID
+      { wch: 25 }, // Name
+      { wch: 20 }, // Role
+      { wch: 15 }, // Dept
+      { wch: 30 }, // Email
+      { wch: 15 }, // Phone
+      { wch: 15 }, // Date
+      { wch: 10 }  // Status
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
+
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader("Content-Disposition", 'attachment; filename="Employees.xlsx"');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+
+  } catch (error) {
+    console.error("Export Error:", error);
+    res.status(500).json({ message: "Export failed" });
+  }
+};
+import User from "../models/userModel.js";
+import bcrypt from "bcryptjs";
 
 export const addEmployee = async (req, res) => {
   try {
     const { name, code, role, department, email, phone, joinDate, status } = req.body;
 
-    // Validation
-    if (!name || !code || !role || !department || !email || !phone || !joinDate) {
-      return res.status(400).json({ message: "All fields are required" });
+    // 1. Strict Validation
+    if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
+    if (!role) return res.status(400).json({ message: "Role is required" });
+    if (!department) return res.status(400).json({ message: "Department is required" });
+    if (!joinDate) return res.status(400).json({ message: "Joining Date is required" });
+
+    // Email Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ message: "Valid Email is required" });
     }
 
-    // ✅ Code format validation (EMP001)
-    const codeRegex = /^EMP\d{3}$/;
-    if (!codeRegex.test(code)) {
-      return res.status(400).json({
-        message: "Employee code must be in EMP001 format"
-      });
+    // Phone Validation (UAE Format)
+    // Relaxed to support various lengths (landline, mobile, potential extra prefixing)
+    // Checks for UAE prefix (+971, 00971, 971, 0) followed by 7-12 digits
+    const uaePhoneRegex = /^(?:\+971|00971|971|0)?\d{7,12}$/;
+
+    // Sanitize spaces/dashes before check
+    const cleanPhone = phone ? phone.replace(/[\s-]/g, '') : '';
+
+    if (!cleanPhone || !uaePhoneRegex.test(cleanPhone)) {
+      return res.status(400).json({ message: "Valid UAE Phone Number is required" });
     }
 
-    // Check if employee code already exists
-    const existingEmployee = await Employee.findOne({ code });
+    // 2. Check for Duplicates (Email or Phone)
+    const existingEmployee = await Employee.findOne({
+      $or: [{ email: email }, { phone: phone }]
+    });
+
     if (existingEmployee) {
-      return res.status(409).json({ message: "Employee code already exists" });
+      if (existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
+      if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
     }
 
-    // Check if email already exists
-    const existingEmail = await Employee.findOne({ email });
-    if (existingEmail) {
-      return res.status(409).json({ message: "Email already exists" });
+    // 3. Generate Auto Incremented EMP Code
+    const lastEmployee = await Employee.findOne().sort({ code: -1 });
+    let nextCode = "EMP001";
+
+    if (lastEmployee && lastEmployee.code) {
+      const lastNumber = parseInt(lastEmployee.code.replace("EMP", ""), 10);
+      if (!isNaN(lastNumber)) {
+        nextCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
+      }
     }
 
+    // 4. Auto-create User account for login (CRITICAL STEP)
+    // If this fails, Employee will NOT be added
+
+    // Normalize phone for User model (+971 format)
+    let userPhone = phone.replace(/\s+/g, "");
+    if (userPhone.startsWith("0")) {
+      userPhone = "+971" + userPhone.substring(1);
+    } else if (userPhone.startsWith("971")) {
+      userPhone = "+" + userPhone;
+    }
+
+    const userExists = await User.findOne({ email });
+    let createdUser = false;
+
+    if (!userExists) {
+      try {
+        const hashedPassword = await bcrypt.hash("Password@123", 10);
+        await User.create({
+          name,
+          email,
+          phone: userPhone,
+          password: hashedPassword,
+          role: role
+        });
+        createdUser = true;
+      } catch (uErr) {
+        console.error("User creation failed:", uErr.message);
+        return res.status(500).json({ message: "Failed to create User account. Employee not added." });
+      }
+    }
+
+    // 5. Create Employee (Only if User valid)
     const employee = await Employee.create({
       name,
-      code,
+      code: nextCode,
       role,
       department,
       email,
@@ -41,18 +170,50 @@ export const addEmployee = async (req, res) => {
     });
 
     res.status(201).json({
-      message: "Employee added successfully",
+      message: createdUser
+        ? "Employee added & User account created (Password: Password@123)"
+        : "Employee added (User account already existed)",
       employee
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Add Employee Error:", error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: error.message });
+    }
+    if (error.code === 11000) {
+      return res.status(409).json({ message: "Duplicate entry found (Email or Phone)" });
+    }
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
 export const getEmployees = async (req, res) => {
   try {
+    const { department, status, search } = req.query;
+
+    let matchStage = {};
+
+    // Filter by Department
+    if (department && department !== "All Departments") {
+      matchStage.department = department;
+    }
+
+    // Filter by Status
+    if (status && status !== "All Status") {
+      matchStage.status = status;
+    }
+
+    // Filter by Search (Name, Email, Code)
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } }
+      ];
+    }
+
     const employees = await Employee.aggregate([
+      { $match: matchStage }, // Apply filters first
       {
         $addFields: {
           numericCode: {
@@ -79,6 +240,7 @@ export const getEmployees = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
+    const { role } = req.body;
 
     const updatedEmployee = await Employee.findByIdAndUpdate(
       id,
@@ -88,6 +250,15 @@ export const updateEmployee = async (req, res) => {
 
     if (!updatedEmployee) {
       return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Sync Role with User account
+    if (role) {
+      // Find linked User by email and update role
+      await User.findOneAndUpdate(
+        { email: updatedEmployee.email },
+        { role: role }
+      );
     }
 
     res.json({ employee: updatedEmployee });

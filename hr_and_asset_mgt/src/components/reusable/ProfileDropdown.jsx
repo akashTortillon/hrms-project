@@ -36,17 +36,14 @@ export default function ProfileDropdown({
 
   return (
     <div className="profile-dropdown" ref={menuRef}
-    onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="profile-dropdown__section">
-        <div className="profile-dropdown__label">Switch Role (Demo)</div>
-        <select className="profile-dropdown__select" value={role}
-          onChange={(e) => onRoleChange(e.target.value)}>
-          <option value="Admin">Admin</option>
-          <option value="Manager">Manager</option>
-          <option value="Employee">Employee</option>
-        </select>
+        <div className="profile-dropdown__label">Current Role</div>
+        <div className="profile-dropdown__text" style={{ padding: "0 12px 10px", fontWeight: "bold", fontSize: "14px", color: "#333" }}>
+          {role}
+        </div>
       </div>
 
       <div className="profile-dropdown__menu">

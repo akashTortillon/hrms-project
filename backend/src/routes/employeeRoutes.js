@@ -3,11 +3,15 @@ import {
   addEmployee,
   getEmployees,
   updateEmployee,
-  deleteEmployee
+  deleteEmployee,
+  exportEmployees
 } from "../controllers/employeeController.js";
 import { protect } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+// EXPORT employees (Excel)
+router.get("/export", protect, exportEmployees);
 
 // GET all employees
 router.get("/", protect, getEmployees);

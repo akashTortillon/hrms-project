@@ -67,8 +67,8 @@ api.interceptors.request.use((config) => {
 const EMPLOYEE_API = "/api/employees";
 
 // ✅ Fetch employees
-export const getEmployees = async () => {
-  const res = await api.get(EMPLOYEE_API);
+export const getEmployees = async (params = {}) => {
+  const res = await api.get(EMPLOYEE_API, { params });
   return res.data;
 };
 
@@ -87,6 +87,15 @@ export const updateEmployee = async (id, data) => {
 // DELETE employee
 export const deleteEmployee = async (id) => {
   const res = await api.delete(EMPLOYEE_API + `/${id}`);
+  return res.data;
+};
+
+// EXPORT employees (Excel)
+export const exportEmployees = async (params = {}) => {
+  const res = await api.get(EMPLOYEE_API + "/export", {
+    params,
+    responseType: 'blob'
+  });
   return res.data;
 };
 
