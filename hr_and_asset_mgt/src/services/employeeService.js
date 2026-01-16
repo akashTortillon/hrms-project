@@ -72,6 +72,11 @@ export const getEmployees = async (params = {}) => {
   return res.data;
 };
 
+export const getEmployeeById = async (id) => {
+  const res = await api.get(`${EMPLOYEE_API}/${id}`);
+  return res.data;
+};
+
 // ✅ Add employee
 export const addEmployee = async (employee) => {
   const res = await api.post(EMPLOYEE_API, employee);

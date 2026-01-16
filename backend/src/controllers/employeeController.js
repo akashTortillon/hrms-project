@@ -237,6 +237,24 @@ export const getEmployees = async (req, res) => {
 
 
 
+
+export const getEmployeeById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employee = await Employee.findById(id);
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    res.json(employee);
+  } catch (error) {
+    console.error("Get Employee By ID Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
