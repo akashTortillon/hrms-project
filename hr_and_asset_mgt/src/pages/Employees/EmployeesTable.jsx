@@ -71,17 +71,11 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
                 <div className="actions-btn">
                   <button
                     type="button"
-                    className="icon-btn edit-btn"
-                    onClick={() => onEdit && onEdit(emp)}
-                    title="Edit Employee"
-                  >
-                    <SvgIcon name="edit" size={18} />
-                  </button>
-
-                  <button
-                    type="button"
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete && onDelete(emp)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete && onDelete(emp);
+                    }}
                     title="Delete Employee"
                   >
                     <SvgIcon name="delete" size={18} />

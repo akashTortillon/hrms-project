@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { roleService } from "../../services/masterService";
+import { roleService, employeeTypeService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
-export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOptions = [] }) {
+export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOptions = [], editMode = "all" }) {
   const [form, setForm] = useState({ ...employee });
   const [roles, setRoles] = useState([]);
+  const [contractTypes, setContractTypes] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
 
   useEffect(() => {
-    fetchRoles();
+    fetchMasters();
 
     // Parse phone for display
     if (employee.phone) {
@@ -21,12 +22,16 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
     }
   }, [employee]);
 
-  const fetchRoles = async () => {
+  const fetchMasters = async () => {
     try {
-      const data = await roleService.getAll();
-      setRoles(data);
+      const [rolesData, typesData] = await Promise.all([
+        roleService.getAll(),
+        employeeTypeService.getAll()
+      ]);
+      setRoles(rolesData);
+      setContractTypes(typesData);
     } catch (error) {
-      console.error("Failed to fetch roles", error);
+      console.error("Failed to fetch masters", error);
     }
   };
 
@@ -41,7 +46,16 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   };
 
   const handleSubmit = () => {
-    onUpdate(form);
+    // Sanitize Payload: Convert "N/A" or empty dates to null
+    const payload = { ...form };
+
+    ["dob", "passportExpiry", "emiratesIdExpiry", "visaExpiry"].forEach(field => {
+      if (payload[field] === "N/A" || payload[field] === "") {
+        payload[field] = null;
+      }
+    });
+
+    onUpdate(payload);
   };
 
   return (
@@ -55,73 +69,155 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
         <div className="modal-body">
           <div className="modal-grid">
-            {/* Name - Full Width */}
-            <div className="form-group">
-              <label>Employee Name</label>
-              <input name="name" value={form.name} onChange={handleChange} />
-            </div>
+            {/* PRFOILE SECTION */}
+            {(editMode === "all" || editMode === "profile") && (
+              <>
+                <div className="form-group">
+                  <label>Employee Name</label>
+                  <input name="name" value={form.name} onChange={handleChange} />
+                </div>
 
-            {/* Code (Read-Only) & Role */}
-            <div className="form-group">
-              <label>Employee Code</label>
-              <input name="code" value={form.code} disabled style={{ background: '#f3f4f6', cursor: 'not-allowed' }} />
-            </div>
+                <div className="form-group">
+                  <label>Employee Code</label>
+                  <input name="code" value={form.code} disabled style={{ background: '#f3f4f6', cursor: 'not-allowed' }} />
+                </div>
 
-            <div className="form-group">
-              <label>Role</label>
-              <select name="role" onChange={handleChange} value={form.role}>
-                <option value="">Select Role</option>
-                {roles.map((r) => (
-                  <option key={r._id} value={r.name}>{r.name}</option>
-                ))}
-              </select>
-            </div>
+                <div className="form-group">
+                  <label>Role</label>
+                  <select name="role" onChange={handleChange} value={form.role}>
+                    <option value="">Select Role</option>
+                    {roles.map((r) => (
+                      <option key={r._id} value={r.name}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* Dept & Email */}
-            <div className="form-group">
-              <label>Department</label>
-              <select name="department" onChange={handleChange} value={form.department}>
-                <option value="">Select Department</option>
-                {deptOptions.map((dept, idx) => (
-                  <option key={idx} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
+                <div className="form-group">
+                  <label>Department</label>
+                  <select name="department" onChange={handleChange} value={form.department}>
+                    <option value="">Select Department</option>
+                    {deptOptions.map((dept, idx) => (
+                      <option key={idx} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
 
-            <div className="form-group">
-              <label>Email</label>
-              <input name="email" value={form.email} onChange={handleChange} />
-            </div>
+                <div className="form-group">
+                  <label>Email</label>
+                  <input name="email" value={form.email} onChange={handleChange} />
+                </div>
 
-            {/* Phone & Join Date */}
-            <div className="form-group">
-              <label>Phone Number</label>
-              <div className="phone-input-wrapper" style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb' }}>
-                <span style={{ padding: '0 12px', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '40px', display: 'flex', alignItems: 'center' }}>+971</span>
-                <input
-                  value={phoneSuffix}
-                  placeholder="50 123 4567"
-                  onChange={handlePhoneChange}
-                  style={{ border: 'none', boxShadow: 'none', background: 'transparent', height: '40px' }}
-                />
-              </div>
-            </div>
+                <div className="form-group">
+                  <label>Phone Number</label>
+                  <div className="phone-input-wrapper" style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb' }}>
+                    <span style={{ padding: '0 12px', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '40px', display: 'flex', alignItems: 'center' }}>+971</span>
+                    <input
+                      value={phoneSuffix}
+                      placeholder="50 123 4567"
+                      onChange={handlePhoneChange}
+                      style={{ border: 'none', boxShadow: 'none', background: 'transparent', height: '40px' }}
+                    />
+                  </div>
+                </div>
 
-            <div className="form-group">
-              <label>Joining Date</label>
-              <input type="date" name="joinDate" value={form.joinDate ? form.joinDate.slice(0, 10) : ''} onChange={handleChange} />
-            </div>
+                <div className="form-group">
+                  <label>Joining Date</label>
+                  <input type="date" name="joinDate" value={form.joinDate ? form.joinDate.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
 
-            {/* Status & Placeholder/Empty */}
-            <div className="form-group">
-              <label>Status</label>
-              <select name="status" value={form.status} onChange={handleChange}>
-                <option>Active</option>
-                <option>Inactive</option>
-                <option>On Leave</option>
-              </select>
-            </div>
+                <div className="form-group">
+                  <label>Status</label>
+                  <select name="status" value={form.status} onChange={handleChange}>
+                    <option>Active</option>
+                    <option>Inactive</option>
+                    <option>On Leave</option>
+                  </select>
+                </div>
+              </>
+            )}
 
+            {/* PERSONAL SECTION */}
+            {(editMode === "all" || editMode === "personal") && (
+              <>
+                <div className="form-group">
+                  <label>Date of Birth</label>
+                  <input type="date" name="dob" value={form.dob ? form.dob.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
+
+                <div className="form-group">
+                  <label>Nationality</label>
+                  <input name="nationality" value={form.nationality || ''} onChange={handleChange} />
+                </div>
+
+                <div className="form-group">
+                  <label>UAE Address</label>
+                  <input name="address" value={form.address || ''} onChange={handleChange} />
+                </div>
+
+                <div className="form-group">
+                  <label>Passport Expiry</label>
+                  <input type="date" name="passportExpiry" value={form.passportExpiry ? form.passportExpiry.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
+
+                <div className="form-group">
+                  <label>Emirates ID Expiry</label>
+                  <input type="date" name="emiratesIdExpiry" value={form.emiratesIdExpiry ? form.emiratesIdExpiry.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
+              </>
+            )}
+            {/* EMPLOYMENT SECTION */}
+            {(editMode === "all" || editMode === "employment") && (
+              <>
+                <div className="form-group">
+                  <label>Join Date</label>
+                  <input type="date" name="joinDate" value={form.joinDate ? form.joinDate.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
+
+                <div className="form-group">
+                  <label>Contract Type</label>
+                  <select name="contractType" value={form.contractType || ''} onChange={handleChange}>
+                    <option value="">Select Type</option>
+                    {contractTypes.map((t) => (
+                      <option key={t._id} value={t.name}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Department</label>
+                  <select name="department" onChange={handleChange} value={form.department || ''}>
+                    <option value="">Select Department</option>
+                    {deptOptions.map((dept, idx) => (
+                      <option key={idx} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Designation</label>
+                  <input name="designation" value={form.designation || ''} onChange={handleChange} placeholder="e.g. Sales Manager" />
+                </div>
+
+                <div className="form-group">
+                  <label>Basic Salary</label>
+                  <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
+                </div>
+
+                <div className="form-group">
+                  <label>Accommodation</label>
+                  <select name="accommodation" value={form.accommodation || ''} onChange={handleChange}>
+                    <option value="">Select Option</option>
+                    <option value="Company Provided">Company Provided</option>
+                    <option value="Not Provided">Not Provided</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Visa Expiry</label>
+                  <input type="date" name="visaExpiry" value={form.visaExpiry ? form.visaExpiry.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
+              </>
+            )}
           </div>
         </div>
 
