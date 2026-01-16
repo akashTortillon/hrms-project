@@ -7,7 +7,8 @@ import {
     companyDocumentTypeService,
     nationalityService,
     payrollRuleService,
-    workflowTemplateService
+    workflowTemplateService,
+    shiftService
 } from "../../../services/masterService";
 
 export default function useHRManagement() {
@@ -37,6 +38,13 @@ export default function useHRManagement() {
         description: ''
     });
 
+    const [shifts, setShifts] = useState([]);
+    const [shiftState, setShiftState] = useState({
+        startTime: '09:00',
+        endTime: '18:00',
+        lateLimit: '09:15'
+    });
+
     useEffect(() => {
         fetchAll();
     }, []);
@@ -49,6 +57,7 @@ export default function useHRManagement() {
         try { setNationalities(await nationalityService.getAll()); } catch (e) { console.error(e); }
         try { setPayrollRules(await payrollRuleService.getAll()); } catch (e) { console.error(e); }
         try { setWorkflowTemplates(await workflowTemplateService.getAll()); } catch (e) { console.error(e); }
+        try { setShifts(await shiftService.getAll()); } catch (e) { console.error(e); }
     };
 
     const handleOpenAdd = (type) => {
@@ -63,6 +72,11 @@ export default function useHRManagement() {
             ruleName: '',
             days: '',
             description: ''
+        });
+        setShiftState({
+            startTime: '09:00',
+            endTime: '18:00',
+            lateLimit: '09:15'
         });
         setShowModal(true);
     };
@@ -85,6 +99,14 @@ export default function useHRManagement() {
                 description: item.description || ''
             });
             // We don't rely on inputValue for Payroll Rules edit, but setting it safely
+            setInputValue(item.name);
+        } else if (type === "Shift") {
+            const meta = item.metadata || {};
+            setShiftState({
+                startTime: meta.startTime || '09:00',
+                endTime: meta.endTime || '18:00',
+                lateLimit: meta.lateLimit || '09:15'
+            });
             setInputValue(item.name);
         } else {
             setInputValue(item.name);
@@ -156,11 +178,22 @@ export default function useHRManagement() {
 
                 if (editId) await payrollRuleService.update(editId, payload);
                 else await payrollRuleService.add(payload);
-                setPayrollRules(await payrollRuleService.getAll());
             } else if (modalType === "Workflow Template") {
                 if (editId) await workflowTemplateService.update(editId, inputValue);
                 else await workflowTemplateService.add(inputValue);
                 setWorkflowTemplates(await workflowTemplateService.getAll());
+            } else if (modalType === "Shift") {
+                const payload = {
+                    name: inputValue,
+                    metadata: {
+                        startTime: shiftState.startTime,
+                        endTime: shiftState.endTime,
+                        lateLimit: shiftState.lateLimit
+                    }
+                };
+                if (editId) await shiftService.update(editId, payload);
+                else await shiftService.add(payload);
+                setShifts(await shiftService.getAll());
             }
             toast.success(`${modalType} ${editId ? "updated" : "added"} successfully`);
             setShowModal(false);
@@ -183,7 +216,9 @@ export default function useHRManagement() {
         else if (type === "Company Document Type") item = companyDocumentTypes.find(i => i._id === id);
         else if (type === "Nationality") item = nationalities.find(i => i._id === id);
         else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
+        else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
         else if (type === "Workflow Template") item = workflowTemplates.find(i => i._id === id);
+        else if (type === "Shift") item = shifts.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -216,6 +251,9 @@ export default function useHRManagement() {
             } else if (type === "Workflow Template") {
                 await workflowTemplateService.delete(id);
                 setWorkflowTemplates(workflowTemplates.filter(i => i._id !== id));
+            } else if (type === "Shift") {
+                await shiftService.delete(id);
+                setShifts(shifts.filter(i => i._id !== id));
             }
             toast.success("Deleted successfully");
             setDeleteConfig({ ...deleteConfig, show: false });
@@ -249,6 +287,11 @@ export default function useHRManagement() {
         deleteConfig, // State for the modal
         setDeleteConfig,
         payrollState,
-        setPayrollState
+        setDeleteConfig,
+        payrollState,
+        setPayrollState,
+        shifts,
+        shiftState,
+        setShiftState
     };
 }
