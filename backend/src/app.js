@@ -53,6 +53,12 @@ console.log("✅ System Settings routes registered at /api/system-settings");
 // 🔹 Company Documents API
 import companyDocRoutes from "./routes/companyDocRoutes.js";
 app.use("/api/documents", companyDocRoutes);
+
+// 🔹 Employee Documents API (Specific to Employee)
+import employeeDocumentRoutes from "./routes/employeeDocumentRoutes.js";
+app.use("/api/employee-docs", employeeDocumentRoutes);
+console.log("✅ Employee Document routes registered at /api/employee-docs");
+
 // Serve uploaded files statically
 app.use("/uploads", express.static("uploads"));
 
