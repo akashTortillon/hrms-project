@@ -1,4 +1,7 @@
-import React, { useEffect, useState } from "react";
+
+
+
+import React, { useEffect, useState, useMemo } from "react";
 import AssetsHeader from "./AssetsHeader";
 import AssetsFilters from "./AssetsFilter";
 import AssetsTable from "./AssetsTable";
@@ -7,62 +10,75 @@ import AddAssetModal from "./AddAssetModal";
 import AssignAssetModal from "./AssignAssetModal";
 import TransferAssetModal from "./TransferAssetModal";
 import ReturnAssetModal from "./ReturnAssetModal";
-import { getAssets, createAsset, updateAsset, deleteAsset } from "../../services/assetService.js";
-import { assignAssetToEmployee, transferAsset, returnAssetToStore } from "../../services/assignmentService.js";
+import AssetHistoryModal from "./AssetHistoryModal";
+import WarrantyAmcTrackerCard from "./WarrantyAmcTrackerCard.jsx";
 import { toast } from "react-toastify";
 
+import {
+  getAssets,
+  createAsset,
+  updateAsset,
+  deleteAsset,
+} from "../../services/assetService.js";
+
+import {
+  assignAssetToEmployee,
+  transferAsset,
+  returnAssetToStore,
+} from "../../services/assignmentService.js";
+
+import { assetTypeService, assetStatusService } from "../../services/masterService";
+
 function Assets() {
+  // Asset data
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Selected asset for modal actions
   const [selectedAsset, setSelectedAsset] = useState(null);
 
-  useEffect(() => {
-    fetchAssets();
-  }, []);
+  // Masters for dynamic filters
+  const [assetTypes, setAssetTypes] = useState([]);
+  const [assetStatuses, setAssetStatuses] = useState([]);
 
+  // Filters
+  const [search, setSearch] = useState("");
+  const [type, setType] = useState("ALL");
+  const [status, setStatus] = useState("ALL");
+
+  // Fetch assets
   const fetchAssets = async () => {
     try {
       setLoading(true);
       const response = await getAssets();
       const assetsArray = Array.isArray(response) ? response : [];
 
-      // Format assets for display
+      // Format assets
       const formattedAssets = assetsArray.map((asset) => {
-        // Map status to statusKey for CSS classes
         const statusKeyMap = {
           "Available": "available",
           "In Use": "in-use",
-          "Under Maintenance": "maintenance"
+          "Under Maintenance": "maintenance",
         };
 
-        // Format purchase date
-        const purchaseDate = asset.purchaseDate
-          ? new Date(asset.purchaseDate).toISOString().split("T")[0]
-          : "";
-
-        // Format purchase cost as AED currency
-        const formattedPrice = `AED ${asset.purchaseCost?.toLocaleString("en-US") || 0}`;
-
         return {
-          _id: asset._id,
-          id: asset._id, // used by table key
-          name: asset.name,
+          ...asset,
+          id: asset._id,
           code: asset.assetCode,
-          category: asset.category,
-          location: asset.location,
-          subLocation: asset.subLocation || "",
-          custodian: asset.custodian,
-          department: asset.department || "",
-          price: formattedPrice,
-          purchaseDate: purchaseDate,
-          status: asset.status,
+           type: asset.type || asset.category || "N/A",
           statusKey: statusKeyMap[asset.status] || "available",
-          isDeleted: asset.isDeleted || false
+          purchaseDate: asset.purchaseDate
+            ? new Date(asset.purchaseDate).toISOString().split("T")[0]
+            : "",
+          price: `AED ${asset.purchaseCost?.toLocaleString("en-US") || 0}`,
         };
       });
 
@@ -76,189 +92,221 @@ function Assets() {
     }
   };
 
-  // Handle adding new asset
+  // Load masters
+  useEffect(() => {
+    const loadMasters = async () => {
+      try {
+        const [typesRes, statusRes] = await Promise.all([
+          assetTypeService.getAll(),
+          assetStatusService.getAll(),
+        ]);
+
+        setAssetTypes(typesRes || []);
+        setAssetStatuses(statusRes || []);
+      } catch (err) {
+        console.error("Failed to load asset masters", err);
+      }
+    };
+    loadMasters();
+  }, []);
+
+  useEffect(() => {
+    fetchAssets();
+  }, []);
+
+  // Filtered assets
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      const matchesSearch =
+        !search ||
+        asset.name?.toLowerCase().includes(search.toLowerCase()) ||
+        asset.assetCode?.toLowerCase().includes(search.toLowerCase());
+
+      const matchesType = type === "ALL" || asset.type === type;
+      const matchesStatus = status === "ALL" || asset.status === status;
+
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [assets, search, type, status]);
+
+  // Asset stats
+  // const assetStats = useMemo(() => {
+  //   const activeAssets = assets.filter((a) => !a.isDeleted);
+  //   return {
+  //     total: activeAssets.length,
+  //     inUse: activeAssets.filter((a) => a.status === "In Use").length,
+  //     available: activeAssets.filter((a) => a.status === "Available").length,
+  //     maintenance: activeAssets.filter(
+  //       (a) => a.status === "Under Maintenance"
+  //     ).length,
+  //   };
+  // }, [assets]);
+
+  const assetStats = useMemo(() => {
+  const nonDeletedAssets = assets.filter((a) => !a.isDeleted);
+
+  return {
+    //  TOTAL = everything from DB
+    total: assets.length,
+
+    // ✅ Operational stats = only non-deleted
+    inUse: nonDeletedAssets.filter((a) => a.status === "In Use").length,
+    available: nonDeletedAssets.filter((a) => a.status === "Available").length,
+    maintenance: nonDeletedAssets.filter(
+      (a) => a.status === "Under Maintenance"
+    ).length,
+  };
+}, [assets]);
+
+  // Add asset
   const handleAddAsset = async (assetData) => {
     try {
       const response = await createAsset(assetData);
-      const { message, asset: newAsset } = response;
-
-      toast.success(message || "Asset added successfully 🎉");
-
-      // Refresh assets list
-      fetchAssets();
-
+      toast.success(response.message || "Asset added successfully");
       setShowAddModal(false);
+      fetchAssets();
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to add asset";
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || error.message || "Failed to add asset");
     }
   };
 
-  // Handle edit click
+  // Edit asset
   const handleEditClick = (asset) => {
     setSelectedAsset(asset);
     setShowEditModal(true);
   };
 
-  // Handle updating asset
   const handleUpdateAsset = async (assetData) => {
     try {
       const response = await updateAsset(assetData._id, assetData);
-      const { message } = response;
-
-      toast.success(message || "Asset updated successfully");
-
-      // Refresh assets list
-      fetchAssets();
-
+      toast.success(response.message || "Asset updated successfully");
       setShowEditModal(false);
       setSelectedAsset(null);
-    } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to update asset";
-      toast.error(errorMessage);
-    }
-  };
-
-  // Handle delete asset
-  const handleDeleteAsset = async (asset) => {
-    const confirmDelete = window.confirm(
-      `Do you want to delete this asset?`
-    );
-
-    if (!confirmDelete) return;
-
-    try {
-      await deleteAsset(asset._id || asset.id);
-
-      toast.success("Asset deleted successfully");
-
-      // Refresh assets list
       fetchAssets();
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to delete asset";
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || error.message || "Failed to update asset");
     }
   };
 
-  // Handle assign asset
+  // Delete asset
+  const handleDeleteAsset = async (asset) => {
+    if (!window.confirm("Do you want to delete this asset?")) return;
+    try {
+      await deleteAsset(asset._id);
+      toast.success("Asset deleted successfully");
+      fetchAssets();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Failed to delete asset");
+    }
+  };
+
+  // Assign asset
   const handleAssignClick = (asset) => {
     setSelectedAsset(asset);
     setShowAssignModal(true);
   };
-
   const handleAssignAsset = async (data) => {
     try {
       const response = await assignAssetToEmployee(data);
       toast.success(response.message || "Asset assigned successfully");
-
-      // Refresh assets list
-      fetchAssets();
-
       setShowAssignModal(false);
       setSelectedAsset(null);
+      fetchAssets();
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to assign asset";
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || error.message || "Failed to assign asset");
     }
   };
 
-  // Handle transfer asset
+  // Transfer asset
   const handleTransferClick = (asset) => {
     setSelectedAsset(asset);
     setShowTransferModal(true);
   };
-
   const handleTransferAsset = async (data) => {
     try {
       const response = await transferAsset(data);
       toast.success(response.message || "Asset transferred successfully");
-
-      // Refresh assets list
-      fetchAssets();
-
       setShowTransferModal(false);
       setSelectedAsset(null);
+      fetchAssets();
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to transfer asset";
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || error.message || "Failed to transfer asset");
     }
   };
 
-  // Handle return asset
+  // Return asset
   const handleReturnClick = (asset) => {
     setSelectedAsset(asset);
     setShowReturnModal(true);
   };
-
   const handleReturnAsset = async (data) => {
     try {
       const response = await returnAssetToStore(data);
       toast.success(response.message || "Asset returned successfully");
-
-      // Refresh assets list
-      fetchAssets();
-
       setShowReturnModal(false);
       setSelectedAsset(null);
+      fetchAssets();
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to return asset";
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || error.message || "Failed to return asset");
     }
+  };
+
+  // View history
+  const handleHistoryClick = (asset) => {
+    setSelectedAsset(asset);
+    setShowHistoryModal(true);
   };
 
   return (
     <div>
-      <AssetsHeader onAddAsset={() => setShowAddModal(true)} />
-      <AssetsFilters />
+      {/* Header cards */}
+      <AssetsHeader
+        onAddAsset={() => setShowAddModal(true)}
+        stats={[
+          { title: "Total Assets", value: assetStats.total, icon: "cube", iconColor: "#2563eb" },
+          { title: "In Use", value: assetStats.inUse, icon: "cube", iconColor: "#16a34a" },
+          { title: "Available", value: assetStats.available, icon: "cube", iconColor: "#f59e0b" },
+          { title: "Maintenance", value: assetStats.maintenance, icon: "spanner", iconColor: "#dc2626" },
+        ]}
+      />
+
+      {/* Filters */}
+      <AssetsFilters
+        search={search}
+        setSearch={setSearch}
+        type={type}
+        setType={setType}
+        status={status}
+        setStatus={setStatus}
+        assetTypes={assetTypes}
+        assetStatuses={assetStatuses}
+        total={filteredAssets.length}
+      />
+
+      {/* Table */}
       {loading ? (
         <div style={{ padding: "20px", textAlign: "center" }}>Loading assets...</div>
       ) : (
-        <AssetsTable 
-          assets={assets} 
+        <AssetsTable
+          assets={filteredAssets}
           onEdit={handleEditClick}
           onDelete={handleDeleteAsset}
           onAssign={handleAssignClick}
           onTransfer={handleTransferClick}
           onReturn={handleReturnClick}
-        />
-      )}
-      <AssetActions onTransferClick={() => {
-        // Find first asset that is "In Use" for transfer
-        const inUseAsset = assets.find(a => a.status === "In Use" && !a.isDeleted);
-        if (inUseAsset) {
-          handleTransferClick(inUseAsset);
-        } else {
-          toast.info("No assets are currently in use for transfer");
-        }
-      }} />
-
-      {/* ADD MODAL */}
-      {showAddModal && (
-        <AddAssetModal
-          onClose={() => setShowAddModal(false)}
-          onAddAsset={handleAddAsset}
+          onHistory={handleHistoryClick}
         />
       )}
 
-      {/* EDIT MODAL */}
+      {/* Warranty Card */}
+      <WarrantyAmcTrackerCard
+        assets={assets}
+        onViewAll={() => console.log("View all warranty details")}
+      />
+
+      {/* Modals */}
+      {showAddModal && <AddAssetModal onClose={() => setShowAddModal(false)} onAddAsset={handleAddAsset} />}
+
       {showEditModal && selectedAsset && (
         <AddAssetModal
           asset={selectedAsset}
@@ -270,7 +318,6 @@ function Assets() {
         />
       )}
 
-      {/* ASSIGN MODAL */}
       {showAssignModal && selectedAsset && (
         <AssignAssetModal
           asset={selectedAsset}
@@ -282,7 +329,6 @@ function Assets() {
         />
       )}
 
-      {/* TRANSFER MODAL */}
       {showTransferModal && selectedAsset && (
         <TransferAssetModal
           asset={selectedAsset}
@@ -294,7 +340,6 @@ function Assets() {
         />
       )}
 
-      {/* RETURN MODAL */}
       {showReturnModal && selectedAsset && (
         <ReturnAssetModal
           asset={selectedAsset}
@@ -303,6 +348,16 @@ function Assets() {
             setSelectedAsset(null);
           }}
           onReturn={handleReturnAsset}
+        />
+      )}
+
+      {showHistoryModal && selectedAsset && (
+        <AssetHistoryModal
+          asset={selectedAsset}
+          onClose={() => {
+            setShowHistoryModal(false);
+            setSelectedAsset(null);
+          }}
         />
       )}
     </div>

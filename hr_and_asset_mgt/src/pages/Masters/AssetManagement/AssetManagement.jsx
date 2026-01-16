@@ -14,6 +14,7 @@ export default function AssetManagement() {
     assetStatuses,
     vendors,
     serviceTypes,
+    maintenanceShops,
     showModal,
     setShowModal,
     modalType,
@@ -73,6 +74,18 @@ export default function AssetManagement() {
           />
         </MastersCard>
 
+        {/* Maintenance Shops */}
+        <MastersCard
+          title="Maintenance Shops"
+          onAdd={() => handleOpenAdd("Maintenance Shop")}
+        >
+          <RenderList
+            items={maintenanceShops}
+            type="Maintenance Shop"
+            handleDelete={handleDelete}
+            handleEdit={handleOpenEdit}
+          />
+        </MastersCard>
       </div>
 
       <div className="masters-grid mt-6">

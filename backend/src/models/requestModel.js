@@ -33,6 +33,16 @@ const requestSchema = new mongoose.Schema(
     remarks: {
       type: String,
       default: ""
+    },
+    // ✅ NEW
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    approvedAt: {
+      type: Date,
+      default: null
     }
   },
   { timestamps: true }

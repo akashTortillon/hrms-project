@@ -9,7 +9,9 @@ import {
 import {
   assignAssetToEmployee,
   transferAsset,
-  returnAssetToStore
+  returnAssetToStore,
+  getAssetHistory,
+  getCurrentAssignment
 } from "../controllers/assignmentController.js";
 import { protect } from "../middlewares/authMiddleware.js";
 
@@ -34,6 +36,14 @@ console.log("✅ POST /api/assets/transfer route registered");
 // RETURN asset to store (must be before /:id route)
 router.post("/return", protect, returnAssetToStore);
 console.log("✅ POST /api/assets/return route registered");
+
+// GET asset history (must be before /:id route)
+router.get("/:id/history", protect, getAssetHistory);
+console.log("✅ GET /api/assets/:id/history route registered");
+
+// GET current assignment for asset (must be before /:id route)
+router.get("/:id/assignments/current", protect, getCurrentAssignment);
+console.log("✅ GET /api/assets/:id/assignments/current route registered");
 
 // GET asset by ID
 router.get("/:id", protect, getAssetById);

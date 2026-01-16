@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
 import { getEmployees } from "../../services/employeeService.js";
+import { maintenanceShopService } from "../../services/masterService.js";
 
 export default function TransferAssetModal({ onClose, onTransfer, asset }) {
   const [employees, setEmployees] = useState([]);
-  const [toEntityType, setToEntityType] = useState("EMPLOYEE");
+  const [maintenanceShops, setMaintenanceShops] = useState([]);
+  const [toEntityType, setToEntityType] = useState("MAINTENANCE_SHOP"); // Default to maintenance shop
   const [selectedEmployee, setSelectedEmployee] = useState("");
+  const [selectedShop, setSelectedShop] = useState("");
   const [toStore, setToStore] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [currentEmployee, setCurrentEmployee] = useState("");
 
   useEffect(() => {
     fetchEmployees();
+    fetchMaintenanceShops();
+    fetchCurrentAssignment();
   }, []);
 
   const fetchEmployees = async () => {
@@ -23,9 +29,44 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
     }
   };
 
+  const fetchMaintenanceShops = async () => {
+    try {
+      const response = await maintenanceShopService.getAll();
+      const shopsArray = Array.isArray(response) ? response : [];
+      setMaintenanceShops(shopsArray);
+    } catch (error) {
+      console.error("Failed to fetch maintenance shops", error);
+    }
+  };
+
+  const fetchCurrentAssignment = async () => {
+    try {
+      // Get current assignment to show current employee
+      const response = await fetch(`/api/assets/${asset._id || asset.id}/assignments/current`);
+      if (response.ok) {
+        const assignment = await response.json();
+        if (assignment && assignment.toEmployee) {
+          setCurrentEmployee(`${assignment.toEmployee.name} ${assignment.toEmployee.code ? `(${assignment.toEmployee.code})` : ''}`);
+        } else {
+          setCurrentEmployee("");
+        }
+      } else {
+        setCurrentEmployee("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch current assignment", error);
+      setCurrentEmployee("");
+    }
+  };
+
   const handleSubmit = () => {
     if (toEntityType === "EMPLOYEE" && !selectedEmployee) {
       alert("Please select an employee");
+      return;
+    }
+
+    if (toEntityType === "MAINTENANCE_SHOP" && !selectedShop) {
+      alert("Please select a maintenance shop");
       return;
     }
 
@@ -34,13 +75,17 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
       return;
     }
 
-    onTransfer({
+    const transferData = {
       assetId: asset._id || asset.id,
       toEntityType,
       toEmployee: toEntityType === "EMPLOYEE" ? selectedEmployee : null,
       toStore: toEntityType === "STORE" ? toStore.trim() : null,
+      shop: toEntityType === "MAINTENANCE_SHOP" ? selectedShop : null,
+      actionType: toEntityType === "MAINTENANCE_SHOP" ? "TRANSFER_TO_MAINTENANCE" : "ASSIGN",
       remarks: remarks
-    });
+    };
+
+    onTransfer(transferData);
   };
 
   return (
@@ -67,6 +112,18 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
 
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
+                Current Employee
+              </label>
+              <input
+                type="text"
+                value={currentEmployee || "Not assigned"}
+                disabled
+                style={{ opacity: 0.7 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Transfer To *
               </label>
               <select
@@ -74,16 +131,36 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
                 onChange={(e) => {
                   setToEntityType(e.target.value);
                   setSelectedEmployee("");
+                  setSelectedShop("");
                   setToStore("");
                 }}
                 style={{ width: "100%" }}
               >
+                <option value="MAINTENANCE_SHOP">Maintenance Shop</option>
                 <option value="EMPLOYEE">Employee</option>
                 <option value="STORE">Store</option>
               </select>
             </div>
 
-            {toEntityType === "EMPLOYEE" ? (
+            {toEntityType === "MAINTENANCE_SHOP" ? (
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
+                  Select Maintenance Shop *
+                </label>
+                <select
+                  value={selectedShop}
+                  onChange={(e) => setSelectedShop(e.target.value)}
+                  style={{ width: "100%" }}
+                >
+                  <option value="">Choose a maintenance shop...</option>
+                  {maintenanceShops.map((shop) => (
+                    <option key={shop._id} value={shop._id}>
+                      {shop.name} {shop.code ? `(${shop.code})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : toEntityType === "EMPLOYEE" ? (
               <div>
                 <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                   Select Employee *

@@ -1,39 +1,12 @@
 
 
+
 import Card from "../../components/reusable/Card";
 import AppButton from "../../components/reusable/Button";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Assets.css";
 
-
-const stats = [
-  {
-    title: "Total Assets",
-    value: 6,
-    icon: "cube",
-    iconColor: "#2563eb",
-  },
-  {
-    title: "In Use",
-    value: 4,
-    icon: "cube",
-    iconColor: "#16a34a",
-  },
-  {
-    title: "Available",
-    value: 1,
-    icon: "cube",
-    iconColor: "#f59e0b",
-  },
-  {
-    title: "Maintenance",
-    value: 1,
-    icon: "spanner",
-    iconColor: "#dc2626",
-  },
-];
-
-export default function AssetsHeader({ onAddAsset }) {
+export default function AssetsHeader({ stats = [], onAddAsset }) {
   return (
     <div className="document-library">
       {/* Header */}
@@ -46,17 +19,13 @@ export default function AssetsHeader({ onAddAsset }) {
         </div>
 
         <button className="asset-import-btn">
-            <span>Import Assets</span>
+          <span>Import Assets</span>
         </button>
-          
-        
-
 
         <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>
           <SvgIcon name="plus" size={18} />
           <span>Add Asset</span>
         </AppButton>
-
       </div>
 
       {/* Stats */}
@@ -72,7 +41,6 @@ export default function AssetsHeader({ onAddAsset }) {
                   color={item.iconColor}
                 />
               </div>
-
               <div className="stat-value">{item.value}</div>
             </div>
           </Card>

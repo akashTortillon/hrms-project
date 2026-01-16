@@ -15,11 +15,19 @@ const generateAssetCode = async () => {
 
 export const createAsset = async (req, res) => {
   try {
-    const { name, category, location, subLocation, custodian, department, purchaseCost, purchaseDate, status } = req.body;
+    const { name, category, location, subLocation, custodian, department, purchaseCost, purchaseDate, status, warrantyPeriod } = req.body;
 
     // Validation (assetCode is auto-generated, so not required)
     if (!name || !category || !location || !custodian || !purchaseCost || !purchaseDate) {
       return res.status(400).json({ message: "All required fields must be provided" });
+    }
+
+    // Calculate warranty expiry date if warranty period is provided
+    let warrantyExpiryDate = null;
+    if (warrantyPeriod && warrantyPeriod > 0) {
+      const purchaseDateObj = new Date(purchaseDate);
+      warrantyExpiryDate = new Date(purchaseDateObj);
+      warrantyExpiryDate.setFullYear(purchaseDateObj.getFullYear() + parseInt(warrantyPeriod));
     }
 
     // Generate asset code automatically
@@ -35,7 +43,14 @@ export const createAsset = async (req, res) => {
       department: department || "",
       purchaseCost,
       purchaseDate,
-      status: status || "Available"
+      warrantyPeriod: warrantyPeriod ? parseInt(warrantyPeriod) : null,
+      warrantyExpiryDate,
+      status: status || "Available",
+      currentLocation: {
+        type: "STORE",
+        employee: null,
+        shop: null
+      }
     });
 
     res.status(201).json({
@@ -50,7 +65,10 @@ export const createAsset = async (req, res) => {
 
 export const getAssets = async (req, res) => {
   try {
-    const assets = await Asset.find().sort({ createdAt: -1 });
+    const assets = await Asset.find()
+      .populate('currentLocation.employee', 'name email')
+      .populate('currentLocation.shop', 'name code')
+      .sort({ createdAt: -1 });
     res.json(assets);
   } catch (error) {
     console.error(error);
@@ -61,7 +79,9 @@ export const getAssets = async (req, res) => {
 export const getAssetById = async (req, res) => {
   try {
     const { id } = req.params;
-    const asset = await Asset.findById(id);
+    const asset = await Asset.findById(id)
+      .populate('currentLocation.employee', 'name email')
+      .populate('currentLocation.shop', 'name code');
 
     if (!asset) {
       return res.status(404).json({ message: "Asset not found" });
@@ -77,10 +97,25 @@ export const getAssetById = async (req, res) => {
 export const updateAsset = async (req, res) => {
   try {
     const { id } = req.params;
+    const { warrantyPeriod, purchaseDate, ...otherFields } = req.body;
+
+    // Calculate warranty expiry date if warranty period or purchase date is updated
+    let warrantyExpiryDate = null;
+    if (warrantyPeriod && warrantyPeriod > 0 && purchaseDate) {
+      const purchaseDateObj = new Date(purchaseDate);
+      warrantyExpiryDate = new Date(purchaseDateObj);
+      warrantyExpiryDate.setFullYear(purchaseDateObj.getFullYear() + parseInt(warrantyPeriod));
+    }
+
+    const updateData = {
+      ...otherFields,
+      ...(warrantyPeriod && { warrantyPeriod: parseInt(warrantyPeriod) }),
+      ...(warrantyExpiryDate && { warrantyExpiryDate })
+    };
 
     const updatedAsset = await Asset.findByIdAndUpdate(
       id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -104,7 +139,10 @@ export const deleteAsset = async (req, res) => {
 
     const asset = await Asset.findByIdAndUpdate(
       id,
-      { isDeleted: true },
+      { isDeleted: true,
+        status: "Disposed"
+       },
+       
       { new: true }
     );
 

@@ -40,12 +40,37 @@ const assetSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["Available", "In Use", "Under Maintenance"],
+    enum: ["Available", "In Use", "Under Maintenance", "Disposed"],
     default: "Available"
+  },
+  warrantyPeriod: {
+    type: Number,
+    default: null
+  },
+  warrantyExpiryDate: {
+    type: Date,
+    default: null
   },
   isDeleted: {
     type: Boolean,
     default: false
+  },
+  currentLocation: {
+    type: {
+      type: String,
+      enum: ["EMPLOYEE", "MAINTENANCE_SHOP", "STORE"],
+      default: "STORE"
+    },
+    employee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null
+    },
+    shop: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Master",
+      default: null
+    }
   }
 }, { timestamps: true });
 

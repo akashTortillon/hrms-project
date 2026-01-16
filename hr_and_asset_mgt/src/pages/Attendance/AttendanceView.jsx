@@ -8,12 +8,14 @@ import AttendanceStats from "./AttendanceStats";
 import AttendanceFilters from "./AttendanceFilters";
 import AttendanceTable from "./AttendanceTable";
 import ShiftManagement from "./AttendanceShift";
+import { getDepartments } from "../../services/masterService";
 
 import AttendanceEditModal from "./AttendanceEditModal";
 import {
   getDailyAttendance,
   updateAttendance,
-  markAttendance
+  markAttendance,
+  getAttendanceStats
 } from "../../services/attendanceService.js";
 import { toast } from "react-toastify";
 
@@ -39,13 +41,40 @@ function Attendance() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  //
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+const [selectedDepartment, setSelectedDepartment] = useState("All Departments");
+
+  // Shift filter state
+  const [shiftOptions, setShiftOptions] = useState(["All Shifts", "Day Shift", "Night Shift", "Flexible"]);
+  const [selectedShift, setSelectedShift] = useState("All Shifts");
+
+  //
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   useEffect(() => {
     fetchAttendanceData();
-  }, [selectedDate]);
+  }, [selectedDate, selectedDepartment, selectedShift]);
+
+  useEffect(() => {
+  const fetchDepartments = async () => {
+    try {
+      const data = await getDepartments();
+      setDepartmentOptions([
+        "All Departments",
+        ...data.map((d) => d.name)
+      ]);
+    } catch (error) {
+      console.error("Failed to load departments", error);
+    }
+  };
+
+  fetchDepartments();
+}, []);
+
 
   const fetchAttendanceData = async () => {
     setLoading(true);
@@ -63,13 +92,31 @@ function Attendance() {
         checkIn: record.checkIn,
         checkOut: record.checkOut,
         workHours: record.workHours, // ✅ NOW COMES FROM BACKEND
-        status: record.status || "Present",
-        statusClass: getStatusClass(record.status || "Present"),
+        status: record.status || "Absent",
+        statusClass: getStatusClass(record.status || "Absent"),
         icon: "user",
         iconColor: "#6b7280",
       }));
 
-      setAttendanceRecords(formattedRecords);
+      // setAttendanceRecords(formattedRecords);
+      let filteredRecords = formattedRecords;
+
+      // Apply department filter
+      if (selectedDepartment !== "All Departments") {
+        filteredRecords = filteredRecords.filter(
+          (r) => r.department === selectedDepartment
+        );
+      }
+
+      // Apply shift filter
+      if (selectedShift !== "All Shifts") {
+        filteredRecords = filteredRecords.filter(
+          (r) => r.shift === selectedShift
+        );
+      }
+
+setAttendanceRecords(filteredRecords);
+
     } catch (error) {
       console.error("Failed to fetch attendance data", error);
       toast.error("Failed to load attendance records");
@@ -134,12 +181,24 @@ function Attendance() {
   return (
     <div>
       <AttendanceHeader />
-      <AttendanceStats />
+      <AttendanceStats selectedDate={selectedDate} />
 
-      <AttendanceFilters
+      {/* <AttendanceFilters
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
-      />
+      /> */}
+
+      <AttendanceFilters
+  selectedDate={selectedDate}
+  onDateChange={setSelectedDate}
+  department={selectedDepartment}
+  onDepartmentChange={setSelectedDepartment}
+  departmentOptions={departmentOptions}
+  shift={selectedShift}
+  onShiftChange={setSelectedShift}
+  shiftOptions={shiftOptions}
+/>
+
 
       <AttendanceTable
         date={selectedDate}
