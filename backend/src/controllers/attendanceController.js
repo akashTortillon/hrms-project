@@ -1,5 +1,6 @@
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
+import mongoose from "mongoose";
 
 /**
  * GET daily attendance
@@ -107,8 +108,8 @@ export const markAttendance = async (req, res) => {
 
     const attendance = await Attendance.findOneAndUpdate(
       { employee: employeeId, date },
-      { 
-        employee: employeeId, 
+      {
+        employee: employeeId,
         date,
         shift: shift || "Day Shift",
         checkIn: checkIn || null,
@@ -189,6 +190,49 @@ export const updateAttendance = async (req, res) => {
     res.json(updated);
   } catch (error) {
     console.error("Update attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * GET Attendance Stats for an Employee
+ * /api/attendance/stats/:employeeId
+ */
+export const getEmployeeAttendanceStats = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const stats = await Attendance.aggregate([
+      { $match: { employee: new mongoose.Types.ObjectId(employeeId) } },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Format metrics
+    const result = {
+      present: 0,
+      absent: 0,
+      leave: 0,
+      late: 0,
+      total: 0
+    };
+
+    stats.forEach(s => {
+      if (s._id === "Present") result.present = s.count;
+      else if (s._id === "Absent") result.absent = s.count;
+      else if (s._id === "On Leave") result.leave = s.count;
+      else if (s._id === "Late") result.late = s.count;
+    });
+
+    result.total = result.present + result.absent + result.leave + result.late;
+
+    res.json(result);
+  } catch (error) {
+    console.error("Get attendance stats error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

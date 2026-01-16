@@ -39,3 +39,9 @@ export const markAttendance = async (data) => {
   return res.data;
 };
 
+// ✅ Get Employee Attendance Stats
+export const getEmployeeAttendanceStats = async (employeeId) => {
+  const res = await api.get(`${ATTENDANCE_API}/stats/${employeeId}`);
+  return res.data;
+};
+
