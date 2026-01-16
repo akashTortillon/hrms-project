@@ -1,7 +1,16 @@
 
 import "../../style/Attendance.css";
 
-export default function AttendanceFilters({ selectedDate, onDateChange }) {
+export default function AttendanceFilters({
+  selectedDate,
+  onDateChange,
+  department,
+  onDepartmentChange,
+  departmentOptions = [],
+  shift,
+  onShiftChange,
+  shiftOptions = ["All Shifts", "Day Shift", "Night Shift", "Flexible"]
+})  {
   return (
     <div className="attendance-filters">
       <div className="filter-group">
@@ -18,23 +27,31 @@ export default function AttendanceFilters({ selectedDate, onDateChange }) {
 
       <div className="filter-group">
         <label className="filter-label">Department</label>
-        <select className="filter-input filter-select">
-          <option>All Departments</option>
-          <option>Sales</option>
-          <option>HR</option>
-          <option>Finance</option>
-          <option>Operations</option>
-          <option>IT</option>
-        </select>
+        <select
+            className="filter-input filter-select"
+            value={department}
+            onChange={(e) => onDepartmentChange(e.target.value)}
+          >
+            {departmentOptions.map((dept, idx) => (
+              <option key={idx} value={dept}>
+                {dept}
+              </option>
+            ))}
+          </select>
       </div>
 
       <div className="filter-group">
         <label className="filter-label">Shift</label>
-        <select className="filter-input filter-select">
-          <option>All Shifts</option>
-          <option>Day Shift</option>
-          <option>Night Shift</option>
-          <option>Flexible</option>
+        <select 
+          className="filter-input filter-select"
+          value={shift}
+          onChange={(e) => onShiftChange(e.target.value)}
+        >
+          {shiftOptions.map((shiftOption, idx) => (
+            <option key={idx} value={shiftOption}>
+              {shiftOption}
+            </option>
+          ))}
         </select>
       </div>
     </div>

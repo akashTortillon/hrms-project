@@ -1,24 +1,55 @@
+
+
+
 import express from "express";
 import {
   createRequest,
   getMyRequests,
-  withdrawRequest
+  withdrawRequest,
+  getPendingRequestsForAdmin,
+  updateRequestStatus
 } from "../controllers/requestController.js";
+import User from "../models/userModel.js";
 import { protect } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// POST /api/requests - Create a new request
+/* =========================
+   USER REQUEST ROUTES
+========================= */
+
+// Create a new request
+// POST /api/requests
 router.post("/", protect, createRequest);
-console.log("✅ POST /api/requests route registered");
 
-// GET /api/requests/my - Get all requests for current user
+// Get logged-in user's requests
+// GET /api/requests/my
 router.get("/my", protect, getMyRequests);
-console.log("✅ GET /api/requests/my route registered");
 
-// PATCH /api/requests/:id/withdraw - Withdraw a request
+// Withdraw a pending request
+// PATCH /api/requests/:id/withdraw
 router.patch("/:id/withdraw", protect, withdrawRequest);
-console.log("✅ PATCH /api/requests/:id/withdraw route registered");
+
+/* =========================
+   ADMIN / MANAGEMENT ROUTES
+   (NO adminOnly middleware)
+========================= */
+
+// Get all pending requests
+// GET /api/requests/admin/pending
+router.get(
+  "/admin/pending",
+  protect,
+  getPendingRequestsForAdmin
+);
+
+
+router.put(
+  "/:requestId/action",
+  protect,           // existing auth
+      // whatever role check you already use
+  updateRequestStatus
+);
+
 
 export default router;
-

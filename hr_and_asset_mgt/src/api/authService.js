@@ -1,7 +1,7 @@
 
 // const API_URL = "http://localhost:5000/api/auth";
 
-const API_BASE = import.meta.env.VITE_API_BASE; // e.g. https://your-backend.onrender.com
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000"; // e.g. https://your-backend.onrender.com
 const API_URL = `${API_BASE}/api/auth`;
 
 export const registerUser = async (data) => {

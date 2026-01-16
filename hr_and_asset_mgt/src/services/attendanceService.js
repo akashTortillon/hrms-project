@@ -39,3 +39,10 @@ export const markAttendance = async (data) => {
   return res.data;
 };
 
+export const getAttendanceStats = async (date) => {
+  const response = await api.get(`${ATTENDANCE_API}/stats`, {
+    params: { date },
+  });
+  return response.data;
+};
+

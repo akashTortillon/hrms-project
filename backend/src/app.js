@@ -32,23 +32,23 @@ app.use("/api/dashboard", dashboardRoutes);
 
 // 🔹 Employee APIs
 app.use("/api/employees", employeeRoutes);
-console.log("✅ Employee routes registered at /api/employees");
+console.log(" Employee routes registered at /api/employees");
 
 // 🔹 Attendance APIs
 app.use("/api/attendance", attendanceRoutes);
-console.log("✅ Attendance routes registered at /api/attendance");
+console.log("Attendance routes registered at /api/attendance");
 
 // 🔹 Request APIs
 app.use("/api/requests", requestRoutes);
 // 🔹 Unified Master API
 import masterRoutes from "./routes/masterRoutes.js";
 app.use("/api/masters", masterRoutes);
-console.log("✅ Unified Master routes registered at /api/masters");
+console.log("Unified Master routes registered at /api/masters");
 
 // 🔹 System Settings API
 import systemSettingsRoutes from "./routes/systemSettingsRoutes.js";
 app.use("/api/system-settings", systemSettingsRoutes);
-console.log("✅ System Settings routes registered at /api/system-settings");
+console.log("System Settings routes registered at /api/system-settings");
 
 // 🔹 Company Documents API
 import companyDocRoutes from "./routes/companyDocRoutes.js";
@@ -58,7 +58,7 @@ app.use("/uploads", express.static("uploads"));
 
 // 🔹 Asset APIs
 app.use("/api/assets", assetRoutes);
-console.log("✅ Asset routes registered at /api/assets");
+console.log("Asset routes registered at /api/assets");
 
 
 

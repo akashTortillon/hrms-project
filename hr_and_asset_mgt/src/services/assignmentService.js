@@ -36,3 +36,9 @@ export const returnAssetToStore = async (data) => {
   const res = await api.post(`${ASSET_API}/return`, data);
   return res.data;
 };
+
+// ✅ Get asset history
+export const getAssetHistory = async (assetId) => {
+  const res = await api.get(`${ASSET_API}/${assetId}/history`);
+  return res.data;
+};

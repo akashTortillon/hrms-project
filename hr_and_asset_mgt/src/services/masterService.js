@@ -51,6 +51,7 @@ export const nationalityService = createGenericService('nationalities');
 export const payrollRuleService = createGenericService('payroll-rules');
 export const workflowTemplateService = createGenericService('workflow-templates');
 
+
 // Asset Masters
 export const assetTypeService = createGenericService('asset-types');
 export const assetCategoryService = createGenericService('asset-categories');
@@ -60,3 +61,4 @@ export const serviceTypeService = createGenericService('service-types');
 export const roleService = createGenericService('roles');
 
 export const companyDocumentTypeService = createGenericService('company-document-types');
+export const maintenanceShopService = createGenericService('maintenance-shops');

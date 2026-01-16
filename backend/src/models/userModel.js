@@ -14,10 +14,12 @@ const userSchema = new mongoose.Schema({
     ]
   },
   password: { type: String, required: true },
-  role: { type: String, default: "Employee" }
-  //   otp: String,
-  //     otpExpiresAt: Date,
-  //     isVerified: { type: Boolean, default: false },
+  role: { type: String, default: "Employee" },
+  employeeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Employee",
+    required: true
+  }
 },
   { timestamps: true });
 

@@ -13,6 +13,7 @@ export default function AddAssetModal({ onClose, onAddAsset, onUpdateAsset, asse
     department: "",
     purchaseCost: "",
     purchaseDate: "",
+    warrantyPeriod: "",
     status: "Available",
   });
 
@@ -32,6 +33,7 @@ export default function AddAssetModal({ onClose, onAddAsset, onUpdateAsset, asse
         department: asset.department || "",
         purchaseCost: asset.purchaseCost || "",
         purchaseDate: purchaseDate,
+        warrantyPeriod: asset.warrantyPeriod || "",
         status: asset.status || "Available",
       });
     }
@@ -43,7 +45,7 @@ export default function AddAssetModal({ onClose, onAddAsset, onUpdateAsset, asse
   };
 
   const handleSubmit = () => {
-    const { name, category, location, custodian, purchaseCost, purchaseDate } = form;
+    const { name, category, location, custodian, purchaseCost, purchaseDate, warrantyPeriod } = form;
 
     if (!name || !category || !location || !custodian || !purchaseCost || !purchaseDate) {
       alert("All required fields must be provided");
@@ -53,6 +55,12 @@ export default function AddAssetModal({ onClose, onAddAsset, onUpdateAsset, asse
     // Validate purchaseCost is a valid number
     if (isNaN(purchaseCost) || purchaseCost <= 0) {
       alert("Purchase cost must be a valid positive number");
+      return;
+    }
+
+    // Validate warranty period is a valid number if provided
+    if (warrantyPeriod && (isNaN(warrantyPeriod) || warrantyPeriod <= 0)) {
+      alert("Warranty period must be a valid positive number");
       return;
     }
 
@@ -124,6 +132,15 @@ export default function AddAssetModal({ onClose, onAddAsset, onUpdateAsset, asse
               placeholder="Purchase Date"
               value={form.purchaseDate}
               onChange={handleChange}
+            />
+            <input
+              name="warrantyPeriod"
+              type="number"
+              placeholder="Warranty Period (Years)"
+              value={form.warrantyPeriod}
+              onChange={handleChange}
+              min="0"
+              step="1"
             />
             <select name="status" value={form.status} onChange={handleChange}>
               <option value="Available">Available</option>

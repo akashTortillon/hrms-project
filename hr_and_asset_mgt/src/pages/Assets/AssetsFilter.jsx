@@ -1,4 +1,3 @@
-
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
 
@@ -9,6 +8,8 @@ const AssetsFilters = ({
   setType,
   status,
   setStatus,
+  assetTypes = [],
+  assetStatuses = [],
   total = 0,
 }) => {
   return (
@@ -25,28 +26,32 @@ const AssetsFilters = ({
           />
         </div>
 
-        {/* Type */}
+        {/* Asset Type */}
         <select
           className="assets-select"
           value={type}
           onChange={(e) => setType(e.target.value)}
         >
-          <option>All Types</option>
-          <option>IT Equipment</option>
-          <option>Vehicles</option>
-          <option>Furniture</option>
+          <option value="ALL">All Types</option>
+          {assetTypes.map((t) => (
+            <option key={t._id} value={t.name}>
+              {t.name}
+            </option>
+          ))}
         </select>
 
-        {/* Status */}
+        {/* Asset Status */}
         <select
           className="assets-select"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
-          <option>All Status</option>
-          <option>In Use</option>
-          <option>Under Maintenance</option>
-          <option>Disposed</option>
+          <option value="ALL">All Status</option>
+          {assetStatuses.map((s) => (
+            <option key={s._id} value={s.name}>
+              {s.name}
+            </option>
+          ))}
         </select>
 
         {/* Export */}
@@ -64,6 +69,3 @@ const AssetsFilters = ({
 };
 
 export default AssetsFilters;
-
-
-
