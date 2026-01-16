@@ -37,9 +37,10 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
+import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import { toast } from "react-toastify";
 
 export default function EmployeeDetail() {
@@ -55,8 +56,13 @@ export default function EmployeeDetail() {
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
 
+    // Document State
+    const [documents, setDocuments] = useState([]);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+
     // Fetch Employee Data
     const fetchEmployee = async () => {
+
         try {
             const data = await getEmployeeById(id);
             const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
@@ -97,6 +103,34 @@ export default function EmployeeDetail() {
         } catch (err) {
             console.error("Update failed", err);
             toast.error("Failed to update profile");
+        }
+    };
+
+    // Document Handlers
+    useEffect(() => {
+        if (activeTab === "Documents") {
+            fetchDocuments();
+        }
+    }, [activeTab]);
+
+    const fetchDocuments = async () => {
+        try {
+            const docs = await getEmployeeDocuments(id);
+            setDocuments(docs);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleUploadDocument = async (formData) => {
+        try {
+            await uploadEmployeeDocument(formData);
+            toast.success("Document uploaded");
+            setShowUploadModal(false);
+            fetchDocuments();
+        } catch (e) {
+            console.error(e);
+            toast.error("Upload failed");
         }
     };
 
@@ -298,7 +332,61 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && (
+                {activeTab === "Documents" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Document Tracker</h3>
+                            <button
+                                onClick={() => setShowUploadModal(true)}
+                                style={{
+                                    background: '#2563eb', color: 'white', border: 'none',
+                                    padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer'
+                                }}
+                            >
+                                Upload Document
+                            </button>
+                        </div>
+                        <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {documents.map(doc => (
+                                <div key={doc._id} style={{
+                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}</div>
+                                        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                            {doc.documentNumber || 'No Ref'} • Expires: {doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : 'N/A'}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <span style={{
+                                            background: doc.status === 'Valid' ? '#dcfce7' : (doc.status === 'Expired' ? '#fee2e2' : '#fef3c7'),
+                                            color: doc.status === 'Valid' ? '#166534' : (doc.status === 'Expired' ? '#991b1b' : '#92400e'),
+                                            padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
+                                        }}>
+                                            {doc.status}
+                                        </span>
+                                        <a
+                                            href={`${import.meta.env.VITE_API_BASE}/${doc.filePath.replace(/\\/g, '/')}`}
+                                            target="_blank" rel="noopener noreferrer"
+                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer' }}
+                                        >
+                                            View
+                                        </a>
+                                        {/* Optional Delete Button */}
+                                    </div>
+                                </div>
+                            ))}
+                            {documents.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                    No documents uploaded yet.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
@@ -313,6 +401,15 @@ export default function EmployeeDetail() {
                     onClose={() => setShowEditModal(false)}
                     onUpdate={handleUpdateEmployee}
                     editMode={editMode}
+                />
+            )}
+
+            {/* Upload Document Modal */}
+            {showUploadModal && (
+                <UploadEmployeeDocumentModal
+                    employeeId={id}
+                    onClose={() => setShowUploadModal(false)}
+                    onUpload={handleUploadDocument}
                 />
             )}
         </div>
