@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOptions = [], editMode = "all" }) {
   const [form, setForm] = useState({ ...employee });
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
+  const [designations, setDesignations] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
 
   useEffect(() => {
@@ -24,12 +25,14 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
   const fetchMasters = async () => {
     try {
-      const [rolesData, typesData] = await Promise.all([
+      const [rolesData, typesData, desigData] = await Promise.all([
         roleService.getAll(),
-        employeeTypeService.getAll()
+        employeeTypeService.getAll(),
+        getDesignations()
       ]);
       setRoles(rolesData);
       setContractTypes(typesData);
+      setDesignations(desigData);
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -174,9 +177,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
-                  <label>Contract Type</label>
+                  <label>Employee Type</label>
                   <select name="contractType" value={form.contractType || ''} onChange={handleChange}>
-                    <option value="">Select Type</option>
+                    <option value="">Select Employee Type</option>
                     {contractTypes.map((t) => (
                       <option key={t._id} value={t.name}>{t.name}</option>
                     ))}
@@ -195,7 +198,12 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
                 <div className="form-group">
                   <label>Designation</label>
-                  <input name="designation" value={form.designation || ''} onChange={handleChange} placeholder="e.g. Sales Manager" />
+                  <select name="designation" onChange={handleChange} value={form.designation || ''}>
+                    <option value="">Select Designation</option>
+                    {designations.map((d) => (
+                      <option key={d._id} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="form-group">
