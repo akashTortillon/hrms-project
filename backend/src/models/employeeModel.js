@@ -8,12 +8,22 @@ const employeeSchema = new mongoose.Schema({
   email: { type: String, required: true },
   phone: { type: String, required: true },
   joinDate: { type: Date, required: true },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     required: true,
     enum: ["Active", "Inactive", "On Leave"],
     default: "Active"
-  }
+  },
+  dob: { type: Date },
+  nationality: { type: String },
+  address: { type: String },
+  passportExpiry: { type: Date },
+  emiratesIdExpiry: { type: Date },
+  contractType: { type: String },
+  designation: { type: String },
+  basicSalary: { type: String },
+  accommodation: { type: String },
+  visaExpiry: { type: Date }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);

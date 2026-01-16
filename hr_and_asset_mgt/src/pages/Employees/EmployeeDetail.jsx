@@ -3,17 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import "../../style/EmployeeDetail.css";
 
 // Icons (using bootstrap-icons or valid imports, assuming generic svgs or library usage in project)
-// Based on styles, basic SVGs are used. I'll use simple SVGs here to avoid dependency issues if not present.
 const BackArrowIcon = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M19 12H5M12 19l-7-7 7-7" />
-    </svg>
-);
-
-const EditIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
     </svg>
 );
 
@@ -37,7 +29,18 @@ const MailIcon = () => (
     </svg>
 );
 
-import { getEmployeeById } from "../../services/employeeService";
+const EditIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+    </svg>
+);
+
+
+import { getEmployeeById, updateEmployee } from "../../services/employeeService";
+import { getDepartments } from "../../services/masterService";
+import EditEmployeeModal from "./EditEmployeeModal.jsx";
+import { toast } from "react-toastify";
 
 export default function EmployeeDetail() {
     const { id } = useParams();
@@ -47,23 +50,55 @@ export default function EmployeeDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // Edit Modal State
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editMode, setEditMode] = useState("all");
+    const [deptOptions, setDeptOptions] = useState([]);
+
+    // Fetch Employee Data
+    const fetchEmployee = async () => {
+        try {
+            const data = await getEmployeeById(id);
+            const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
+            const passportExpiry = data.passportExpiry ? new Date(data.passportExpiry).toISOString().split("T")[0] : "N/A";
+            const visaExpiry = data.visaExpiry ? new Date(data.visaExpiry).toISOString().split("T")[0] : "N/A";
+            setEmployee({ ...data, dob, passportExpiry, visaExpiry });
+        } catch (err) {
+            console.error(err);
+            setError("Failed to load employee details");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchEmployee = async () => {
-            try {
-                const data = await getEmployeeById(id);
-                const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
-                const passportExpiry = data.passportExpiry ? new Date(data.passportExpiry).toISOString().split("T")[0] : "N/A";
-                // Map backend fields to UI if needed, or just use data directly
-                setEmployee({ ...data, dob, passportExpiry });
-            } catch (err) {
-                console.error(err);
-                setError("Failed to load employee details");
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchEmployee();
+        loadDepartments();
     }, [id]);
+
+    const loadDepartments = async () => {
+        try {
+            const data = await getDepartments();
+            if (data) {
+                setDeptOptions(data.map(d => d.name));
+            }
+        } catch (err) {
+            console.error("Failed to load departments", err);
+        }
+    };
+
+    // Update Employee Handler
+    const handleUpdateEmployee = async (updatedData) => {
+        try {
+            await updateEmployee(id, updatedData);
+            toast.success("Profile updated successfully");
+            setShowEditModal(false);
+            fetchEmployee(); // Refresh data
+        } catch (err) {
+            console.error("Update failed", err);
+            toast.error("Failed to update profile");
+        }
+    };
 
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
@@ -108,7 +143,6 @@ export default function EmployeeDetail() {
                                 <PhoneIcon /> {employee.phone}
                             </div>
                             <div className="contact-item">
-                                {/* Location might not be in backend yet, using Department as placeholder or hardcode */}
                                 <LocationIcon /> {employee.department}
                             </div>
                         </div>
@@ -116,7 +150,15 @@ export default function EmployeeDetail() {
                 </div>
 
                 <div className="profile-actions">
-                    <button className="edit-profile-btn">Edit Profile</button>
+                    <button
+                        className="edit-profile-btn"
+                        onClick={() => {
+                            setEditMode("profile");
+                            setShowEditModal(true);
+                        }}
+                    >
+                        Edit Profile
+                    </button>
                 </div>
             </div>
 
@@ -137,39 +179,142 @@ export default function EmployeeDetail() {
             {/* Content Area */}
             <div className="info-section">
                 {activeTab === "Personal Info" && (
-                    <div className="info-grid">
-                        <div className="info-group">
-                            <label>Date of Birth</label>
-                            <div>{employee.dob}</div>
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Personal Information</h3>
+                            <button
+                                onClick={() => {
+                                    setEditMode("personal");
+                                    setShowEditModal(true);
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    color: '#2563eb',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <EditIcon /> Edit
+                            </button>
                         </div>
-                        <div className="info-group">
-                            <label>Nationality</label>
-                            <div>{employee.nationality}</div>
+
+                        <div className="info-grid">
+                            <div className="info-group">
+                                <label>Date of Birth</label>
+                                {/* Assuming dob is already formatted in fetchEmployee or empty */}
+                                <div>{employee.dob || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Nationality</label>
+                                {/* Not yet in backend model properly, using placeholder or field if exists */}
+                                <div>{employee.nationality || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>UAE Address</label>
+                                <div>{employee.address || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                {/* Spacer or additional field */}
+                            </div>
+                            <div className="info-group">
+                                <label>Passport Expiry</label>
+                                <div>{employee.passportExpiry || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Emirates ID Expiry</label>
+                                <div>{employee.emiratesIdExpiry || "N/A"}</div>
+                            </div>
                         </div>
-                        <div className="info-group">
-                            <label>UAE Address</label>
-                            <div>{employee.address}</div>
-                        </div>
-                        <div className="info-group">
-                            {/* Spacer or additional field */}
-                        </div>
-                        <div className="info-group">
-                            <label>Passport Expiry</label>
-                            <div>{employee.passportExpiry}</div>
-                        </div>
-                        <div className="info-group">
-                            <label>Emirates ID Expiry</label>
-                            <div>{employee.emiratesIdExpiry}</div>
-                        </div>
-                    </div>
+                    </>
                 )}
 
-                {activeTab !== "Personal Info" && (
+                {activeTab === "Employment" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Employment Information</h3>
+                            <button
+                                onClick={() => {
+                                    setEditMode("employment");
+                                    setShowEditModal(true);
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    color: '#2563eb',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <EditIcon /> Edit
+                            </button>
+                        </div>
+
+                        <div className="info-grid">
+                            <div className="info-group">
+                                <label>Join Date</label>
+                                <div>{employee.joinDate ? new Date(employee.joinDate).toISOString().split("T")[0] : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Contract Type</label>
+                                <div>{employee.contractType || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Department</label>
+                                <div>{employee.department || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Designation</label>
+                                <div>{employee.designation || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Basic Salary</label>
+                                <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Accommodation</label>
+                                <div>{employee.accommodation || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa Expiry</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {employee.visaExpiry}
+                                    {employee.visaExpiry !== "N/A" && (
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
                 )}
             </div>
+
+            {/* Edit Modal */}
+            {showEditModal && (
+                <EditEmployeeModal
+                    deptOptions={deptOptions}
+                    employee={employee}
+                    onClose={() => setShowEditModal(false)}
+                    onUpdate={handleUpdateEmployee}
+                    editMode={editMode}
+                />
+            )}
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { roleService } from "../../services/masterService";
+import { roleService, employeeTypeService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
@@ -8,35 +8,41 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     code: "",
     role: "",
     department: "",
+    designation: "",
+    contractType: "",
     email: "",
     phone: "",
     joinDate: "",
     status: "Active",
   });
   const [roles, setRoles] = useState([]);
+  const [contractTypes, setContractTypes] = useState([]);
 
   useEffect(() => {
-    fetchRoles();
+    fetchMasters();
   }, []);
 
-  const fetchRoles = async () => {
+  const fetchMasters = async () => {
     try {
-      const data = await roleService.getAll();
-      setRoles(data);
+      const [rolesData, typesData] = await Promise.all([
+        roleService.getAll(),
+        employeeTypeService.getAll()
+      ]);
+      setRoles(rolesData);
+      setContractTypes(typesData);
     } catch (error) {
-      console.error("Failed to fetch roles", error);
+      console.error("Failed to fetch masters", error);
     }
   };
-
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = () => {
-    const { name, code, role, department, email, phone, joinDate } = form;
+    const { name, role, department, designation, contractType, email, phone, joinDate } = form;
 
-    if (!name || !role || !department || !email || !phone || !joinDate) {
+    if (!name || !role || !department || !email || !phone || !joinDate || !designation || !contractType) {
       alert("All fields are required");
       return;
     }
@@ -80,6 +86,21 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Designation</label>
+              <input name="designation" placeholder="e.g. Sales Manager" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Contract Type</label>
+              <select name="contractType" onChange={handleChange} value={form.contractType}>
+                <option value="">Select Contract Type</option>
+                {contractTypes.map((t) => (
+                  <option key={t._id} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
               <label>Email</label>
               <input name="email" placeholder="email@company.com" type="email" onChange={handleChange} />
             </div>
@@ -92,13 +113,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                   name="phoneSuffix"
                   placeholder="50 123 4567"
                   onChange={(e) => {
-                    // Allow only numbers
                     const val = e.target.value.replace(/\D/g, '');
-                    setForm({ ...form, phone: `+971${val}` }); // Store full phone in buffer or just handle submit?
-                    // Actually better to store the suffix in local state or just handle it. 
-                    // Let's rely on standard handleChange but specific logic.
-                    // If I use name="phone", value will be what user types.
-                    // I should probably manually update form.phone
                     setForm(prev => ({ ...prev, phone: `+971${val}` }));
                   }}
                   style={{ border: 'none', boxShadow: 'none', background: 'transparent', height: '44px' }}

@@ -258,12 +258,27 @@ export const getEmployeeById = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
+    const { role, email, phone } = req.body;
+
+    // Check for duplicate email/phone excluding current user
+    if (email || phone) {
+      const existing = await Employee.findOne({
+        $and: [
+          { _id: { $ne: id } },
+          { $or: [{ email }, { phone }] }
+        ]
+      });
+
+      if (existing) {
+        if (existing.email === email) return res.status(409).json({ message: "Email already exists" });
+        if (existing.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
+      }
+    }
 
     const updatedEmployee = await Employee.findByIdAndUpdate(
       id,
       req.body,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!updatedEmployee) {
@@ -271,7 +286,7 @@ export const updateEmployee = async (req, res) => {
     }
 
     // Sync Role with User account
-    if (role) {
+    if (role && updatedEmployee.email) {
       // Find linked User by email and update role
       await User.findOneAndUpdate(
         { email: updatedEmployee.email },
@@ -281,8 +296,14 @@ export const updateEmployee = async (req, res) => {
 
     res.json({ employee: updatedEmployee });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Update Employee Error:", error);
+    if (error.code === 11000) {
+      return res.status(409).json({ message: "Duplicate entry found (Email or Phone)" });
+    }
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
