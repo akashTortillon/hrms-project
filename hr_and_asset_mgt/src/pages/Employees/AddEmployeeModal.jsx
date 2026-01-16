@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
@@ -14,9 +14,18 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     phone: "",
     joinDate: "",
     status: "Active",
+    dob: "",
+    nationality: "",
+    address: "",
+    passportExpiry: "",
+    emiratesIdExpiry: "",
+    basicSalary: "",
+    accommodation: "",
+    visaExpiry: ""
   });
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
+  const [designations, setDesignations] = useState([]);
 
   useEffect(() => {
     fetchMasters();
@@ -24,12 +33,14 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
   const fetchMasters = async () => {
     try {
-      const [rolesData, typesData] = await Promise.all([
+      const [rolesData, typesData, desigData] = await Promise.all([
         roleService.getAll(),
-        employeeTypeService.getAll()
+        employeeTypeService.getAll(),
+        getDesignations()
       ]);
       setRoles(rolesData);
       setContractTypes(typesData);
+      setDesignations(desigData);
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -60,6 +71,11 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
         <div className="modal-body">
           <div className="modal-grid">
+            {/* Basic Info */}
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1', marginBottom: '10px' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#1f2937', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>Basic Information</h4>
+            </div>
+
             <div className="form-group">
               <label>Employee Name</label>
               <input name="name" placeholder="Enter Full Name" onChange={handleChange} />
@@ -87,15 +103,10 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Designation</label>
-              <input name="designation" placeholder="e.g. Sales Manager" onChange={handleChange} />
-            </div>
-
-            <div className="form-group">
-              <label>Contract Type</label>
-              <select name="contractType" onChange={handleChange} value={form.contractType}>
-                <option value="">Select Contract Type</option>
-                {contractTypes.map((t) => (
-                  <option key={t._id} value={t.name}>{t.name}</option>
+              <select name="designation" onChange={handleChange} value={form.designation}>
+                <option value="">Select Designation</option>
+                {designations.map((d) => (
+                  <option key={d._id} value={d.name}>{d.name}</option>
                 ))}
               </select>
             </div>
@@ -122,17 +133,81 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
-              <label>Joining Date</label>
-              <input name="joinDate" type="date" onChange={handleChange} />
-            </div>
-
-            <div className="form-group">
               <label>Status</label>
               <select name="status" onChange={handleChange}>
                 <option>Active</option>
                 <option>Inactive</option>
                 <option>On Leave</option>
               </select>
+            </div>
+
+            {/* Employment Details */}
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1', margin: '15px 0 10px 0' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#1f2937', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>Employment Details</h4>
+            </div>
+
+            <div className="form-group">
+              <label>Joining Date</label>
+              <input name="joinDate" type="date" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Employee Type</label>
+              <select name="contractType" onChange={handleChange} value={form.contractType}>
+                <option value="">Select Employee Type</option>
+                {contractTypes.map((t) => (
+                  <option key={t._id} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Basic Salary (AED)</label>
+              <input name="basicSalary" placeholder="e.g. 15000" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Accommodation</label>
+              <select name="accommodation" onChange={handleChange} value={form.accommodation}>
+                <option value="">Select Option</option>
+                <option value="Company Provided">Company Provided</option>
+                <option value="Not Provided">Not Provided</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Visa Expiry</label>
+              <input name="visaExpiry" type="date" onChange={handleChange} />
+            </div>
+
+            {/* Personal Info */}
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1', margin: '15px 0 10px 0' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#1f2937', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>Personal Information</h4>
+            </div>
+
+            <div className="form-group">
+              <label>Date of Birth</label>
+              <input name="dob" type="date" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Nationality</label>
+              <input name="nationality" placeholder="e.g. Indian" onChange={handleChange} />
+            </div>
+
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1' }}>
+              <label>UAE Address</label>
+              <input name="address" placeholder="e.g. Dubai Marina" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Passport Expiry</label>
+              <input name="passportExpiry" type="date" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Emirates ID Expiry</label>
+              <input name="emiratesIdExpiry" type="date" onChange={handleChange} />
             </div>
           </div>
         </div>
