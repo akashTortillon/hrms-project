@@ -66,6 +66,11 @@ app.use("/uploads", express.static("uploads"));
 app.use("/api/assets", assetRoutes);
 console.log("✅ Asset routes registered at /api/assets");
 
+// 🔹 Training APIs
+import trainingRoutes from "./routes/trainingRoutes.js";
+app.use("/api/trainings", trainingRoutes);
+console.log("✅ Training routes registered at /api/trainings");
+
 
 
 

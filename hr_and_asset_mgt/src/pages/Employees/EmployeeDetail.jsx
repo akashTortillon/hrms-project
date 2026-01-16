@@ -43,6 +43,9 @@ import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import { toast } from "react-toastify";
 
+import { getEmployeeAttendanceStats } from "../../services/attendanceService";
+import { getEmployeeTrainings } from "../../services/trainingService";
+
 export default function EmployeeDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -60,9 +63,12 @@ export default function EmployeeDetail() {
     const [documents, setDocuments] = useState([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
 
+    // Attendance & Training State
+    const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, late: 0, total: 0 });
+    const [trainings, setTrainings] = useState([]);
+
     // Fetch Employee Data
     const fetchEmployee = async () => {
-
         try {
             const data = await getEmployeeById(id);
             const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
@@ -110,6 +116,8 @@ export default function EmployeeDetail() {
     useEffect(() => {
         if (activeTab === "Documents") {
             fetchDocuments();
+        } else if (activeTab === "Attendance") {
+            fetchAttendanceData();
         }
     }, [activeTab]);
 
@@ -131,6 +139,19 @@ export default function EmployeeDetail() {
         } catch (e) {
             console.error(e);
             toast.error("Upload failed");
+        }
+    };
+
+    const fetchAttendanceData = async () => {
+        try {
+            const [stats, tr] = await Promise.all([
+                getEmployeeAttendanceStats(id),
+                getEmployeeTrainings(id)
+            ]);
+            setAttendanceStats(stats);
+            setTrainings(tr);
+        } catch (e) {
+            console.error("Attendance/Training fetch error:", e);
         }
     };
 
@@ -386,7 +407,68 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && (
+                {activeTab === "Attendance" && (
+                    <>
+                        <div className="attendance-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px', marginBottom: '30px' }}>
+                            <div style={{ background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#166534', fontSize: '14px', fontWeight: '500' }}>Present</div>
+                                <div style={{ color: '#166534', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.present}</div>
+                            </div>
+                            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#991b1b', fontSize: '14px', fontWeight: '500' }}>Absent</div>
+                                <div style={{ color: '#991b1b', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.absent}</div>
+                            </div>
+                            <div style={{ background: '#fefce8', border: '1px solid #fef9c3', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#854d0e', fontSize: '14px', fontWeight: '500' }}>Leave</div>
+                                <div style={{ color: '#854d0e', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.leave}</div>
+                            </div>
+                            <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#9a3412', fontSize: '14px', fontWeight: '500' }}>Late</div>
+                                <div style={{ color: '#9a3412', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.late}</div>
+                            </div>
+                            <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#1e40af', fontSize: '14px', fontWeight: '500' }}>Total Days</div>
+                                <div style={{ color: '#1e40af', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.total}</div>
+                            </div>
+                        </div>
+
+                        <h3 style={{ fontSize: '16px', color: '#1f2937', marginBottom: '15px' }}>Training Records</h3>
+                        <div className="training-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {trainings.map((t) => (
+                                <div key={t._id} style={{
+                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <div style={{ fontWeight: '600', color: '#111827', fontSize: '15px' }}>{t.title}</div>
+                                        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                            {new Date(t.date).toISOString().split('T')[0]}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                        <span style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>
+                                            Score: {t.score}
+                                        </span>
+                                        <span style={{
+                                            background: t.status === 'Completed' ? '#dcfce7' : (t.status === 'Failed' ? '#fee2e2' : '#fef3c7'),
+                                            color: t.status === 'Completed' ? '#166534' : (t.status === 'Failed' ? '#991b1b' : '#854d0e'),
+                                            padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
+                                        }}>
+                                            {t.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                            {trainings.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                    No training records found.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
