@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect } from "react";
 
 import AttendanceHeader from "./AttendanceHeader";
@@ -13,8 +10,11 @@ import AttendanceEditModal from "./AttendanceEditModal";
 import {
   getDailyAttendance,
   updateAttendance,
-  markAttendance
+  markAttendance,
+  syncBiometrics,
+  getMonthlyAttendance
 } from "../../services/attendanceService.js";
+import { getDepartments, shiftService } from "../../services/masterService.js";
 import { toast } from "react-toastify";
 
 // Utility → today's date
@@ -39,13 +39,45 @@ function Attendance() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // View State
+  const [viewMode, setViewMode] = useState("day"); // 'day' or 'month'
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [monthlyRecords, setMonthlyRecords] = useState([]);
+  const [stats, setStats] = useState({ present: 0, late: 0, absent: 0, leave: 0, total: 0 });
+
+  // Filters State
+  const [departments, setDepartments] = useState([]);
+  const [shifts, setShifts] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedShift, setSelectedShift] = useState("");
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   useEffect(() => {
-    fetchAttendanceData();
-  }, [selectedDate]);
+    fetchMasterData();
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === "day") {
+      fetchAttendanceData();
+    } else {
+      fetchMonthlyData();
+    }
+  }, [selectedDate, viewMode, selectedMonth, selectedYear]);
+
+  const fetchMasterData = async () => {
+    try {
+      const deps = await getDepartments();
+      const shfs = await shiftService.getAll();
+      setDepartments(deps);
+      setShifts(shfs);
+    } catch (error) {
+      console.error("Failed to fetch filter options", error);
+    }
+  };
 
   const fetchAttendanceData = async () => {
     setLoading(true);
@@ -70,10 +102,50 @@ function Attendance() {
       }));
 
       setAttendanceRecords(formattedRecords);
+
+      // Calculate Stats
+      const newStats = { present: 0, late: 0, absent: 0, leave: 0, total: formattedRecords.length };
+      formattedRecords.forEach(r => {
+        if (r.status === 'Present') newStats.present++;
+        else if (r.status === 'Late') newStats.late++;
+        else if (r.status === 'Absent') newStats.absent++;
+        else if (r.status === 'On Leave') newStats.leave++;
+      });
+      setStats(newStats);
+
     } catch (error) {
       console.error("Failed to fetch attendance data", error);
       toast.error("Failed to load attendance records");
       setAttendanceRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMonthlyData = async () => {
+    setLoading(true);
+    try {
+      const data = await getMonthlyAttendance(selectedMonth.toString(), selectedYear.toString());
+      setMonthlyRecords(data);
+    } catch (error) {
+      console.error("Failed to fetch monthly data", error);
+      toast.error("Failed to load monthly records");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSync = async () => {
+    try {
+      setLoading(true);
+      const res = await syncBiometrics();
+      toast.success(`Synced ${res.synced} records successfully`);
+      // Refresh current view
+      if (viewMode === "day") fetchAttendanceData();
+      else fetchMonthlyData();
+    } catch (error) {
+      console.error("Sync failed", error);
+      toast.error("Sync failed");
     } finally {
       setLoading(false);
     }
@@ -133,19 +205,43 @@ function Attendance() {
 
   return (
     <div>
-      <AttendanceHeader />
-      <AttendanceStats />
+      <AttendanceHeader
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        onSync={handleSync}
+        loading={loading}
+      />
+      <AttendanceStats stats={stats} />
 
       <AttendanceFilters
+        viewMode={viewMode}
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        selectedYear={selectedYear}
+        setSelectedYear={setSelectedYear}
+        departments={departments}
+        shifts={shifts}
+        selectedDepartment={selectedDepartment}
+        setSelectedDepartment={setSelectedDepartment}
+        selectedShift={selectedShift}
+        setSelectedShift={setSelectedShift}
       />
 
       <AttendanceTable
         date={selectedDate}
-        records={attendanceRecords}
+        records={(viewMode === "day" ? attendanceRecords : monthlyRecords).filter(record => {
+          const deptMatch = !selectedDepartment || record.department === selectedDepartment;
+          const shiftMatch = !selectedShift || record.shift === selectedShift;
+          return deptMatch && shiftMatch;
+        })}
+        viewMode={viewMode} // Pass view mode
+        daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
         onEdit={openAttendanceModal}
         loading={loading}
+        year={selectedYear}
+        month={selectedMonth}
       />
 
       <ShiftManagement />

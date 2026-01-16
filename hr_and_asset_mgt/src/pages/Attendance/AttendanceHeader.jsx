@@ -3,9 +3,7 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import AppButton from "../../components/reusable/Button";
 import "../../style/Attendance.css";
 
-export default function AttendanceHeader() {
-  const [view, setView] = useState("daily");
-
+export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading }) {
   return (
     <div className="attendance-header">
       <div className="attendance-header-left">
@@ -16,15 +14,15 @@ export default function AttendanceHeader() {
 
         <div className="attendance-tabs">
           <AppButton
-            className={`attendance-action-btn ${view === "daily" ? "is-active" : ""}`}
-            onClick={() => setView("daily")}
+            className={`attendance-action-btn ${viewMode === "day" ? "is-active" : ""}`}
+            onClick={() => setViewMode("day")}
           >
             Daily View
           </AppButton>
 
           <AppButton
-            className={`attendance-action-btn ${view === "monthly" ? "is-active" : ""}`}
-            onClick={() => setView("monthly")}
+            className={`attendance-action-btn ${viewMode === "month" ? "is-active" : ""}`}
+            onClick={() => setViewMode("month")}
           >
             Monthly View
           </AppButton>
@@ -32,8 +30,13 @@ export default function AttendanceHeader() {
       </div>
 
       <div className="attendance-header-actions">
-        <AppButton variant="primary" className="btn-outline-custom">
-          Sync Biometric
+        <AppButton
+          variant="primary"
+          className="btn-outline-custom"
+          onClick={onSync}
+          disabled={loading}
+        >
+          {loading ? "Syncing..." : "Sync Biometric"}
         </AppButton>
 
         <AppButton variant="primary">

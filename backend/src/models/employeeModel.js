@@ -23,6 +23,7 @@ const employeeSchema = new mongoose.Schema({
   designation: { type: String },
   basicSalary: { type: String },
   accommodation: { type: String },
+  shift: { type: String, default: "Day Shift" },
   visaExpiry: { type: Date }
 }, { timestamps: true });
 

@@ -45,3 +45,17 @@ export const getEmployeeAttendanceStats = async (employeeId) => {
   return res.data;
 };
 
+// ✅ Sync Biometrics
+export const syncBiometrics = async () => {
+  const res = await api.post(`${ATTENDANCE_API}/sync`);
+  return res.data;
+};
+
+// ✅ Get Monthly Attendance
+export const getMonthlyAttendance = async (month, year) => {
+  const res = await api.get(`${ATTENDANCE_API}/monthly`, {
+    params: { month, year }
+  });
+  return res.data;
+};
+

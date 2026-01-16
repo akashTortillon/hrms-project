@@ -29,7 +29,10 @@ export default function HRManagement() {
         deleteConfig,
         setDeleteConfig,
         payrollState,
-        setPayrollState
+        setPayrollState,
+        shifts,
+        shiftState,
+        setShiftState
     } = useHRManagement();
 
     return (
@@ -42,6 +45,13 @@ export default function HRManagement() {
             </div>
 
             <div className="masters-grid">
+                {/* Shifts */}
+                <MastersCard
+                    title="Shifts"
+                    onAdd={() => handleOpenAdd("Shift")}
+                >
+                    <RenderList items={shifts} type="Shift" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                </MastersCard>
 
                 {/* Employee Types */}
                 <MastersCard
@@ -238,6 +248,49 @@ export default function HRManagement() {
                                 </div>
                             </div>
                         )}
+                    </div>
+                ) : modalType === "Shift" ? (
+                    <div className="space-y-4">
+                        <div className="form-group">
+                            <label className="modal-form-label">Shift Name</label>
+                            <input
+                                type="text"
+                                className="modal-form-input"
+                                placeholder="e.g. Day Shift"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="form-group">
+                                <label className="modal-form-label">Start Time</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.startTime}
+                                    onChange={(e) => setShiftState({ ...shiftState, startTime: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="modal-form-label">End Time</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.endTime}
+                                    onChange={(e) => setShiftState({ ...shiftState, endTime: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="modal-form-label">Late Mark After</label>
+                            <input
+                                type="time"
+                                className="modal-form-input"
+                                value={shiftState.lateLimit}
+                                onChange={(e) => setShiftState({ ...shiftState, lateLimit: e.target.value })}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Employee checked in after this time will be marked Late</p>
+                        </div>
                     </div>
                 ) : (
                     // Generic Form for other Masters
