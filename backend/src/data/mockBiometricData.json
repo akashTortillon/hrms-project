@@ -1,52 +1,142 @@
 [
     {
         "employeeCode": "EMP001",
-        "timestamp": "2026-01-15T08:55:00",
+        "timestamp": "2026-01-01T09:05:00",
         "type": "IN"
     },
     {
         "employeeCode": "EMP001",
-        "timestamp": "2026-01-15T17:35:00",
-        "type": "OUT"
-    },
-    {
-        "employeeCode": "EMP002",
-        "timestamp": "2026-01-15T09:10:00",
-        "type": "IN"
-    },
-    {
-        "employeeCode": "EMP002",
-        "timestamp": "2026-01-15T18:00:00",
-        "type": "OUT"
-    },
-    {
-        "employeeCode": "EMP003",
-        "timestamp": "2026-01-15T08:00:00",
-        "type": "IN"
-    },
-    {
-        "employeeCode": "EMP003",
-        "timestamp": "2026-01-15T17:00:00",
+        "timestamp": "2026-01-01T18:05:00",
         "type": "OUT"
     },
     {
         "employeeCode": "EMP001",
-        "timestamp": "2026-01-16T09:05:00",
+        "timestamp": "2026-01-02T09:07:00",
         "type": "IN"
     },
     {
         "employeeCode": "EMP001",
-        "timestamp": "2026-01-16T17:40:00",
+        "timestamp": "2026-01-02T18:13:00",
         "type": "OUT"
     },
     {
-        "employeeCode": "EMP002",
-        "timestamp": "2026-01-16T08:50:00",
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-03T08:55:00",
         "type": "IN"
     },
     {
-        "employeeCode": "EMP002",
-        "timestamp": "2026-01-16T17:55:00",
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-03T18:23:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-05T09:20:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-05T18:10:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-06T09:44:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-06T18:03:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-07T08:53:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-07T18:20:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-08T09:07:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-08T18:12:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-09T08:57:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-09T18:20:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-10T08:53:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-10T18:13:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-12T09:01:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-12T18:08:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-13T09:07:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-13T18:25:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-14T09:08:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-14T18:13:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-15T09:02:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-15T18:04:00",
+        "type": "OUT"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-16T09:45:00",
+        "type": "IN"
+    },
+    {
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-16T18:23:00",
         "type": "OUT"
     },
     {
@@ -55,8 +145,8 @@
         "type": "IN"
     },
     {
-        "employeeCode": "EMP009",
-        "timestamp": "2026-01-17T08:58:00",
-        "type": "IN"
+        "employeeCode": "EMP001",
+        "timestamp": "2026-01-17T18:01:00",
+        "type": "OUT"
     }
 ]

@@ -71,7 +71,16 @@ export default function useHRManagement() {
             leaveTypeId: '',
             ruleName: '',
             days: '',
-            description: ''
+            accrualRate: '',
+            accrualFrequency: 'MONTHLY',
+            carryForwardLimit: '',
+            isPaid: true,
+            description: '',
+            category: 'ALLOWANCE',
+            calculationType: 'FIXED',
+            value: '',
+            base: 'BASIC_SALARY',
+            isAutomatic: true
         });
         setShiftState({
             startTime: '09:00',
@@ -96,7 +105,16 @@ export default function useHRManagement() {
                 leaveTypeId: meta.leaveTypeId || '',
                 ruleName: isLeave ? '' : item.name,
                 days: meta.days || '',
-                description: item.description || ''
+                accrualRate: meta.accrualRate || '',
+                accrualFrequency: meta.accrualFrequency || 'MONTHLY',
+                carryForwardLimit: meta.carryForwardLimit || '',
+                isPaid: meta.isPaid ?? true,
+                description: item.description || '',
+                category: meta.category || 'ALLOWANCE',
+                calculationType: meta.calculationType || 'FIXED',
+                value: meta.value || '',
+                base: meta.base || 'BASIC_SALARY',
+                isAutomatic: meta.isAutomatic ?? true
             });
             // We don't rely on inputValue for Payroll Rules edit, but setting it safely
             setInputValue(item.name);
@@ -158,7 +176,11 @@ export default function useHRManagement() {
                             metadata: {
                                 type: 'LEAVE_CONFIG',
                                 leaveTypeId: payrollState.leaveTypeId,
-                                days: payrollState.days
+                                days: payrollState.days,
+                                accrualRate: Number(payrollState.accrualRate),
+                                accrualFrequency: payrollState.accrualFrequency,
+                                carryForwardLimit: Number(payrollState.carryForwardLimit),
+                                isPaid: payrollState.isPaid
                             }
                         };
                     } else {
@@ -167,7 +189,12 @@ export default function useHRManagement() {
                             name: payrollState.ruleName,
                             description: payrollState.description,
                             metadata: {
-                                type: 'PAYROLL_CONFIG'
+                                type: 'PAYROLL_CONFIG',
+                                category: payrollState.category,
+                                calculationType: payrollState.calculationType,
+                                value: Number(payrollState.value),
+                                base: payrollState.base,
+                                isAutomatic: payrollState.isAutomatic
                             }
                         };
                     }
@@ -178,6 +205,7 @@ export default function useHRManagement() {
 
                 if (editId) await payrollRuleService.update(editId, payload);
                 else await payrollRuleService.add(payload);
+                setPayrollRules(await payrollRuleService.getAll());
             } else if (modalType === "Workflow Template") {
                 if (editId) await workflowTemplateService.update(editId, inputValue);
                 else await workflowTemplateService.add(inputValue);
