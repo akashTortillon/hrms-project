@@ -1,6 +1,8 @@
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
+import Request from "../models/requestModel.js";
+import User from "../models/userModel.js";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -145,6 +147,62 @@ export const syncBiometrics = async (req, res) => {
  * GET daily attendance
  * /api/attendance?date=YYYY-MM-DD
  */
+// Helper: Get Set of EmployeeIDs who are on APPROVED LEAVE for a specific date
+const getApprovedLeaves = async (date, employees) => {
+  const onLeaveEmployeeIds = new Set();
+
+  // 1. Map Employee Emails -> Employee IDs
+  const emailToEmpId = {};
+  const emails = [];
+  employees.forEach(emp => {
+    if (emp.email) {
+      emailToEmpId[emp.email] = emp._id.toString();
+      emails.push(emp.email);
+    }
+  });
+
+  // 2. Find Users for these employees
+  const users = await User.find({ email: { $in: emails } });
+  const userIdToEmpId = {};
+  const userIds = [];
+
+  users.forEach(u => {
+    userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
+    userIds.push(u._id);
+  });
+
+  // 3. Find APPROVED LEAVE Requests for these users
+  const requests = await Request.find({
+    userId: { $in: userIds },
+    requestType: "LEAVE",
+    status: "APPROVED"
+  });
+
+  // 4. Check date overlap
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+
+  requests.forEach(req => {
+    if (req.details && req.details.startDate && req.details.endDate) {
+      const start = new Date(req.details.startDate);
+      const end = new Date(req.details.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+
+      if (targetDate >= start && targetDate <= end) {
+        const empId = userIdToEmpId[req.userId.toString()];
+        if (empId) onLeaveEmployeeIds.add(empId);
+      }
+    }
+  });
+
+  return onLeaveEmployeeIds;
+};
+
+/**
+ * GET daily attendance
+ * /api/attendance?date=YYYY-MM-DD
+ */
 export const getDailyAttendance = async (req, res) => {
   try {
     const { date } = req.query;
@@ -159,6 +217,9 @@ export const getDailyAttendance = async (req, res) => {
     // Get attendance for the date
     const attendanceRecords = await Attendance.find({ date }).populate("employee");
 
+    // Get Approved Leaves for this date
+    const onLeaveSet = await getApprovedLeaves(date, employees);
+
     // Merge
     const attendanceMap = {};
     attendanceRecords.forEach((rec) => {
@@ -167,6 +228,10 @@ export const getDailyAttendance = async (req, res) => {
 
     const result = employees.map((emp) => {
       const record = attendanceMap[emp._id.toString()];
+      // Check if employee is strictly On Leave in their profile OR has an approved leave request
+      const isProfileOnLeave = emp.status === "On Leave";
+      const isRequestOnLeave = onLeaveSet.has(emp._id.toString());
+
       return {
         _id: record?._id || null, // If null, no record yet
         employeeId: emp._id,
@@ -177,7 +242,9 @@ export const getDailyAttendance = async (req, res) => {
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
         workHours: record?.workHours || "-",
-        status: record?.status || "Absent", // Default to Absent if no record found for the day (unlike previous implementation which assumed Present)
+        // If record exists, use its status. 
+        // If not, check if profile says "On Leave" OR Leave Request Approved. Otherwise "Absent".
+        status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
         avatar: emp.avatar // if available
       };
     });
@@ -236,7 +303,10 @@ export const getMonthlyAttendance = async (req, res) => {
 
       days.forEach(day => {
         const record = empAttendance[day];
-        const status = record ? record.status : "Absent"; // Or "Weekend"? Handling weekends is complex without calendar mastery. Defaulting to Absent for now.
+        // If record exists, use its status
+        // Else if employee profile is "On Leave", use that
+        // Else "Absent"
+        const status = record ? record.status : (emp.status === "On Leave" ? "On Leave" : "Absent");
 
         attendanceData[day] = {
           status,
