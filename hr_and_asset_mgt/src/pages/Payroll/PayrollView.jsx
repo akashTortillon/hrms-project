@@ -64,7 +64,7 @@ function Payroll() {
         status={records.length > 0 ? (records[0].status === 'PROCESSED' ? 2 : 1) : 0}
       />
 
-      <PayrollEmployeesTable employees={records} loading={loading} />
+      <PayrollEmployeesTable employees={records} loading={loading} onRefresh={fetchPayroll} />
 
       <div className="wps-section">
 
