@@ -27,5 +27,17 @@ export const payrollService = {
     getSummary: async (month, year) => {
         const response = await api.get(`/payroll/summary?month=${month}&year=${year}`);
         return response.data;
+    },
+
+    // Add Manual Adjustment
+    addAdjustment: async (payload) => {
+        const response = await api.post("/payroll/adjust", payload);
+        return response.data;
+    },
+
+    // Finalize Payroll
+    finalize: async (month, year) => {
+        const response = await api.post("/payroll/finalize", { month, year });
+        return response.data;
     }
 };

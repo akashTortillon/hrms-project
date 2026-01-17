@@ -268,3 +268,55 @@ export const getPayrollSummary = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// --- API: Add Manual Adjustment ---
+export const addAdjustment = async (req, res) => {
+    try {
+        const { payrollId, type, name, amount } = req.body;
+        const payroll = await Payroll.findById(payrollId);
+
+        if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
+        if (payroll.status !== "DRAFT") return res.status(400).json({ message: "Cannot adjust a finalized payroll." });
+
+        const numAmount = Number(amount);
+
+        if (type === "ALLOWANCE") {
+            payroll.allowances.push({ name, amount: numAmount, type: "MANUAL" });
+            payroll.totalAllowances = (payroll.totalAllowances || 0) + numAmount;
+        } else {
+            payroll.deductions.push({ name, amount: numAmount, type: "MANUAL" });
+            payroll.totalDeductions = (payroll.totalDeductions || 0) + numAmount;
+        }
+
+        // Recalculate Net
+        payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
+
+        await payroll.save();
+        res.json({ message: "Adjustment Added Successfully", payroll });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// --- API: Finalize Payroll ---
+export const finalizePayroll = async (req, res) => {
+    try {
+        const { month, year } = req.body;
+
+        // Update all DRAFT records for this month to PROCESSED
+        const result = await Payroll.updateMany(
+            { month, year, status: "DRAFT" },
+            { $set: { status: "PROCESSED" } }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(400).json({ message: "No Draft payroll records found to finalize." });
+        }
+
+        res.json({ message: `Success! Payroll Finalized for ${result.modifiedCount} employees. The payroll is now locked.` });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

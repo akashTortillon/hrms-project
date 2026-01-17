@@ -221,7 +221,7 @@
 }
 
 .step-line.completed {
-  background:#2563eb;
+  background: #2563eb;
 }
 
 
@@ -235,7 +235,7 @@
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   margin-top: 24px;
-  overflow: hidden;
+  /* overflow: hidden; Removed to allow dropdowns */
 }
 
 /* Header */
@@ -302,12 +302,14 @@
 
 /* Amount colors */
 .amount-positive {
-  color: #16a34a;     /* Figma green */
+  color: #16a34a;
+  /* Figma green */
   font-weight: 600;
 }
 
 .amount-negative {
-  color: #dc2626;     /* Figma red */
+  color: #dc2626;
+  /* Figma red */
   font-weight: 600;
 }
 
@@ -333,12 +335,14 @@
 }
 
 .actions-col {
-  width: 120px;           /* keeps column stable */
+  width: 120px;
+  /* keeps column stable */
   text-align: right;
 }
 
 .view-link {
-  white-space: nowrap;    /* 👈 prevents line break */
+  white-space: nowrap;
+  /* 👈 prevents line break */
   display: inline-block;
   font-weight: 500;
 }
@@ -414,4 +418,130 @@
 /* Body spacing */
 .wps-card .card-body {
   padding: 0 16px 16px;
+}
+
+/* --- Action Menu (3 Dots) --- */
+.action-menu-container {
+  position: relative;
+  display: inline-block;
+}
+
+.action-toggle-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.action-toggle-btn:hover {
+  color: #374151;
+  background-color: #f3f4f6;
+}
+
+.action-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 160px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+  padding: 4px 0;
+}
+
+.action-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #374151;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.action-menu-item:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+/* --- Modal Styles (Vanilla CSS) --- */
+.modal-form-group {
+  margin-bottom: 16px;
+}
+
+.modal-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #fff;
+  transition: border-color 0.2s;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.modal-input:disabled {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.btn-secondary {
+  background-color: white;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.btn-secondary:hover {
+  background-color: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.btn-primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #1d4ed8;
 }
