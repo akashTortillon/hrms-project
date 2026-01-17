@@ -21,6 +21,7 @@ export default function useSystemSettings() {
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
     const [editId, setEditId] = useState(null);
+    const [holidayDate, setHolidayDate] = useState("");
 
     const [deleteConfig, setDeleteConfig] = useState({
         show: false,
@@ -90,6 +91,7 @@ export default function useSystemSettings() {
     const handleOpenAdd = (type) => {
         setModalType(type);
         setInputValue("");
+        setHolidayDate("");
         setEditId(null);
         setShowModal(true);
     };
@@ -97,6 +99,16 @@ export default function useSystemSettings() {
     const handleOpenEdit = (type, item) => {
         setModalType(type);
         setInputValue(item.name);
+        if (type === "Holiday" && item.date) {
+            // Extract YYYY-MM-DD from date string
+            const d = new Date(item.date);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            setHolidayDate(`${yyyy}-${mm}-${dd}`);
+        } else {
+            setHolidayDate("");
+        }
         setEditId(item._id);
         setShowModal(true);
     };
@@ -108,12 +120,17 @@ export default function useSystemSettings() {
         try {
             // HOLIDAYS
             if (modalType === "Holiday") {
+                const payload = {
+                    name: inputValue,
+                    date: holidayDate
+                };
+
                 let data;
                 if (editId) {
-                    data = await updateHoliday(editId, inputValue);
+                    data = await updateHoliday(editId, payload);
                     toast.success("Holiday updated");
                 } else {
-                    data = await addHoliday(inputValue);
+                    data = await addHoliday(payload);
                     toast.success("Holiday added");
                 }
                 setHolidays(data.holidays);
@@ -180,6 +197,8 @@ export default function useSystemSettings() {
         modalType,
         inputValue,
         setInputValue,
+        holidayDate,
+        setHolidayDate,
         handleOpenAdd,
         handleOpenEdit,
         handleSave,

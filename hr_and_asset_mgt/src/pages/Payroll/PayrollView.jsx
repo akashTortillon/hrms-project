@@ -50,7 +50,13 @@ function Payroll() {
   return (
     <div>
       {/* Date Selector could go here */}
-      <PayrollSummaryCards stats={stats} />
+      <PayrollSummaryCards
+        stats={stats}
+        month={month}
+        year={year}
+        setMonth={setMonth}
+        setYear={setYear}
+      />
 
       <PayrollStatus
         onGenerate={handleGenerate}

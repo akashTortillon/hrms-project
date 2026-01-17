@@ -26,6 +26,12 @@ export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
                                 )}
                             </div>
                         )}
+                        {/* Show extra details for Holidays */}
+                        {type === "Holiday" && item.date && (
+                            <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                                {new Date(item.date).toLocaleDateString()}
+                            </span>
+                        )}
                     </div>
                     <div className="structure-actions">
                         <button className="icon-btn edit" onClick={() => handleEdit(type, item)}>
@@ -41,5 +47,5 @@ export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
                 </div>
             );
         })}
-    </div>
+    </div >
 );
