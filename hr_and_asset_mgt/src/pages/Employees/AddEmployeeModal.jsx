@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
@@ -21,11 +21,14 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     emiratesIdExpiry: "",
     basicSalary: "",
     accommodation: "",
-    visaExpiry: ""
+    accommodation: "",
+    visaExpiry: "",
+    shift: ""
   });
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
+  const [shifts, setShifts] = useState([]);
 
   useEffect(() => {
     fetchMasters();
@@ -41,6 +44,9 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
       setRoles(rolesData);
       setContractTypes(typesData);
       setDesignations(desigData);
+
+      const shiftsData = await shiftService.getAll();
+      setShifts(shiftsData);
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -138,6 +144,16 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 <option>Active</option>
                 <option>Inactive</option>
                 <option>On Leave</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Shift</label>
+              <select name="shift" onChange={handleChange} value={form.shift}>
+                <option value="">Select Shift</option>
+                {shifts.map((s) => (
+                  <option key={s._id} value={s.name}>{s.name}</option>
+                ))}
               </select>
             </div>
 
