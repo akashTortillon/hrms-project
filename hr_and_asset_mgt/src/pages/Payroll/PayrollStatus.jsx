@@ -3,11 +3,12 @@ import { useState } from "react";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Payroll.css";
 
-export default function PayrollStatus({ onGenerate, loading, status = 0 }) {
+export default function PayrollStatus({ onGenerate, onFinalize, loading, status = 0 }) {
   // 0 = Draft (Generate), 1 = Processing, 2 = Completed
 
   const handleAction = () => {
-    if (status === 0 || status === 1) onGenerate();
+    if (status === 0) onGenerate();
+    if (status === 1) onFinalize();
   };
 
   const buttonConfig = () => {
