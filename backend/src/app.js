@@ -4,6 +4,7 @@ import authRoutes from "./routes/authRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
+import payrollRoutes from "./routes/payrollRoutes.js";
 import requestRoutes from "./routes/requestRoutes.js";
 import assetRoutes from "./routes/assetRoutes.js";
 
@@ -40,6 +41,10 @@ console.log("✅ Attendance routes registered at /api/attendance");
 
 // 🔹 Request APIs
 app.use("/api/requests", requestRoutes);
+
+// 🔹 Payroll APIs
+app.use("/api/payroll", payrollRoutes);
+console.log("✅ Payroll routes registered at /api/payroll");
 // 🔹 Unified Master API
 import masterRoutes from "./routes/masterRoutes.js";
 app.use("/api/masters", masterRoutes);

@@ -3,25 +3,24 @@ import { useState } from "react";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Payroll.css";
 
-export default function PayrollStatus() {
-  // 0 = Draft, 1 = Processing, 2 = Completed
-  const [step, setStep] = useState(0);
+export default function PayrollStatus({ onGenerate, loading, status = 0 }) {
+  // 0 = Draft (Generate), 1 = Processing, 2 = Completed
 
   const handleAction = () => {
-    if (step === 0) setStep(1);
-    else if (step === 1) setStep(2);
+    if (status === 0 || status === 1) onGenerate();
   };
 
   const buttonConfig = () => {
-    if (step === 0) {
+    if (status === 0) {
       return {
-        text: "Start Processing",
+        text: loading ? "Generating..." : "Generate Payroll",
         className: "status-btn primary",
+        disabled: loading
       };
     }
-    if (step === 1) {
+    if (status === 1) {
       return {
-        text: "Complete Payroll",
+        text: "Finalize Payroll",
         className: "status-btn success",
       };
     }
@@ -29,6 +28,7 @@ export default function PayrollStatus() {
       text: "Completed",
       className: "status-btn completed",
       icon: "circle-tick",
+      disabled: true
     };
   };
 
@@ -41,14 +41,14 @@ export default function PayrollStatus() {
         <div>
           <h3 className="payroll-status-title">Payroll Status</h3>
           <p className="payroll-status-subtitle">
-            Current processing status for 2025-11
+            Current processing status for Jan 2026
           </p>
         </div>
 
         <button
           className={btn.className}
           onClick={handleAction}
-          disabled={step === 2}
+          disabled={btn.disabled}
         >
           {btn.icon && <SvgIcon name={btn.icon} size={16} />}
           {btn.text}
@@ -58,23 +58,23 @@ export default function PayrollStatus() {
       {/* Stepper */}
       <div className="payroll-stepper">
         {/* Step 1 */}
-        <div className={`step ${step >= 0 ? "active" : ""}`}>
+        <div className={`step ${status >= 0 ? "active" : ""}`}>
           <span className="step-circle">1</span>
           <span className="step-label">Draft</span>
         </div>
 
-        <div className={`step-line ${step >= 1 ? "active" : ""}`} />
+        <div className={`step-line ${status >= 1 ? "active" : ""}`} />
 
         {/* Step 2 */}
-        <div className={`step ${step >= 1 ? "active" : ""}`}>
+        <div className={`step ${status >= 1 ? "active" : ""}`}>
           <span className="step-circle">2</span>
           <span className="step-label">Processing</span>
         </div>
 
-        <div className={`step-line ${step >= 2 ? "completed" : ""}`} />
+        <div className={`step-line ${status >= 2 ? "completed" : ""}`} />
 
         {/* Step 3 */}
-        <div className={`step ${step === 2 ? "completed" : ""}`}>
+        <div className={`step ${status === 2 ? "completed" : ""}`}>
           <span className="step-circle">3</span>
           <span className="step-label">Completed</span>
         </div>
