@@ -47,6 +47,19 @@ function Payroll() {
     }
   };
 
+  const handleFinalize = async () => {
+    try {
+      setLoading(true);
+      await payrollService.finalize(month, year);
+      toast.success("Payroll Finalized & Locked!");
+      fetchPayroll(); // Refresh
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to finalize");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       {/* Date Selector could go here */}
@@ -60,11 +73,17 @@ function Payroll() {
 
       <PayrollStatus
         onGenerate={handleGenerate}
+        onFinalize={handleFinalize}
         loading={loading}
         status={records.length > 0 ? (records[0].status === 'PROCESSED' ? 2 : 1) : 0}
       />
 
-      <PayrollEmployeesTable employees={records} loading={loading} onRefresh={fetchPayroll} />
+      <PayrollEmployeesTable
+        employees={records}
+        loading={loading}
+        onRefresh={fetchPayroll}
+        isFinalized={records.length > 0 && records[0].status === 'PROCESSED'}
+      />
 
       <div className="wps-section">
 

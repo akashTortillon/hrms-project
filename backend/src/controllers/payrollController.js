@@ -170,7 +170,7 @@ export const generatePayroll = async (req, res) => {
                                 // Value 0.5 = Half Day
                                 const dailyRate = basicSalary / 30;
                                 const deductionPerLate = dailyRate * Number(meta.value);
-                                amount = deductionPerLate * lateCount;
+                                amount = deductionPerLate * lateCount; // No grace period (Strict)
                             }
                             else if (meta.calculationType === "FIXED") {
                                 amount = Number(meta.value) * lateCount;

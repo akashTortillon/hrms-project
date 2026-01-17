@@ -3,7 +3,7 @@ import "../../style/Payroll.css";
 import PayslipModal from "./PayslipModal";
 import AdjustmentModal from "./AdjustmentModal";
 
-export default function PayrollEmployeesTable({ employees = [], onRefresh }) {
+export default function PayrollEmployeesTable({ employees = [], onRefresh, isFinalized }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -42,7 +42,9 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh }) {
           <h3>Employee Payroll Details</h3>
 
           <div className="payroll-table-actions">
-            <button className="outline-btn" onClick={() => handleAdjust(null)}>Add Adjustments</button>
+            {!isFinalized && (
+              <button className="outline-btn" onClick={() => handleAdjust(null)}>Add Adjustments</button>
+            )}
           </div>
         </div>
 
@@ -98,9 +100,11 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh }) {
                         <button className="action-menu-item" onClick={() => handleView(record)}>
                           View Details
                         </button>
-                        <button className="action-menu-item" onClick={() => handleAdjust(record)}>
-                          Add Adjustment
-                        </button>
+                        {!isFinalized && (
+                          <button className="action-menu-item" onClick={() => handleAdjust(record)}>
+                            Add Adjustment
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

@@ -11,7 +11,7 @@ const YEAR = 2025;
 const MONTH = 11; // December (0-indexed)
 const START_DAY = 1;
 const END_DAY = 31; // Full Month
-const EMPLOYEES = ['EMP001'];
+const EMPLOYEES = ['EMP001', 'EMP002', 'EMP003', 'EMP004'];
 
 const generateLogs = () => {
     const logs = [];
@@ -27,32 +27,41 @@ const generateLogs = () => {
         // Skip Dec 25 (Holiday)
         if (day === 25) continue;
 
-        // Skip Dec 25 (Holiday)
-        if (day === 25) continue;
-
         EMPLOYEES.forEach(empCode => {
-            // Mostly Present. No Absents as per request.
-            // Occasional Late (20% chance)
+            // Random Absence (10% Chance) - Skip creating logs implies Absent in Payroll Logic
+            if (day !== 25 && Math.random() < 0.10) {
+                return; // Skip this employee for this day
+            }
 
-            const isLate = Math.random() < 0.2;
+            // Late (30% Chance)
+            const isLate = Math.random() < 0.3;
             let inTime, outTime;
 
             if (isLate) {
-                // Late: 09:16 - 09:45
-                const mins = Math.floor(Math.random() * 30) + 16;
-                inTime = `09:${String(mins).padStart(2, '0')}`;
+                // Late: 09:16 - 10:30
+                const hour = Math.random() < 0.8 ? 9 : 10;
+                const min = Math.floor(Math.random() * 59);
+                // Ensure it's >= 09:16
+                const finalMin = (hour === 9 && min < 16) ? min + 16 : min;
+                inTime = `${String(hour).padStart(2, '0')}:${String(finalMin).padStart(2, '0')}`;
             } else {
-                // On Time: 08:45 - 09:15 (Grace period usually till 9:15)
-                // Let's say 8:50 - 9:10
-                const mins = Math.floor(Math.random() * 20) + 50; // 50-69
-                let h = 8;
-                let m = mins;
-                if (m >= 60) { h = 9; m -= 60; }
-                inTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                // On Time: 08:30 - 09:15
+                // 8:30 to 8:59 OR 9:00 to 9:15
+                if (Math.random() < 0.7) {
+                    // 8:xx
+                    const min = Math.floor(Math.random() * 30) + 30; // 30-59
+                    inTime = `08:${min}`;
+                } else {
+                    // 9:xx
+                    const min = Math.floor(Math.random() * 16); // 0-15
+                    inTime = `09:${String(min).padStart(2, '0')}`;
+                }
             }
 
-            // OUT: 18:00 - 18:30
-            outTime = `18:${String(Math.floor(Math.random() * 30)).padStart(2, '0')}`;
+            // OUT: 17:30 - 19:30
+            const outHour = Math.floor(Math.random() * 2) + 17; // 17 or 18. Adjust if 19 needed.
+            const outMin = Math.floor(Math.random() * 60);
+            outTime = `${outHour}:${String(outMin).padStart(2, '0')}`;
 
             // IN Punch
             logs.push({
