@@ -160,7 +160,7 @@ export const addEmployee = async (req, res) => {
     // 5. Create Employee (Only if User valid)
     const {
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
-      designation, contractType, basicSalary, accommodation, visaExpiry
+      designation, contractType, basicSalary, accommodation, visaExpiry, shift
     } = req.body;
 
     const employee = await Employee.create({
@@ -173,7 +173,8 @@ export const addEmployee = async (req, res) => {
       joinDate,
       status: status || "Active",
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
-      designation, contractType, basicSalary, accommodation, visaExpiry
+      designation, contractType, basicSalary, accommodation, visaExpiry,
+      shift: shift || "Day Shift"
     });
 
     res.status(201).json({

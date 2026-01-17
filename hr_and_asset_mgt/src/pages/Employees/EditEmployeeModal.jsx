@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOptions = [], editMode = "all" }) {
@@ -7,6 +7,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
 
   useEffect(() => {
@@ -33,6 +34,8 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
       setRoles(rolesData);
       setContractTypes(typesData);
       setDesignations(desigData);
+      const shiftsData = await shiftService.getAll();
+      setShifts(shiftsData);
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -134,6 +137,16 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     <option>Active</option>
                     <option>Inactive</option>
                     <option>On Leave</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Shift</label>
+                  <select name="shift" onChange={handleChange} value={form.shift || ''}>
+                    <option value="">Select Shift</option>
+                    {shifts.map((s) => (
+                      <option key={s._id} value={s.name}>{s.name}</option>
+                    ))}
                   </select>
                 </div>
               </>
