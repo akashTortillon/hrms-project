@@ -5,7 +5,7 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Payroll.css";
 
 
-export default function PayrollSummaryCards({ stats }) {
+export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear }) {
   const cards = [
     {
       title: "Total Basic Salary",
@@ -29,6 +29,11 @@ export default function PayrollSummaryCards({ stats }) {
     },
   ];
 
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
   return (
     <>
       <div className="payroll-header">
@@ -40,10 +45,27 @@ export default function PayrollSummaryCards({ stats }) {
         </div>
 
         <div className="payroll-header-actions">
-          <select className="payroll-month-select">
-            <option>November 2025</option>
-            <option>October 2025</option>
-            <option>September 2025</option>
+          {/* Month Selector */}
+          <select
+            className="payroll-month-select"
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+          >
+            {months.map((m, idx) => (
+              <option key={idx} value={idx + 1}>{m}</option>
+            ))}
+          </select>
+
+          {/* Year Selector */}
+          <select
+            className="payroll-month-select"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            style={{ marginLeft: '10px' }}
+          >
+            <option value={2024}>2024</option>
+            <option value={2025}>2025</option>
+            <option value={2026}>2026</option>
           </select>
 
           <button className="payroll-export-btn">

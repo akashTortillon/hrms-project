@@ -1,43 +1,94 @@
-
 import Payroll from "../models/payrollModel.js";
 import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
 import Attendance from "../models/attendanceModel.js";
 import mongoose from "mongoose";
+import SystemSettings from "../models/systemSettingsModel.js";
 
 // --- HELPER: Calculate Attendance Stats ---
 const getAttendanceStats = async (employeeId, month, year) => {
-    // Basic Mock Logic for now (Replace with real Aggregation later)
-    // TODO: Use actual Attendance Model aggregation
-
-    // Construct string dates for query since Attendance uses "YYYY-MM-DD" string
+    // 1. Setup Date Range
+    const daysInMonth = new Date(year, month, 0).getDate();
     const strMonth = String(month).padStart(2, '0');
     const startStr = `${year}-${strMonth}-01`;
-    const endStr = `${year}-${strMonth}-31`; // Simple upper bound, works for string comparison
+    const endStr = `${year}-${strMonth}-${daysInMonth}`;
 
-    console.log(`[Payroll] Querying Attendance for Emp: ${employeeId} | Range: ${startStr} to ${endStr}`);
-
+    // 2. Fetch Data Sources
+    // A. Attendance Logs
     const logs = await Attendance.find({
         employee: employeeId,
         date: { $gte: startStr, $lte: endStr }
     });
+    const logMap = {}; // date string -> log
+    logs.forEach(l => logMap[l.date] = l);
 
-    console.log(`[Payroll] Found ${logs.length} logs for ${employeeId}`);
+    // B. Public Holidays (From System Settings)
+    const settings = await SystemSettings.findOne();
+    const holidaySet = new Set();
+    if (settings && settings.holidays) {
+        settings.holidays.forEach(h => {
+            if (h.date) {
+                const d = new Date(h.date);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                holidaySet.add(`${yyyy}-${mm}-${dd}`);
+            }
+        });
+    }
 
-    const daysPresent = logs.filter(l => l.status === 'Present' || l.status === 'Late').length;
-    const daysAbsent = logs.filter(l => l.status === 'Absent').length;
-    const late = logs.filter(l => l.status === 'Late').length;
+    // C. Approved Leaves (TODO: Integrate real Request model. For now check Attendance 'On Leave' status)
 
-    // Calculate Overtime (Mock: Random if active)
-    const overtimeHours = 0;
+    // 3. Iterate Day by Day
+    let paidDays = 0; // Present + Weekends + Holidays + Paid Leaves
+    let lopDays = 0;  // Unaccounted Absences + Unpaid Leaves
+    let lateCount = 0;
+
+    // Debug: Trace logic
+    // console.log(`[Payroll Scan] ${employeeId} : ${startStr} to ${endStr}`);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${strMonth}-${String(day).padStart(2, '0')}`;
+        const dateObj = new Date(year, month - 1, day);
+        const dayOfWeek = dateObj.getDay(); // 0=Sun, 6=Sat
+
+        // -- PRIORITY 1: ATTENDANCE RECORD --
+        if (logMap[dateStr]) {
+            const status = logMap[dateStr].status;
+            if (status === 'Present' || status === 'Late') {
+                paidDays++;
+                if (status === 'Late') lateCount++;
+            } else if (status === 'On Leave') {
+                // Assume Paid Leave for now unless marked otherwise
+                paidDays++;
+            } else if (status === 'Absent') {
+                lopDays++;
+            }
+        }
+        // -- PRIORITY 2: WEEKEND (Sunday) --
+        else if (dayOfWeek === 0) {
+            paidDays++; // Weekends are Paid
+        }
+        // -- PRIORITY 3: PUBLIC HOLIDAY --
+        else if (holidaySet.has(dateStr)) {
+            paidDays++; // Holidays are Paid
+        }
+        // -- PRIORITY 4: NO RECORD -> IMPLIED ABSENT --
+        else {
+            // It's a working day, no punch, no holiday -> ABSENT
+            lopDays++;
+        }
+    }
+
+    console.log(`[Payroll Calc] Emp: ${employeeId} | Paid: ${paidDays} | LOP: ${lopDays} | Late: ${lateCount}`);
 
     return {
-        totalDays: 30, // Standard Month
-        daysPresent,
-        daysAbsent,
-        unpaidLeaves: 0, // Need Leave Request integration
-        overtimeHours,
-        late
+        totalDays: daysInMonth,
+        daysPresent: paidDays, // For Salary Calc, this is "Days Eligible for Pay"
+        daysAbsent: lopDays,   // Distinctly "Loss of Pay" days
+        unpaidLeaves: 0,       // Merged into daysAbsent above for simplicity? Or separate if needed.
+        overtimeHours: 0,
+        late: lateCount
     };
 };
 

@@ -7,10 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // CONFIGURATION
-const YEAR = 2026;
-const MONTH = 0; // January (0-indexed)
+const YEAR = 2025;
+const MONTH = 11; // December (0-indexed)
 const START_DAY = 1;
-const END_DAY = 17; // Up to Today
+const END_DAY = 31; // Full Month
 const EMPLOYEES = ['EMP001'];
 
 const generateLogs = () => {
@@ -23,6 +23,12 @@ const generateLogs = () => {
 
         // Skip Sundays (0)
         if (dayOfWeek === 0) continue;
+
+        // Skip Dec 25 (Holiday)
+        if (day === 25) continue;
+
+        // Skip Dec 25 (Holiday)
+        if (day === 25) continue;
 
         EMPLOYEES.forEach(empCode => {
             // Mostly Present. No Absents as per request.

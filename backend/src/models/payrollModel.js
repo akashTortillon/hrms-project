@@ -46,7 +46,8 @@ const payrollSchema = new mongoose.Schema({
         daysPresent: Number,
         daysAbsent: Number,
         unpaidLeaves: Number,
-        overtimeHours: Number
+        overtimeHours: Number,
+        late: Number
     },
 
     // WPS Info
