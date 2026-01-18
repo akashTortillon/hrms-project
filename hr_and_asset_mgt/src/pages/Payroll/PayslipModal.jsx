@@ -78,7 +78,7 @@ export default function PayslipModal({ show, onClose, record }) {
         },
         attendanceGrid: {
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(5, 1fr)',
             gap: '15px',
             padding: '15px',
             backgroundColor: '#f9f9f9',
@@ -220,6 +220,10 @@ export default function PayslipModal({ show, onClose, record }) {
                             <div style={styles.attendanceItem}>
                                 <span style={styles.attendanceLabel}>Late Count</span>
                                 <span style={styles.attendanceValue}>{attendanceSummary?.late || 0}</span>
+                            </div>
+                            <div style={styles.attendanceItem}>
+                                <span style={styles.attendanceLabel}>Overtime (Hrs)</span>
+                                <span style={styles.attendanceValue}>{attendanceSummary?.overtimeHours || 0}</span>
                             </div>
                         </div>
                     </div>
