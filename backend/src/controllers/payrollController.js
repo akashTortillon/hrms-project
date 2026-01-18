@@ -7,7 +7,20 @@ import SystemSettings from "../models/systemSettingsModel.js";
 import * as XLSX from "xlsx";
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employeeId, month, year) => {
+// --- HELPER: Parse "8h 45m" to decimal hours ---
+const parseHours = (timeStr) => {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(' ');
+    let h = 0, m = 0;
+    for (const p of parts) {
+        if (p.includes('h')) h = parseInt(p);
+        if (p.includes('m')) m = parseInt(p);
+    }
+    return h + (m / 60);
+};
+
+// --- HELPER: Calculate Attendance Stats ---
+const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null) => {
     // 1. Setup Date Range
     const daysInMonth = new Date(year, month, 0).getDate();
     const strMonth = String(month).padStart(2, '0');
@@ -15,16 +28,14 @@ const getAttendanceStats = async (employeeId, month, year) => {
     const endStr = `${year}-${strMonth}-${daysInMonth}`;
 
     // 2. Fetch Data Sources
-    // A. Attendance Logs
     const logs = await Attendance.find({
         employee: employeeId,
         date: { $gte: startStr, $lte: endStr }
     });
-    const logMap = {}; // date string -> log
+    const logMap = {};
     logs.forEach(l => logMap[l.date] = l);
 
-    // B. Public Holidays (From System Settings)
-    const settings = await SystemSettings.findOne();
+    const settings = preFetchedSettings || await SystemSettings.findOne();
     const holidaySet = new Set();
     if (settings && settings.holidays) {
         settings.holidays.forEach(h => {
@@ -38,29 +49,50 @@ const getAttendanceStats = async (employeeId, month, year) => {
         });
     }
 
-    // C. Approved Leaves (TODO: Integrate real Request model. For now check Attendance 'On Leave' status)
-
     // 3. Iterate Day by Day
-    let paidDays = 0; // Present + Weekends + Holidays + Paid Leaves
-    let lopDays = 0;  // Unaccounted Absences + Unpaid Leaves
+    let paidDays = 0;
+    let lopDays = 0;
     let lateCount = 0;
+    let overtimeHours = 0;
+    const GLOBAL_STANDARD_HOURS = 9;
 
-    // Debug: Trace logic
-    // console.log(`[Payroll Scan] ${employeeId} : ${startStr} to ${endStr}`);
+    // Helper to get hours for a specific shift name
+    const getShiftHours = (shiftName) => {
+        if (!shiftName || !shiftMap[shiftName]) return GLOBAL_STANDARD_HOURS;
+        return Number(shiftMap[shiftName].workHours) || GLOBAL_STANDARD_HOURS;
+    };
 
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${strMonth}-${String(day).padStart(2, '0')}`;
         const dateObj = new Date(year, month - 1, day);
-        const dayOfWeek = dateObj.getDay(); // 0=Sun, 6=Sat
+        const dayOfWeek = dateObj.getDay();
 
         // -- PRIORITY 1: ATTENDANCE RECORD --
         if (logMap[dateStr]) {
-            const status = logMap[dateStr].status;
+            const record = logMap[dateStr];
+            const status = record.status;
+
             if (status === 'Present' || status === 'Late') {
                 paidDays++;
                 if (status === 'Late') lateCount++;
+
+                // Calculate Overtime based on THIS DAY'S Shift
+                if (record.workHours) {
+                    const worked = parseHours(record.workHours);
+                    const shiftName = record.shift || "Day Shift"; // Fallback to Day Shift
+                    const standardLimit = getShiftHours(shiftName);
+
+                    if (worked > standardLimit) {
+                        const dailyOT = worked - standardLimit;
+                        overtimeHours += dailyOT;
+                        if (debugInfo?.code === 'EMP001') {
+                            console.log(`[DEBUG EMP001] ${dateStr} | Shift: ${shiftName} (${standardLimit}h) | Worked: ${worked.toFixed(2)}h | OT: ${dailyOT.toFixed(2)}h`);
+                        }
+                    } else if (debugInfo?.code === 'EMP001') {
+                        console.log(`[DEBUG EMP001] ${dateStr} | Shift: ${shiftName} (${standardLimit}h) | Worked: ${worked.toFixed(2)}h | No OT`);
+                    }
+                }
             } else if (status === 'On Leave') {
-                // Assume Paid Leave for now unless marked otherwise
                 paidDays++;
             } else if (status === 'Absent') {
                 lopDays++;
@@ -68,27 +100,26 @@ const getAttendanceStats = async (employeeId, month, year) => {
         }
         // -- PRIORITY 2: WEEKEND (Sunday) --
         else if (dayOfWeek === 0) {
-            paidDays++; // Weekends are Paid
+            paidDays++;
         }
         // -- PRIORITY 3: PUBLIC HOLIDAY --
         else if (holidaySet.has(dateStr)) {
-            paidDays++; // Holidays are Paid
+            paidDays++;
         }
-        // -- PRIORITY 4: NO RECORD -> IMPLIED ABSENT --
+        // -- PRIORITY 4: IMPLIED ABSENT --
         else {
-            // It's a working day, no punch, no holiday -> ABSENT
             lopDays++;
         }
     }
 
-    console.log(`[Payroll Calc] Emp: ${employeeId} | Paid: ${paidDays} | LOP: ${lopDays} | Late: ${lateCount}`);
+    // console.log(`[Payroll Calc] Emp: ${employeeId} | Paid: ${paidDays} | LOP: ${lopDays} | Late: ${lateCount} | OT: ${overtimeHours.toFixed(2)}`);
 
     return {
         totalDays: daysInMonth,
-        daysPresent: paidDays, // For Salary Calc, this is "Days Eligible for Pay"
-        daysAbsent: lopDays,   // Distinctly "Loss of Pay" days
-        unpaidLeaves: 0,       // Merged into daysAbsent above for simplicity? Or separate if needed.
-        overtimeHours: 0,
+        daysPresent: paidDays,
+        daysAbsent: lopDays,
+        unpaidLeaves: 0,
+        overtimeHours: parseFloat(overtimeHours.toFixed(2)),
         late: lateCount
     };
 };
@@ -98,99 +129,127 @@ export const generatePayroll = async (req, res) => {
     try {
         const { month, year } = req.body;
 
-        // 1. Fetch Active Employees
+        // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
-
-        // 2. Fetch Payroll Rules (Masters)
         const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
+
+        // Fetch Shifts to map names to hours
+        const shifts = await Master.find({ type: "SHIFT", isActive: true });
+        const shiftMap = {}; // "Day Shift" -> { workHours: 9, ... }
+        shifts.forEach(s => {
+            if (s.metadata) shiftMap[s.name] = s.metadata;
+        });
+
+        const settings = await SystemSettings.findOne();
 
         const payrollRecords = [];
 
         for (const emp of employees) {
-            // Fix: parse string "15,000" -> 15000. Handle root level field.
             const basicSalaryRaw = emp.basicSalary || "0";
             const basicSalary = Number(String(basicSalaryRaw).replace(/[^0-9.-]+/g, ""));
+
             const allowanceList = [];
             const deductionList = [];
             let totalAllowances = 0;
             let totalDeductions = 0;
 
-            // Get Attendance Stats
-            const stats = await getAttendanceStats(emp._id, month, year);
+            // Derived Rates
+            const dailySalary = basicSalary / 30; // Standard 30 days
 
-            // 3. Apply Rules
+            // Determine Employee's Standard Hourly Rate based on THEIR assigned shift
+            const empShiftName = emp.shift || "Day Shift";
+            const empStandardHours = (shiftMap[empShiftName] && Number(shiftMap[empShiftName].workHours)) || 9;
+            const hourlySalary = dailySalary / empStandardHours;
+
+            // Get Stats
+            const stats = await getAttendanceStats(emp._id, month, year, settings, shiftMap, { code: emp.code });
+
+            if (emp.code === 'EMP001') {
+                console.log(`[DEBUG EMP001] Stats: OT=${stats.overtimeHours}, Late=${stats.late} | Salary: Basic=${basicSalary}, Hourly=${hourlySalary.toFixed(2)}`);
+            }
+
+            // 3. Dynamic Rule Engine
             for (const rule of rules) {
                 const meta = rule.metadata || {};
-
-                // Only process Automatic rules
                 if (!meta.isAutomatic) continue;
 
                 let amount = 0;
+                let description = "";
 
-                // --- ALLOWANCE LOGIC ---
-                if (meta.category === "ALLOWANCE") {
-                    if (meta.calculationType === "FIXED") {
-                        amount = Number(meta.value || 0);
-                    } else if (meta.calculationType === "PERCENTAGE") {
-                        const baseAmount = meta.base === "BASIC_SALARY" ? basicSalary : basicSalary; // Can add GROSS later
-                        amount = baseAmount * (Number(meta.value) / 100);
-                    }
+                // --- DETERMINE BASIS STATISTIC ---
+                // Fallback for Legacy Rules: Map Code/Name to Basis
+                let basis = meta.basis; // EXPECTED IN NEW RULES: 'LATE_COUNT', 'OVERTIME_HOURS', 'ABSENT_DAYS'
 
-                    if (amount > 0) {
-                        allowanceList.push({ name: rule.name, amount, type: "AUTO", meta: `Rule: ${rule.name}` });
-                        totalAllowances += amount;
-                    }
+                if (!basis) {
+                    if (rule.code === "LOP" || rule.name.includes("Unpaid")) basis = "ABSENT_DAYS";
+                    else if ((rule.code && rule.code.includes("LATE")) || (rule.name && rule.name.includes("Late"))) basis = "LATE_COUNT";
+                    else if ((rule.code && rule.code.includes("OT")) || (rule.name && rule.name.includes("Overtime"))) basis = "OVERTIME_HOURS";
                 }
 
-                // --- DEDUCTION LOGIC ---
-                else if (meta.category === "DEDUCTION") {
+                // --- CALCULATE AMOUNT ---
 
-                    // 1. Unpaid Leave / LOP
-                    if (rule.code === "LOP" || rule.name.includes("Unpaid")) {
-                        const dailyRate = basicSalary / 30;
-                        const absentDays = stats.daysAbsent + stats.unpaidLeaves;
-                        amount = absentDays * dailyRate;
+                // Case A: Fixed or Percentage (No Statistic Needed)
+                if (meta.calculationType === "FIXED") {
+                    amount = Number(meta.value || 0);
+                    description = `Fixed`;
+                    if (emp.code === 'EMP001') console.log(`[DEBUG EMP001] Rule: ${rule.name} | FIXED | Amt: ${amount}`);
+                } else if (meta.calculationType === "PERCENTAGE") {
+                    amount = basicSalary * (Number(meta.value) / 100);
+                    description = `${meta.value}% of Basic`;
+                }
 
-                        if (amount > 0) {
-                            deductionList.push({
-                                name: "Unpaid Leave / Absent",
-                                amount: parseFloat(amount.toFixed(2)),
-                                type: "AUTO",
-                                meta: `${absentDays} days * ${dailyRate.toFixed(2)}`
-                            });
-                            totalDeductions += amount;
-                        }
+                // Case B: Statistic Based (Hourly/Daily/Instance)
+                else if (basis) {
+                    let statValue = 0;
+                    let unitRate = 0;
+
+                    // 1. Get the Statistic Value
+                    if (basis === "LATE_COUNT") statValue = stats.late;
+                    else if (basis === "ABSENT_DAYS") statValue = stats.daysAbsent + stats.unpaidLeaves;
+                    else if (basis === "OVERTIME_HOURS") statValue = stats.overtimeHours;
+
+                    // 2. Determine Unit Rate (Hourly or Daily)
+                    if (meta.calculationType === "HOURLY_RATE" || basis === "OVERTIME_HOURS") { // Default OT to Hourly
+                        unitRate = hourlySalary;
+                    } else {
+                        unitRate = dailySalary; // Default Late/Absent to Daily
                     }
 
-                    // 2. Late Deduction
-                    else if ((rule.code && rule.code.includes("LATE")) || (rule.name && rule.name.includes("Late")) || meta.condition === "LATE_INSTANCE") {
-                        const lateCount = stats.late || 0;
+                    // 3. Apply Multiplier
+                    // meta.value counts as the Multiplier here (e.g. 1.5x OT, 0.5x Late Deduction)
+                    // If no value, assume 1.0 (Direct deduction/payment)
+                    const multiplier = meta.value ? Number(meta.value) : 1.0;
 
-                        if (lateCount > 0) {
-                            if (meta.calculationType === "DAILY_RATE") {
-                                // Value 0.5 = Half Day
-                                const dailyRate = basicSalary / 30;
-                                const deductionPerLate = dailyRate * Number(meta.value);
-                                amount = deductionPerLate * lateCount; // No grace period (Strict)
-                            }
-                            else if (meta.calculationType === "FIXED") {
-                                amount = Number(meta.value) * lateCount;
-                            }
-                            else {
-                                // Fallback: Fixed 100
-                                amount = 100 * lateCount;
-                            }
+                    amount = statValue * unitRate * multiplier;
+                    description = `${basis} x ${multiplier}`;
 
-                            if (amount > 0) {
-                                deductionList.push({
-                                    name: "Late Deduction",
-                                    amount: parseFloat(amount.toFixed(2)),
-                                    type: "AUTO",
-                                    meta: `${lateCount} lates * ${meta.value} (${meta.calculationType})`
-                                });
-                                totalDeductions += amount;
-                            }
-                        }
+                    if (emp.code === 'EMP001') {
+                        console.log(`[DEBUG EMP001] Rule: ${rule.name} | Basis: ${basis} | Stat: ${statValue} | Rate: ${unitRate.toFixed(2)} | Mult: ${multiplier} | Amt: ${amount.toFixed(2)}`);
+                    }
+
+                    if (statValue > 0) {
+                        amount = statValue * unitRate * multiplier;
+                        description = `${statValue} x ${multiplier} x Rate`;
+                    }
+                } else {
+                    if (emp.code === 'EMP001') console.log(`[DEBUG EMP001] SKIPPED Rule: ${rule.name} (No Basis found & Not Fixed/Percentage)`);
+                }
+
+                // --- ADD TO LIST ---
+                if (amount > 0) {
+                    const entry = {
+                        name: rule.name,
+                        amount: parseFloat(amount.toFixed(2)),
+                        type: "AUTO",
+                        meta: description
+                    };
+
+                    if (meta.category === "ALLOWANCE") {
+                        allowanceList.push(entry);
+                        totalAllowances += amount;
+                    } else if (meta.category === "DEDUCTION") {
+                        deductionList.push(entry);
+                        totalDeductions += amount;
                     }
                 }
             }
@@ -198,7 +257,7 @@ export const generatePayroll = async (req, res) => {
             // 4. Calculate Net
             const netSalary = basicSalary + totalAllowances - totalDeductions;
 
-            // 5. Prepare Record (Upsert)
+            // 5. Prepare Record
             payrollRecords.push({
                 updateOne: {
                     filter: { employee: emp._id, month, year },

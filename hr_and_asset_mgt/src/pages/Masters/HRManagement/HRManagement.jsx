@@ -385,6 +385,17 @@ export default function HRManagement() {
                             </div>
                         </div>
                         <div className="form-group">
+                            <label className="modal-form-label">Standard Work Hours</label>
+                            <input
+                                type="number"
+                                className="modal-form-input"
+                                placeholder="e.g. 9"
+                                value={shiftState.workHours}
+                                onChange={(e) => setShiftState({ ...shiftState, workHours: e.target.value })}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Defines the base hours for Hourly Rate & Overtime calculation (Default: 9)</p>
+                        </div>
+                        <div className="form-group">
                             <label className="modal-form-label">Late Mark After</label>
                             <input
                                 type="time"

@@ -42,7 +42,8 @@ export default function useHRManagement() {
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
         endTime: '18:00',
-        lateLimit: '09:15'
+        lateLimit: '09:15',
+        workHours: '9'
     });
 
     useEffect(() => {
@@ -85,7 +86,8 @@ export default function useHRManagement() {
         setShiftState({
             startTime: '09:00',
             endTime: '18:00',
-            lateLimit: '09:15'
+            lateLimit: '09:15',
+            workHours: '9'
         });
         setShowModal(true);
     };
@@ -123,7 +125,8 @@ export default function useHRManagement() {
             setShiftState({
                 startTime: meta.startTime || '09:00',
                 endTime: meta.endTime || '18:00',
-                lateLimit: meta.lateLimit || '09:15'
+                lateLimit: meta.lateLimit || '09:15',
+                workHours: meta.workHours || '9'
             });
             setInputValue(item.name);
         } else {
@@ -216,7 +219,8 @@ export default function useHRManagement() {
                     metadata: {
                         startTime: shiftState.startTime,
                         endTime: shiftState.endTime,
-                        lateLimit: shiftState.lateLimit
+                        lateLimit: shiftState.lateLimit,
+                        workHours: Number(shiftState.workHours)
                     }
                 };
                 if (editId) await shiftService.update(editId, payload);
