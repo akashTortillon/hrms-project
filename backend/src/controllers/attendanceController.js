@@ -3,6 +3,7 @@ import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
 import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
+import SystemSettings from "../models/systemSettingsModel.js";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -16,6 +17,24 @@ const toMinutes = (time) => {
   if (!time) return 0;
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+};
+
+// Helper: Get Holidays Set
+const getHolidaysSet = async () => {
+  const settings = await SystemSettings.findOne();
+  const holidaySet = new Set();
+  if (settings && settings.holidays) {
+    settings.holidays.forEach(h => {
+      if (h.date) {
+        const d = new Date(h.date);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        holidaySet.add(`${yyyy}-${mm}-${dd}`);
+      }
+    });
+  }
+  return holidaySet;
 };
 
 // Helper: Calculate duration between two times in HH:MM format
@@ -290,6 +309,9 @@ export const getMonthlyAttendance = async (req, res) => {
       date: { $regex: regex }
     });
 
+    // Get Holidays
+    const holidaySet = await getHolidaysSet();
+
     // Map attendance by Employee -> Date
     const attendanceMap = {};
     attendanceRecords.forEach(rec => {
@@ -311,10 +333,25 @@ export const getMonthlyAttendance = async (req, res) => {
 
       days.forEach(day => {
         const record = empAttendance[day];
-        // If record exists, use its status
-        // Else if employee profile is "On Leave", use that
-        // Else "Absent"
-        const status = record ? record.status : (emp.status === "On Leave" ? "On Leave" : "Absent");
+        const dateObj = new Date(day);
+        const isSunday = dateObj.getDay() === 0;
+        const isHoliday = holidaySet.has(day);
+
+        let status;
+
+        if (record) {
+          status = record.status;
+        } else {
+          if (emp.status === "On Leave") {
+            status = "On Leave";
+          } else if (isSunday) {
+            status = "Weekend";
+          } else if (isHoliday) {
+            status = "Holiday";
+          } else {
+            status = "Absent";
+          }
+        }
 
         attendanceData[day] = {
           status,
@@ -325,7 +362,8 @@ export const getMonthlyAttendance = async (req, res) => {
         if (status === "Present") present++;
         else if (status === "Late") late++;
         else if (status === "On Leave") leave++;
-        else absent++;
+        else if (status === "Absent") absent++;
+        // Weekends don't count towards absent
       });
 
       return {

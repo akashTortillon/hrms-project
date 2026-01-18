@@ -34,6 +34,10 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
         return "status-leave";
       case "Present":
         return "status-present";
+      case "Weekend":
+        return "status-weekend"; // New class for Sundays
+      case "Holiday":
+        return "status-holiday";
       default:
         return "";
     }
@@ -44,6 +48,8 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
     if (status === "Late") return "L";
     if (status === "Absent") return "A";
     if (status === "On Leave" || status === "Leave") return "OL";
+    if (status === "Weekend") return "W";
+    if (status === "Holiday") return "H";
     return "-";
   };
 
@@ -57,61 +63,83 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
           <h3>Monthly Attendance - {new Date(year, month - 1).toLocaleString('default', { month: 'long' })} {year}</h3>
         </div>
 
-        <table className="attendance-table monthly-table">
-          <thead>
-            <tr>
-              <th className="sticky-col-header">Employee</th>
-              <th className="stats-col-header">Stats</th>
-              {days.map(d => (
-                <th key={d} className="day-col-header">{d}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={daysInMonth + 2} className="text-center p-4">Loading...</td></tr>
-            ) : records.length === 0 ? (
-              <tr><td colSpan={daysInMonth + 2} className="text-center p-4">No records found</td></tr>
-            ) : (
-              records.map(emp => (
-                <tr key={emp._id}>
-                  <td className="sticky-col-cell">
-                    <div className="employee-name">{emp.name}</div>
-                    <div className="employee-meta">{emp.code}</div>
-                  </td>
-                  <td>
-                    <div className="stats-cell-content">
-                      <div className="stat-item stat-present">P: {emp.stats?.present || 0}</div>
-                      <div className="stat-item stat-absent">A: {emp.stats?.absent || 0}</div>
-                      <div className="stat-item stat-late">L: {emp.stats?.late || 0}</div>
-                    </div>
-                  </td>
-                  {days.map(d => {
-                    // Construct key yyyy-mm-dd
-                    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    const record = emp.attendance[dateKey] || {};
-                    const status = record.status || ""; // Empty if no record
-                    const abbr = status ? getStatusAbbr(status) : "";
-                    const cls = status ? getStatusClass(status) : "";
+        <div className="table-responsive">
+          <table className="attendance-table monthly-table">
+            <thead>
+              <tr>
+                <th className="sticky-col-header">Employee</th>
+                <th className="stats-col-header">Stats</th>
+                {days.map(d => {
+                  const dateObj = new Date(year, month - 1, d);
+                  const isSunday = dateObj.getDay() === 0;
+                  return (
+                    <th key={d} className={`day-col-header ${isSunday ? 'header-sunday' : ''}`}>
+                      <div className="day-number">{d}</div>
+                      <div className="day-name">{dateObj.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={daysInMonth + 2} className="text-center p-4">Loading...</td></tr>
+              ) : records.length === 0 ? (
+                <tr><td colSpan={daysInMonth + 2} className="text-center p-4">No records found</td></tr>
+              ) : (
+                records.map(emp => (
+                  <tr key={emp._id}>
+                    <td className="sticky-col-cell">
+                      <div className="employee-name">{emp.name}</div>
+                      <div className="employee-meta">{emp.code}</div>
+                    </td>
+                    <td>
+                      <div className="stats-cell-content">
+                        <div className="stat-item stat-present">P: {emp.stats?.present || 0}</div>
+                        <div className="stat-item stat-absent">A: {emp.stats?.absent || 0}</div>
+                        <div className="stat-item stat-late">L: {emp.stats?.late || 0}</div>
+                      </div>
+                    </td>
+                    {days.map(d => {
+                      // Construct key yyyy-mm-dd
+                      const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      const record = emp.attendance[dateKey] || {};
+                      let status = record.status;
 
-                    return (
-                      <td key={d} className="status-cell">
-                        {status && (
-                          <div
-                            className={`status-badge ${cls}`}
-                            title={`${dateKey}: ${status} (${record.checkIn || '-'} - ${record.checkOut || '-'})`}
-                          >
-                            {abbr}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                      // Check for Sunday
+                      const dateObj = new Date(year, month - 1, d);
+                      const isSunday = dateObj.getDay() === 0;
+
+                      if (isSunday) {
+                        status = "Weekend";
+                      } else if (!status) {
+                        // If not Sunday and no record, default to Absent if past date? 
+                        // For now let's leave it empty or handled by backend 'Absent'. 
+                        // The backend usually fills 'Absent'.
+                      }
+
+                      const abbr = status ? getStatusAbbr(status) : "";
+                      const cls = status ? getStatusClass(status) : "";
+
+                      return (
+                        <td key={d} className={`status-cell ${isSunday ? 'cell-sunday' : ''}`}>
+                          {status && (
+                            <div
+                              className={`status-badge ${cls}`}
+                              title={`${dateKey}: ${status} ${record.checkIn ? `(${record.checkIn} - ${record.checkOut})` : ''}`}
+                            >
+                              {abbr}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
