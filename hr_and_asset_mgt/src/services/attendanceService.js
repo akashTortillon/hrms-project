@@ -68,3 +68,11 @@ export const exportAttendanceReport = async (filters) => {
   return res.data;
 };
 
+// ✅ Get Employee Attendance History
+export const getEmployeeAttendanceHistory = async (employeeId, month, year) => {
+  const res = await api.get(`${ATTENDANCE_API}/history/${employeeId}`, {
+    params: { month, year }
+  });
+  return res.data;
+};
+

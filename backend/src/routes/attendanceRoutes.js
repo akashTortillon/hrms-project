@@ -7,7 +7,8 @@ import {
   getEmployeeAttendanceStats,
   syncBiometrics,
   getMonthlyAttendance,
-  exportAttendance
+  exportAttendance,
+  getEmployeeAttendanceHistory
 } from "../controllers/attendanceController.js";
 import { protect } from "../middlewares/authMiddleware.js";
 
@@ -18,6 +19,7 @@ router.get("/monthly", protect, getMonthlyAttendance);
 router.get("/export", protect, exportAttendance);
 router.get("/", protect, getDailyAttendance);
 router.get("/stats/:employeeId", protect, getEmployeeAttendanceStats);
+router.get("/history/:employeeId", protect, getEmployeeAttendanceHistory);
 router.post("/mark", protect, markAttendance);
 router.put("/:id", protect, updateAttendance);
 
