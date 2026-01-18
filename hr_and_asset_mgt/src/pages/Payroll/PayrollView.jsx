@@ -60,6 +60,44 @@ function Payroll() {
     }
   };
 
+  const handleExportExcel = async () => {
+    try {
+      await payrollService.exportExcel(month, year);
+      toast.success("Export Downloaded!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Export failed.");
+    }
+  };
+
+  const handleGenerateSIF = async () => {
+    try {
+      await payrollService.generateSIF(month, year);
+      toast.success("SIF File Generated!");
+    } catch (error) {
+      console.error(error);
+      toast.error("SIF Generation failed.");
+    }
+  };
+
+  const handleGenerateMOL = async () => {
+    try {
+      await payrollService.downloadMOLReport(month, year);
+      toast.success("MOL Report Downloaded!");
+    } catch (error) {
+      toast.error("Failed to download MOL Report");
+    }
+  };
+
+  const handlePaymentHistory = async () => {
+    try {
+      await payrollService.downloadPaymentHistory(year);
+      toast.success(`Payment History for ${year} Downloaded!`);
+    } catch (error) {
+      toast.error("Failed to download History");
+    }
+  };
+
   return (
     <div>
       {/* Date Selector could go here */}
@@ -69,6 +107,7 @@ function Payroll() {
         year={year}
         setMonth={setMonth}
         setYear={setYear}
+        onExportWPS={handleGenerateSIF}
       />
 
       <PayrollStatus
@@ -83,6 +122,7 @@ function Payroll() {
         loading={loading}
         onRefresh={fetchPayroll}
         isFinalized={records.length > 0 && records[0].status === 'PROCESSED'}
+        onExport={() => handleExportExcel()}
       />
 
       <div className="wps-section">
@@ -91,23 +131,29 @@ function Payroll() {
 
 
         <div className="wps-card-grid">
-          <Card
-            title="Generate SIF File"
-            subtitle="Create salary payment file for banks"
-            className="wps-card"
-          />
+          <div onClick={handleGenerateSIF} style={{ cursor: 'pointer' }}>
+            <Card
+              title="Generate SIF File"
+              subtitle="Create salary payment file for banks"
+              className="wps-card"
+            />
+          </div>
 
-          <Card
-            title="MOL Report"
-            subtitle="Ministry of Labour compliance report"
-            className="wps-card"
-          />
+          <div onClick={handleGenerateMOL} style={{ cursor: 'pointer' }}>
+            <Card
+              title="MOL Report"
+              subtitle="Ministry of Labour compliance report"
+              className="wps-card"
+            />
+          </div>
 
-          <Card
-            title="Payment History"
-            subtitle="View past payroll transactions"
-            className="wps-card"
-          />
+          <div onClick={handlePaymentHistory} style={{ cursor: 'pointer' }}>
+            <Card
+              title="Payment History"
+              subtitle="View past payroll transactions"
+              className="wps-card"
+            />
+          </div>
         </div>
       </div>
     </div>

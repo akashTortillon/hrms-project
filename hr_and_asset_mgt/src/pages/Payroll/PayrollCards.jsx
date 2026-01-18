@@ -5,7 +5,7 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Payroll.css";
 
 
-export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear }) {
+export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
   const cards = [
     {
       title: "Total Basic Salary",
@@ -68,7 +68,7 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
             <option value={2026}>2026</option>
           </select>
 
-          <button className="payroll-export-btn">
+          <button className="payroll-export-btn" onClick={onExportWPS}>
             <SvgIcon name="download" size={16} />
             Export WPS File
           </button>

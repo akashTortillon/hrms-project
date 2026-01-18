@@ -53,6 +53,7 @@ const getShiftRules = async (shiftName) => {
  */
 export const syncBiometrics = async (req, res) => {
   try {
+    console.log("Starting Biometric Sync...");
     const dataPath = path.join(__dirname, "../data/mockBiometricData.json");
     if (!fs.existsSync(dataPath)) {
       return res.status(404).json({ message: "Biometric data file not found" });
@@ -60,6 +61,7 @@ export const syncBiometrics = async (req, res) => {
 
     const rawData = fs.readFileSync(dataPath, "utf-8");
     const logs = JSON.parse(rawData);
+    console.log(`Found ${logs.length} biometric logs.`);
 
     // 1. Group logs by Employee + Date
     const groupedData = {};
@@ -97,6 +99,8 @@ export const syncBiometrics = async (req, res) => {
 
     for (const key in groupedData) {
       const record = groupedData[key];
+      // console.log(`Processing: ${record.employeeCode} on ${record.date} | In: ${record.checkIn} Out: ${record.checkOut}`);
+
       const employee = await Employee.findOne({ code: record.employeeCode });
 
       if (!employee) {
@@ -119,6 +123,8 @@ export const syncBiometrics = async (req, res) => {
       // Calculate Work Hours
       const workHours = calculateDuration(record.checkIn, record.checkOut);
 
+      console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
+
       // Upsert Attendance
       await Attendance.findOneAndUpdate(
         { employee: employee._id, date: record.date },
@@ -135,6 +141,8 @@ export const syncBiometrics = async (req, res) => {
       );
       syncedCount++;
     }
+
+    console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
 
     res.json({ message: "Sync successful", synced: syncedCount, errors });
   } catch (error) {
