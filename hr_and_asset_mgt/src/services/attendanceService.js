@@ -59,3 +59,12 @@ export const getMonthlyAttendance = async (month, year) => {
   return res.data;
 };
 
+// ✅ Export Report
+export const exportAttendanceReport = async (filters) => {
+  const res = await api.get(`${ATTENDANCE_API}/export`, {
+    params: filters,
+    responseType: "blob", // Important for file download
+  });
+  return res.data;
+};
+

@@ -13,7 +13,8 @@ import {
   updateAttendance,
   markAttendance,
   syncBiometrics,
-  getMonthlyAttendance
+  getMonthlyAttendance,
+  exportAttendanceReport
 } from "../../services/attendanceService.js";
 import { getDepartments, shiftService } from "../../services/masterService.js";
 import { toast } from "react-toastify";
@@ -170,6 +171,40 @@ function Attendance() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const filters = {
+        view: viewMode,
+        date: selectedDate,
+        month: selectedMonth,
+        year: selectedYear,
+        department: selectedDepartment,
+        shift: selectedShift
+      };
+
+      const blob = await exportAttendanceReport(filters);
+
+      // Trigger Download
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      const filename = viewMode === "month"
+        ? `Attendance_${selectedMonth}-${selectedYear}.xlsx`
+        : `Attendance_${selectedDate}.xlsx`;
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+
+      toast.success("Report downloaded successfully");
+    } catch (error) {
+      console.error("Export failed", error);
+      toast.error("Failed to export report");
+    }
+  };
+
   const openAttendanceModal = (employee) => {
     setSelectedEmployee(employee);
     setShowModal(true);
@@ -202,6 +237,7 @@ function Attendance() {
         setViewMode={(m) => updateParams({ view: m })}
         onSync={handleSync}
         loading={loading}
+        onExport={handleExport}
       />
       <AttendanceStats stats={stats} />
 
