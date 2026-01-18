@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import * as XLSX from "xlsx";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -488,5 +489,184 @@ export const getEmployeeAttendanceStats = async (req, res) => {
   } catch (error) {
     console.error("Get attendance stats error:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * EXPORT Attendance to Excel
+ */
+export const exportAttendance = async (req, res) => {
+  try {
+    const { view, date, month, year, department, shift, search } = req.query;
+
+    // 1. Fetch Employees (with Filters)
+    let matchStage = { status: "Active" };
+    if (department) matchStage.department = department;
+
+    // Note: Filtering by 'shift' in Employee model refers to 'Default Shift'. 
+    // Attendance record might have a different shift. 
+    // For simplicity, we'll filter by Employee Default Shift first, or post-process.
+    // Given the frontend behaviour, let's filter after mapping if possible, or filter by default shift here.
+    // The frontend filters by the "Shift" displayed in the table, which comes from the record or default.
+    // Let's filter post-fetching to align exactly with frontend behavior.
+
+    // Filter by Search (Name, Code)
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const employees = await Employee.find(matchStage).sort({ code: 1 });
+    let finalRows = [];
+    let headers = [];
+    let cols = [];
+
+    if (view === "month" && month && year) {
+      // --- MONTHLY EXPORT ---
+      const startDate = `${year}-${month.padStart(2, "0")}-01`;
+      const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+
+      const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
+      const holidaySet = await getHolidaysSet();
+
+      // Attendance Map
+      const attendanceMap = {};
+      attendanceRecords.forEach(rec => {
+        if (!attendanceMap[rec.employee]) attendanceMap[rec.employee] = {};
+        attendanceMap[rec.employee][rec.date] = rec;
+      });
+
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+      // Build Matrix
+      finalRows = employees.map(emp => {
+        const row = {
+          "Employee ID": emp.code,
+          "Name": emp.name,
+          "Department": emp.department,
+          "Shift": emp.shift || "Day Shift"
+        };
+
+        const empAttendance = attendanceMap[emp._id] || {};
+        let present = 0, late = 0, absent = 0, leave = 0;
+
+        days.forEach(d => {
+          const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const record = empAttendance[dateKey];
+          const dateObj = new Date(dateKey);
+          const isSunday = dateObj.getDay() === 0;
+          const isHoliday = holidaySet.has(dateKey);
+
+          let status = "";
+          let cellValue = "";
+
+          if (record) {
+            status = record.status;
+            cellValue = record.status === "Present" ? "P" :
+              record.status === "Late" ? "L" :
+                record.status === "Absent" ? "A" :
+                  record.status === "On Leave" ? "OL" : record.status;
+          } else {
+            if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
+            else if (isSunday) { status = "Weekend"; cellValue = "W"; }
+            else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
+            else { status = "Absent"; cellValue = "A"; }
+          }
+
+          row[String(d)] = cellValue;
+
+          // Stats
+          if (status === "Present") present++;
+          else if (status === "Late") late++;
+          else if (status === "On Leave") leave++;
+          else if (status === "Absent") absent++;
+        });
+
+        row["Present"] = present;
+        row["Late"] = late;
+        row["Absent"] = absent;
+        row["Leave"] = leave;
+
+        // Determine if row matches Shift Filter (if applied)
+        // Using Default Shift
+        if (shift && (emp.shift || "Day Shift") !== shift) return null;
+
+        return row;
+      }).filter(r => r !== null);
+
+      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(String)];
+
+    } else {
+      // --- DAILY EXPORT ---
+      // Defaults to today if no date? Controller should require date
+      const targetDate = date || new Date().toISOString().split('T')[0];
+
+      const attendanceRecords = await Attendance.find({ date: targetDate }).populate("employee");
+      const onLeaveSet = await getApprovedLeaves(targetDate, employees);
+
+      const attendanceMap = {};
+      attendanceRecords.forEach((rec) => {
+        if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
+      });
+
+      finalRows = employees.map(emp => {
+        const record = attendanceMap[emp._id.toString()];
+        const isProfileOnLeave = emp.status === "On Leave";
+        const isRequestOnLeave = onLeaveSet.has(emp._id.toString());
+
+        const effectiveStatus = record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent");
+        const effectiveShift = record?.shift || emp.shift || "Day Shift";
+
+        // Filter Check
+        if (shift && effectiveShift !== shift) return null;
+
+        return {
+          "Employee ID": emp.code,
+          "Name": emp.name,
+          "Department": emp.department,
+          "Shift": effectiveShift,
+          "Check In": record?.checkIn || "-",
+          "Check Out": record?.checkOut || "-",
+          "Work Hours": record?.workHours || "-",
+          "Status": effectiveStatus
+        };
+      }).filter(r => r !== null);
+    }
+
+    // Generate Excel
+    const worksheet = XLSX.utils.json_to_sheet(finalRows);
+
+    // Formatting cols
+    const colWidths = [
+      { wch: 12 }, // ID 
+      { wch: 25 }, // Name
+      { wch: 20 }, // Dept
+      { wch: 15 }, // Shift
+      { wch: 10 }, // Stats/CheckIn
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+    ];
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+    const cleanupName = (view === "month" && month)
+      ? `Attendance_${month}-${year}`
+      : `Attendance_${date}`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${cleanupName}.xlsx"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+
+  } catch (error) {
+    console.error("Export Attendance Error:", error);
+    res.status(500).json({ message: "Export failed" });
   }
 };
