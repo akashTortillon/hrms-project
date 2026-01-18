@@ -13,19 +13,19 @@ export default function AttendanceHeader({ viewMode, setViewMode, onSync, loadin
         </p>
 
         <div className="attendance-tabs">
-          <AppButton
-            className={`attendance-action-btn ${viewMode === "day" ? "is-active" : ""}`}
+          <button
+            className={`attendance-tab ${viewMode === "day" ? "active" : ""}`}
             onClick={() => setViewMode("day")}
           >
             Daily View
-          </AppButton>
+          </button>
 
-          <AppButton
-            className={`attendance-action-btn ${viewMode === "month" ? "is-active" : ""}`}
+          <button
+            className={`attendance-tab ${viewMode === "month" ? "active" : ""}`}
             onClick={() => setViewMode("month")}
           >
             Monthly View
-          </AppButton>
+          </button>
         </div>
       </div>
 
