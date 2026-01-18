@@ -4,6 +4,7 @@ import Master from "../models/masterModel.js";
 import Attendance from "../models/attendanceModel.js";
 import mongoose from "mongoose";
 import SystemSettings from "../models/systemSettingsModel.js";
+import * as XLSX from "xlsx";
 
 // --- HELPER: Calculate Attendance Stats ---
 const getAttendanceStats = async (employeeId, month, year) => {
@@ -318,5 +319,183 @@ export const finalizePayroll = async (req, res) => {
         res.json({ message: `Success! Payroll Finalized for ${result.modifiedCount} employees. The payroll is now locked.` });
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+};
+
+// --- API: Export Payroll to Excel ---
+export const exportPayroll = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban");
+
+        if (!records || records.length === 0) {
+            return res.status(404).json({ message: "No payroll records found for this month." });
+        }
+
+        const data = records.map(r => ({
+            "Employee ID": r.employee?.code || "N/A",
+            "Name": r.employee?.name || "N/A",
+            "Department": r.employee?.department || "N/A",
+            "Designation": r.employee?.designation || "N/A",
+            "Basic Salary": r.basicSalary || 0,
+            "Total Allowances": r.totalAllowances || 0,
+            "Total Deductions": r.totalDeductions || 0,
+            "Net Salary": r.netSalary || 0,
+            "Payment Status": r.status,
+            "Bank Account": r.employee?.bankAccount || "",
+            "IBAN": r.employee?.iban || ""
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Payroll_${month}_${year}`);
+
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+        res.setHeader("Content-Disposition", `attachment; filename="Payroll_${month}_${year}.xlsx"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buffer);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Export failed: " + error.message });
+    }
+};
+
+// --- API: Generate SIF File (WPS) ---
+export const generateSIF = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        // Fetch only PROCESSED (Finalized) records ideally, but DRAFT is ok for testing
+        const records = await Payroll.find({ month, year }).populate("employee", "name code laborCardNumber bankAccount iban agentId");
+
+        if (!records || records.length === 0) {
+            return res.status(404).json({ message: "No payroll records found." });
+        }
+
+        // Standard WPS SIF Header (Example)
+        // Format: SCR, EmployerID, BankCode, Date, Time, SalaryMonth, EDRCount, TotalSalary
+
+        const employerId = "1234567890123"; // Retrieve from Master/Settings in real app
+        const bankCode = "BANK001";
+        const creationDate = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+        const creationTime = new Date().toTimeString().slice(0, 5).replace(":", ""); // HHMM
+        const salaryMonth = `${year}-${String(month).padStart(2, '0')}`; // YYYY-MM
+        const totalAmount = records.reduce((sum, r) => sum + (r.netSalary || 0), 0);
+        const recordCount = records.length;
+
+        let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${recordCount},${totalAmount}\n`;
+
+        // Body: EDR, PersonID, AgentID, Account, StartDate, EndDate, Days, Income, Basic, Extra, Deduction
+        records.forEach(r => {
+            const empId = r.employee?.laborCardNumber || r.employee?.code;
+            const agentId = r.employee?.agentId || "AGENT001";
+            const account = r.employee?.iban || r.employee?.bankAccount || "000000000000";
+            const amount = (r.netSalary || 0).toFixed(2);
+
+            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+            const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
+
+            // Standard EDR line
+            sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${r.basicSalary},${r.totalAllowances},0\n`;
+        });
+
+        res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.csv"`);
+        res.setHeader("Content-Type", "text/csv");
+        res.send(sifContent);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "SIF Generation failed: " + error.message });
+    }
+};
+
+// --- API: Generic MOL Compliance Report ---
+export const generateMOLReport = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+
+        // 1. Get all active employees
+        const employees = await Employee.find({ status: "Active" });
+
+        // 2. Get payroll records for this month
+        const payrolls = await Payroll.find({ month, year });
+        const payrollMap = {};
+        payrolls.forEach(p => {
+            if (p.employee) payrollMap[p.employee.toString()] = p;
+        });
+
+        const reportData = employees.map(emp => {
+            const payRecord = payrollMap[emp._id.toString()];
+            const isPaid = payRecord && payRecord.status === "PROCESSED";
+
+            return {
+                "Employee ID": emp.code,
+                "Name": emp.name,
+                "Labor Card No.": emp.laborCardNumber || "N/A",
+                "Contract Basic": emp.basicSalary,
+                "Net Paid": payRecord ? payRecord.netSalary : 0,
+                "Payment Status": isPaid ? "PAID" : "UNPAID / PENDING",
+                "Month": `${month}/${year}`
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(reportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "MOL_Report");
+
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+        res.setHeader("Content-Disposition", `attachment; filename="MOL_Report_${month}_${year}.xlsx"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buffer);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "MOL Report failed" });
+    }
+};
+
+// --- API: Yearly Payment History ---
+export const getPaymentHistory = async (req, res) => {
+    try {
+        const { year } = req.query;
+
+        const records = await Payroll.find({ year, status: "PROCESSED" })
+            .populate("employee", "name code department");
+
+        if (records.length === 0) {
+            return res.status(404).json({ message: `No payment history found for ${year}` });
+        }
+
+        const historyData = records.map(r => ({
+            "Month": r.month,
+            "Year": r.year,
+            "Employee ID": r.employee?.code,
+            "Name": r.employee?.name,
+            "Department": r.employee?.department,
+            "Basic Salary": r.basicSalary,
+            "Allowances": r.totalAllowances,
+            "Deductions": r.totalDeductions,
+            "Net Paid": r.netSalary,
+            "Processed Date": r.updatedAt ? r.updatedAt.toISOString().slice(0, 10) : "N/A"
+        }));
+
+        // Sort by Month then Name
+        historyData.sort((a, b) => a.Month - b.Month);
+
+        const worksheet = XLSX.utils.json_to_sheet(historyData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `History_${year}`);
+
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+        res.setHeader("Content-Disposition", `attachment; filename="Payment_History_${year}.xlsx"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buffer);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "History Export failed" });
     }
 };

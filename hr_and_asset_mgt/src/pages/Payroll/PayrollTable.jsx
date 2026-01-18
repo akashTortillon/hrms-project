@@ -3,7 +3,7 @@ import "../../style/Payroll.css";
 import PayslipModal from "./PayslipModal";
 import AdjustmentModal from "./AdjustmentModal";
 
-export default function PayrollEmployeesTable({ employees = [], onRefresh, isFinalized }) {
+export default function PayrollEmployeesTable({ employees = [], onRefresh, isFinalized, onExport }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -42,6 +42,9 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
           <h3>Employee Payroll Details</h3>
 
           <div className="payroll-table-actions">
+            <button className="outline-btn" onClick={onExport} style={{ marginRight: '10px' }}>
+              Export Excel
+            </button>
             {!isFinalized && (
               <button className="outline-btn" onClick={() => handleAdjust(null)}>Add Adjustments</button>
             )}
