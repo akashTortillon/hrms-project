@@ -453,41 +453,138 @@ export const updateAttendance = async (req, res) => {
  * GET Attendance Stats for an Employee
  */
 export const getEmployeeAttendanceStats = async (req, res) => {
-  // Keep existing logic or update if needed
-  // ... (This function seemed fine in previous version, mostly aggregates DB)
   try {
     const { employeeId } = req.params;
 
-    const stats = await Attendance.aggregate([
-      { $match: { employee: new mongoose.Types.ObjectId(employeeId) } },
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 }
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    // Start Date: Join Date or Created At or Today fallback
+    const startDate = new Date(employee.joinDate || employee.createdAt || new Date());
+    startDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    // Fetch ALL records for the employee
+    const records = await Attendance.find({ employee: employeeId });
+
+    const holidaySet = await getHolidaysSet();
+    const recordMap = {};
+    records.forEach(r => recordMap[r.date] = r);
+
+    let present = 0, absent = 0, leave = 0, late = 0;
+
+    // Iterate from Start Date to Today
+    let currentDate = new Date(startDate);
+
+    while (currentDate <= today) {
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+      const day = String(currentDate.getDate()).padStart(2, "0");
+      const dateStr = `${year}-${month}-${day}`;
+
+      const isSunday = currentDate.getDay() === 0;
+      const isHoliday = holidaySet.has(dateStr);
+      const record = recordMap[dateStr];
+
+      if (record) {
+        if (record.status === "Present") present++;
+        else if (record.status === "Late") late++;
+        else if (record.status === "On Leave") leave++;
+        else if (record.status === "Absent") absent++;
+      } else {
+        // No record -> Implicit Status
+        // Only count implicit absent if typically a working day (not Sunday, not Holiday)
+        if (!isSunday && !isHoliday) {
+          absent++;
         }
       }
-    ]);
 
-    const result = {
-      present: 0,
-      absent: 0,
-      leave: 0,
-      late: 0,
-      total: 0
-    };
+      // Next Day
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
-    stats.forEach(s => {
-      if (s._id === "Present") result.present = s.count;
-      else if (s._id === "Absent") result.absent = s.count;
-      else if (s._id === "On Leave") result.leave = s.count;
-      else if (s._id === "Late") result.late = s.count;
+    res.json({
+      present,
+      absent,
+      leave,
+      late,
+      total: present + absent + leave + late
     });
 
-    result.total = result.present + result.absent + result.leave + result.late;
-
-    res.json(result);
   } catch (error) {
     console.error("Get attendance stats error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+/**
+ * GET Employee Attendance History (Single Employee, Monthly)
+ */
+export const getEmployeeAttendanceHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { month, year } = req.query; // Optional, default to current
+
+    const now = new Date();
+    const targetMonth = month ? parseInt(month) : now.getMonth() + 1;
+    const targetYear = year ? parseInt(year) : now.getFullYear();
+
+    const regex = new RegExp(`^${targetYear}-${String(targetMonth).padStart(2, "0")}`);
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    const attendanceRecords = await Attendance.find({
+      employee: employeeId,
+      date: { $regex: regex }
+    });
+
+    const holidaySet = await getHolidaysSet();
+    const attendanceMap = {};
+    attendanceRecords.forEach(rec => attendanceMap[rec.date] = rec);
+
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const history = [];
+
+    // Determine cutoff for "Future" (end of today)
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dateObj = new Date(dateStr);
+
+      const isSunday = dateObj.getDay() === 0;
+      const isHoliday = holidaySet.has(dateStr);
+      const record = attendanceMap[dateStr];
+
+      let status = "Absent";
+
+      if (record) {
+        status = record.status;
+      } else {
+        if (dateObj > today) status = "-"; // Future
+        else if (employee.status === "On Leave") status = "On Leave";
+        else if (isSunday) status = "Weekend";
+        else if (isHoliday) status = "Holiday";
+        else status = "Absent";
+      }
+
+      history.push({
+        date: dateStr,
+        status,
+        checkIn: record?.checkIn || "-",
+        checkOut: record?.checkOut || "-",
+        workHours: record?.workHours || "-"
+      });
+    }
+
+    res.json(history);
+  } catch (error) {
+    console.error("Get History Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
