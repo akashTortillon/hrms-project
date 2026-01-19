@@ -1,35 +1,53 @@
-export const getDashboardMetrics = (req, res) => {
-  res.json([
-    {
-      title: "Total Employees",
-      value: "247",
-      subtext: "+12",
-      iconName: "users",
-      iconBgClass: "dashboard-icon-bg-blue",
-    },
-    {
-      title: "Documents Expiring",
-      value: "18",
-      subtext: "This Month",
-      iconName: "exclamation",
-      iconBgClass: "dashboard-icon-bg-yellow",
-    },
-    {
-      title: "Pending Approvals",
-      value: "7",
-      subtext: "3 Urgent",
-      iconName: "clock (1)",
-      iconBgClass: "dashboard-icon-bg-orange",
-    },
-    {
-      title: "Assets In Service",
-      value: "432",
-      subtext: "12 Due",
-      iconName: "cube",
-      iconBgClass: "dashboard-icon-bg-green",
-    },
-  ]);
+
+
+
+import Employee from "../models/employeeModel.js";
+
+/**
+ * DASHBOARD SUMMARY (STEP 1 – Total Employees only)
+ */
+export const getDashboardSummary = async (req, res) => {
+  
+
+  try {
+    /** ---------------------------
+     * TOTAL ACTIVE EMPLOYEES
+     * --------------------------*/
+    const totalEmployees = await Employee.countDocuments({
+      status: "Active",
+    });
+
+    /** ---------------------------
+     * JOINED THIS MONTH
+     * --------------------------*/
+    const now = new Date();
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0
+    );
+
+    const joinedThisMonth = await Employee.countDocuments({
+      status: "Active",
+      joinDate: { $gte: startOfMonth },
+    });
+
+    res.json({
+      totalEmployees,
+      employeesAddedThisMonth: joinedThisMonth,
+    });
+  } catch (error) {
+    console.error("Dashboard metrics error:", error);
+    res.status(500).json({ message: "Dashboard metrics failed" });
+  }
 };
+
+/* --------------------------------------------------
+   KEEP THESE DUMMY ENDPOINTS FOR NOW (NO CHANGE)
+--------------------------------------------------- */
 
 export const getCompanyDocumentExpiries = (req, res) => {
   res.json([
@@ -39,13 +57,6 @@ export const getCompanyDocumentExpiries = (req, res) => {
       secondaryText: "Main Office",
       badge: { text: "16 days", variant: "warning" },
       dateText: "2025-12-15",
-    },
-    {
-      id: 2,
-      primaryText: "Insurance Policy",
-      secondaryText: "Branch RAK",
-      badge: { text: "9 days", variant: "danger" },
-      dateText: "2025-12-08",
     },
   ]);
 };
@@ -81,3 +92,4 @@ export const getTodaysAttendance = (req, res) => {
     },
   ]);
 };
+

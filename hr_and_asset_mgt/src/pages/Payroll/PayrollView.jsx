@@ -1,5 +1,3 @@
-
-
 import React from "react";
 import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView";
@@ -7,8 +5,7 @@ import PayrollSummaryCards from "./PayrollCards";
 import PayrollStatus from "./PayrollStatus";
 import PayrollEmployeesTable from "./PayrollTable";
 
-
-function Payroll() {
+export default function Payroll(){
     const payrollEmployeesData = [
   {
     id: 1,
@@ -84,6 +81,3 @@ function Payroll() {
         </div>
     );
 }
-
-
-export default Payroll;
