@@ -82,7 +82,7 @@
 .attendance-action-btn.is-active {
   background: #e0ecff !important;
   color: #2563eb !important;
-  
+
 }
 
 /* Hover (inactive only) */
@@ -95,6 +95,7 @@
 .attendance-action-btn svg {
   fill: currentColor;
 }
+
 
 
 
@@ -354,6 +355,18 @@
   color: #a16207;
 }
 
+.status-weekend {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.status-holiday {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #d8b4fe;
+}
+
 /* ===== ACTION ===== */
 
 .actions-col {
@@ -369,7 +382,152 @@
 }
 
 
+/* ===== MONTHLY VIEW SPECIFICS ===== */
 
+.attendance-table-card.monthly-view {
+  display: block;
+  width: 100%;
+  /* Ensure the card respects the parent width strictly */
+  max-width: 100%;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  /* Key to stopping parent expansion */
+  overflow: hidden;
+  /* Prevent the card from growing beyond viewport */
+  box-sizing: border-box;
+}
+
+.table-responsive {
+  display: block;
+  width: 100%;
+  /* The scrollable area must fill the card but not exceed it */
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent the container from expanding */
+  position: relative;
+}
+
+.attendance-table.monthly-table {
+  /* Allow table to be as wide as needed for content */
+  width: max-content;
+  /* But ensure it doesn't force parent to grow */
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  /* Prevent table from breaking layout */
+  table-layout: auto;
+}
+
+.sticky-col-header {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background-color: #f9fafb;
+  min-width: 200px;
+  max-width: 250px;
+  width: 220px;
+  box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+}
+
+.stats-col-header {
+  min-width: 80px;
+  max-width: 100px;
+  width: 90px;
+}
+
+.day-col-header {
+  min-width: 36px;
+  max-width: 48px;
+  width: 40px;
+  text-align: center;
+  padding: 8px 4px;
+}
+
+.day-number {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #111827;
+}
+
+.day-name {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.header-sunday {
+  background-color: #fef2f2;
+}
+
+.cell-sunday {
+  background-color: #fef9f9;
+}
+
+.sticky-col-cell {
+  position: sticky;
+  left: 0;
+  background-color: white;
+  z-index: 10;
+  min-width: 200px;
+  max-width: 250px;
+  width: 220px;
+  box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+}
+
+.stats-cell-content {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-item {
+  font-weight: 500;
+}
+
+.stat-present {
+  color: #16a34a;
+}
+
+.stat-absent {
+  color: #dc2626;
+}
+
+.stat-late {
+  color: #f97316;
+}
+
+.status-cell {
+  text-align: center;
+  padding: 4px;
+  min-width: 36px;
+  max-width: 48px;
+  width: 40px;
+}
+
+.status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  transition: transform 0.1s ease;
+  cursor: default;
+}
+
+.status-badge:hover {
+  transform: scale(1.1);
+}
 
 
 
@@ -443,6 +601,3 @@
   font-size: 13px;
   color: #6b7280;
 }
-
-
-

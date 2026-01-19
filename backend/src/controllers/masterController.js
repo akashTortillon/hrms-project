@@ -12,6 +12,7 @@ const TYPE_MAPPING = {
     "nationalities": "NATIONALITY",
     "payroll-rules": "PAYROLL_RULE",
     "workflow-templates": "WORKFLOW_TEMPLATE",
+    "shifts": "SHIFT",
 
     // Asset
     "asset-types": "ASSET_TYPE",

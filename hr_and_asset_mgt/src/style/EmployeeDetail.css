@@ -1,0 +1,223 @@
+/* =========================
+   EMPLOYEE DETAIL PAGE
+========================= */
+
+.employee-detail-container {
+    padding: 0;
+    color: #1f2d3d;
+}
+
+/* ---------- Header ---------- */
+.employee-detail-header {
+    margin-bottom: 24px;
+}
+
+.employee-detail-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.employee-detail-subtitle {
+    font-size: 14px;
+    color: #64748b;
+    /* muted */
+    margin-top: 4px;
+    margin-left: 36px;
+    /* align with text start */
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    color: #1f2d3d;
+}
+
+/* ---------- Profile Card ---------- */
+.employee-profile-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    /* var(--border) */
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: relative;
+}
+
+.profile-main-info {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.profile-avatar-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #dbeafe;
+    color: #2563eb;
+    font-size: 32px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-details h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.profile-role-id {
+    font-size: 14px;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+
+.profile-contact {
+    display: flex;
+    gap: 24px;
+    font-size: 14px;
+    color: #334155;
+    margin-top: 8px;
+}
+
+.contact-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.contact-item svg {
+    color: #94a3b8;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.edit-profile-btn {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.edit-profile-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+/* ---------- Tabs ---------- */
+.employee-tabs {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 6px;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.tab-btn.active {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.tab-btn:hover:not(.active) {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+/* ---------- Info Section (Content) ---------- */
+.info-section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 32px;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 32px 64px;
+}
+
+.info-group label {
+    display: block;
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+
+.info-group div {
+    font-size: 15px;
+    font-weight: 500;
+    color: #1f2d3d;
+}
+
+/* ---------- Status Badge ---------- */
+/* Reuse .status-pill from Employees.css or redefine if needed, currently redefining for simpler scope */
+.status-badge {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 500;
+    margin-left: 10px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+    .employee-profile-card {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .profile-contact {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+}

@@ -1,77 +1,138 @@
-
-import React from "react";
+import React, { useState } from "react";
 import "../../style/Payroll.css";
+import PayslipModal from "./PayslipModal";
+import AdjustmentModal from "./AdjustmentModal";
 
-export default function PayrollEmployeesTable({ employees = [] }) {
+export default function PayrollEmployeesTable({ employees = [], onRefresh, isFinalized, onExport }) {
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustTarget, setAdjustTarget] = useState(null);
+  const [activeMenu, setActiveMenu] = useState(null);
+
+  // Close menu when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = () => setActiveMenu(null);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  const handleView = (record) => {
+    setSelectedRecord(record);
+    setShowModal(true);
+    setActiveMenu(null);
+  };
+
+  const handleAdjust = (record = null) => {
+    setAdjustTarget(record);
+    setShowAdjustModal(true);
+    setActiveMenu(null);
+  };
+
+  const toggleMenu = (e, id) => {
+    e.stopPropagation(); // Prevent document click from closing immediately
+    setActiveMenu(activeMenu === id ? null : id);
+  };
+
   return (
-    <div className="payroll-table-card">
-      {/* Header */}
-      <div className="payroll-table-header">
-        <h3>Employee Payroll Details</h3>
+    <>
+      <div className="payroll-table-card">
+        {/* Header */}
+        <div className="payroll-table-header">
+          <h3>Employee Payroll Details</h3>
 
-        <div className="payroll-table-actions">
-          <button className="outline-btn">Import Attendance</button>
-          <button className="outline-btn">Add Adjustments</button>
+          <div className="payroll-table-actions">
+            <button className="outline-btn" onClick={onExport} style={{ marginRight: '10px' }}>
+              Export Excel
+            </button>
+            {!isFinalized && (
+              <button className="outline-btn" onClick={() => handleAdjust(null)}>Add Adjustments</button>
+            )}
+          </div>
         </div>
+
+        {/* Table */}
+        <table className="payroll-table">
+          <thead>
+            <tr>
+              <th>EMPLOYEE</th>
+              <th>BASIC SALARY</th>
+              <th>ALLOWANCES</th>
+              <th>DEDUCTIONS</th>
+              <th>NET SALARY</th>
+              <th className="actions-col">ACTIONS</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {employees.length === 0 ? (
+              <tr><td colSpan="6" className="text-center py-6 text-gray-500">No payroll records found. Click to generate.</td></tr>
+            ) : employees.map((record) => (
+              <tr key={record._id}>
+                {/* Employee */}
+                <td>
+                  <div className="payroll-employee-cell">
+                    <div className="employee-name">{record.employee?.name || "Unknown"}</div>
+                    <div className="employee-meta">
+                      {record.employee?.code} • {record.employee?.department || record.employee?.designation}
+                    </div>
+                  </div>
+                </td>
+
+                <td>{record.basicSalary?.toLocaleString()} AED</td>
+
+                <td className="amount-positive" style={{ color: "green" }}>
+                  +{record.totalAllowances?.toLocaleString()} AED
+                </td>
+
+                <td className="amount-negative" style={{ color: "red" }}>
+                  -{record.totalDeductions?.toLocaleString()} AED
+                </td>
+
+                <td className="amount-net">
+                  {record.netSalary?.toLocaleString()} AED
+                </td>
+
+                <td className="actions-col">
+                  <div className="action-menu-container">
+                    <button className="action-toggle-btn" onClick={(e) => toggleMenu(e, record._id)}>
+                      &#8942;
+                    </button>
+                    {activeMenu === record._id && (
+                      <div className="action-dropdown-menu">
+                        <button className="action-menu-item" onClick={() => handleView(record)}>
+                          View Details
+                        </button>
+                        {!isFinalized && (
+                          <button className="action-menu-item" onClick={() => handleAdjust(record)}>
+                            Add Adjustment
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* Table */}
-      <table className="payroll-table">
-        <thead>
-          <tr>
-            <th>EMPLOYEE</th>
-            <th>BASIC SALARY</th>
-            <th>ALLOWANCES</th>
-            <th>DEDUCTIONS</th>
-            <th>NET SALARY</th>
-            <th className="actions-col">ACTIONS</th>
-          </tr>
-        </thead>
+      {/* Detail Modal */}
+      <PayslipModal
+        show={showModal}
+        onClose={() => setShowModal(false)}
+        record={selectedRecord}
+      />
 
-        <tbody>
-          {employees.map((emp) => (
-            <tr key={emp.id}>
-              {/* Employee */}
-              <td>
-                <div className="payroll-employee-cell">
-                  <div className="employee-name">{emp.name}</div>
-                  <div className="employee-meta">
-                    {emp.code} • {emp.department}
-                  </div>
-                </div>
-              </td>
-
-              <td>{emp.basicSalary} AED</td>
-
-              <td className="amount-positive" style={{color:"green"}}>
-                +{emp.allowances} AED
-              </td>
-
-              <td className="amount-negative" style={{color:"red"}}>
-                -{emp.deductions} AED
-              </td>
-
-              <td className="amount-net">
-                {emp.netSalary} AED
-              </td>
-
-              <td className="actions-col">
-                <button className="view-link">View Details</button>
-              </td>
-            </tr>
-          ))}
-
-          {/* Total Row */}
-          <tr className="payroll-total-row">
-            <td>Total</td>
-            <td>59,000 AED</td>
-            <td className="amount-positive" style={{color:"green"}}>+11,500 AED</td>
-            <td className="amount-negative" style={{color:"red"}}>-1,800 AED</td>
-            <td className="amount-net">68,700 AED</td>
-            <td />
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      {/* Adjustment Modal */}
+      <AdjustmentModal
+        show={showAdjustModal}
+        onClose={() => setShowAdjustModal(false)}
+        employees={employees}
+        initialRecord={adjustTarget}
+        onSuccess={onRefresh}
+      />
+    </>
   );
 }
