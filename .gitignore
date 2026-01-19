@@ -10,9 +10,14 @@ coverage/
 build/
 dist/
 
+# Environment files - Keep .env.example, ignore .env
+!.env.example
+.env
+.env.local
+.env.production
+
 # Misc
 .DS_Store
-.env
 .npm
 *.log
 logs

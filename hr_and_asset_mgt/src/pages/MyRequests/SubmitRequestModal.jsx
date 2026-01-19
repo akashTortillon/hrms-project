@@ -8,6 +8,9 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
   
+  // ✅ NEW: SubType state for Salary requests
+  const [salarySubType, setSalarySubType] = useState("salary_advance");
+  
   // Form states
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "Annual Leave",
@@ -57,6 +60,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
+        // ✅ NEW: Include subType for salary requests
+        requestData.subType = salarySubType;
         requestData.details = {
           amount: salaryForm.amount,
           repaymentPeriod: salaryForm.repaymentPeriod,
@@ -96,6 +101,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           purpose: ""
         });
         setActiveType("leave");
+        setSalarySubType("salary_advance"); // Reset subType
         onClose();
         if (onSuccess) {
           onSuccess();
@@ -235,6 +241,33 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {/* SALARY ADVANCE FORM */}
         {activeType === "salary" && (
           <div className="leave-form">
+            {/* ✅ NEW: RADIO BUTTONS FOR SUB-TYPE */}
+            <div className="salary-subtype-section">
+              <label className="subtype-label">Request Type</label>
+              <div className="radio-group">
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="salarySubType"
+                    value="salary_advance"
+                    checked={salarySubType === "salary_advance"}
+                    onChange={(e) => setSalarySubType(e.target.value)}
+                  />
+                  <span className="radio-text">Salary Advance</span>
+                </label>
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="salarySubType"
+                    value="loan"
+                    checked={salarySubType === "loan"}
+                    onChange={(e) => setSalarySubType(e.target.value)}
+                  />
+                  <span className="radio-text">Loan Application</span>
+                </label>
+              </div>
+            </div>
+
             <div>
               <label>Request Amount (AED)</label>
               <input
@@ -267,7 +300,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div>
               <label>Reason</label>
               <textarea
-                placeholder="Enter reason for salary advance..."
+                placeholder={`Enter reason for ${salarySubType === "loan" ? "loan" : "salary advance"}...`}
                 value={salaryForm.reason}
                 onChange={(e) =>
                   setSalaryForm({ ...salaryForm, reason: e.target.value })
