@@ -29,7 +29,10 @@ export default function HRManagement() {
         deleteConfig,
         setDeleteConfig,
         payrollState,
-        setPayrollState
+        setPayrollState,
+        shifts,
+        shiftState,
+        setShiftState
     } = useHRManagement();
 
     return (
@@ -42,6 +45,13 @@ export default function HRManagement() {
             </div>
 
             <div className="masters-grid">
+                {/* Shifts */}
+                <MastersCard
+                    title="Shifts"
+                    onAdd={() => handleOpenAdd("Shift")}
+                >
+                    <RenderList items={shifts} type="Shift" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                </MastersCard>
 
                 {/* Employee Types */}
                 <MastersCard
@@ -174,16 +184,65 @@ export default function HRManagement() {
                                         ))}
                                     </select>
                                 </div>
-                                <div className="form-group">
-                                    <label className="modal-form-label">Number of Days</label>
-                                    <input
-                                        type="number"
-                                        className="modal-form-input"
-                                        placeholder="e.g. 10"
-                                        value={payrollState.days}
-                                        onChange={(e) => setPayrollState({ ...payrollState, days: e.target.value })}
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Max Days / Year</label>
+                                        <input
+                                            type="number"
+                                            className="modal-form-input"
+                                            placeholder="e.g. 30"
+                                            value={payrollState.days}
+                                            onChange={(e) => setPayrollState({ ...payrollState, days: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Carry Forward Limit</label>
+                                        <input
+                                            type="number"
+                                            className="modal-form-input"
+                                            placeholder="e.g. 15"
+                                            value={payrollState.carryForwardLimit || ""}
+                                            onChange={(e) => setPayrollState({ ...payrollState, carryForwardLimit: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Accrual Rate</label>
+                                        <input
+                                            type="number"
+                                            className="modal-form-input"
+                                            placeholder="e.g. 2.5"
+                                            value={payrollState.accrualRate || ""}
+                                            onChange={(e) => setPayrollState({ ...payrollState, accrualRate: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Accrual Frequency</label>
+                                        <select
+                                            className="modal-form-input"
+                                            value={payrollState.accrualFrequency || "MONTHLY"}
+                                            onChange={(e) => setPayrollState({ ...payrollState, accrualFrequency: e.target.value })}
+                                        >
+                                            <option value="MONTHLY">Monthly</option>
+                                            <option value="YEARLY">Yearly</option>
+                                            <option value="CONTRACT_END">End of Contract</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="form-group flex items-center gap-2 mt-2">
+                                    <input
+                                        type="checkbox"
+                                        id="isPaid"
+                                        checked={payrollState.isPaid ?? true}
+                                        onChange={(e) => setPayrollState({ ...payrollState, isPaid: e.target.checked })}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor="isPaid" className="text-sm font-medium text-gray-700">Paid Leave</label>
+                                </div>
+
                                 <div className="form-group">
                                     <label className="modal-form-label">Description</label>
                                     <textarea
@@ -213,21 +272,75 @@ export default function HRManagement() {
                                     <input
                                         type="text"
                                         className="modal-form-input"
-                                        placeholder="e.g. Basic Salary Calculation"
+                                        placeholder="e.g. HRA / Transport / LOP"
                                         value={payrollState.ruleName}
                                         onChange={(e) => setPayrollState({ ...payrollState, ruleName: e.target.value })}
                                     />
                                 </div>
-                                <div className="form-group">
-                                    <label className="modal-form-label">Description / Formula</label>
-                                    <textarea
-                                        className="modal-form-input"
-                                        placeholder="Describe the rule..."
-                                        rows="3"
-                                        value={payrollState.description}
-                                        onChange={(e) => setPayrollState({ ...payrollState, description: e.target.value })}
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Category</label>
+                                        <select
+                                            className="modal-form-input"
+                                            value={payrollState.category || "ALLOWANCE"}
+                                            onChange={(e) => setPayrollState({ ...payrollState, category: e.target.value })}
+                                        >
+                                            <option value="ALLOWANCE">Allowance</option>
+                                            <option value="DEDUCTION">Deduction</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Calculation Type</label>
+                                        <select
+                                            className="modal-form-input"
+                                            value={payrollState.calculationType || "FIXED"}
+                                            onChange={(e) => setPayrollState({ ...payrollState, calculationType: e.target.value })}
+                                        >
+                                            <option value="FIXED">Fixed Amount</option>
+                                            <option value="PERCENTAGE">Percentage (%)</option>
+                                            <option value="DAILY_RATE">Daily Rate (x Days)</option>
+                                            <option value="HOURLY_MULTIPLIER">Hourly (x Multiplier)</option>
+                                        </select>
+                                    </div>
                                 </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Value</label>
+                                        <input
+                                            type="number"
+                                            className="modal-form-input"
+                                            placeholder="Amount or %"
+                                            value={payrollState.value || ""}
+                                            onChange={(e) => setPayrollState({ ...payrollState, value: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Base (if %)</label>
+                                        <select
+                                            className="modal-form-input"
+                                            value={payrollState.base || "BASIC_SALARY"}
+                                            onChange={(e) => setPayrollState({ ...payrollState, base: e.target.value })}
+                                            disabled={payrollState.calculationType === "FIXED"}
+                                        >
+                                            <option value="BASIC_SALARY">Basic Salary</option>
+                                            <option value="GROSS_SALARY">Gross Salary</option>
+                                            <option value="HOURLY_RATE">Hourly Rate</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="form-group flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="isAutomatic"
+                                        checked={payrollState.isAutomatic}
+                                        onChange={(e) => setPayrollState({ ...payrollState, isAutomatic: e.target.checked })}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor="isAutomatic" className="text-sm font-medium text-gray-700">Apply Automatically to All Employees</label>
+                                </div>
+
                                 <div className="text-right">
                                     <button
                                         onClick={() => setPayrollState({ ...payrollState, step: 'SELECTION', subType: '' })}
@@ -238,6 +351,60 @@ export default function HRManagement() {
                                 </div>
                             </div>
                         )}
+                    </div>
+                ) : modalType === "Shift" ? (
+                    <div className="space-y-4">
+                        <div className="form-group">
+                            <label className="modal-form-label">Shift Name</label>
+                            <input
+                                type="text"
+                                className="modal-form-input"
+                                placeholder="e.g. Day Shift"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="form-group">
+                                <label className="modal-form-label">Start Time</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.startTime}
+                                    onChange={(e) => setShiftState({ ...shiftState, startTime: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="modal-form-label">End Time</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.endTime}
+                                    onChange={(e) => setShiftState({ ...shiftState, endTime: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="modal-form-label">Standard Work Hours</label>
+                            <input
+                                type="number"
+                                className="modal-form-input"
+                                placeholder="e.g. 9"
+                                value={shiftState.workHours}
+                                onChange={(e) => setShiftState({ ...shiftState, workHours: e.target.value })}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Defines the base hours for Hourly Rate & Overtime calculation (Default: 9)</p>
+                        </div>
+                        <div className="form-group">
+                            <label className="modal-form-label">Late Mark After</label>
+                            <input
+                                type="time"
+                                className="modal-form-input"
+                                value={shiftState.lateLimit}
+                                onChange={(e) => setShiftState({ ...shiftState, lateLimit: e.target.value })}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Employee checked in after this time will be marked Late</p>
+                        </div>
                     </div>
                 ) : (
                     // Generic Form for other Masters

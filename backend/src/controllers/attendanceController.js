@@ -1,5 +1,231 @@
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
+import Master from "../models/masterModel.js";
+import Request from "../models/requestModel.js";
+import User from "../models/userModel.js";
+import SystemSettings from "../models/systemSettingsModel.js";
+import mongoose from "mongoose";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import * as XLSX from "xlsx";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Helper: Parse time to minutes (HH:MM) -> minutes
+const toMinutes = (time) => {
+  if (!time) return 0;
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+};
+
+// Helper: Get Holidays Set
+const getHolidaysSet = async () => {
+  const settings = await SystemSettings.findOne();
+  const holidaySet = new Set();
+  if (settings && settings.holidays) {
+    settings.holidays.forEach(h => {
+      if (h.date) {
+        const d = new Date(h.date);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        holidaySet.add(`${yyyy}-${mm}-${dd}`);
+      }
+    });
+  }
+  return holidaySet;
+};
+
+// Helper: Calculate duration between two times in HH:MM format
+const calculateDuration = (start, end) => {
+  if (!start || !end) return null;
+  const startMin = toMinutes(start);
+  const endMin = toMinutes(end);
+  let duration = endMin - startMin;
+  if (duration < 0) duration += 24 * 60; // Handle overnight
+
+  const h = Math.floor(duration / 60);
+  const m = duration % 60;
+  return `${h}h ${m}m`;
+};
+
+/**
+ * Get Shift Rules from Master
+ */
+const getShiftRules = async (shiftName) => {
+  const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
+  if (shiftMaster && shiftMaster.metadata) {
+    return {
+      start: shiftMaster.metadata.startTime || "09:00",
+      end: shiftMaster.metadata.endTime || "18:00",
+      lateLimit: shiftMaster.metadata.lateLimit || "09:15"
+    };
+  }
+  // Default fallback if shift not found
+  return { start: "09:00", end: "18:00", lateLimit: "09:15" };
+};
+
+/**
+ * SYNC Biometrics
+ * Reads mock data and processes attendance
+ */
+export const syncBiometrics = async (req, res) => {
+  try {
+    console.log("Starting Biometric Sync...");
+    const dataPath = path.join(__dirname, "../data/mockBiometricData.json");
+    if (!fs.existsSync(dataPath)) {
+      return res.status(404).json({ message: "Biometric data file not found" });
+    }
+
+    const rawData = fs.readFileSync(dataPath, "utf-8");
+    const logs = JSON.parse(rawData);
+    console.log(`Found ${logs.length} biometric logs.`);
+
+    // 1. Group logs by Employee + Date
+    const groupedData = {};
+
+    for (const log of logs) {
+      const date = log.timestamp.split("T")[0];
+      const time = log.timestamp.split("T")[1].substring(0, 5); // HH:MM
+      const key = `${log.employeeCode}_${date}`;
+
+      if (!groupedData[key]) {
+        groupedData[key] = {
+          employeeCode: log.employeeCode,
+          date,
+          checkIn: null,
+          checkOut: null
+        };
+      }
+
+      if (log.type === "IN") {
+        // Keep earliest check-in
+        if (!groupedData[key].checkIn || time < groupedData[key].checkIn) {
+          groupedData[key].checkIn = time;
+        }
+      } else if (log.type === "OUT") {
+        // Keep latest check-out
+        if (!groupedData[key].checkOut || time > groupedData[key].checkOut) {
+          groupedData[key].checkOut = time;
+        }
+      }
+    }
+
+    // 2. Process each grouped record
+    let syncedCount = 0;
+    const errors = [];
+
+    for (const key in groupedData) {
+      const record = groupedData[key];
+      // console.log(`Processing: ${record.employeeCode} on ${record.date} | In: ${record.checkIn} Out: ${record.checkOut}`);
+
+      const employee = await Employee.findOne({ code: record.employeeCode });
+
+      if (!employee) {
+        errors.push(`Employee not found: ${record.employeeCode}`);
+        continue;
+      }
+
+      // Get Shift Rules
+      const shiftName = employee.shift || "Day Shift";
+      const rules = await getShiftRules(shiftName);
+
+      // Determine Status
+      let status = "Absent";
+      if (record.checkIn) {
+        const checkInMin = toMinutes(record.checkIn);
+        const lateLimitMin = toMinutes(rules.lateLimit);
+        status = checkInMin <= lateLimitMin ? "Present" : "Late";
+      }
+
+      // Calculate Work Hours
+      const workHours = calculateDuration(record.checkIn, record.checkOut);
+
+      console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
+
+      // Upsert Attendance
+      await Attendance.findOneAndUpdate(
+        { employee: employee._id, date: record.date },
+        {
+          employee: employee._id,
+          date: record.date,
+          shift: shiftName,
+          checkIn: record.checkIn,
+          checkOut: record.checkOut,
+          status: status,
+          workHours: workHours
+        },
+        { upsert: true, new: true }
+      );
+      syncedCount++;
+    }
+
+    console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
+
+    res.json({ message: "Sync successful", synced: syncedCount, errors });
+  } catch (error) {
+    console.error("Sync error:", error);
+    res.status(500).json({ message: "Server error during sync" });
+  }
+};
+
+/**
+ * GET daily attendance
+ * /api/attendance?date=YYYY-MM-DD
+ */
+// Helper: Get Set of EmployeeIDs who are on APPROVED LEAVE for a specific date
+const getApprovedLeaves = async (date, employees) => {
+  const onLeaveEmployeeIds = new Set();
+
+  // 1. Map Employee Emails -> Employee IDs
+  const emailToEmpId = {};
+  const emails = [];
+  employees.forEach(emp => {
+    if (emp.email) {
+      emailToEmpId[emp.email] = emp._id.toString();
+      emails.push(emp.email);
+    }
+  });
+
+  // 2. Find Users for these employees
+  const users = await User.find({ email: { $in: emails } });
+  const userIdToEmpId = {};
+  const userIds = [];
+
+  users.forEach(u => {
+    userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
+    userIds.push(u._id);
+  });
+
+  // 3. Find APPROVED LEAVE Requests for these users
+  const requests = await Request.find({
+    userId: { $in: userIds },
+    requestType: "LEAVE",
+    status: "APPROVED"
+  });
+
+  // 4. Check date overlap
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+
+  requests.forEach(req => {
+    if (req.details && req.details.startDate && req.details.endDate) {
+      const start = new Date(req.details.startDate);
+      const end = new Date(req.details.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+
+      if (targetDate >= start && targetDate <= end) {
+        const empId = userIdToEmpId[req.userId.toString()];
+        if (empId) onLeaveEmployeeIds.add(empId);
+      }
+    }
+  });
+
+  return onLeaveEmployeeIds;
+};
 
 /**
  * GET daily attendance
@@ -14,33 +240,40 @@ export const getDailyAttendance = async (req, res) => {
     }
 
     // Get all employees
-    const employees = await Employee.find().sort({ code: 1 });
+    const employees = await Employee.find({ status: "Active" }).sort({ code: 1 }); // Only Active employees
 
     // Get attendance for the date
-    const attendanceRecords = await Attendance.find({ date }).populate(
-      "employee"
-    );
+    const attendanceRecords = await Attendance.find({ date }).populate("employee");
 
-    // Merge employees + attendance
+    // Get Approved Leaves for this date
+    const onLeaveSet = await getApprovedLeaves(date, employees);
+
+    // Merge
     const attendanceMap = {};
     attendanceRecords.forEach((rec) => {
-      attendanceMap[rec.employee._id] = rec;
+      if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
     });
 
     const result = employees.map((emp) => {
-      const record = attendanceMap[emp._id];
+      const record = attendanceMap[emp._id.toString()];
+      // Check if employee is strictly On Leave in their profile OR has an approved leave request
+      const isProfileOnLeave = emp.status === "On Leave";
+      const isRequestOnLeave = onLeaveSet.has(emp._id.toString());
 
       return {
-        _id: record?._id || null,
+        _id: record?._id || null, // If null, no record yet
         employeeId: emp._id,
         name: emp.name,
         code: emp.code,
         department: emp.department,
-        shift: record?.shift || "Day Shift",
-        checkIn: record?.checkIn || null,
-        checkOut: record?.checkOut || null,
-        workHours: record?.workHours || null,
-        status: record?.status || "Present"
+        shift: record?.shift || emp.shift || "Day Shift",
+        checkIn: record?.checkIn || "-",
+        checkOut: record?.checkOut || "-",
+        workHours: record?.workHours || "-",
+        // If record exists, use its status. 
+        // If not, check if profile says "On Leave" OR Leave Request Approved. Otherwise "Absent".
+        status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
+        avatar: emp.avatar // if available
       };
     });
 
@@ -52,63 +285,130 @@ export const getDailyAttendance = async (req, res) => {
 };
 
 /**
- * CREATE attendance (auto-create if missing)
+ * GET Monthly Attendance
+ * /api/attendance/monthly?month=MM&year=YYYY
+ */
+export const getMonthlyAttendance = async (req, res) => {
+  try {
+    const { month, year } = req.query;
+
+    if (!month || !year) {
+      return res.status(400).json({ message: "Month and Year are required" });
+    }
+
+    const startDate = `${year}-${month.padStart(2, "0")}-01`;
+    // Calculate end date properly
+    const nextMonth = new Date(parseInt(year), parseInt(month), 1); // Month is 0-indexed in Date constructor? No, wait. 
+    // Actually, simple string match is safer for YYYY-MM prefix if we store as String.
+    // But let's stick to the stored Date String format YYYY-MM-DD.
+
+    // Construct regex or range query
+    const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+
+    const employees = await Employee.find({ status: "Active" }).sort({ code: 1 });
+    const attendanceRecords = await Attendance.find({
+      date: { $regex: regex }
+    });
+
+    // Get Holidays
+    const holidaySet = await getHolidaysSet();
+
+    // Map attendance by Employee -> Date
+    const attendanceMap = {};
+    attendanceRecords.forEach(rec => {
+      if (!attendanceMap[rec.employee]) attendanceMap[rec.employee] = {};
+      attendanceMap[rec.employee][rec.date] = rec;
+    });
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = i + 1;
+      return `${year}-${month.padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
+    });
+
+    const result = employees.map(emp => {
+      const empAttendance = attendanceMap[emp._id] || {};
+      const attendanceData = {};
+
+      let present = 0, late = 0, absent = 0, leave = 0;
+
+      days.forEach(day => {
+        const record = empAttendance[day];
+        const dateObj = new Date(day);
+        const isSunday = dateObj.getDay() === 0;
+        const isHoliday = holidaySet.has(day);
+
+        let status;
+
+        if (record) {
+          status = record.status;
+        } else {
+          if (emp.status === "On Leave") {
+            status = "On Leave";
+          } else if (isSunday) {
+            status = "Weekend";
+          } else if (isHoliday) {
+            status = "Holiday";
+          } else {
+            status = "Absent";
+          }
+        }
+
+        attendanceData[day] = {
+          status,
+          checkIn: record?.checkIn,
+          checkOut: record?.checkOut
+        };
+
+        if (status === "Present") present++;
+        else if (status === "Late") late++;
+        else if (status === "On Leave") leave++;
+        else if (status === "Absent") absent++;
+        // Weekends don't count towards absent
+      });
+
+      return {
+        _id: emp._id,
+        name: emp.name,
+        code: emp.code,
+        stats: { present, late, absent, leave },
+        attendance: attendanceData
+      };
+    });
+
+    res.json(result);
+
+  } catch (error) {
+    console.error("Get monthly attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * CREATE attendance (mark manually)
  */
 export const markAttendance = async (req, res) => {
   try {
     const { employeeId, date, checkIn, checkOut, shift } = req.body;
 
-    const SHIFT_CONFIG = {
-      "Day Shift": { start: "08:00", end: "17:00", lateAfter: "08:00" },
-      "Night Shift": { start: "20:00", end: "05:00", lateAfter: "20:00" }
-    };
+    // Get Shift Rules
+    const rules = await getShiftRules(shift || "Day Shift");
 
-    const toMinutes = (time) => {
-      const [h, m] = time.split(":").map(Number);
-      return h * 60 + m;
-    };
-
-    const normalize = (time, shiftStart) => {
-      let mins = toMinutes(time);
-      if (shiftStart >= 720 && mins < shiftStart) mins += 1440;
-      return mins;
-    };
-
+    // Determine Status
     let status = "Absent";
-    let workHours = null;
-
     if (checkIn) {
-      const rule = SHIFT_CONFIG[shift || "Day Shift"];
       const checkInMin = toMinutes(checkIn);
-      const lateMin = toMinutes(rule.lateAfter);
-      status = checkInMin <= lateMin ? "Present" : "Late";
+      const lateLimitMin = toMinutes(rules.lateLimit);
+      status = checkInMin <= lateLimitMin ? "Present" : "Late";
     }
 
-    if (checkIn && checkOut) {
-      const rule = SHIFT_CONFIG[shift || "Day Shift"];
-
-      let shiftStart = toMinutes(rule.start);
-      let shiftEnd = toMinutes(rule.end);
-
-      let inMin = normalize(checkIn, shiftStart);
-      let outMin = normalize(checkOut, shiftStart);
-
-      if (shiftEnd <= shiftStart) shiftEnd += 1440;
-
-      const actualStart = Math.max(inMin, shiftStart);
-      const actualEnd = Math.min(outMin, shiftEnd);
-
-      const minutes = Math.max(actualEnd - actualStart, 0);
-
-      const h = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      workHours = `${h}h ${m}m`;
-    }
+    // Calculate Work Hours
+    const workHours = calculateDuration(checkIn, checkOut);
 
     const attendance = await Attendance.findOneAndUpdate(
       { employee: employeeId, date },
-      { 
-        employee: employeeId, 
+      {
+        employee: employeeId,
         date,
         shift: shift || "Day Shift",
         checkIn: checkIn || null,
@@ -126,59 +426,15 @@ export const markAttendance = async (req, res) => {
   }
 };
 
-
-
+/**
+ * Update single attendance record
+ */
 export const updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const { checkIn, checkOut, shift } = req.body;
+    const { checkIn, checkOut, shift, status } = req.body;
 
-    const SHIFT_CONFIG = {
-      "Day Shift": { start: "08:00", end: "17:00", lateAfter: "08:00" },
-      "Night Shift": { start: "20:00", end: "05:00", lateAfter: "20:00" }
-    };
-
-    const toMinutes = (time) => {
-      const [h, m] = time.split(":").map(Number);
-      return h * 60 + m;
-    };
-
-    const normalize = (time, shiftStart) => {
-      let mins = toMinutes(time);
-      if (shiftStart >= 720 && mins < shiftStart) mins += 1440;
-      return mins;
-    };
-
-    let status = "Absent";
-    let workHours = null;
-
-    if (checkIn) {
-      const rule = SHIFT_CONFIG[shift];
-      const checkInMin = toMinutes(checkIn);
-      const lateMin = toMinutes(rule.lateAfter);
-      status = checkInMin <= lateMin ? "Present" : "Late";
-    }
-
-    if (checkIn && checkOut) {
-      const rule = SHIFT_CONFIG[shift];
-
-      let shiftStart = toMinutes(rule.start);
-      let shiftEnd = toMinutes(rule.end);
-
-      let inMin = normalize(checkIn, shiftStart);
-      let outMin = normalize(checkOut, shiftStart);
-
-      if (shiftEnd <= shiftStart) shiftEnd += 1440;
-
-      const actualStart = Math.max(inMin, shiftStart);
-      const actualEnd = Math.min(outMin, shiftEnd);
-
-      const minutes = Math.max(actualEnd - actualStart, 0);
-
-      const h = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      workHours = `${h}h ${m}m`;
-    }
+    const workHours = calculateDuration(checkIn, checkOut);
 
     const updated = await Attendance.findByIdAndUpdate(
       id,
@@ -190,5 +446,324 @@ export const updateAttendance = async (req, res) => {
   } catch (error) {
     console.error("Update attendance error:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * GET Attendance Stats for an Employee
+ */
+export const getEmployeeAttendanceStats = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    // Start Date: Join Date or Created At or Today fallback
+    const startDate = new Date(employee.joinDate || employee.createdAt || new Date());
+    startDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    // Fetch ALL records for the employee
+    const records = await Attendance.find({ employee: employeeId });
+
+    const holidaySet = await getHolidaysSet();
+    const recordMap = {};
+    records.forEach(r => recordMap[r.date] = r);
+
+    let present = 0, absent = 0, leave = 0, late = 0;
+
+    // Iterate from Start Date to Today
+    let currentDate = new Date(startDate);
+
+    while (currentDate <= today) {
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+      const day = String(currentDate.getDate()).padStart(2, "0");
+      const dateStr = `${year}-${month}-${day}`;
+
+      const isSunday = currentDate.getDay() === 0;
+      const isHoliday = holidaySet.has(dateStr);
+      const record = recordMap[dateStr];
+
+      if (record) {
+        if (record.status === "Present") present++;
+        else if (record.status === "Late") late++;
+        else if (record.status === "On Leave") leave++;
+        else if (record.status === "Absent") absent++;
+      } else {
+        // No record -> Implicit Status
+        // Only count implicit absent if typically a working day (not Sunday, not Holiday)
+        if (!isSunday && !isHoliday) {
+          absent++;
+        }
+      }
+
+      // Next Day
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    res.json({
+      present,
+      absent,
+      leave,
+      late,
+      total: present + absent + leave + late
+    });
+
+  } catch (error) {
+    console.error("Get attendance stats error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+/**
+ * GET Employee Attendance History (Single Employee, Monthly)
+ */
+export const getEmployeeAttendanceHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { month, year } = req.query; // Optional, default to current
+
+    const now = new Date();
+    const targetMonth = month ? parseInt(month) : now.getMonth() + 1;
+    const targetYear = year ? parseInt(year) : now.getFullYear();
+
+    const regex = new RegExp(`^${targetYear}-${String(targetMonth).padStart(2, "0")}`);
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    const attendanceRecords = await Attendance.find({
+      employee: employeeId,
+      date: { $regex: regex }
+    });
+
+    const holidaySet = await getHolidaysSet();
+    const attendanceMap = {};
+    attendanceRecords.forEach(rec => attendanceMap[rec.date] = rec);
+
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const history = [];
+
+    // Determine cutoff for "Future" (end of today)
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dateObj = new Date(dateStr);
+
+      const isSunday = dateObj.getDay() === 0;
+      const isHoliday = holidaySet.has(dateStr);
+      const record = attendanceMap[dateStr];
+
+      let status = "Absent";
+
+      if (record) {
+        status = record.status;
+      } else {
+        if (dateObj > today) status = "-"; // Future
+        else if (employee.status === "On Leave") status = "On Leave";
+        else if (isSunday) status = "Weekend";
+        else if (isHoliday) status = "Holiday";
+        else status = "Absent";
+      }
+
+      history.push({
+        date: dateStr,
+        status,
+        checkIn: record?.checkIn || "-",
+        checkOut: record?.checkOut || "-",
+        workHours: record?.workHours || "-"
+      });
+    }
+
+    res.json(history);
+  } catch (error) {
+    console.error("Get History Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * EXPORT Attendance to Excel
+ */
+export const exportAttendance = async (req, res) => {
+  try {
+    const { view, date, month, year, department, shift, search } = req.query;
+
+    // 1. Fetch Employees (with Filters)
+    let matchStage = { status: "Active" };
+    if (department) matchStage.department = department;
+
+    // Note: Filtering by 'shift' in Employee model refers to 'Default Shift'. 
+    // Attendance record might have a different shift. 
+    // For simplicity, we'll filter by Employee Default Shift first, or post-process.
+    // Given the frontend behaviour, let's filter after mapping if possible, or filter by default shift here.
+    // The frontend filters by the "Shift" displayed in the table, which comes from the record or default.
+    // Let's filter post-fetching to align exactly with frontend behavior.
+
+    // Filter by Search (Name, Code)
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const employees = await Employee.find(matchStage).sort({ code: 1 });
+    let finalRows = [];
+    let headers = [];
+    let cols = [];
+
+    if (view === "month" && month && year) {
+      // --- MONTHLY EXPORT ---
+      const startDate = `${year}-${month.padStart(2, "0")}-01`;
+      const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+
+      const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
+      const holidaySet = await getHolidaysSet();
+
+      // Attendance Map
+      const attendanceMap = {};
+      attendanceRecords.forEach(rec => {
+        if (!attendanceMap[rec.employee]) attendanceMap[rec.employee] = {};
+        attendanceMap[rec.employee][rec.date] = rec;
+      });
+
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+      // Build Matrix
+      finalRows = employees.map(emp => {
+        const row = {
+          "Employee ID": emp.code,
+          "Name": emp.name,
+          "Department": emp.department,
+          "Shift": emp.shift || "Day Shift"
+        };
+
+        const empAttendance = attendanceMap[emp._id] || {};
+        let present = 0, late = 0, absent = 0, leave = 0;
+
+        days.forEach(d => {
+          const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const record = empAttendance[dateKey];
+          const dateObj = new Date(dateKey);
+          const isSunday = dateObj.getDay() === 0;
+          const isHoliday = holidaySet.has(dateKey);
+
+          let status = "";
+          let cellValue = "";
+
+          if (record) {
+            status = record.status;
+            cellValue = record.status === "Present" ? "P" :
+              record.status === "Late" ? "L" :
+                record.status === "Absent" ? "A" :
+                  record.status === "On Leave" ? "OL" : record.status;
+          } else {
+            if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
+            else if (isSunday) { status = "Weekend"; cellValue = "W"; }
+            else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
+            else { status = "Absent"; cellValue = "A"; }
+          }
+
+          row[String(d)] = cellValue;
+
+          // Stats
+          if (status === "Present") present++;
+          else if (status === "Late") late++;
+          else if (status === "On Leave") leave++;
+          else if (status === "Absent") absent++;
+        });
+
+        row["Present"] = present;
+        row["Late"] = late;
+        row["Absent"] = absent;
+        row["Leave"] = leave;
+
+        // Determine if row matches Shift Filter (if applied)
+        // Using Default Shift
+        if (shift && (emp.shift || "Day Shift") !== shift) return null;
+
+        return row;
+      }).filter(r => r !== null);
+
+      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(String)];
+
+    } else {
+      // --- DAILY EXPORT ---
+      // Defaults to today if no date? Controller should require date
+      const targetDate = date || new Date().toISOString().split('T')[0];
+
+      const attendanceRecords = await Attendance.find({ date: targetDate }).populate("employee");
+      const onLeaveSet = await getApprovedLeaves(targetDate, employees);
+
+      const attendanceMap = {};
+      attendanceRecords.forEach((rec) => {
+        if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
+      });
+
+      finalRows = employees.map(emp => {
+        const record = attendanceMap[emp._id.toString()];
+        const isProfileOnLeave = emp.status === "On Leave";
+        const isRequestOnLeave = onLeaveSet.has(emp._id.toString());
+
+        const effectiveStatus = record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent");
+        const effectiveShift = record?.shift || emp.shift || "Day Shift";
+
+        // Filter Check
+        if (shift && effectiveShift !== shift) return null;
+
+        return {
+          "Employee ID": emp.code,
+          "Name": emp.name,
+          "Department": emp.department,
+          "Shift": effectiveShift,
+          "Check In": record?.checkIn || "-",
+          "Check Out": record?.checkOut || "-",
+          "Work Hours": record?.workHours || "-",
+          "Status": effectiveStatus
+        };
+      }).filter(r => r !== null);
+    }
+
+    // Generate Excel
+    const worksheet = XLSX.utils.json_to_sheet(finalRows);
+
+    // Formatting cols
+    const colWidths = [
+      { wch: 12 }, // ID 
+      { wch: 25 }, // Name
+      { wch: 20 }, // Dept
+      { wch: 15 }, // Shift
+      { wch: 10 }, // Stats/CheckIn
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+    ];
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+    const cleanupName = (view === "month" && month)
+      ? `Attendance_${month}-${year}`
+      : `Attendance_${date}`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${cleanupName}.xlsx"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+
+  } catch (error) {
+    console.error("Export Attendance Error:", error);
+    res.status(500).json({ message: "Export failed" });
   }
 };

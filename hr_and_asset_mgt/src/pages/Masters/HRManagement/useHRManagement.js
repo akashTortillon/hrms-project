@@ -7,7 +7,8 @@ import {
     companyDocumentTypeService,
     nationalityService,
     payrollRuleService,
-    workflowTemplateService
+    workflowTemplateService,
+    shiftService
 } from "../../../services/masterService";
 
 export default function useHRManagement() {
@@ -37,6 +38,14 @@ export default function useHRManagement() {
         description: ''
     });
 
+    const [shifts, setShifts] = useState([]);
+    const [shiftState, setShiftState] = useState({
+        startTime: '09:00',
+        endTime: '18:00',
+        lateLimit: '09:15',
+        workHours: '9'
+    });
+
     useEffect(() => {
         fetchAll();
     }, []);
@@ -49,6 +58,7 @@ export default function useHRManagement() {
         try { setNationalities(await nationalityService.getAll()); } catch (e) { console.error(e); }
         try { setPayrollRules(await payrollRuleService.getAll()); } catch (e) { console.error(e); }
         try { setWorkflowTemplates(await workflowTemplateService.getAll()); } catch (e) { console.error(e); }
+        try { setShifts(await shiftService.getAll()); } catch (e) { console.error(e); }
     };
 
     const handleOpenAdd = (type) => {
@@ -62,7 +72,22 @@ export default function useHRManagement() {
             leaveTypeId: '',
             ruleName: '',
             days: '',
-            description: ''
+            accrualRate: '',
+            accrualFrequency: 'MONTHLY',
+            carryForwardLimit: '',
+            isPaid: true,
+            description: '',
+            category: 'ALLOWANCE',
+            calculationType: 'FIXED',
+            value: '',
+            base: 'BASIC_SALARY',
+            isAutomatic: true
+        });
+        setShiftState({
+            startTime: '09:00',
+            endTime: '18:00',
+            lateLimit: '09:15',
+            workHours: '9'
         });
         setShowModal(true);
     };
@@ -82,9 +107,27 @@ export default function useHRManagement() {
                 leaveTypeId: meta.leaveTypeId || '',
                 ruleName: isLeave ? '' : item.name,
                 days: meta.days || '',
-                description: item.description || ''
+                accrualRate: meta.accrualRate || '',
+                accrualFrequency: meta.accrualFrequency || 'MONTHLY',
+                carryForwardLimit: meta.carryForwardLimit || '',
+                isPaid: meta.isPaid ?? true,
+                description: item.description || '',
+                category: meta.category || 'ALLOWANCE',
+                calculationType: meta.calculationType || 'FIXED',
+                value: meta.value || '',
+                base: meta.base || 'BASIC_SALARY',
+                isAutomatic: meta.isAutomatic ?? true
             });
             // We don't rely on inputValue for Payroll Rules edit, but setting it safely
+            setInputValue(item.name);
+        } else if (type === "Shift") {
+            const meta = item.metadata || {};
+            setShiftState({
+                startTime: meta.startTime || '09:00',
+                endTime: meta.endTime || '18:00',
+                lateLimit: meta.lateLimit || '09:15',
+                workHours: meta.workHours || '9'
+            });
             setInputValue(item.name);
         } else {
             setInputValue(item.name);
@@ -136,7 +179,11 @@ export default function useHRManagement() {
                             metadata: {
                                 type: 'LEAVE_CONFIG',
                                 leaveTypeId: payrollState.leaveTypeId,
-                                days: payrollState.days
+                                days: payrollState.days,
+                                accrualRate: Number(payrollState.accrualRate),
+                                accrualFrequency: payrollState.accrualFrequency,
+                                carryForwardLimit: Number(payrollState.carryForwardLimit),
+                                isPaid: payrollState.isPaid
                             }
                         };
                     } else {
@@ -145,7 +192,12 @@ export default function useHRManagement() {
                             name: payrollState.ruleName,
                             description: payrollState.description,
                             metadata: {
-                                type: 'PAYROLL_CONFIG'
+                                type: 'PAYROLL_CONFIG',
+                                category: payrollState.category,
+                                calculationType: payrollState.calculationType,
+                                value: Number(payrollState.value),
+                                base: payrollState.base,
+                                isAutomatic: payrollState.isAutomatic
                             }
                         };
                     }
@@ -161,6 +213,19 @@ export default function useHRManagement() {
                 if (editId) await workflowTemplateService.update(editId, inputValue);
                 else await workflowTemplateService.add(inputValue);
                 setWorkflowTemplates(await workflowTemplateService.getAll());
+            } else if (modalType === "Shift") {
+                const payload = {
+                    name: inputValue,
+                    metadata: {
+                        startTime: shiftState.startTime,
+                        endTime: shiftState.endTime,
+                        lateLimit: shiftState.lateLimit,
+                        workHours: Number(shiftState.workHours)
+                    }
+                };
+                if (editId) await shiftService.update(editId, payload);
+                else await shiftService.add(payload);
+                setShifts(await shiftService.getAll());
             }
             toast.success(`${modalType} ${editId ? "updated" : "added"} successfully`);
             setShowModal(false);
@@ -183,7 +248,9 @@ export default function useHRManagement() {
         else if (type === "Company Document Type") item = companyDocumentTypes.find(i => i._id === id);
         else if (type === "Nationality") item = nationalities.find(i => i._id === id);
         else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
+        else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
         else if (type === "Workflow Template") item = workflowTemplates.find(i => i._id === id);
+        else if (type === "Shift") item = shifts.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -216,6 +283,9 @@ export default function useHRManagement() {
             } else if (type === "Workflow Template") {
                 await workflowTemplateService.delete(id);
                 setWorkflowTemplates(workflowTemplates.filter(i => i._id !== id));
+            } else if (type === "Shift") {
+                await shiftService.delete(id);
+                setShifts(shifts.filter(i => i._id !== id));
             }
             toast.success("Deleted successfully");
             setDeleteConfig({ ...deleteConfig, show: false });
@@ -249,6 +319,11 @@ export default function useHRManagement() {
         deleteConfig, // State for the modal
         setDeleteConfig,
         payrollState,
-        setPayrollState
+        setDeleteConfig,
+        payrollState,
+        setPayrollState,
+        shifts,
+        shiftState,
+        setShiftState
     };
 }

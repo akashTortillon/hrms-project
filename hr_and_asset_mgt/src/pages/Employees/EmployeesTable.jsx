@@ -1,9 +1,11 @@
 
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Employees.css";
 
-export default function EmployeesTable({ employees = [], onEdit,onDelete }) {
+export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
+  const navigate = useNavigate();
   return (
     <div className="employees-table-card">
       <table className="employees-table">
@@ -23,7 +25,11 @@ export default function EmployeesTable({ employees = [], onEdit,onDelete }) {
             <tr key={emp.id}>
               {/* Employee */}
               <td>
-                <div className="employee-cell">
+                <div
+                  className="employee-cell"
+                  onClick={() => navigate(`/app/employees/${emp.id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <div className="employee-avatar">
                     {emp.name.charAt(0)}
                   </div>
@@ -63,28 +69,22 @@ export default function EmployeesTable({ employees = [], onEdit,onDelete }) {
               {/* Actions */}
               <td className="actions-col">
                 <div className="actions-btn">
-                    <button
-                      type="button"
-                      className="icon-btn edit-btn"
-                      onClick={() => onEdit && onEdit(emp)}
-                      title="Edit Employee"
-                    >
-                      <SvgIcon name="edit" size={18} />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="icon-btn delete-btn"
-                      onClick={() => onDelete && onDelete(emp)}
-                      title="Delete Employee"
-                    >
-                      <SvgIcon name="delete" size={18} />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="icon-btn delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete && onDelete(emp);
+                    }}
+                    title="Delete Employee"
+                  >
+                    <SvgIcon name="delete" size={18} />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
-          
+
         </tbody>
       </table>
     </div>

@@ -1,0 +1,499 @@
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import "../../style/EmployeeDetail.css";
+
+// Icons (using bootstrap-icons or valid imports, assuming generic svgs or library usage in project)
+const BackArrowIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+);
+
+const PhoneIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+    </svg>
+);
+
+const LocationIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+        <circle cx="12" cy="10" r="3"></circle>
+    </svg>
+);
+
+const MailIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+        <polyline points="22,6 12,13 2,6"></polyline>
+    </svg>
+);
+
+const EditIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+    </svg>
+);
+
+
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument } from "../../services/employeeService";
+import { getDepartments } from "../../services/masterService";
+import EditEmployeeModal from "./EditEmployeeModal.jsx";
+import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
+import { toast } from "react-toastify";
+
+import { getEmployeeAttendanceStats } from "../../services/attendanceService";
+import { getEmployeeTrainings } from "../../services/trainingService";
+
+export default function EmployeeDetail() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState("Personal Info");
+    const [employee, setEmployee] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // Edit Modal State
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editMode, setEditMode] = useState("all");
+    const [deptOptions, setDeptOptions] = useState([]);
+
+    // Document State
+    const [documents, setDocuments] = useState([]);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+
+    // Attendance & Training State
+    const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, late: 0, total: 0 });
+    const [trainings, setTrainings] = useState([]);
+
+    // Fetch Employee Data
+    const fetchEmployee = async () => {
+        try {
+            const data = await getEmployeeById(id);
+            const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
+            const passportExpiry = data.passportExpiry ? new Date(data.passportExpiry).toISOString().split("T")[0] : "N/A";
+            const visaExpiry = data.visaExpiry ? new Date(data.visaExpiry).toISOString().split("T")[0] : "N/A";
+            setEmployee({ ...data, dob, passportExpiry, visaExpiry });
+        } catch (err) {
+            console.error(err);
+            setError("Failed to load employee details");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchEmployee();
+        loadDepartments();
+    }, [id]);
+
+    const loadDepartments = async () => {
+        try {
+            const data = await getDepartments();
+            if (data) {
+                setDeptOptions(data.map(d => d.name));
+            }
+        } catch (err) {
+            console.error("Failed to load departments", err);
+        }
+    };
+
+    // Update Employee Handler
+    const handleUpdateEmployee = async (updatedData) => {
+        try {
+            await updateEmployee(id, updatedData);
+            toast.success("Profile updated successfully");
+            setShowEditModal(false);
+            fetchEmployee(); // Refresh data
+        } catch (err) {
+            console.error("Update failed", err);
+            toast.error("Failed to update profile");
+        }
+    };
+
+    // Document Handlers
+    useEffect(() => {
+        if (activeTab === "Documents") {
+            fetchDocuments();
+        } else if (activeTab === "Attendance") {
+            fetchAttendanceData();
+        }
+    }, [activeTab]);
+
+    const fetchDocuments = async () => {
+        try {
+            const docs = await getEmployeeDocuments(id);
+            setDocuments(docs);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleUploadDocument = async (formData) => {
+        try {
+            await uploadEmployeeDocument(formData);
+            toast.success("Document uploaded");
+            setShowUploadModal(false);
+            fetchDocuments();
+        } catch (e) {
+            console.error(e);
+            toast.error("Upload failed");
+        }
+    };
+
+    const fetchAttendanceData = async () => {
+        try {
+            const [stats, tr] = await Promise.all([
+                getEmployeeAttendanceStats(id),
+                getEmployeeTrainings(id)
+            ]);
+            setAttendanceStats(stats);
+            setTrainings(tr);
+        } catch (e) {
+            console.error("Attendance/Training fetch error:", e);
+        }
+    };
+
+    if (loading) return <div className="p-8 text-center">Loading profile...</div>;
+    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+    if (!employee) return <div className="p-8 text-center">Employee not found</div>;
+
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets"];
+
+    return (
+        <div className="employee-detail-container">
+            {/* Header */}
+            <div className="employee-detail-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button onClick={() => navigate("/app/employees")} className="back-btn">
+                        <BackArrowIcon />
+                    </button>
+                    <h1 className="employee-detail-title">
+                        Employee Profile
+                    </h1>
+                </div>
+                <p className="employee-detail-subtitle">View and manage employee information</p>
+            </div>
+
+            {/* Profile Card */}
+            <div className="employee-profile-card">
+                <div className="profile-main-info">
+                    <div className="profile-avatar-large">
+                        {employee.name ? employee.name.charAt(0) : "U"}
+                    </div>
+                    <div className="profile-details">
+                        <h2>
+                            {employee.name}
+                            <span className={`status-badge`}>{employee.status}</span>
+                        </h2>
+                        <div className="profile-role-id">
+                            {employee.role} • {employee.code}
+                        </div>
+                        <div className="profile-contact">
+                            <div className="contact-item">
+                                <MailIcon /> {employee.email}
+                            </div>
+                            <div className="contact-item">
+                                <PhoneIcon /> {employee.phone}
+                            </div>
+                            <div className="contact-item">
+                                <LocationIcon /> {employee.department}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="profile-actions">
+                    <button
+                        className="edit-profile-btn"
+                        onClick={() => {
+                            setEditMode("profile");
+                            setShowEditModal(true);
+                        }}
+                    >
+                        Edit Profile
+                    </button>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="employee-tabs">
+                {tabs.map((tab) => (
+                    <button
+                        key={tab}
+                        className={`tab-btn ${activeTab === tab ? "active" : ""}`}
+                        onClick={() => setActiveTab(tab)}
+                    >
+                        {/* Icons can be added here if needed, keeping simple for now */}
+                        {tab}
+                    </button>
+                ))}
+            </div>
+
+            {/* Content Area */}
+            <div className="info-section">
+                {activeTab === "Personal Info" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Personal Information</h3>
+                            <button
+                                onClick={() => {
+                                    setEditMode("personal");
+                                    setShowEditModal(true);
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    color: '#2563eb',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <EditIcon /> Edit
+                            </button>
+                        </div>
+
+                        <div className="info-grid">
+                            <div className="info-group">
+                                <label>Date of Birth</label>
+                                {/* Assuming dob is already formatted in fetchEmployee or empty */}
+                                <div>{employee.dob || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Nationality</label>
+                                {/* Not yet in backend model properly, using placeholder or field if exists */}
+                                <div>{employee.nationality || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>UAE Address</label>
+                                <div>{employee.address || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                {/* Spacer or additional field */}
+                            </div>
+                            <div className="info-group">
+                                <label>Passport Expiry</label>
+                                <div>{employee.passportExpiry || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Emirates ID Expiry</label>
+                                <div>{employee.emiratesIdExpiry || "N/A"}</div>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === "Employment" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Employment Information</h3>
+                            <button
+                                onClick={() => {
+                                    setEditMode("employment");
+                                    setShowEditModal(true);
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    color: '#2563eb',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <EditIcon /> Edit
+                            </button>
+                        </div>
+
+                        <div className="info-grid">
+                            <div className="info-group">
+                                <label>Join Date</label>
+                                <div>{employee.joinDate ? new Date(employee.joinDate).toISOString().split("T")[0] : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Contract Type</label>
+                                <div>{employee.contractType || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Department</label>
+                                <div>{employee.department || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Designation</label>
+                                <div>{employee.designation || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Basic Salary</label>
+                                <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Accommodation</label>
+                                <div>{employee.accommodation || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa Expiry</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {employee.visaExpiry}
+                                    {employee.visaExpiry !== "N/A" && (
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === "Documents" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Document Tracker</h3>
+                            <button
+                                onClick={() => setShowUploadModal(true)}
+                                style={{
+                                    background: '#2563eb', color: 'white', border: 'none',
+                                    padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer'
+                                }}
+                            >
+                                Upload Document
+                            </button>
+                        </div>
+                        <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {documents.map(doc => (
+                                <div key={doc._id} style={{
+                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}</div>
+                                        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                            {doc.documentNumber || 'No Ref'} • Expires: {doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : 'N/A'}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <span style={{
+                                            background: doc.status === 'Valid' ? '#dcfce7' : (doc.status === 'Expired' ? '#fee2e2' : '#fef3c7'),
+                                            color: doc.status === 'Valid' ? '#166534' : (doc.status === 'Expired' ? '#991b1b' : '#92400e'),
+                                            padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
+                                        }}>
+                                            {doc.status}
+                                        </span>
+                                        <a
+                                            href={`${import.meta.env.VITE_API_BASE}/${doc.filePath.replace(/\\/g, '/')}`}
+                                            target="_blank" rel="noopener noreferrer"
+                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer' }}
+                                        >
+                                            View
+                                        </a>
+                                        {/* Optional Delete Button */}
+                                    </div>
+                                </div>
+                            ))}
+                            {documents.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                    No documents uploaded yet.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {activeTab === "Attendance" && (
+                    <>
+                        <div className="attendance-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px', marginBottom: '30px' }}>
+                            <div style={{ background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#166534', fontSize: '14px', fontWeight: '500' }}>Present</div>
+                                <div style={{ color: '#166534', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.present}</div>
+                            </div>
+                            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#991b1b', fontSize: '14px', fontWeight: '500' }}>Absent</div>
+                                <div style={{ color: '#991b1b', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.absent}</div>
+                            </div>
+                            <div style={{ background: '#fefce8', border: '1px solid #fef9c3', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#854d0e', fontSize: '14px', fontWeight: '500' }}>Leave</div>
+                                <div style={{ color: '#854d0e', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.leave}</div>
+                            </div>
+                            <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#9a3412', fontSize: '14px', fontWeight: '500' }}>Late</div>
+                                <div style={{ color: '#9a3412', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.late}</div>
+                            </div>
+                            <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '8px', padding: '15px', textAlign: 'center' }}>
+                                <div style={{ color: '#1e40af', fontSize: '14px', fontWeight: '500' }}>Total Days</div>
+                                <div style={{ color: '#1e40af', fontSize: '20px', fontWeight: 'bold', marginTop: '5px' }}>{attendanceStats.total}</div>
+                            </div>
+                        </div>
+
+                        <h3 style={{ fontSize: '16px', color: '#1f2937', marginBottom: '15px' }}>Training Records</h3>
+                        <div className="training-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {trainings.map((t) => (
+                                <div key={t._id} style={{
+                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <div style={{ fontWeight: '600', color: '#111827', fontSize: '15px' }}>{t.title}</div>
+                                        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                            {new Date(t.date).toISOString().split('T')[0]}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                        <span style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>
+                                            Score: {t.score}
+                                        </span>
+                                        <span style={{
+                                            background: t.status === 'Completed' ? '#dcfce7' : (t.status === 'Failed' ? '#fee2e2' : '#fef3c7'),
+                                            color: t.status === 'Completed' ? '#166534' : (t.status === 'Failed' ? '#991b1b' : '#854d0e'),
+                                            padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
+                                        }}>
+                                            {t.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                            {trainings.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                    No training records found.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && (
+                    <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
+                        Content for {activeTab} will be available soon.
+                    </div>
+                )}
+            </div>
+
+            {/* Edit Modal */}
+            {showEditModal && (
+                <EditEmployeeModal
+                    deptOptions={deptOptions}
+                    employee={employee}
+                    onClose={() => setShowEditModal(false)}
+                    onUpdate={handleUpdateEmployee}
+                    editMode={editMode}
+                />
+            )}
+
+            {/* Upload Document Modal */}
+            {showUploadModal && (
+                <UploadEmployeeDocumentModal
+                    employeeId={id}
+                    onClose={() => setShowUploadModal(false)}
+                    onUpload={handleUploadDocument}
+                />
+            )}
+        </div>
+    );
+}

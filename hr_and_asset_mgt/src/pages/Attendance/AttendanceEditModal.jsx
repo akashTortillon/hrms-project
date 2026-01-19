@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
+import { shiftService } from "../../services/masterService";
 
 /* =========================
    Helpers
@@ -24,6 +25,7 @@ const AttendanceEditModal = ({
   date,
   onSave
 }) => {
+  const [shifts, setShifts] = useState([]);
   const [shift, setShift] = useState("Day Shift");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
@@ -37,11 +39,22 @@ const AttendanceEditModal = ({
   ========================= */
 
   useEffect(() => {
+    // Fetch Shifts
+    const loadShifts = async () => {
+      try {
+        const data = await shiftService.getAll();
+        setShifts(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadShifts();
+
     if (!employee) return;
 
     setShift(employee.shift || "Day Shift");
-    setCheckIn(employee.checkIn || "");
-    setCheckOut(employee.checkOut || "");
+    setCheckIn(employee.checkIn && employee.checkIn !== "-" ? employee.checkIn : "");
+    setCheckOut(employee.checkOut && employee.checkOut !== "-" ? employee.checkOut : "");
   }, [employee]);
 
   /* =========================
@@ -160,8 +173,10 @@ const AttendanceEditModal = ({
           <div>
             <label>Shift</label>
             <select value={shift} onChange={(e) => setShift(e.target.value)}>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
+              <option value="">Select Shift</option>
+              {shifts.map((s) => (
+                <option key={s._id} value={s.name}>{s.name}</option>
+              ))}
             </select>
           </div>
 

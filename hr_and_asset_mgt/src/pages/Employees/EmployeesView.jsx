@@ -134,7 +134,6 @@ import { useSearchParams } from "react-router-dom";
 import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
-import EditEmployeeModal from "./EditEmployeeModal.jsx";
 
 import {
   getEmployees,
@@ -162,8 +161,6 @@ export default function Employees() {
   const [deptOptions, setDeptOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   // 🔹 Sync Local Search with URL (e.g. back button)
   useEffect(() => {
@@ -284,29 +281,7 @@ export default function Employees() {
     }
   };
 
-  // 🔹 EDIT click
-  const handleEditClick = (employee) => {
-    setSelectedEmployee(employee);
-    setShowEditModal(true);
-  };
 
-  // 🔹 UPDATE employee
-  const handleUpdateEmployee = async (updatedEmployee) => {
-    try {
-      await updateEmployee(
-        updatedEmployee._id,
-        updatedEmployee
-      );
-
-      toast.success("Employee updated successfully");
-      fetchEmployees();
-
-      setShowEditModal(false);
-      setSelectedEmployee(null);
-    } catch (error) {
-      toast.error("Failed to update employee");
-    }
-  };
 
 
 
@@ -373,7 +348,6 @@ export default function Employees() {
       {/* TABLE - Use 'employees' directly as it is now filtered from backend */}
       <EmployeesTable
         employees={employees}
-        onEdit={handleEditClick}
         onDelete={handleDeleteEmployee}
       />
 
@@ -383,17 +357,6 @@ export default function Employees() {
           deptOptions={deptOptions}
           onClose={() => setShowAddModal(false)}
           onAddEmployee={handleAddEmployee}
-        />
-      )}
-
-      {/* EDIT MODAL */}
-      {showEditModal && selectedEmployee && (
-        <EditEmployeeModal
-          deptOptions={deptOptions}
-          employee={selectedEmployee}
-          onClose={() => setShowEditModal(false)}
-          onUpdate={handleUpdateEmployee}
-          onDelete={handleDeleteEmployee}
         />
       )}
     </div>
