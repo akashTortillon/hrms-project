@@ -8,12 +8,12 @@ const assignmentSchema = new mongoose.Schema({
   },
   fromEntityType: {
     type: String,
-    enum: ["EMPLOYEE", "STORE","MAINTENANCE_SHOP"],
+    enum: ["EMPLOYEE", "STORE", "MAINTENANCE_SHOP"],
     required: true
   },
   toEntityType: {
     type: String,
-    enum: ["EMPLOYEE", "STORE","MAINTENANCE_SHOP"],
+    enum: ["EMPLOYEE", "STORE", "MAINTENANCE_SHOP"],
     required: true
   },
   fromEmployee: {
@@ -48,13 +48,17 @@ const assignmentSchema = new mongoose.Schema({
   },
   actionType: {
     type: String,
-    enum: ["ASSIGN", "TRANSFER_TO_MAINTENANCE", "RETURN_FROM_MAINTENANCE"],
+    enum: ["ASSIGN", "TRANSFER_TO_EMPLOYEE", "TRANSFER_TO_STORE", "TRANSFER_TO_MAINTENANCE", "RETURN_FROM_MAINTENANCE", "RETURN"],
     default: "ASSIGN"
   },
   shop: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Master",
     default: null
+  },
+  serviceCost: {
+    type: Number,
+    default: 0
   }
 }, { timestamps: true });
 

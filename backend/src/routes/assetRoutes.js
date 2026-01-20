@@ -4,7 +4,18 @@ import {
   getAssets,
   getAssetById,
   updateAsset,
-  deleteAsset
+  deleteAsset,
+  scheduleMaintenance,
+  updateMaintenanceLog,
+  deleteMaintenanceLog,
+  updateAmcDetails,
+  uploadDocument,
+  deleteDocument,
+  downloadDocument,
+  disposeAsset,
+  getAssetAlerts,
+  getEmployeeAssets,
+  exportAssets
 } from "../controllers/assetController.js";
 import {
   assignAssetToEmployee,
@@ -14,47 +25,73 @@ import {
   getCurrentAssignment
 } from "../controllers/assignmentController.js";
 import { protect } from "../middlewares/authMiddleware.js";
+import upload from "../config/multer.js";
 
 const router = express.Router();
 
+/* =========================
+   EXPORT ROUTE (FIRST)
+========================= */
+router.get("/export", protect, exportAssets);
+
+/* =========================
+   ASSET CRUD ROUTES
+========================= */
+
 // GET all assets
 router.get("/", protect, getAssets);
-console.log("✅ GET /api/assets route registered");
 
 // CREATE new asset
 router.post("/", protect, createAsset);
-console.log("✅ POST /api/assets route registered");
 
-// ASSIGN asset to employee (must be before /:id route)
+// ASSIGNMENT ROUTES (must be before /:id)
 router.post("/assign", protect, assignAssetToEmployee);
-console.log("✅ POST /api/assets/assign route registered");
-
-// TRANSFER asset (must be before /:id route)
 router.post("/transfer", protect, transferAsset);
-console.log("✅ POST /api/assets/transfer route registered");
-
-// RETURN asset to store (must be before /:id route)
 router.post("/return", protect, returnAssetToStore);
-console.log("✅ POST /api/assets/return route registered");
 
-// GET asset history (must be before /:id route)
+// ALERTS & REPORTS (must be before /:id)
+router.get("/alerts/all", protect, getAssetAlerts);
+
+// EMPLOYEE ASSETS (must be before /:id)
+router.get("/employee/:employeeId", protect, getEmployeeAssets);
+
+// GET asset history (must be before /:id)
 router.get("/:id/history", protect, getAssetHistory);
-console.log("✅ GET /api/assets/:id/history route registered");
 
-// GET current assignment for asset (must be before /:id route)
+// GET current assignment (must be before /:id)
 router.get("/:id/assignments/current", protect, getCurrentAssignment);
-console.log("✅ GET /api/assets/:id/assignments/current route registered");
 
 // GET asset by ID
 router.get("/:id", protect, getAssetById);
-console.log("✅ GET /api/assets/:id route registered");
 
 // UPDATE asset
 router.put("/:id", protect, updateAsset);
-console.log("✅ PUT /api/assets/:id route registered");
 
 // DELETE asset
 router.delete("/:id", protect, deleteAsset);
-console.log("✅ DELETE /api/assets/:id route registered");
+
+/* =========================
+   MAINTENANCE ROUTES
+========================= */
+router.post("/:id/maintenance", protect, scheduleMaintenance);
+router.put("/:id/maintenance/:maintenanceId", protect, updateMaintenanceLog);
+router.delete("/:id/maintenance/:maintenanceId", protect, deleteMaintenanceLog);
+
+/* =========================
+   AMC ROUTES
+========================= */
+router.put("/:id/amc", protect, updateAmcDetails);
+
+/* =========================
+   DOCUMENT ROUTES
+========================= */
+router.post("/:id/documents", protect, upload.single("document"), uploadDocument);
+router.delete("/:id/documents/:documentId", protect, deleteDocument);
+router.get("/:id/documents/:documentId/download", protect, downloadDocument);
+
+/* =========================
+   DISPOSAL ROUTES
+========================= */
+router.post("/:id/dispose", protect, disposeAsset);
 
 export default router;
