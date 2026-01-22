@@ -31,8 +31,10 @@ import {
   deleteDocument,
   downloadDocument,
   updateAmcDetails,
-  disposeAsset
+  disposeAsset,
+  importAssets
 } from "../../services/assetService.js";
+import { mockAssetData } from "../../data/mockAssetData.js";
 
 import {
   assignAssetToEmployee,
@@ -75,17 +77,17 @@ function Assets() {
 
   // Fetch assets
   const fetchAssets = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const params = {
-      search: search || undefined,
-      type: type !== "ALL" ? type : undefined,
-      status: status !== "ALL" ? status : undefined,
-    };
+      const params = {
+        search: search || undefined,
+        type: type !== "ALL" ? type : undefined,
+        status: status !== "ALL" ? status : undefined,
+      };
 
-    const response = await getAssets(params);
-    const assetsArray = Array.isArray(response) ? response : [];
+      const response = await getAssets(params);
+      const assetsArray = Array.isArray(response) ? response : [];
       // Format assets
       const formattedAssets = assetsArray.map((asset) => {
         const statusKeyMap = {
@@ -138,8 +140,8 @@ function Assets() {
   }, []);
 
   useEffect(() => {
-  fetchAssets();
-}, [search, type, status]);
+    fetchAssets();
+  }, [search, type, status]);
 
   // Filtered assets
   // const filteredAssets = useMemo(() => {
@@ -176,6 +178,17 @@ function Assets() {
       fetchAssets();
     } catch (error) {
       toast.error(error.response?.data?.message || error.message || "Failed to add asset");
+    }
+  };
+
+  // Import assets
+  const handleImportAssets = async () => {
+    try {
+      const response = await importAssets(mockAssetData);
+      toast.success(response.message || "Assets imported successfully");
+      fetchAssets();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Failed to import assets");
     }
   };
 
@@ -392,6 +405,7 @@ function Assets() {
       {/* Header cards */}
       <AssetsHeader
         onAddAsset={() => setShowAddModal(true)}
+        onImport={handleImportAssets}
         stats={[
           { title: "Total Assets", value: assetStats.total, icon: "cube", iconColor: "#2563eb" },
           { title: "In Use", value: assetStats.inUse, icon: "cube", iconColor: "#16a34a" },

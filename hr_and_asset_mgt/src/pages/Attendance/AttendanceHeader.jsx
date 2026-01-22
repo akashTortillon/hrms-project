@@ -3,9 +3,7 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import AppButton from "../../components/reusable/Button";
 import "../../style/Attendance.css";
 
-export default function AttendanceHeader() {
-  const [view, setView] = useState("daily");
-
+export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading, onExport }) {
   return (
     <div className="attendance-header">
       <div className="attendance-header-left">
@@ -15,28 +13,33 @@ export default function AttendanceHeader() {
         </p>
 
         <div className="attendance-tabs">
-          <AppButton
-            className={`attendance-action-btn ${view === "daily" ? "is-active" : ""}`}
-            onClick={() => setView("daily")}
+          <button
+            className={`attendance-tab ${viewMode === "day" ? "active" : ""}`}
+            onClick={() => setViewMode("day")}
           >
             Daily View
-          </AppButton>
+          </button>
 
-          <AppButton
-            className={`attendance-action-btn ${view === "monthly" ? "is-active" : ""}`}
-            onClick={() => setView("monthly")}
+          <button
+            className={`attendance-tab ${viewMode === "month" ? "active" : ""}`}
+            onClick={() => setViewMode("month")}
           >
             Monthly View
-          </AppButton>
+          </button>
         </div>
       </div>
 
       <div className="attendance-header-actions">
-        <AppButton variant="primary" className="btn-outline-custom">
-          Sync Biometric
+        <AppButton
+          variant="primary"
+          className="btn-outline-custom"
+          onClick={onSync}
+          disabled={loading}
+        >
+          {loading ? "Syncing..." : "Sync Biometric"}
         </AppButton>
 
-        <AppButton variant="primary">
+        <AppButton variant="primary" onClick={onExport}>
           <SvgIcon name="download" size={16} />
           <span>Export Report</span>
         </AppButton>

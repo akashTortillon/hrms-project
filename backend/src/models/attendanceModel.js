@@ -37,6 +37,16 @@ const attendanceSchema = new mongoose.Schema(
       type: String,
       enum: ["Present", "Late", "Absent", "On Leave"],
       default: "Absent"
+    },
+
+    leaveType: {
+      type: String,
+      default: null
+    },
+
+    isPaid: {
+      type: Boolean,
+      default: true
     }
   },
   {

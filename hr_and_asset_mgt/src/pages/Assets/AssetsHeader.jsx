@@ -1,12 +1,22 @@
 
 
 
+import { useState } from "react";
 import Card from "../../components/reusable/Card";
 import AppButton from "../../components/reusable/Button";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Assets.css";
 
-export default function AssetsHeader({ stats = [], onAddAsset }) {
+export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
+  const [importing, setImporting] = useState(false);
+
+  const handleImportClick = async () => {
+    if (importing) return;
+    setImporting(true);
+    await onImport();
+    setImporting(false);
+  };
+
   return (
     <div className="document-library">
       {/* Header */}
@@ -18,8 +28,13 @@ export default function AssetsHeader({ stats = [], onAddAsset }) {
           </p>
         </div>
 
-        <button className="asset-import-btn">
-          <span>Import Assets</span>
+        <button
+          className="asset-import-btn"
+          onClick={handleImportClick}
+          disabled={importing}
+          style={{ opacity: importing ? 0.7 : 1, cursor: importing ? 'wait' : 'pointer' }}
+        >
+          <span>{importing ? "Importing..." : "Import Assets"}</span>
         </button>
 
         <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>

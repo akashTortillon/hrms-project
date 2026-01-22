@@ -22,45 +22,57 @@ function Dashboard() {
   const [metrics, setMetrics] = useState({
     totalEmployees: 0,
     employeesAddedThisMonth: 0,
+    pendingApprovals: 0,
+    urgentApprovals: 0,
+    assetsInService: 0,
+    assetsDueService: 0
   });
 
   // Real document stats
   const [documentStats, setDocumentStats] = useState({ total: 0, valid: 0, expiring: 0, critical: 0, expired: 0 });
 
-  
+
 
   /** 🧱 DUMMY / EXISTING DATA (UNCHANGED) */
   const [companyDocumentExpiries, setCompanyDocumentExpiries] = useState([]);
   const [employeeVisaExpiries, setEmployeeVisaExpiries] = useState([]);
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [todaysAttendance, setTodaysAttendance] = useState([]);
-  
-  
+
+
 
   useEffect(() => {
     /** ✅ Fetch REAL metrics */
     fetchMetrics()
-    .then((res) => {
-      console.log("Dashboard metrics response:", res.data);
+      .then((res) => {
+        console.log("Dashboard metrics response:", res.data);
 
-      setMetrics({
-        totalEmployees: res.data?.totalEmployees ?? 0,
-        employeesAddedThisMonth: res.data?.employeesAddedThisMonth ?? 0,
-      });
-    })
-    .catch((err) => {
-      console.error("Error fetching dashboard metrics:", err);
+        setMetrics({
+          totalEmployees: res.data?.totalEmployees ?? 0,
+          employeesAddedThisMonth: res.data?.employeesAddedThisMonth ?? 0,
+          pendingApprovals: res.data?.pendingApprovals ?? 0,
+          urgentApprovals: res.data?.urgentApprovals ?? 0,
+          assetsInService: res.data?.assetsInService ?? 0,
+          assetsDueService: res.data?.assetsDueService ?? 0
+        });
+      })
+      .catch((err) => {
+        console.error("Error fetching dashboard metrics:", err);
 
-      setMetrics({
-        totalEmployees: 0,
-        employeesAddedThisMonth: 0,
+        setMetrics({
+          totalEmployees: 0,
+          employeesAddedThisMonth: 0,
+          pendingApprovals: 0,
+          urgentApprovals: 0,
+          assetsInService: 0,
+          assetsDueService: 0
+        });
       });
-    });
 
     /** ✅ Fetch REAL document stats */
     getDocumentStats()
       .then((res) => {
-        console.log("Document stats response:",res);
+        console.log("Document stats response:", res);
         // Ensure we always have a valid object structure
         const stats = res || { total: 0, valid: 0, expiring: 0, critical: 0, expired: 0 };
         setDocumentStats(stats);
@@ -71,14 +83,14 @@ function Dashboard() {
       });
 
     fetchCompanyDocuments()
-    .then((res) => {
-      setCompanyDocumentExpiries(
-        Array.isArray(res.data) ? res.data : []
-      );
-    })
-    .catch(() => setCompanyDocumentExpiries([]));
+      .then((res) => {
+        setCompanyDocumentExpiries(
+          Array.isArray(res.data) ? res.data : []
+        );
+      })
+      .catch(() => setCompanyDocumentExpiries([]));
 
-/** ⛔ Dummy calls — DO NOT TOUCH */
+    /** ⛔ Dummy calls — DO NOT TOUCH */
     fetchEmployeeVisas()
       .then((res) =>
         setEmployeeVisaExpiries(Array.isArray(res.data) ? res.data : [])
@@ -100,21 +112,21 @@ function Dashboard() {
 
 
   const getDocumentsExpiringThisMonth = (documents = []) => {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-  return documents.filter((doc) => {
-    if (!doc.expiryDate) return false;
+    return documents.filter((doc) => {
+      if (!doc.expiryDate) return false;
 
-    const expiry = new Date(doc.expiryDate);
+      const expiry = new Date(doc.expiryDate);
 
-    return (
-      expiry.getMonth() === currentMonth &&
-      expiry.getFullYear() === currentYear
-    );
-  }).length;
-};
+      return (
+        expiry.getMonth() === currentMonth &&
+        expiry.getFullYear() === currentYear
+      );
+    }).length;
+  };
 
 
   /** 🧮 TOP DASHBOARD CARDS */
@@ -127,23 +139,23 @@ function Dashboard() {
       iconBgClass: "dashboard-icon-bg-blue",
     },
     {
-  title: "Documents Expiring",
-  value: (documentStats?.expiring || 0) + (documentStats?.critical || 0), // Both expiring soon + critical
-  subtext: "This Month",
-  iconName: "exclamation",
-  iconBgClass: "dashboard-icon-bg-yellow",
-},
+      title: "Documents Expiring",
+      value: (documentStats?.expiring || 0) + (documentStats?.critical || 0), // Both expiring soon + critical
+      subtext: "This Month",
+      iconName: "exclamation",
+      iconBgClass: "dashboard-icon-bg-yellow",
+    },
     {
       title: "Pending Approvals",
-      value: 7,
-      subtext: "3 Urgent",
+      value: metrics.pendingApprovals,
+      subtext: `${metrics.urgentApprovals} Urgent`,
       iconName: "clock (1)",
       iconBgClass: "dashboard-icon-bg-orange",
     },
     {
       title: "Assets In Service",
-      value: 5,
-      subtext: "3 Due",
+      value: metrics.assetsInService,
+      subtext: `${metrics.assetsDueService} Due`,
       iconName: "cube",
       iconBgClass: "dashboard-icon-bg-green",
     },
@@ -182,36 +194,36 @@ function Dashboard() {
         <Card className="dashboard-quick-actions-wrapper">
           <div className="dashboard-quick-actions-grid">
             <Card
-  className="dashboard-quick-action-card"
-  onClick={() => navigate("/app/employees")}
->
-  <SvgIcon name="users" size={22} />
-  <span>Add Employee</span>
-</Card>
+              className="dashboard-quick-action-card"
+              onClick={() => navigate("/app/employees")}
+            >
+              <SvgIcon name="users" size={22} />
+              <span>Add Employee</span>
+            </Card>
 
-<Card
-  className="dashboard-quick-action-card"
-  onClick={() => navigate("/app/payroll")}
->
-  <SvgIcon name="dollar" size={22} />
-  <span>Process Payroll</span>
-</Card>
+            <Card
+              className="dashboard-quick-action-card"
+              onClick={() => navigate("/app/payroll")}
+            >
+              <SvgIcon name="dollar" size={22} />
+              <span>Process Payroll</span>
+            </Card>
 
-<Card
-  className="dashboard-quick-action-card"
-  onClick={() => navigate("/app/documents")}
->
-  <SvgIcon name="document" size={22} />
-  <span>View Documents</span>
-</Card>
+            <Card
+              className="dashboard-quick-action-card"
+              onClick={() => navigate("/app/documents")}
+            >
+              <SvgIcon name="document" size={22} />
+              <span>View Documents</span>
+            </Card>
 
-<Card
-  className="dashboard-quick-action-card"
-  onClick={() => navigate("/app/reports")}
->
-  <SvgIcon name="reports" size={22} />
-  <span>Generate Report</span>
-</Card>
+            <Card
+              className="dashboard-quick-action-card"
+              onClick={() => navigate("/app/reports")}
+            >
+              <SvgIcon name="reports" size={22} />
+              <span>Generate Report</span>
+            </Card>
 
           </div>
         </Card>

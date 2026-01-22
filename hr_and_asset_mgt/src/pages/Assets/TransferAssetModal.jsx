@@ -516,14 +516,16 @@
 import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
 import { getEmployees } from "../../services/employeeService.js";
-import { maintenanceShopService } from "../../services/masterService.js";
+import { maintenanceShopService, getDepartments } from "../../services/masterService.js";
 import { getCurrentAssignment } from "../../services/assignmentService.js";
 
 export default function TransferAssetModal({ onClose, onTransfer, asset }) {
   const [employees, setEmployees] = useState([]);
   const [maintenanceShops, setMaintenanceShops] = useState([]);
+  const [departments, setDepartments] = useState([]); // New department state
   const [toEntityType, setToEntityType] = useState("MAINTENANCE_SHOP");
   const [selectedEmployee, setSelectedEmployee] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState(""); // New department selection
   const [selectedShop, setSelectedShop] = useState("");
   const [toStore, setToStore] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -532,6 +534,7 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
   useEffect(() => {
     fetchEmployees();
     fetchMaintenanceShops();
+    fetchDepartments(); // Fetch departments
     fetchCurrentAssignment();
   }, []);
 
@@ -550,6 +553,16 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
       setMaintenanceShops(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error("Failed to fetch maintenance shops", error);
+    }
+  };
+
+  // New: Fetch Departments
+  const fetchDepartments = async () => {
+    try {
+      const response = await getDepartments();
+      setDepartments(Array.isArray(response) ? response : []);
+    } catch (error) {
+      console.error("Failed to fetch departments", error);
     }
   };
 
@@ -580,6 +593,11 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
       return;
     }
 
+    if (toEntityType === "DEPARTMENT" && !selectedDepartment) {
+      alert("Please select a department");
+      return;
+    }
+
     if (toEntityType === "STORE" && !toStore.trim()) {
       alert("Please enter store name");
       return;
@@ -588,12 +606,14 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
     let actionType;
     if (toEntityType === "MAINTENANCE_SHOP") actionType = "TRANSFER_TO_MAINTENANCE";
     else if (toEntityType === "EMPLOYEE") actionType = "TRANSFER_TO_EMPLOYEE";
+    else if (toEntityType === "DEPARTMENT") actionType = "TRANSFER_TO_DEPARTMENT";
     else if (toEntityType === "STORE") actionType = "TRANSFER_TO_STORE";
 
     const transferData = {
       assetId: asset._id || asset.id,
       toEntityType,
       toEmployee: toEntityType === "EMPLOYEE" ? selectedEmployee : null,
+      toDepartment: toEntityType === "DEPARTMENT" ? selectedDepartment : null,
       toStore: toEntityType === "STORE" ? toStore.trim() : null,
       shop: toEntityType === "MAINTENANCE_SHOP" ? selectedShop : null,
       actionType,
@@ -627,11 +647,13 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
                 setToEntityType(e.target.value);
                 setSelectedEmployee("");
                 setSelectedShop("");
+                setSelectedDepartment("");
                 setToStore("");
               }}
             >
               <option value="MAINTENANCE_SHOP">Maintenance Shop</option>
               <option value="EMPLOYEE">Employee</option>
+              <option value="DEPARTMENT">Department</option>
               <option value="STORE">Store</option>
             </select>
 
@@ -652,6 +674,17 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
                 {employees.map((emp) => (
                   <option key={emp._id} value={emp._id}>
                     {emp.name} ({emp.code})
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {toEntityType === "DEPARTMENT" && (
+              <select value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)}>
+                <option value="">Choose a department...</option>
+                {departments.map((dept) => (
+                  <option key={dept._id} value={dept.name}>
+                    {dept.name}
                   </option>
                 ))}
               </select>

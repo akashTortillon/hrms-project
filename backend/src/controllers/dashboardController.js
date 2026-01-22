@@ -2,12 +2,14 @@
 
 
 import Employee from "../models/employeeModel.js";
+import Request from "../models/requestModel.js";
+import Asset from "../models/assetModel.js";
 
 /**
  * DASHBOARD SUMMARY (STEP 1 – Total Employees only)
  */
 export const getDashboardSummary = async (req, res) => {
-  
+
 
   try {
     /** ---------------------------
@@ -35,9 +37,34 @@ export const getDashboardSummary = async (req, res) => {
       joinDate: { $gte: startOfMonth },
     });
 
+    /** ---------------------------
+     * PENDING APPROVALS & URGENT
+     * --------------------------*/
+    const totalPending = await Request.countDocuments({ status: "PENDING" });
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    const urgentApprovals = await Request.countDocuments({
+      status: "PENDING",
+      submittedAt: { $lte: threeDaysAgo }
+    });
+
+    /** ---------------------------
+     * ASSETS IN SERVICE & DUE
+     * --------------------------*/
+    const assetsInService = await Asset.countDocuments({ status: "In Use" });
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const assetsDue = await Asset.countDocuments({
+      serviceDueDate: { $gte: now, $lte: thirtyDaysFromNow }
+    });
+
     res.json({
       totalEmployees,
       employeesAddedThisMonth: joinedThisMonth,
+      pendingApprovals: totalPending,
+      urgentApprovals,
+      assetsInService,
+      assetsDueService: assetsDue
     });
   } catch (error) {
     console.error("Dashboard metrics error:", error);

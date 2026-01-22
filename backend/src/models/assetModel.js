@@ -15,11 +15,13 @@ const maintenanceLogSchema = new mongoose.Schema({
     default: null
   },
   serviceType: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Master",
     required: true
   },
   provider: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Master",
     required: true
   },
   cost: {
@@ -170,23 +172,23 @@ const assetSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
-  
+
   custodian: {
-  type: {
-    type: String,
-    enum: ["EMPLOYEE", "DEPARTMENT"],
-    default: null
+    type: {
+      type: String,
+      enum: ["EMPLOYEE", "DEPARTMENT"],
+      default: null
+    },
+    employee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null
+    },
+    department: {
+      type: String, // or ObjectId if you have Department model
+      default: null
+    }
   },
-  employee: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Employee",
-    default: null
-  },
-  department: {
-    type: String, // or ObjectId if you have Department model
-    default: null
-  }
-},
   department: {
     type: String,
     default: ""

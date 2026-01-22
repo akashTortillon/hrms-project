@@ -28,6 +28,11 @@ export const getEmployees = async (params = {}) => {
   return res.data;
 };
 
+export const getEmployeeById = async (id) => {
+  const res = await api.get(`${EMPLOYEE_API}/${id}`);
+  return res.data;
+};
+
 // ✅ Add employee
 export const addEmployee = async (employee) => {
   const res = await api.post(EMPLOYEE_API, employee);
@@ -55,3 +60,21 @@ export const exportEmployees = async (params = {}) => {
   return res.data;
 };
 
+const DOC_API = "/api/employee-docs";
+
+export const getEmployeeDocuments = async (employeeId) => {
+  const res = await api.get(`${DOC_API}/${employeeId}`);
+  return res.data;
+};
+
+export const uploadEmployeeDocument = async (formData) => {
+  const res = await api.post(DOC_API, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+export const deleteEmployeeDocument = async (docId) => {
+  const res = await api.delete(`${DOC_API}/${docId}`);
+  return res.data;
+};

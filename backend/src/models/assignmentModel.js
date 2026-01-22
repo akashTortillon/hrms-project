@@ -8,12 +8,12 @@ const assignmentSchema = new mongoose.Schema({
   },
   fromEntityType: {
     type: String,
-    enum: ["EMPLOYEE", "STORE", "MAINTENANCE_SHOP"],
+    enum: ["EMPLOYEE", "STORE", "MAINTENANCE_SHOP", "DEPARTMENT"],
     required: true
   },
   toEntityType: {
     type: String,
-    enum: ["EMPLOYEE", "STORE", "MAINTENANCE_SHOP"],
+    enum: ["EMPLOYEE", "STORE", "MAINTENANCE_SHOP", "DEPARTMENT"],
     required: true
   },
   fromEmployee: {
@@ -31,6 +31,14 @@ const assignmentSchema = new mongoose.Schema({
     default: null
   },
   toStore: {
+    type: String,
+    default: null
+  },
+  fromDepartment: {
+    type: String,
+    default: null
+  },
+  toDepartment: {
     type: String,
     default: null
   },

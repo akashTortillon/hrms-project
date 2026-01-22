@@ -23,6 +23,8 @@ export default function SystemSettings() {
     modalType,
     inputValue,
     setInputValue,
+    holidayDate,
+    setHolidayDate,
     handleOpenAdd,
     handleOpenEdit,
     handleSave,
@@ -158,12 +160,9 @@ export default function SystemSettings() {
         </div>
       </MastersCard>
 
-      {/* Add/Edit Modal */}
       <CustomModal
         show={showModal}
-        title={`${inputValue && !showModal /* Logic quirk fix: usually we check editId, but title just needs 'Add' or 'Edit' context */} ${modalType}`}
-        // We will improve title logic inline
-        titleContent={inputValue ? `Edit ${modalType}` : `Add ${modalType}`}
+        title={inputValue ? `Edit ${modalType}` : `Add ${modalType}`}
         onClose={() => setShowModal(false)}
         footer={
           <>
@@ -177,17 +176,42 @@ export default function SystemSettings() {
         }
       >
         <div className="form-group flex flex-col gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={`Enter ${modalType} Name`}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              autoFocus
-            />
-          </div>
+          {modalType === "Holiday" ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Holiday Name</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. New Year"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={holidayDate}
+                  onChange={(e) => setHolidayDate(e.target.value)}
+                />
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{modalType} Name</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={`Enter ${modalType} Name`}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                autoFocus
+              />
+            </div>
+          )}
         </div>
       </CustomModal>
 

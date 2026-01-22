@@ -1,4 +1,4 @@
-import React, { useState,useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
 import {
   serviceTypeService,
@@ -8,7 +8,7 @@ import {
 
 export default function MaintenanceSchedulerModal({ onClose, onSchedule, asset }) {
 
-const [serviceTypes, setServiceTypes] = useState([]);
+  const [serviceTypes, setServiceTypes] = useState([]);
   const [providers, setProviders] = useState([]);
   const [form, setForm] = useState({
     scheduledDate: "",
@@ -19,7 +19,7 @@ const [serviceTypes, setServiceTypes] = useState([]);
   });
 
 
-/* -------------------- LOAD MASTERS -------------------- */
+  /* -------------------- LOAD MASTERS -------------------- */
   useEffect(() => {
     fetchMasters();
   }, []);
@@ -41,14 +41,14 @@ const [serviceTypes, setServiceTypes] = useState([]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm({ 
-      ...form, 
-      [name]: name === "cost" ? parseFloat(value) || "" : value 
+    setForm({
+      ...form,
+      [name]: name === "cost" ? parseFloat(value) || "" : value
     });
   };
 
   const handleSubmit = () => {
-    const { scheduledDate, serviceType, provider } = form;
+    const { scheduledDate, serviceType, provider, cost, description } = form;
 
     if (!scheduledDate || !serviceType || !provider) {
       alert("Please fill all required fields: Scheduled Date, Service Type, and Provider");
@@ -61,7 +61,7 @@ const [serviceTypes, setServiceTypes] = useState([]);
       return;
     }
 
-onSchedule({
+    onSchedule({
       assetId: asset._id || asset.id,
       scheduledDate,
       serviceType, // MASTER ID
@@ -153,7 +153,7 @@ onSchedule({
                 value={form.cost}
                 onChange={handleChange}
                 min="0"
-                
+
               />
             </div>
 
