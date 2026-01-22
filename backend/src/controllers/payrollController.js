@@ -392,33 +392,152 @@ export const finalizePayroll = async (req, res) => {
 export const exportPayroll = async (req, res) => {
     try {
         const { month, year } = req.query;
-        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban");
+        // Populate fields needed for the report
+        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban bankName laborCardNumber personalId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found for this month." });
         }
 
-        const data = records.map(r => ({
-            "Employee ID": r.employee?.code || "N/A",
-            "Name": r.employee?.name || "N/A",
-            "Department": r.employee?.department || "N/A",
-            "Designation": r.employee?.designation || "N/A",
-            "Basic Salary": r.basicSalary || 0,
-            "Total Allowances": r.totalAllowances || 0,
-            "Total Deductions": r.totalDeductions || 0,
-            "Net Salary": r.netSalary || 0,
-            "Payment Status": r.status,
-            "Bank Account": r.employee?.bankAccount || "",
-            "IBAN": r.employee?.iban || ""
-        }));
+        // --- Prepare Data for Excel ---
+        const monthNames = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+        const monthName = monthNames[parseInt(month) - 1] || "UNKNOWN";
 
-        const worksheet = XLSX.utils.json_to_sheet(data);
+        // Company Constants (Hardcoded as per request image)
+        const COMPANY_NAME = "COMPANY NAME: LEPTIS HYPERMARKET LLC";
+        const MOL_ID = "MOL ID No. 0000001564503";
+        const REPORT_TITLE = `PAYROLL FOR THE MONTH OF ${monthName} - ${year}`;
+
+        // 1. Define the Array of Arrays (AoA) Structure
+        const aoa = [];
+
+        // Row 1: Company Name
+        aoa.push([COMPANY_NAME]);
+        // Row 2: MOL ID
+        aoa.push([MOL_ID]);
+        // Row 3: Report Title
+        aoa.push([REPORT_TITLE]);
+        // Row 4: Empty space
+        aoa.push([]);
+
+        // Row 5: Column Headers Top
+        const headerRowTop = [
+            "Sl.No",
+            "NAME OF THE EMPLOYEE",
+            "WORK PERMIT NO (8 DIGIT NO)",
+            "PERSONAL NO (14 DIGIT NO)",
+            "BANK NAME",
+            "FAB CARD NO(16 DIGITS)\nOR IBAN FOR PERSONAL",
+            "NO OF DAYS",
+            "Employee's Net Salary", // Merged Header
+            "",
+            ""
+        ];
+        aoa.push(headerRowTop);
+
+        // Row 6: Column Headers Bottom (Sub-headers)
+        const headerRowBottom = [
+            "", "", "", "", "", "", "", // Empty for merged columns
+            "Fixed",
+            "Variable",
+            "Total"
+        ];
+        aoa.push(headerRowBottom);
+
+        // Data Rows
+        let serialNo = 1;
+        records.forEach(r => {
+            const emp = r.employee || {};
+
+            // Calc Salary Components
+            const fixed = r.basicSalary || 0;
+            const net = r.netSalary || 0;
+            // Assuming Variable = Net - Fixed (includes allowances - deductions + OT)
+            // Ensure no negative variable if net < basic (e.g. absent) might look weird, but mathematically correct for "balancing"
+            let variable = net - fixed;
+
+            // Format to 2 decimals
+            // variable = parseFloat(variable.toFixed(2));
+
+            // "NO OF DAYS" -> Using LOP (Loss of Pay) or 0 if user wants "Days Absent"? 
+            // Image shows "0" for full salary. Let's assume it means "LOP Days".
+            // r.attendanceSummary might have daysAbsent.
+            const noOfDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
+            // OR if the user means "Days Worked", then we should put daysPresent. 
+            // But the sample shows "0" for seemingly full pay. Let's stick to 0 for now as 'LOP' or just 0 default.
+            // Actually, in the image, "NO OF DAYS" is 0. 
+            // Let's use `r.attendanceSummary?.daysAbsent || 0` as a dynamic value closest to "0" for perfect attendance.
+
+            const row = [
+                serialNo++,                          // Sl.No
+                emp.name || "Unknown",               // Name
+                emp.laborCardNumber || "Not Provided",           // Work Permit
+                emp.personalId || "Not Provided",                // Personal No
+                emp.bankName || "Not Provided",                  // Bank Name
+                emp.iban || emp.bankAccount || "Not Provided",   // FAB/IBAN
+                noOfDays,                            // No Of Days
+                fixed,                               // Fixed
+                variable,                            // Variable
+                net                                  // Total
+            ];
+            aoa.push(row);
+        });
+
+        // 2. Create Sheet
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+
+        // 3. Define Merges
+        // s: start, e: end. r: row, c: col (0-indexed)
+        const merges = [
+            // Header: Company Name (Row 0, Cols A-J)
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+            // Header: MOL ID (Row 1, Cols A-J)
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+            // Header: Report Title (Row 2, Cols A-J)
+            { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
+
+            // Table Headers (Row 4 & 5)
+            // Sl.No (A5:A6) -> r4,c0 to r5,c0
+            { s: { r: 4, c: 0 }, e: { r: 5, c: 0 } },
+            // Name (B5:B6)
+            { s: { r: 4, c: 1 }, e: { r: 5, c: 1 } },
+            // Work Permit
+            { s: { r: 4, c: 2 }, e: { r: 5, c: 2 } },
+            // Personal No
+            { s: { r: 4, c: 3 }, e: { r: 5, c: 3 } },
+            // Bank Name
+            { s: { r: 4, c: 4 }, e: { r: 5, c: 4 } },
+            // FAB/IBAN
+            { s: { r: 4, c: 5 }, e: { r: 5, c: 5 } },
+            // NO OF DAYS
+            { s: { r: 4, c: 6 }, e: { r: 5, c: 6 } },
+            // Employee's Net Salary (H5:J5) -> Horizontal Merge
+            { s: { r: 4, c: 7 }, e: { r: 4, c: 9 } }
+        ];
+
+        worksheet['!merges'] = merges;
+
+        // 4. Set Column Widths (Approximation)
+        worksheet['!cols'] = [
+            { wch: 5 },  // Sl.No
+            { wch: 30 }, // Name
+            { wch: 15 }, // Work Permit
+            { wch: 18 }, // Personal No
+            { wch: 10 }, // Bank Name
+            { wch: 25 }, // FAB/IBAN
+            { wch: 10 }, // No Of Days
+            { wch: 10 }, // Fixed
+            { wch: 10 }, // Variable
+            { wch: 10 }  // Total
+        ];
+
+        // 5. Build Workbook
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, `Payroll_${month}_${year}`);
 
         const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-        res.setHeader("Content-Disposition", `attachment; filename="Payroll_${month}_${year}.xlsx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="Payroll_Export_${month}_${year}.xlsx"`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buffer);
 

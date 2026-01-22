@@ -301,6 +301,10 @@ export default function EmployeeDetail() {
                                 <div>{employee.nationality || "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Personal ID (14 Digit)</label>
+                                <div>{employee.personalId || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
                                 <label>UAE Address</label>
                                 <div>{employee.address || "N/A"}</div>
                             </div>
@@ -362,6 +366,14 @@ export default function EmployeeDetail() {
                                 <div>{employee.designation || "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Labor Card No</label>
+                                <div>{employee.laborCardNumber || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Agent ID (WPS)</label>
+                                <div>{employee.agentId || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
                                 <label>Basic Salary</label>
                                 <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
                             </div>
@@ -378,6 +390,25 @@ export default function EmployeeDetail() {
                                             <polyline points="20 6 9 17 4 12"></polyline>
                                         </svg>
                                     )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bank Details Section */}
+                        <div style={{ marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
+                            <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', color: '#1f2937' }}>Bank Details</h4>
+                            <div className="info-grid">
+                                <div className="info-group">
+                                    <label>Bank Name</label>
+                                    <div>{employee.bankName || "N/A"}</div>
+                                </div>
+                                <div className="info-group">
+                                    <label>IBAN</label>
+                                    <div>{employee.iban || "N/A"}</div>
+                                </div>
+                                <div className="info-group">
+                                    <label>Account Number</label>
+                                    <div>{employee.bankAccount || "N/A"}</div>
                                 </div>
                             </div>
                         </div>

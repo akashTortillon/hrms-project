@@ -166,6 +166,11 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
+                  <label>Personal ID (14 Digit)</label>
+                  <input name="personalId" value={form.personalId || ''} onChange={handleChange} placeholder="e.g. 784-1234-1234567-1" />
+                </div>
+
+                <div className="form-group">
                   <label>UAE Address</label>
                   <input name="address" value={form.address || ''} onChange={handleChange} />
                 </div>
@@ -220,6 +225,16 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
+                  <label>Labor Card No / Work Permit</label>
+                  <input name="laborCardNumber" value={form.laborCardNumber || ''} onChange={handleChange} placeholder="e.g. 87654321" />
+                </div>
+
+                <div className="form-group">
+                  <label>Agent ID (WPS)</label>
+                  <input name="agentId" value={form.agentId || ''} onChange={handleChange} placeholder="e.g. AGENT001" />
+                </div>
+
+                <div className="form-group">
                   <label>Basic Salary</label>
                   <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
                 </div>
@@ -236,6 +251,26 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 <div className="form-group">
                   <label>Visa Expiry</label>
                   <input type="date" name="visaExpiry" value={form.visaExpiry ? form.visaExpiry.slice(0, 10) : ''} onChange={handleChange} />
+                </div>
+
+                {/* Bank Details Header */}
+                <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
+                  <h4 style={{ margin: 0, fontSize: '14px', color: '#374151' }}>Bank Details</h4>
+                </div>
+
+                <div className="form-group">
+                  <label>Bank Name</label>
+                  <input name="bankName" value={form.bankName || ''} onChange={handleChange} placeholder="e.g. FAB, ADCB" />
+                </div>
+
+                <div className="form-group">
+                  <label>IBAN</label>
+                  <input name="iban" value={form.iban || ''} onChange={handleChange} placeholder="AE..." />
+                </div>
+
+                <div className="form-group">
+                  <label>Account Number</label>
+                  <input name="bankAccount" value={form.bankAccount || ''} onChange={handleChange} />
                 </div>
               </>
             )}
