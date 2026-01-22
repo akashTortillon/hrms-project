@@ -80,6 +80,10 @@ export default function useHRManagement() {
             category: 'ALLOWANCE',
             calculationType: 'FIXED',
             value: '',
+            category: 'ALLOWANCE',
+            calculationType: 'FIXED',
+            value: '',
+            basis: '',
             base: 'BASIC_SALARY',
             isAutomatic: true
         });
@@ -115,6 +119,9 @@ export default function useHRManagement() {
                 category: meta.category || 'ALLOWANCE',
                 calculationType: meta.calculationType || 'FIXED',
                 value: meta.value || '',
+                calculationType: meta.calculationType || 'FIXED',
+                value: meta.value || '',
+                basis: meta.basis || '',
                 base: meta.base || 'BASIC_SALARY',
                 isAutomatic: meta.isAutomatic ?? true
             });
@@ -196,6 +203,9 @@ export default function useHRManagement() {
                                 category: payrollState.category,
                                 calculationType: payrollState.calculationType,
                                 value: Number(payrollState.value),
+                                base: payrollState.base,
+                                value: Number(payrollState.value),
+                                basis: payrollState.basis,
                                 base: payrollState.base,
                                 isAutomatic: payrollState.isAutomatic
                             }
