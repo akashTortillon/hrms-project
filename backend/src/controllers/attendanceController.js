@@ -283,11 +283,13 @@ export const syncBiometrics = async (req, res) => {
 
     // 1. Group logs by Employee + Date
     const groupedData = {};
+    const employeeCodes = new Set(); // To fetch relevant employees later
 
     for (const log of logs) {
       const date = log.timestamp.split("T")[0];
       const time = log.timestamp.split("T")[1].substring(0, 5); // HH:MM
       const key = `${log.employeeCode}_${date}`;
+      employeeCodes.add(log.employeeCode);
 
       if (!groupedData[key]) {
         groupedData[key] = {
@@ -311,6 +313,10 @@ export const syncBiometrics = async (req, res) => {
       }
     }
 
+    // Fetch relevant employees to check for leaves
+    const employeesList = await Employee.find({ code: { $in: Array.from(employeeCodes) } });
+    const leaveMap = await getApprovedLeavesMap(employeesList);
+
     // 2. Process each grouped record
     let syncedCount = 0;
     const errors = [];
@@ -319,10 +325,16 @@ export const syncBiometrics = async (req, res) => {
       const record = groupedData[key];
       // console.log(`Processing: ${record.employeeCode} on ${record.date} | In: ${record.checkIn} Out: ${record.checkOut}`);
 
-      const employee = await Employee.findOne({ code: record.employeeCode });
+      const employee = employeesList.find(e => e.code === record.employeeCode);
 
       if (!employee) {
         errors.push(`Employee not found: ${record.employeeCode}`);
+        continue;
+      }
+
+      // ✅ CHECK LEAVE FIRST: If employee is on approved leave, ignore biometric entry
+      if (isLeave(employee._id, record.date, leaveMap)) {
+        console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} has Approved Leave. Skipping biometric overwrite.`);
         continue;
       }
 
@@ -359,8 +371,8 @@ export const syncBiometrics = async (req, res) => {
           shift: shiftName,
           checkIn: record.checkIn,
           checkOut: record.checkOut,
-          status: status,
-          workHours: workHours
+          status,
+          workHours
         },
         { upsert: true, new: true }
       );
@@ -430,6 +442,64 @@ const getApprovedLeaves = async (date, employees) => {
   });
 
   return onLeaveEmployeeIds;
+};
+
+// ✅ NEW HELPER: Get Map of Approved Leaves for Multiple Employees
+const getApprovedLeavesMap = async (employees) => {
+  const emailToEmpId = {};
+  const emails = [];
+  employees.forEach(emp => {
+    if (emp.email) {
+      emailToEmpId[emp.email] = emp._id.toString();
+      emails.push(emp.email);
+    }
+  });
+
+  const users = await User.find({ email: { $in: emails } });
+  const userIdToEmpId = {};
+  const userIds = [];
+  users.forEach(u => {
+    userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
+    userIds.push(u._id);
+  });
+
+  const requests = await Request.find({
+    userId: { $in: userIds },
+    requestType: "LEAVE",
+    status: "APPROVED"
+  });
+
+  const map = {}; // empId -> [{start, end}]
+  requests.forEach(req => {
+    const details = req.details || {};
+    const startDate = details.startDate || details.fromDate;
+    const endDate = details.endDate || details.toDate;
+
+    if (startDate && endDate) {
+      const empId = userIdToEmpId[req.userId.toString()];
+      if (empId) {
+        if (!map[empId]) map[empId] = [];
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        s.setHours(0, 0, 0, 0);
+        e.setHours(23, 59, 59, 999);
+        map[empId].push({ start: s, end: e });
+      }
+    }
+  });
+  return map;
+};
+
+// ✅ NEW HELPER: Check if a date is within any leave range
+const isLeave = (empId, dateStr, map) => {
+  const ranges = map[empId.toString()];
+  if (!ranges) return false;
+  const d = new Date(dateStr);
+  d.setHours(12, 0, 0, 0); // Mid-day check
+  for (const r of ranges) {
+    if (d >= r.start && d <= r.end) return true;
+  }
+  return false;
 };
 
 /**
@@ -535,6 +605,8 @@ export const getMonthlyAttendance = async (req, res) => {
 
     // Get Holidays
     const holidaySet = await getHolidaysSet();
+    // ✅ NEW: Get Leave Map
+    const leaveMap = await getApprovedLeavesMap(employees);
 
     // Map attendance by Employee -> Date
     const attendanceMap = {};
@@ -566,7 +638,10 @@ export const getMonthlyAttendance = async (req, res) => {
         if (record) {
           status = record.status;
         } else {
+          // ✅ Updated Priority Logic
           if (emp.status === "On Leave") {
+            status = "On Leave";
+          } else if (isLeave(emp._id, day, leaveMap)) { // Check approved leave requests
             status = "On Leave";
           } else if (isSunday) {
             status = "Weekend";
@@ -693,6 +768,9 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     const records = await Attendance.find({ employee: employeeId });
 
     const holidaySet = await getHolidaysSet();
+    // ✅ NEW: Get Leave Map for this employee
+    const leaveMap = await getApprovedLeavesMap([employee]);
+
     const recordMap = {};
     records.forEach(r => recordMap[r.date] = r);
 
@@ -719,7 +797,10 @@ export const getEmployeeAttendanceStats = async (req, res) => {
       } else {
         // No record -> Implicit Status
         // Only count implicit absent if typically a working day (not Sunday, not Holiday)
-        if (!isSunday && !isHoliday) {
+        // ✅ Check for Leave
+        if (isLeave(employee._id, dateStr, leaveMap)) {
+          leave++;
+        } else if (!isSunday && !isHoliday) {
           absent++;
         }
       }
@@ -766,6 +847,9 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
     });
 
     const holidaySet = await getHolidaysSet();
+    // ✅ NEW: Leave Map
+    const leaveMap = await getApprovedLeavesMap([employee]);
+
     const attendanceMap = {};
     attendanceRecords.forEach(rec => attendanceMap[rec.date] = rec);
 
@@ -791,6 +875,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
       } else {
         if (dateObj > today) status = "-"; // Future
         else if (employee.status === "On Leave") status = "On Leave";
+        else if (isLeave(employee._id, dateStr, leaveMap)) status = "On Leave"; // ✅ Check Approved Leaves
         else if (isSunday) status = "Weekend";
         else if (isHoliday) status = "Holiday";
         else status = "Absent";
@@ -850,6 +935,8 @@ export const exportAttendance = async (req, res) => {
 
       const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
       const holidaySet = await getHolidaysSet();
+      // ✅ NEW: Leave Map
+      const leaveMap = await getApprovedLeavesMap(employees);
 
       // Attendance Map
       const attendanceMap = {};
@@ -891,6 +978,7 @@ export const exportAttendance = async (req, res) => {
                   record.status === "On Leave" ? "OL" : record.status;
           } else {
             if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
+            else if (isLeave(emp._id, dateKey, leaveMap)) { status = "On Leave"; cellValue = "OL"; } // ✅ Checked
             else if (isSunday) { status = "Weekend"; cellValue = "W"; }
             else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
             else { status = "Absent"; cellValue = "A"; }
