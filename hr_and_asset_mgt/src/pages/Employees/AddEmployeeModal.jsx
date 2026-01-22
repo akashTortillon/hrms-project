@@ -21,7 +21,6 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     emiratesIdExpiry: "",
     basicSalary: "",
     accommodation: "",
-    accommodation: "",
     visaExpiry: "",
     shift: ""
   });

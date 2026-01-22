@@ -54,6 +54,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     let lopDays = 0;
     let lateCount = 0;
     let overtimeHours = 0;
+    let unpaidLeavesCount = 0; // ✅ Track unpaid leaves separately
     const GLOBAL_STANDARD_HOURS = 9;
 
     // Helper to get hours for a specific shift name
@@ -93,7 +94,13 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                     }
                 }
             } else if (status === 'On Leave') {
-                paidDays++;
+                // ✅ NEW: Distinguish Paid vs Unpaid Leaves
+                if (record.isPaid !== false) {
+                    paidDays++;
+                } else {
+                    lopDays++;
+                    unpaidLeavesCount++; // ✅ NEW
+                }
             } else if (status === 'Absent') {
                 lopDays++;
             }
@@ -118,7 +125,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         totalDays: daysInMonth,
         daysPresent: paidDays,
         daysAbsent: lopDays,
-        unpaidLeaves: 0,
+        unpaidLeaves: unpaidLeavesCount,
         overtimeHours: parseFloat(overtimeHours.toFixed(2)),
         late: lateCount
     };
@@ -442,6 +449,19 @@ export const generateSIF = async (req, res) => {
         const salaryMonth = `${year}-${String(month).padStart(2, '0')}`; // YYYY-MM
         const totalAmount = records.reduce((sum, r) => sum + (r.netSalary || 0), 0);
         const recordCount = records.length;
+
+        // --- NEW: JSON Format for Frontend Preview ---
+        if (req.query.format === "json") {
+            const previewData = records.map(r => ({
+                "Employee": r.employee?.name || "N/A",
+                "Code": r.employee?.code || "N/A",
+                "IBAN/Account": r.employee?.iban || r.employee?.bankAccount || "N/A",
+                "Total Net": (r.netSalary || 0).toFixed(2),
+                "Basic": (r.basicSalary || 0).toFixed(2),
+                "Allowances": (r.totalAllowances || 0).toFixed(2)
+            }));
+            return res.status(200).json({ success: true, data: previewData });
+        }
 
         let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${recordCount},${totalAmount}\n`;
 

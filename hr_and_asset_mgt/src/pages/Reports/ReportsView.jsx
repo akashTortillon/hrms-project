@@ -1,16 +1,12 @@
-
-
-import  React from "react";
+import React from "react";
 import ReportsOverview from "./ReportsAtionCards";
 import ReportsPill from "./PillToggleReports";
 import ComplianceExports from "./ComplianceExports";
 
-function Reports(){
+export default function ReportsView() {
     return <div>
         <ReportsOverview />
         <ReportsPill />
-        <ComplianceExports/>
-        </div>
-}   
-
-export default Reports;
+        <ComplianceExports />
+    </div>
+}

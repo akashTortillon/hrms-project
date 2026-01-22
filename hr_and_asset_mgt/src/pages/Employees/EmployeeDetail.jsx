@@ -45,6 +45,10 @@ import { toast } from "react-toastify";
 
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
 import { getEmployeeTrainings } from "../../services/trainingService";
+import { getEmployeeAssets } from "../../services/assetService";
+import { assignAssetToEmployee } from "../../services/assignmentService";
+import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
+import SvgIcon from "../../components/svgIcon/svgView";
 
 export default function EmployeeDetail() {
     const { id } = useParams();
@@ -66,6 +70,10 @@ export default function EmployeeDetail() {
     // Attendance & Training State
     const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, late: 0, total: 0 });
     const [trainings, setTrainings] = useState([]);
+
+    // Asset State
+    const [employeeAssets, setEmployeeAssets] = useState([]);
+    const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
@@ -118,6 +126,8 @@ export default function EmployeeDetail() {
             fetchDocuments();
         } else if (activeTab === "Attendance") {
             fetchAttendanceData();
+        } else if (activeTab === "Assets") {
+            fetchEmployeeAssetsData();
         }
     }, [activeTab]);
 
@@ -152,6 +162,27 @@ export default function EmployeeDetail() {
             setTrainings(tr);
         } catch (e) {
             console.error("Attendance/Training fetch error:", e);
+        }
+    };
+
+    const fetchEmployeeAssetsData = async () => {
+        try {
+            const assets = await getEmployeeAssets(id);
+            setEmployeeAssets(Array.isArray(assets) ? assets : []);
+        } catch (e) {
+            console.error("Assets fetch error:", e);
+        }
+    };
+
+    const handleAssignAsset = async (data) => {
+        try {
+            await assignAssetToEmployee(data);
+            toast.success("Asset assigned successfully");
+            fetchEmployeeAssetsData(); // Refresh list
+            setShowAssignAssetModal(false); // Close modal
+        } catch (error) {
+            console.error("Assignment error:", error);
+            toast.error(error.response?.data?.message || "Failed to assign asset");
         }
     };
 
@@ -468,7 +499,68 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && (
+                {activeTab === "Assets" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Allocated Assets</h3>
+                            <button
+                                onClick={() => setShowAssignAssetModal(true)}
+                                style={{
+                                    background: '#2563eb', color: 'white', border: 'none',
+                                    padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: '6px'
+                                }}
+                            >
+                                <span style={{ fontSize: "18px", fontWeight: "bold" }}>+</span> Assign Asset
+                            </button>
+                        </div>
+
+                        <div className="assets-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {employeeAssets.map((asset) => (
+                                <div key={asset._id} style={{
+                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div style={{
+                                            background: '#bfdbfe', padding: '10px', borderRadius: '8px',
+                                            color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}>
+                                            <SvgIcon name="cube" size={24} />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontWeight: '600', color: '#111827', fontSize: '15px' }}>
+                                                {asset.name}
+                                            </div>
+                                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                                {asset.assetCode} • {asset.type}
+                                            </div>
+                                            {/* Status or other details if needed */}
+                                            <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                                                Assigned: {new Date(asset.assignedAt || asset.updatedAt).toISOString().split('T')[0]}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <span style={{
+                                        background: asset.status === 'In Use' ? '#dcfce7' : (asset.status === 'Under Maintenance' ? '#fef3c7' : '#e5e7eb'),
+                                        color: asset.status === 'In Use' ? '#166534' : (asset.status === 'Under Maintenance' ? '#854d0e' : '#374151'),
+                                        padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
+                                    }}>
+                                        {asset.status}
+                                    </span>
+                                </div>
+                            ))}
+                            {employeeAssets.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                    No assets assigned to this employee.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
@@ -492,6 +584,15 @@ export default function EmployeeDetail() {
                     employeeId={id}
                     onClose={() => setShowUploadModal(false)}
                     onUpload={handleUploadDocument}
+                />
+            )}
+
+            {/* Assign Asset Modal */}
+            {showAssignAssetModal && (
+                <AssignAssetToEmployeeModal
+                    employeeId={id}
+                    onClose={() => setShowAssignAssetModal(false)}
+                    onAssign={handleAssignAsset}
                 />
             )}
         </div>
