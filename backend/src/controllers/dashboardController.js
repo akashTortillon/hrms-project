@@ -67,7 +67,7 @@ export const getDashboardSummary = async (req, res) => {
       assetsDueService: assetsDue
     });
   } catch (error) {
-    console.error("Dashboard metrics error:", error);
+    // console.error("Dashboard metrics error:", error);
     res.status(500).json({ message: "Dashboard metrics failed" });
   }
 };

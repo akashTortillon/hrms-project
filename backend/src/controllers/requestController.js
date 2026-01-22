@@ -474,7 +474,7 @@ const getRequestTypeLabel = (request) => {
 const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
   try {
     if (!process.env.SMTP_EMAIL || !process.env.SMTP_APP_PASSWORD) {
-      console.error("❌ Email configuration missing");
+      // console.error("❌ Email configuration missing");
       return;
     }
 
@@ -524,9 +524,9 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
     if (ccEmails.length > 0) emailOptions.cc = ccEmails.join(', ');
 
     await sendEmail(emailOptions);
-    console.log(`✅ ${requestLabel} submission email sent successfully`);
+    // console.log(`✅ ${requestLabel} submission email sent successfully`);
   } catch (error) {
-    console.error("❌ Failed to send submission email:", error);
+    // console.error("❌ Failed to send submission email:", error);
   }
 };
 
@@ -557,9 +557,9 @@ const sendSalaryAdvanceApprovalEmail = async (request, employeeUser) => {
     `;
 
     await sendEmail({ to: employeeUser.email, subject, html });
-    console.log(`✅ ${requestLabel} approval email sent successfully`);
+    // console.log(`✅ ${requestLabel} approval email sent successfully`);
   } catch (error) {
-    console.error("❌ Failed to send approval email:", error);
+    // console.error("❌ Failed to send approval email:", error);
   }
 };
 
@@ -588,9 +588,9 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
     `;
 
     await sendEmail({ to: employeeUser.email, subject, html });
-    console.log(`✅ ${requestLabel} rejection email sent successfully`);
+    // console.log(`✅ ${requestLabel} rejection email sent successfully`);
   } catch (error) {
-    console.error("❌ Failed to send rejection email:", error);
+    // console.error("❌ Failed to send rejection email:", error);
   }
 };
 
@@ -648,7 +648,7 @@ export const createRequest = async (req, res) => {
       data: request
     });
   } catch (error) {
-    console.error("Create request error:", error);
+    // console.error("Create request error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to submit request"
@@ -673,7 +673,7 @@ export const getMyRequests = async (req, res) => {
       data: requests
     });
   } catch (error) {
-    console.error("Get my requests error:", error);
+    // console.error("Get my requests error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch requests"
@@ -718,7 +718,7 @@ export const withdrawRequest = async (req, res) => {
       data: populatedRequest
     });
   } catch (error) {
-    console.error("Withdraw request error:", error);
+    // console.error("Withdraw request error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to withdraw request"
@@ -740,7 +740,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       data: requests
     });
   } catch (error) {
-    console.error("Admin pending requests error:", error);
+    // console.error("Admin pending requests error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch pending requests"
@@ -803,7 +803,7 @@ export const updateRequestStatus = async (req, res) => {
       data: populatedRequest
     });
   } catch (err) {
-    console.error("❌ Update request error:", err);
+    // console.error("❌ Update request error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -864,7 +864,7 @@ export const approveDocumentRequest = async (req, res) => {
       data: populatedRequest
     });
   } catch (err) {
-    console.error("❌ Approve document request error:", err);
+    // console.error("❌ Approve document request error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to approve document request"
@@ -927,7 +927,7 @@ export const rejectDocumentRequest = async (req, res) => {
       data: populatedRequest
     });
   } catch (err) {
-    console.error("❌ Reject document request error:", err);
+    // console.error("❌ Reject document request error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to reject document request"
@@ -984,7 +984,7 @@ export const downloadDocument = async (req, res) => {
     const fileStream = fs.createReadStream(request.uploadedDocument);
     fileStream.pipe(res);
   } catch (err) {
-    console.error("❌ Download document error:", err);
+    // console.error("❌ Download document error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to download document"

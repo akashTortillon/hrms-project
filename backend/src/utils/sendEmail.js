@@ -4,14 +4,14 @@ export const sendEmail = async (options) => {
   try {
     // Check if email is configured
     if (!process.env.SMTP_EMAIL || !process.env.SMTP_APP_PASSWORD) {
-      console.log("❌ Email configuration missing in environment variables");
+      // console.log("❌ Email configuration missing in environment variables");
       return { success: false, message: "Email not configured" };
     }
 
     // Check if recipients are provided
     const recipients = options.to || options.email;
     if (!recipients) {
-      console.error("❌ No recipients defined");
+      // console.error("❌ No recipients defined");
       return { success: false, message: "No recipients defined" };
     }
 
@@ -37,18 +37,18 @@ export const sendEmail = async (options) => {
 
     // Send email
     const info = await transporter.sendMail(mailOptions);
-    
-    console.log("✅ Email sent successfully:", info.messageId);
-    
-    return { 
-      success: true, 
-      messageId: info.messageId 
+
+    // console.log("✅ Email sent successfully:", info.messageId);
+
+    return {
+      success: true,
+      messageId: info.messageId
     };
   } catch (error) {
-    console.error("❌ Email sending failed:", error.message);
-    return { 
-      success: false, 
-      error: error.message 
+    // console.error("❌ Email sending failed:", error.message);
+    return {
+      success: false,
+      error: error.message
     };
   }
 };
