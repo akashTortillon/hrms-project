@@ -6,7 +6,7 @@ import { sendEmail } from "../utils/sendEmail.js";
 
 export const register = async (req, res) => {
   try {
-    const { name, email,phone, password, confirmPassword } = req.body;
+    const { name, email, phone, password, confirmPassword } = req.body;
 
     // Basic validation
     if (!name || !email || !phone || !password || !confirmPassword) {
@@ -26,9 +26,9 @@ export const register = async (req, res) => {
 
     // Check if user already exists
     // Check if user already exists
-const existingUser = await User.findOne({ 
-  email: { $regex: new RegExp(`^${email}$`, 'i') } 
-});
+    const existingUser = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, 'i') }
+    });
     if (existingUser) {
       return res.status(409).json({ message: "User already exists" });
     }
@@ -50,7 +50,7 @@ const existingUser = await User.findOne({
       token
     });
   } catch (error) {
-    console.error(error);
+    // console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -64,11 +64,13 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+
     // ✅ Make email case-insensitive
-    const user = await User.findOne({ 
-      email: { $regex: new RegExp(`^${email}$`, 'i') } 
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, 'i') }
     });
-    
+
+
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -77,15 +79,15 @@ export const login = async (req, res) => {
     // Fetch Permissions from Master DB
     let permissions = [];
     if (user.role === 'Admin') {
-        permissions = ["ALL"];
+      permissions = ["ALL"];
     } else {
-        const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
-        permissions = roleDef ? roleDef.permissions : [];
+      const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
+      permissions = roleDef ? roleDef.permissions : [];
     }
 
     const token = generateToken(user._id);
 
-    res.json({ 
+    res.json({
       token,
       role: user.role,
       permissions, // <--- Optimized: Send permissions directly
@@ -97,50 +99,10 @@ export const login = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Login error:", error);
+    // console.error("Login error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 
 
-// export const login = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     // ✅ Case-insensitive email lookup
-//     const user = await User.findOne({ 
-//       email: { $regex: new RegExp(`^${email}$`, 'i') } 
-//     });
-    
-//     if (!user) {
-//       console.log("Login failed: User not found for email:", email);
-//       return res.status(401).json({ message: "Invalid credentials" });
-//     }
-
-//     // ✅ Check if password is hashed (starts with $2a$ or $2b$)
-//     const isPasswordHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
-    
-//     if (!isPasswordHashed) {
-//       console.log("Login failed: Password not hashed for user:", email);
-//       return res.status(401).json({ 
-//         message: "Invalid credentials. Please reset your password." 
-//       });
-//     }
-
-//     const isMatch = await bcrypt.compare(password, user.password);
-    
-//     if (!isMatch) {
-//       console.log("Login failed: Password mismatch for user:", email);
-//       return res.status(401).json({ message: "Invalid credentials" });
-//     }
-
-//     const token = generateToken(user._id);
-//     console.log("Login successful for user:", email);
-//     res.json({ token });
-    
-//   } catch (error) {
-//     console.error("Login error:", error);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };

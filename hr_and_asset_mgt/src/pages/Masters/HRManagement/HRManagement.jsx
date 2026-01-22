@@ -290,6 +290,19 @@ export default function HRManagement() {
                                         </select>
                                     </div>
                                     <div className="form-group">
+                                        <label className="modal-form-label">Trigger Basis</label>
+                                        <select
+                                            className="modal-form-input"
+                                            value={payrollState.basis || ""}
+                                            onChange={(e) => setPayrollState({ ...payrollState, basis: e.target.value })}
+                                        >
+                                            <option value="">None (Fixed / Flat)</option>
+                                            <option value="LATE_COUNT">Late Count</option>
+                                            <option value="OVERTIME_HOURS">Overtime Hours</option>
+                                            <option value="ABSENT_DAYS">Absent Days</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
                                         <label className="modal-form-label">Calculation Type</label>
                                         <select
                                             className="modal-form-input"
@@ -299,7 +312,7 @@ export default function HRManagement() {
                                             <option value="FIXED">Fixed Amount</option>
                                             <option value="PERCENTAGE">Percentage (%)</option>
                                             <option value="DAILY_RATE">Daily Rate (x Days)</option>
-                                            <option value="HOURLY_MULTIPLIER">Hourly (x Multiplier)</option>
+                                            <option value="HOURLY_RATE">Hourly (x Multiplier)</option>
                                         </select>
                                     </div>
                                 </div>

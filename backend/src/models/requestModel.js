@@ -17,6 +17,12 @@ const requestSchema = new mongoose.Schema(
       enum: ["LEAVE", "SALARY", "DOCUMENT"],
       required: true
     },
+    // ✅ NEW: SubType field for Salary Advance vs Loan
+    subType: {
+      type: String,
+      enum: ["salary_advance", "loan", null],
+      default: null
+    },
     status: {
       type: String,
       enum: ["PENDING", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],
@@ -33,6 +39,50 @@ const requestSchema = new mongoose.Schema(
     remarks: {
       type: String,
       default: ""
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    approvedAt: {
+      type: Date,
+      default: null
+    },
+    withdrawnBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    withdrawnAt: {
+      type: Date,
+      default: null
+    },
+    rejectionReason: {
+      type: String,
+      default: ""
+    },
+    // ✅ NEW: Document Request specific fields
+    documentType: {
+      type: String,
+      default: ""
+    },
+    uploadedDocument: {
+      type: String, // File path
+      default: ""
+    },
+    uploadedAt: {
+      type: Date,
+      default: null
+    },
+    actionBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    actionDate: {
+      type: Date,
+      default: null
     }
   },
   { timestamps: true }
@@ -42,4 +92,3 @@ const requestSchema = new mongoose.Schema(
 requestSchema.index({ userId: 1, submittedAt: -1 });
 
 export default mongoose.model("Request", requestSchema);
-

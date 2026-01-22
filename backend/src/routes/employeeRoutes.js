@@ -16,11 +16,11 @@ router.get("/export", protect, exportEmployees);
 
 // GET all employees
 router.get("/", protect, getEmployees);
-console.log("✅ GET /api/employees route registered");
+// console.log("✅ GET /api/employees route registered");
 
 // ADD new employee
 router.post("/", protect, addEmployee);
-console.log("✅ POST /api/employees route registered");
+// console.log("✅ POST /api/employees route registered");
 
 // GET single employee
 router.get("/:id", protect, getEmployeeById);

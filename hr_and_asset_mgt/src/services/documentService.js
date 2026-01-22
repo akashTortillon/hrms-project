@@ -30,3 +30,5 @@ export const deleteDocument = async (id) => {
     const res = await api.delete(`${BASE_URL}/${id}`);
     return res.data;
 };
+
+

@@ -23,7 +23,8 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
 
   // ✅ STATUS → CLASS mapping
   const getStatusClass = (status) => {
-    switch (status) {
+    const safeStatus = status || "Absent";
+    switch (safeStatus) {
       case "Late":
         return "status-late";
       case "Absent":
@@ -208,7 +209,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                     <span
                       className={`status-pill ${getStatusClass(row.status)}`}
                     >
-                      {row.status}
+                      {row.status || "Absent"}
                     </span>
                   </td>
 

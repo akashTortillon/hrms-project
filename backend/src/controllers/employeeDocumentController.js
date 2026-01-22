@@ -44,7 +44,7 @@ export const addDocument = async (req, res) => {
 
         res.status(201).json(newDoc);
     } catch (error) {
-        console.error("Add Employee Doc Error:", error);
+        // console.error("Add Employee Doc Error:", error);
         res.status(500).json({ message: "Server error" });
     }
 };
@@ -56,7 +56,7 @@ export const getEmployeeDocuments = async (req, res) => {
         const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
         res.json(documents);
     } catch (error) {
-        console.error("Get Employee Docs Error:", error);
+        // console.error("Get Employee Docs Error:", error);
         res.status(500).json({ message: "Server error" });
     }
 };
@@ -79,7 +79,7 @@ export const deleteDocument = async (req, res) => {
         await EmployeeDocument.findByIdAndDelete(id);
         res.json({ message: "Document deleted successfully" });
     } catch (error) {
-        console.error("Delete Employee Doc Error:", error);
+        // console.error("Delete Employee Doc Error:", error);
         res.status(500).json({ message: "Server error" });
     }
 };

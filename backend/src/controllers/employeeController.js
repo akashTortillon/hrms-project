@@ -70,7 +70,7 @@ export const exportEmployees = async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    console.error("Export Error:", error);
+    // console.error("Export Error:", error);
     res.status(500).json({ message: "Export failed" });
   }
 };
@@ -152,7 +152,7 @@ export const addEmployee = async (req, res) => {
         });
         createdUser = true;
       } catch (uErr) {
-        console.error("User creation failed:", uErr.message);
+        // console.error("User creation failed:", uErr.message);
         return res.status(500).json({ message: "Failed to create User account. Employee not added." });
       }
     }
@@ -184,7 +184,7 @@ export const addEmployee = async (req, res) => {
       employee
     });
   } catch (error) {
-    console.error("Add Employee Error:", error);
+    // console.error("Add Employee Error:", error);
     if (error.name === 'ValidationError') {
       return res.status(400).json({ message: error.message });
     }
@@ -238,7 +238,7 @@ export const getEmployees = async (req, res) => {
 
     res.json(employees);
   } catch (error) {
-    console.error(error);
+    // console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -257,7 +257,7 @@ export const getEmployeeById = async (req, res) => {
 
     res.json(employee);
   } catch (error) {
-    console.error("Get Employee By ID Error:", error);
+    // console.error("Get Employee By ID Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -304,7 +304,7 @@ export const updateEmployee = async (req, res) => {
 
     res.json({ employee: updatedEmployee });
   } catch (error) {
-    console.error("Update Employee Error:", error);
+    // console.error("Update Employee Error:", error);
     if (error.code === 11000) {
       return res.status(409).json({ message: "Duplicate entry found (Email or Phone)" });
     }
@@ -328,7 +328,7 @@ export const deleteEmployee = async (req, res) => {
 
     res.json({ message: "Employee removed successfully" });
   } catch (error) {
-    console.error(error);
+    // console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };

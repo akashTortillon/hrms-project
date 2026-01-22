@@ -90,4 +90,4 @@ validDates.forEach(dateStr => {
 });
 
 fs.writeFileSync('mockBiometricData.json', JSON.stringify(data, null, 4));
-console.log("Mock Data Generated with Distinct Randomized Absences");
+// console.log("Mock Data Generated with Distinct Randomized Absences");
