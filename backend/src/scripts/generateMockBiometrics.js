@@ -7,10 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // CONFIGURATION
-const YEAR = 2025;
-const MONTH = 11; // December (0-indexed)
+const YEAR = 2026;
+const MONTH = 0; // January (0-indexed)
 const START_DAY = 1;
-const END_DAY = 31; // Full Month
+const END_DAY = 26; // Up to today
 const EMPLOYEES = ['EMP001', 'EMP002', 'EMP003', 'EMP004'];
 
 const generateLogs = () => {

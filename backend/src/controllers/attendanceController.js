@@ -525,8 +525,8 @@ export const getDailyAttendance = async (req, res) => {
     // Get attendance for the date
     const attendanceRecords = await Attendance.find({ date }).populate("employee");
 
-    // Get Approved Leaves for this date
-    const onLeaveSet = await getApprovedLeaves(date, employees);
+    // Get Approved Leaves for this date (Consistent with Monthly View)
+    const leaveMap = await getApprovedLeavesMap(employees);
 
     // Merge
     const attendanceMap = {};
@@ -534,29 +534,12 @@ export const getDailyAttendance = async (req, res) => {
       if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
     });
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // 3️⃣ Get approved leave requests covering this date
-    // const approvedLeaves = await Request.find({
-    //   requestType: "LEAVE",
-    //   status: "APPROVED",
-    //   "details.fromDate": { $lte: dayEnd },
-    //   "details.toDate": { $gte: dayStart }
-    // });
-
-    // const leaveMap = {};
-    // approvedLeaves.forEach((leave) => {
-    //   leaveMap[leave.userId.toString()] = true;
-    // });
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
     // 4️⃣ Merge employees + attendance + leave
     const result = employees.map((emp) => {
       const record = attendanceMap[emp._id.toString()];
       // Check if employee is strictly On Leave in their profile OR has an approved leave request
       const isProfileOnLeave = emp.status === "On Leave";
-      const isRequestOnLeave = onLeaveSet.has(emp._id.toString());
+      const isRequestOnLeave = isLeave(emp._id, date, leaveMap);
 
       return {
         _id: record?._id || null, // If null, no record yet
@@ -568,8 +551,10 @@ export const getDailyAttendance = async (req, res) => {
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
         workHours: record?.workHours || "-",
-        // If record exists, use its status. 
-        // If not, check if profile says "On Leave" OR Leave Request Approved. Otherwise "Absent".
+        // If record exists AND it's not Absent (or if record says On Leave), use its status.
+        // If record doesn't exist, calculate implied status.
+        // If profile says On Leave or Request Approved -> "On Leave"
+        // Else "Absent"
         status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
         avatar: emp.avatar // if available
       };
