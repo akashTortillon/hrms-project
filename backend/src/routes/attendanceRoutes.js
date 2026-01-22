@@ -22,5 +22,7 @@ router.get("/stats/:employeeId", protect, getEmployeeAttendanceStats);
 router.get("/history/:employeeId", protect, getEmployeeAttendanceHistory);
 router.post("/mark", protect, markAttendance);
 router.put("/:id", protect, updateAttendance);
+// router.get("/stats", protect, getEmployeeAttendanceStats);
+
 
 export default router;

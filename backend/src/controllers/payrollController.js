@@ -2,11 +2,76 @@ import Payroll from "../models/payrollModel.js";
 import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
 import Attendance from "../models/attendanceModel.js";
+import Request from "../models/requestModel.js";
+import User from "../models/userModel.js";
 import mongoose from "mongoose";
 import SystemSettings from "../models/systemSettingsModel.js";
 import * as XLSX from "xlsx";
 
 // --- HELPER: Calculate Attendance Stats ---
+// --- HELPER: Parse "8h 45m" to decimal hours ---
+// --- HELPER: Get Map of Approved Leaves for Multiple Employees ---
+const getApprovedLeavesMap = async (employees) => {
+    const emailToEmpId = {};
+    const emails = [];
+    employees.forEach(emp => {
+        if (emp.email) {
+            emailToEmpId[emp.email] = emp._id.toString();
+            emails.push(emp.email);
+        }
+    });
+
+    const users = await User.find({ email: { $in: emails } });
+    const userIdToEmpId = {};
+    const userIds = [];
+    users.forEach(u => {
+        userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
+        userIds.push(u._id);
+    });
+
+    const requests = await Request.find({
+        userId: { $in: userIds },
+        requestType: "LEAVE",
+        status: "APPROVED"
+    });
+
+    const map = {}; // empId -> [{start, end, leaveType}]
+    requests.forEach(req => {
+        const details = req.details || {};
+        const startDate = details.startDate || details.fromDate;
+        const endDate = details.endDate || details.toDate;
+
+        if (startDate && endDate) {
+            const empId = userIdToEmpId[req.userId.toString()];
+            if (empId) {
+                if (!map[empId]) map[empId] = [];
+                const s = new Date(startDate);
+                const e = new Date(endDate);
+                s.setHours(0, 0, 0, 0);
+                e.setHours(23, 59, 59, 999);
+                map[empId].push({
+                    start: s,
+                    end: e,
+                    leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave"
+                });
+            }
+        }
+    });
+    return map;
+};
+
+// --- HELPER: Check if a date is within any leave range ---
+const getLeaveInfo = (empId, dateStr, map) => {
+    const ranges = map[empId.toString()];
+    if (!ranges) return null;
+    const d = new Date(dateStr);
+    d.setHours(12, 0, 0, 0); // Mid-day check
+    for (const r of ranges) {
+        if (d >= r.start && d <= r.end) return r;
+    }
+    return null;
+};
+
 // --- HELPER: Parse "8h 45m" to decimal hours ---
 const parseHours = (timeStr) => {
     if (!timeStr) return 0;
@@ -20,7 +85,7 @@ const parseHours = (timeStr) => {
 };
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null) => {
+const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
     // 1. Setup Date Range
     const daysInMonth = new Date(year, month, 0).getDate();
     const strMonth = String(month).padStart(2, '0');
@@ -54,6 +119,8 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     let lopDays = 0;
     let lateCount = 0;
     let overtimeHours = 0;
+    let unpaidLeavesCount = 0;
+    let paidLeavesCount = 0; // ✅ NEW
     const GLOBAL_STANDARD_HOURS = 9;
 
     // Helper to get hours for a specific shift name
@@ -67,14 +134,19 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         const dateObj = new Date(year, month - 1, day);
         const dayOfWeek = dateObj.getDay();
 
+        let isDayPresent = false;
+        let isDayPaidLeave = false;
+        let isDayUnpaidLeave = false;
+        let isDayLate = false;
+
         // -- PRIORITY 1: ATTENDANCE RECORD --
         if (logMap[dateStr]) {
             const record = logMap[dateStr];
             const status = record.status;
 
             if (status === 'Present' || status === 'Late') {
-                paidDays++;
-                if (status === 'Late') lateCount++;
+                isDayPresent = true;
+                if (status === 'Late') isDayLate = true;
 
                 // Calculate Overtime based on THIS DAY'S Shift
                 if (record.workHours) {
@@ -85,32 +157,84 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                     if (worked > standardLimit) {
                         const dailyOT = worked - standardLimit;
                         overtimeHours += dailyOT;
-                        if (debugInfo?.code === 'EMP001') {
-                            console.log(`[DEBUG EMP001] ${dateStr} | Shift: ${shiftName} (${standardLimit}h) | Worked: ${worked.toFixed(2)}h | OT: ${dailyOT.toFixed(2)}h`);
-                        }
-                    } else if (debugInfo?.code === 'EMP001') {
-                        console.log(`[DEBUG EMP001] ${dateStr} | Shift: ${shiftName} (${standardLimit}h) | Worked: ${worked.toFixed(2)}h | No OT`);
                     }
                 }
             } else if (status === 'On Leave') {
+                // Check if Paid/Unpaid based on record.leaveType or default
+                // Logic: If record has precise info, use it. Else fallback.
+                // Our unified logic below handles this better, but if record exists, trust it? 
+                // Wait, record might be created by biometric sync or manual update without leaveType info.
+                // Let's rely on the Robust Check below if record info is sparse.
+
+                // If record directly says Paid/Unpaid (future proofing)
+                if (record.isPaid === true) isDayPaidLeave = true;
+                else if (record.isPaid === false) isDayUnpaidLeave = true;
+                else {
+                    // Ambiguous. Check Leave Map.
+                }
+            }
+        }
+
+        // -- PRIORITY 2: APPROVED LEAVE (Override Absent/Ambiguous) --
+        // Check if today is a Leave day
+        const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
+
+        // If we haven't already determined status from a clearer record
+        if (!isDayPresent && !isDayLate) {
+            if (leaveInfo || (logMap[dateStr] && logMap[dateStr].status === 'On Leave')) {
+                // Determine Paid vs Unpaid
+                // 1. Get Leave Type
+                // 2. lookup leaveRules
+                const typeName = leaveInfo?.leaveType || logMap[dateStr]?.leaveType; // Name or ID
+
+                let isPaid = true; // Default to Paid
+
+                // Resolving logic:
+                // Try to match by Name or ID in leaveRules
+                // leaveRules comes as map: { 'Sick Leave': true, 'Unpaid': false } etc via ID or Name
+
+                if (typeName) {
+                    if (leaveRules[typeName] !== undefined) {
+                        isPaid = leaveRules[typeName];
+                    } else {
+                        // Semantic Check
+                        const lower = String(typeName).toLowerCase();
+                        if (lower.includes('unpaid') || lower.includes('loss of pay')) isPaid = false;
+                        else isPaid = true; // Annual, Sick, Maternity -> Paid
+                    }
+                }
+
+                if (isPaid) isDayPaidLeave = true;
+                else isDayUnpaidLeave = true;
+            }
+        }
+
+        // -- FINAL STATUS AGGREGATION --
+        if (isDayPresent) {
+            paidDays++; // Present is paid
+            if (isDayLate) lateCount++;
+        } else if (isDayPaidLeave) {
+            paidDays++;
+            paidLeavesCount++; // ✅ NEW
+        } else if (isDayUnpaidLeave) {
+            unpaidLeavesCount++;
+            lopDays++; // Unpaid leave is LOP
+        } else {
+            // -- PRIORITY 3: WEEKEND (Sunday) --
+            if (dayOfWeek === 0) {
                 paidDays++;
-            } else if (status === 'Absent') {
+            }
+            // -- PRIORITY 4: PUBLIC HOLIDAY --
+            else if (holidaySet.has(dateStr)) {
+                paidDays++;
+            }
+            // -- PRIORITY 5: IMPLIED ABSENT --
+            else {
                 lopDays++;
             }
         }
-        // -- PRIORITY 2: WEEKEND (Sunday) --
-        else if (dayOfWeek === 0) {
-            paidDays++;
-        }
-        // -- PRIORITY 3: PUBLIC HOLIDAY --
-        else if (holidaySet.has(dateStr)) {
-            paidDays++;
-        }
-        // -- PRIORITY 4: IMPLIED ABSENT --
-        else {
-            lopDays++;
-        }
     }
+    // End Loop
 
     // console.log(`[Payroll Calc] Emp: ${employeeId} | Paid: ${paidDays} | LOP: ${lopDays} | Late: ${lateCount} | OT: ${overtimeHours.toFixed(2)}`);
 
@@ -118,7 +242,8 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         totalDays: daysInMonth,
         daysPresent: paidDays,
         daysAbsent: lopDays,
-        unpaidLeaves: 0,
+        unpaidLeaves: unpaidLeavesCount,
+        paidLeaves: paidLeavesCount, // ✅ NEW
         overtimeHours: parseFloat(overtimeHours.toFixed(2)),
         late: lateCount
     };
@@ -139,6 +264,31 @@ export const generatePayroll = async (req, res) => {
         shifts.forEach(s => {
             if (s.metadata) shiftMap[s.name] = s.metadata;
         });
+
+        // ✅ NEW: Pre-fetch LEAVE RULES for Paid/Unpaid logic
+        const payrollRules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
+        const leaveRulesMap = {}; // leaveTypeId -> isPaid
+        const masterLeaveTypes = await Master.find({ type: "LEAVE_TYPE" }); // To map IDs to Names if needed
+
+        payrollRules.forEach(r => {
+            if (r.metadata && r.metadata.type === 'LEAVE_CONFIG') {
+                // Try to resolve "isPaid"
+                let isPaid = true;
+                if (r.metadata.isPaid !== undefined) isPaid = r.metadata.isPaid;
+                else if (r.name.toLowerCase().includes('unpaid')) isPaid = false;
+
+                // Map by Leave Type ID if available
+                if (r.metadata.leaveTypeId) {
+                    leaveRulesMap[r.metadata.leaveTypeId.toString()] = isPaid;
+                    // Also find Name
+                    const typeName = masterLeaveTypes.find(t => t._id.toString() === r.metadata.leaveTypeId.toString())?.name;
+                    if (typeName) leaveRulesMap[typeName] = isPaid;
+                }
+            }
+        });
+
+        // ✅ NEW: Fetch Approved Leave Map
+        const approvedLeaveMap = await getApprovedLeavesMap(employees);
 
         const settings = await SystemSettings.findOne();
 
@@ -162,11 +312,15 @@ export const generatePayroll = async (req, res) => {
             const hourlySalary = dailySalary / empStandardHours;
 
             // Get Stats
-            const stats = await getAttendanceStats(emp._id, month, year, settings, shiftMap, { code: emp.code });
+            const stats = await getAttendanceStats(
+                emp._id, month, year,
+                settings, shiftMap,
+                { code: emp.code },
+                approvedLeaveMap,
+                leaveRulesMap
+            );
 
-            if (emp.code === 'EMP001') {
-                console.log(`[DEBUG EMP001] Stats: OT=${stats.overtimeHours}, Late=${stats.late} | Salary: Basic=${basicSalary}, Hourly=${hourlySalary.toFixed(2)}`);
-            }
+
 
             // 3. Dynamic Rule Engine
             for (const rule of rules) {
@@ -192,7 +346,6 @@ export const generatePayroll = async (req, res) => {
                 if (meta.calculationType === "FIXED") {
                     amount = Number(meta.value || 0);
                     description = `Fixed`;
-                    if (emp.code === 'EMP001') console.log(`[DEBUG EMP001] Rule: ${rule.name} | FIXED | Amt: ${amount}`);
                 } else if (meta.calculationType === "PERCENTAGE") {
                     amount = basicSalary * (Number(meta.value) / 100);
                     description = `${meta.value}% of Basic`;
@@ -204,9 +357,23 @@ export const generatePayroll = async (req, res) => {
                     let unitRate = 0;
 
                     // 1. Get the Statistic Value
-                    if (basis === "LATE_COUNT") statValue = stats.late;
-                    else if (basis === "ABSENT_DAYS") statValue = stats.daysAbsent + stats.unpaidLeaves;
-                    else if (basis === "OVERTIME_HOURS") statValue = stats.overtimeHours;
+                    if (basis === "LATE_COUNT") {
+                        statValue = stats.late;
+                        if (statValue > 0) description = `${statValue} Days Late`;
+                    }
+                    else if (basis === "ABSENT_DAYS") {
+                        statValue = stats.daysAbsent + stats.unpaidLeaves;
+                        if (statValue > 0) {
+                            const parts = [];
+                            if (stats.daysAbsent > 0) parts.push(`${stats.daysAbsent} Absent`);
+                            if (stats.unpaidLeaves > 0) parts.push(`${stats.unpaidLeaves} Unpaid Leave`);
+                            description = parts.join(' + ');
+                        }
+                    }
+                    else if (basis === "OVERTIME_HOURS") {
+                        statValue = stats.overtimeHours;
+                        if (statValue > 0) description = `${statValue} Hrs OT`;
+                    }
 
                     // 2. Determine Unit Rate (Hourly or Daily)
                     if (meta.calculationType === "HOURLY_RATE" || basis === "OVERTIME_HOURS") { // Default OT to Hourly
@@ -220,19 +387,13 @@ export const generatePayroll = async (req, res) => {
                     // If no value, assume 1.0 (Direct deduction/payment)
                     const multiplier = meta.value ? Number(meta.value) : 1.0;
 
-                    amount = statValue * unitRate * multiplier;
-                    description = `${basis} x ${multiplier}`;
-
-                    if (emp.code === 'EMP001') {
-                        console.log(`[DEBUG EMP001] Rule: ${rule.name} | Basis: ${basis} | Stat: ${statValue} | Rate: ${unitRate.toFixed(2)} | Mult: ${multiplier} | Amt: ${amount.toFixed(2)}`);
-                    }
-
                     if (statValue > 0) {
                         amount = statValue * unitRate * multiplier;
-                        description = `${statValue} x ${multiplier} x Rate`;
+                        // Append rate info if complex
+                        if (multiplier !== 1) description += ` (x${multiplier})`;
                     }
                 } else {
-                    if (emp.code === 'EMP001') console.log(`[DEBUG EMP001] SKIPPED Rule: ${rule.name} (No Basis found & Not Fixed/Percentage)`);
+                    // Skipped Rule (No Basis found & Not Fixed/Percentage)
                 }
 
                 // --- ADD TO LIST ---
@@ -290,7 +451,7 @@ export const generatePayroll = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        // console.error(error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -355,7 +516,7 @@ export const addAdjustment = async (req, res) => {
         res.json({ message: "Adjustment Added Successfully", payroll });
 
     } catch (error) {
-        console.error(error);
+        // console.error(error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -385,38 +546,156 @@ export const finalizePayroll = async (req, res) => {
 export const exportPayroll = async (req, res) => {
     try {
         const { month, year } = req.query;
-        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban");
+        // Populate fields needed for the report
+        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban bankName laborCardNumber personalId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found for this month." });
         }
 
-        const data = records.map(r => ({
-            "Employee ID": r.employee?.code || "N/A",
-            "Name": r.employee?.name || "N/A",
-            "Department": r.employee?.department || "N/A",
-            "Designation": r.employee?.designation || "N/A",
-            "Basic Salary": r.basicSalary || 0,
-            "Total Allowances": r.totalAllowances || 0,
-            "Total Deductions": r.totalDeductions || 0,
-            "Net Salary": r.netSalary || 0,
-            "Payment Status": r.status,
-            "Bank Account": r.employee?.bankAccount || "",
-            "IBAN": r.employee?.iban || ""
-        }));
+        // --- Prepare Data for Excel ---
+        const monthNames = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+        const monthName = monthNames[parseInt(month) - 1] || "UNKNOWN";
 
-        const worksheet = XLSX.utils.json_to_sheet(data);
+        // Company Constants (Hardcoded as per request image)
+        const COMPANY_NAME = "COMPANY NAME: LEPTIS HYPERMARKET LLC";
+        const MOL_ID = "MOL ID No. 0000001564503";
+        const REPORT_TITLE = `PAYROLL FOR THE MONTH OF ${monthName} - ${year}`;
+
+        // 1. Define the Array of Arrays (AoA) Structure
+        const aoa = [];
+
+        // Row 1: Company Name
+        aoa.push([COMPANY_NAME]);
+        // Row 2: MOL ID
+        aoa.push([MOL_ID]);
+        // Row 3: Report Title
+        aoa.push([REPORT_TITLE]);
+        // Row 4: Empty space
+        aoa.push([]);
+
+        // Row 5: Column Headers Top
+        const headerRowTop = [
+            "Sl.No",
+            "NAME OF THE EMPLOYEE",
+            "WORK PERMIT NO (8 DIGIT NO)",
+            "PERSONAL NO (14 DIGIT NO)",
+            "BANK NAME",
+            "FAB CARD NO(16 DIGITS)\nOR IBAN FOR PERSONAL",
+            "LOP DAYS",          // Renamed for clarity
+            "PAID LEAVES",       // ✅ NEW
+            "Employee's Net Salary", // Merged Header
+            "",
+            ""
+        ];
+        aoa.push(headerRowTop);
+
+        // Row 6: Column Headers Bottom (Sub-headers)
+        const headerRowBottom = [
+            "", "", "", "", "", "", "", "", // Empty for merged columns
+            "Fixed",
+            "Variable",
+            "Total"
+        ];
+        aoa.push(headerRowBottom);
+
+        // Data Rows
+        let serialNo = 1;
+        records.forEach(r => {
+            const emp = r.employee || {};
+
+            // Calc Salary Components
+            const fixed = r.basicSalary || 0;
+            const net = r.netSalary || 0;
+            // Assuming Variable = Net - Fixed (includes allowances - deductions + OT)
+            // Ensure no negative variable if net < basic (e.g. absent) might look weird, but mathematically correct for "balancing"
+            let variable = net - fixed;
+
+            // Format to 2 decimals
+            // variable = parseFloat(variable.toFixed(2));
+
+            // "NO OF DAYS" -> Using LOP (Loss of Pay) or 0 if user wants "Days Absent"? 
+            // Image shows "0" for full salary. Let's assume it means "LOP Days".
+            // r.attendanceSummary might have daysAbsent.
+            const lopDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
+            const paidLeaves = r.attendanceSummary ? (r.attendanceSummary.paidLeaves || 0) : 0; // ✅ NEW
+
+            const row = [
+                serialNo++,                          // Sl.No
+                emp.name || "Unknown",               // Name
+                emp.laborCardNumber || "Not Provided",           // Work Permit
+                emp.personalId || "Not Provided",                // Personal No
+                emp.bankName || "Not Provided",                  // Bank Name
+                emp.iban || emp.bankAccount || "Not Provided",   // FAB/IBAN
+                lopDays,                             // LOP Days
+                paidLeaves,                          // Paid Leaves
+                fixed,                               // Fixed
+                variable,                            // Variable
+                net                                  // Total
+            ];
+            aoa.push(row);
+        });
+
+        // 2. Create Sheet
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+
+        // 3. Define Merges
+        // s: start, e: end. r: row, c: col (0-indexed)
+        const merges = [
+            // Header: Company Name (Row 0, Cols A-J)
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+            // Header: MOL ID (Row 1, Cols A-J)
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+            // Header: Report Title (Row 2, Cols A-J)
+            { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
+
+            // Table Headers (Row 4 & 5)
+            // Sl.No (A5:A6) -> r4,c0 to r5,c0
+            { s: { r: 4, c: 0 }, e: { r: 5, c: 0 } },
+            // Name (B5:B6)
+            { s: { r: 4, c: 1 }, e: { r: 5, c: 1 } },
+            // Work Permit
+            { s: { r: 4, c: 2 }, e: { r: 5, c: 2 } },
+            // Personal No
+            { s: { r: 4, c: 3 }, e: { r: 5, c: 3 } },
+            // Bank Name
+            { s: { r: 4, c: 4 }, e: { r: 5, c: 4 } },
+            // FAB/IBAN
+            { s: { r: 4, c: 5 }, e: { r: 5, c: 5 } },
+            // NO OF DAYS
+            { s: { r: 4, c: 6 }, e: { r: 5, c: 6 } },
+            // Employee's Net Salary (H5:J5) -> Horizontal Merge
+            { s: { r: 4, c: 7 }, e: { r: 4, c: 9 } }
+        ];
+
+        worksheet['!merges'] = merges;
+
+        // 4. Set Column Widths (Approximation)
+        worksheet['!cols'] = [
+            { wch: 5 },  // Sl.No
+            { wch: 30 }, // Name
+            { wch: 15 }, // Work Permit
+            { wch: 18 }, // Personal No
+            { wch: 10 }, // Bank Name
+            { wch: 25 }, // FAB/IBAN
+            { wch: 10 }, // No Of Days
+            { wch: 10 }, // Fixed
+            { wch: 10 }, // Variable
+            { wch: 10 }  // Total
+        ];
+
+        // 5. Build Workbook
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, `Payroll_${month}_${year}`);
 
         const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-        res.setHeader("Content-Disposition", `attachment; filename="Payroll_${month}_${year}.xlsx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="Payroll_Export_${month}_${year}.xlsx"`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buffer);
 
     } catch (error) {
-        console.error(error);
+        // console.error(error);
         res.status(500).json({ message: "Export failed: " + error.message });
     }
 };
@@ -443,6 +722,19 @@ export const generateSIF = async (req, res) => {
         const totalAmount = records.reduce((sum, r) => sum + (r.netSalary || 0), 0);
         const recordCount = records.length;
 
+        // --- NEW: JSON Format for Frontend Preview ---
+        if (req.query.format === "json") {
+            const previewData = records.map(r => ({
+                "Employee": r.employee?.name || "N/A",
+                "Code": r.employee?.code || "N/A",
+                "IBAN/Account": r.employee?.iban || r.employee?.bankAccount || "N/A",
+                "Total Net": (r.netSalary || 0).toFixed(2),
+                "Basic": (r.basicSalary || 0).toFixed(2),
+                "Allowances": (r.totalAllowances || 0).toFixed(2)
+            }));
+            return res.status(200).json({ success: true, data: previewData });
+        }
+
         let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${recordCount},${totalAmount}\n`;
 
         // Body: EDR, PersonID, AgentID, Account, StartDate, EndDate, Days, Income, Basic, Extra, Deduction
@@ -464,7 +756,7 @@ export const generateSIF = async (req, res) => {
         res.send(sifContent);
 
     } catch (error) {
-        console.error(error);
+        // console.error(error);
         res.status(500).json({ message: "SIF Generation failed: " + error.message });
     }
 };

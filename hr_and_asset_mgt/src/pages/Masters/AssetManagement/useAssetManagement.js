@@ -5,7 +5,8 @@ import {
     assetCategoryService,
     assetStatusService,
     vendorService,
-    serviceTypeService
+    serviceTypeService,
+    maintenanceShopService
 } from "../../../services/masterService";
 
 export default function useAssetManagement() {
@@ -14,6 +15,7 @@ export default function useAssetManagement() {
     const [assetStatuses, setAssetStatuses] = useState([]);
     const [vendors, setVendors] = useState([]);
     const [serviceTypes, setServiceTypes] = useState([]);
+    const [maintenanceShops, setMaintenanceShops] = useState([]);
 
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
@@ -35,6 +37,7 @@ export default function useAssetManagement() {
         try { setAssetStatuses(await assetStatusService.getAll()); } catch (e) { console.error(e); }
         try { setVendors(await vendorService.getAll()); } catch (e) { console.error(e); }
         try { setServiceTypes(await serviceTypeService.getAll()); } catch (e) { console.error(e); }
+        try { setMaintenanceShops(await maintenanceShopService.getAll()); } catch (e) { console.error(e); }
     };
 
     const handleOpenAdd = (type) => {
@@ -89,6 +92,10 @@ export default function useAssetManagement() {
                 if (editId) await serviceTypeService.update(editId, inputValue);
                 else await serviceTypeService.add(inputValue);
                 setServiceTypes(await serviceTypeService.getAll());
+            } else if (modalType === "Maintenance Shop") {
+                if (editId) await maintenanceShopService.update(editId, inputValue);
+                else await maintenanceShopService.add(inputValue);
+                setMaintenanceShops(await maintenanceShopService.getAll());
             }
             toast.success(`${modalType} ${editId ? "updated" : "added"} successfully`);
             setShowModal(false);
@@ -108,6 +115,7 @@ export default function useAssetManagement() {
         else if (type === "Status Label") item = assetStatuses.find(i => i._id === id);
         else if (type === "Vendor") item = vendors.find(i => i._id === id);
         else if (type === "Service Type") item = serviceTypes.find(i => i._id === id);
+        else if (type === "Maintenance Shop") item = maintenanceShops.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -133,6 +141,9 @@ export default function useAssetManagement() {
             } else if (type === "Service Type") {
                 await serviceTypeService.delete(id);
                 setServiceTypes(serviceTypes.filter(i => i._id !== id));
+            } else if (type === "Maintenance Shop") {
+                await maintenanceShopService.delete(id);
+                setMaintenanceShops(maintenanceShops.filter(i => i._id !== id));
             }
             toast.success("Deleted successfully");
             setDeleteConfig({ ...deleteConfig, show: false });
@@ -150,6 +161,7 @@ export default function useAssetManagement() {
         assetStatuses,
         vendors,
         serviceTypes,
+        maintenanceShops,
         showModal,
         setShowModal,
         modalType,

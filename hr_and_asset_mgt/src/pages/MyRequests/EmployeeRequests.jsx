@@ -1,14 +1,62 @@
-import React, { useState, useEffect } from "react";
+
+
+
+import React, { useState, useEffect, useMemo } from "react";
 import "../../style/EmployeeRequests.css";
 import SubmitRequestModal from "./SubmitRequestModal";
-import { getMyRequests, withdrawRequest } from "../../services/requestService.js";
+import { getMyRequests, withdrawRequest, downloadDocument } from "../../services/requestService.js";
 import { toast } from "react-toastify";
 import SvgIcon from "../../components/svgIcon/svgView";
+
+/* ----------------------------------
+   ✅ STATUS TEXT HELPER (DYNAMIC)
+---------------------------------- */
+const getStatusText = (req) => {
+  // Debug log
+  console.log("getStatusText called for:", req.requestId, {
+    status: req.status,
+    approvedAt: req.approvedAt,
+    approvedBy: req.approvedBy
+  });
+
+  if (!req.approvedAt || !req.approvedBy) return null;
+
+  const date = new Date(req.approvedAt).toLocaleDateString();
+
+  const approverName = req.approvedBy?.name || "Admin";
+  const approverRole = req.approvedBy?.role || "";
+
+  const roleLabel = approverRole ? ` (${approverRole})` : "";
+
+  if (req.status === "APPROVED")
+    return `Approved by ${approverName}${roleLabel} on ${date}`;
+
+  if (req.status === "REJECTED")
+    return `Rejected by ${approverName}${roleLabel} on ${date}`;
+
+  if (req.status === "COMPLETED")
+    return `Completed by ${approverName}${roleLabel} on ${date}`;
+
+  return null;
+};
 
 export default function EmployeeRequests() {
   const [openModal, setOpenModal] = useState(false);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const [search, setSearch] = useState("");
+const [requestType, setRequestType] = useState("All");
+const [status, setStatus] = useState("All");
+
+  /* ----------------------------------
+     LEAVE CONFIG (Denominators)
+  ---------------------------------- */
+  const LEAVE_LIMITS = {
+    "Annual Leave": 30,
+    "Sick Leave": 15,
+    "Unpaid Leave": null
+  };
 
   useEffect(() => {
     fetchRequests();
@@ -19,6 +67,7 @@ export default function EmployeeRequests() {
       setLoading(true);
       const response = await getMyRequests();
       if (response.success) {
+        console.log("🔍 EMPLOYEE REQUESTS DATA:", response.data);
         setRequests(response.data || []);
       }
     } catch (error) {
@@ -38,29 +87,82 @@ export default function EmployeeRequests() {
         toast.error(response.message || "Failed to withdraw request");
       }
     } catch (error) {
-      const errorMessage =
+      toast.error(
         error.response?.data?.message ||
-        error.message ||
-        "Failed to withdraw request";
-      toast.error(errorMessage);
+          error.message ||
+          "Failed to withdraw request"
+      );
     }
+  };
+
+  /* ----------------------------------
+     LEAVE USAGE CALCULATION
+  ---------------------------------- */
+  const leaveUsage = useMemo(() => {
+    const usage = {
+      "Annual Leave": 0,
+      "Sick Leave": 0,
+      "Unpaid Leave": 0
+    };
+
+    requests.forEach((req) => {
+      if (
+        req.requestType === "LEAVE" &&
+        ["APPROVED", "COMPLETED"].includes(req.status)
+      ) {
+        const leaveType = req.details?.leaveType;
+        const days = Number(req.details?.numberOfDays || 0);
+
+        if (usage[leaveType] !== undefined) {
+          usage[leaveType] += days;
+        }
+      }
+    });
+
+    return usage;
+  }, [requests]);
+
+  const getProgress = (used, total) => {
+    if (!total) return 0;
+    return Math.min((used / total) * 100, 100);
   };
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toISOString().split("T")[0];
+    return new Date(dateString).toISOString().split("T")[0];
   };
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      PENDING: { label: "Pending", class: "status-pending", icon: <SvgIcon name="circle-tick" size={15}/> },
-      APPROVED: { label: "Approved", class: "status-approved", icon: <SvgIcon name="circle-tick" size={15}/> },
-      REJECTED: { label: "Rejected", class: "status-rejected", icon: <SvgIcon name="circle-xmark" size={15}/> },
-      COMPLETED: { label: "Completed", class: "status-completed", icon: <SvgIcon name="circle-tick" size={15}/> },
-      WITHDRAWN: { label: "Withdrawn", class: "status-withdrawn", icon: <SvgIcon name="arrow-uturn-cw-left" size={15}/> }
+      PENDING: {
+        label: "Pending",
+        class: "status-pending",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
+      APPROVED: {
+        label: "Approved",
+        class: "status-approved",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
+      REJECTED: {
+        label: "Rejected",
+        class: "status-rejected",
+        icon: <SvgIcon name="circle-xmark" size={15} />
+      },
+      COMPLETED: {
+        label: "Completed",
+        class: "status-completed",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
+      WITHDRAWN: {
+        label: "Withdrawn",
+        class: "status-withdrawn",
+        icon: <SvgIcon name="arrow-uturn-cw-left" size={15} />
+      }
     };
+
     const config = statusConfig[status] || statusConfig.PENDING;
+
     return (
       <span className={`status-badge ${config.class}`}>
         <span className="status-icon">{config.icon}</span>
@@ -69,46 +171,104 @@ export default function EmployeeRequests() {
     );
   };
 
+  /* ----------------------------------
+     REQUEST LABELS & DETAILS
+  ---------------------------------- */
+
+  // ✅ UPDATED: Salary subType support (loan / advance)
   const getRequestTypeLabel = (request) => {
-    const { requestType, details } = request;
-    
-    if (requestType === "LEAVE") {
-      return details.leaveType || "Leave Request";
-    } else if (requestType === "SALARY") {
-      return "Salary Advance";
-    } else if (requestType === "DOCUMENT") {
-      return "Document Request";
+    if (request.requestType === "LEAVE") return request.details.leaveType;
+
+    if (request.requestType === "SALARY") {
+      return request.subType === "loan"
+        ? "Loan Application"
+        : "Salary Advance";
     }
-    return requestType;
+
+    if (request.requestType === "DOCUMENT") return "Document Request";
+    return request.requestType;
   };
 
   const getRequestDetails = (request) => {
-    const { requestType, details } = request;
-    
-    if (requestType === "LEAVE") {
-      const days = details.numberOfDays
-        ? ` (${details.numberOfDays} days)`
+    if (request.requestType === "LEAVE") {
+      const days = request.details.numberOfDays
+        ? ` (${request.details.numberOfDays} days)`
         : "";
-      return `${details.fromDate} to ${details.toDate}${days}`;
-    } else if (requestType === "SALARY") {
-      return `Amount: AED ${details.amount}`;
-    } else if (requestType === "DOCUMENT") {
-      return `Document: ${details.documentType}`;
+      return `${request.details.fromDate} to ${request.details.toDate}${days}`;
+    }
+    if (request.requestType === "SALARY") {
+      return `Amount: AED ${request.details.amount}`;
+    }
+    if (request.requestType === "DOCUMENT") {
+      return `Document: ${request.details.documentType}`;
     }
     return "";
   };
+
+  // ✅ UPDATED: Use service function for download
+  const handleDownloadDocument = async (requestId) => {
+    try {
+      const blob = await downloadDocument(requestId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `document-${requestId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success("Document downloaded successfully");
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error(
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to download document'
+      );
+    }
+  };
+
+
+
+
+
+  const filteredRequests = useMemo(() => {
+  return requests.filter((req) => {
+    // 🔍 Search (ID / type / leave type)
+    const searchText = search.toLowerCase();
+
+    const matchesSearch =
+      !searchText ||
+      req.requestId?.toLowerCase().includes(searchText) ||
+      req.requestType?.toLowerCase().includes(searchText) ||
+      req.details?.leaveType?.toLowerCase().includes(searchText);
+
+    // 📌 Request Type filter
+    const matchesType =
+      requestType === "All" || req.requestType === requestType;
+
+    //  Status filter
+    const matchesStatus =
+      status === "All" || req.status === status;
+
+    return matchesSearch && matchesType && matchesStatus;
+  });
+}, [requests, search, requestType, status]);
+
+
+
+
+
   return (
     <div className="employee-requests">
       {/* HEADER */}
       <div className="requests-header">
         <div>
           <h1 className="requests-title">My Requests</h1>
-          <p className="requests-subtitle">
-            Submit and track your requests
-          </p>
+          <p className="requests-subtitle">Submit and track your requests</p>
         </div>
 
-        <button className="new-request-btn" onClick={() => setOpenModal(true)} >
+        <button className="new-request-btn" onClick={() => setOpenModal(true)}>
           <span className="plus">＋</span>
           New Request
         </button>
@@ -116,118 +276,181 @@ export default function EmployeeRequests() {
 
       {/* LEAVE SUMMARY */}
       <div className="leave-cards">
-        {/* Annual Leave */}
-        <div className="leave-card">
-          <div className="leave-card-header">
-            <span className="leave-title">Annual Leave</span>
-            <span className="leave-count">
-              <strong>22</strong> / 30 days
-            </span>
-          </div>
-          <div className="progress-bar">
-            <div
-              className="progress-fill blue"
-              style={{ width: "73%" }}
-            />
-          </div>
-        </div>
+        {Object.keys(LEAVE_LIMITS).map((leaveType) => {
+          const used = leaveUsage[leaveType];
+          const total = LEAVE_LIMITS[leaveType];
+          const progress = getProgress(used, total);
 
-        {/* Sick Leave */}
-        <div className="leave-card">
-          <div className="leave-card-header">
-            <span className="leave-title">Sick Leave</span>
-            <span className="leave-count">
-              <strong>13</strong> / 15 days
-            </span>
-          </div>
-          <div className="progress-bar">
-            <div
-              className="progress-fill green"
-              style={{ width: "87%" }}
-            />
-          </div>
-        </div>
+          return (
+            <div key={leaveType} className="leave-card">
+              <div className="leave-card-header">
+                <span className="leave-title">{leaveType}</span>
+                <span className="leave-count">
+                  <strong>{used}</strong>{" "}
+                  {total ? `/ ${total} days` : "days taken"}
+                </span>
+              </div>
 
-        {/* Unpaid Leave */}
-        <div className="leave-card">
-          <div className="leave-card-header">
-            <span className="leave-title">Unpaid Leave</span>
-            <span className="leave-count">
-              <strong>0</strong> days taken
-            </span>
-          </div>
-          <div className="progress-bar">
-            <div
-              className="progress-fill gray"
-              style={{ width: "0%", minWidth: "10px" }}
-            />
-          </div>
-        </div>
-
-
-        {openModal && (
-          <SubmitRequestModal
-            onClose={() => setOpenModal(false)}
-            onSuccess={fetchRequests}
-          />
-        )}
+              <div className="progress-bar">
+                <div
+                  className={`progress-fill ${
+                    leaveType === "Annual Leave"
+                      ? "blue"
+                      : leaveType === "Sick Leave"
+                      ? "green"
+                      : "gray"
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+                <div
+                  className="progress-unfilled"
+                  style={{ width: `${100 - progress}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+
+        {/* Requests Filters */}
+<div className="requests-filters-card">
+  <div className="requests-filters">
+    
+    {/* Search */}
+    <div className="requests-search">
+      <SvgIcon name="search" size={18} />
+      <input
+        type="text"
+        placeholder="Search by request type ..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+    </div>
+
+    {/* Request Type */}
+    <select
+      className="requests-select"
+      value={requestType}
+      onChange={(e) => setRequestType(e.target.value)}
+    >
+      <option value="All">All Request Types</option>
+      <option value="LEAVE">Leave</option>
+      <option value="SALARY">Salary</option>
+      <option value="DOCUMENT">Document</option>
+    </select>
+
+    {/* Status */}
+    <select
+      className="requests-select"
+      value={status}
+      onChange={(e) => setStatus(e.target.value)}
+    >
+      <option value="All">All Status</option>
+      <option value="PENDING">Pending</option>
+      <option value="APPROVED">Approved</option>
+      <option value="REJECTED">Rejected</option>
+      <option value="COMPLETED">Completed</option>
+    </select>
+
+    
+  </div>
+
+  <div className="requests-count">
+    Showing {filteredRequests.length} Requests
+
+  </div>
+</div>
+
+
+
+
+
 
       {/* REQUEST HISTORY */}
       <div className="request-history-section">
-        <div className="request-history-header">
-          <h2 className="request-history-title">Request History</h2>
-          <p className="request-history-subtitle">
-            Track status of your submitted requests
-          </p>
-        </div>
-
         {loading ? (
           <div className="loading-message">Loading requests...</div>
         ) : requests.length === 0 ? (
           <div className="no-requests">No requests submitted yet</div>
         ) : (
           <div className="request-list">
-            {requests.map((request) => (
-              <div key={request._id} className="request-item">
-                <div className="request-item-content">
-                  <div className="request-item-header">
-                    <h3 className="request-item-title">
-                      {getRequestTypeLabel(request)}
-                    </h3>
-                    {getStatusBadge(request.status)}
-                  </div>
-                  <div className="request-item-meta">
-                    Request ID: {request.requestId} • Submitted:{" "}
-                    {formatDate(request.submittedAt)}
-                  </div>
-                  <div className="request-item-details">
-                    {getRequestDetails(request)}
-                  </div>
-                  {request.status === "APPROVED" && request.remarks && (
-                    <div className="request-item-approval">
-                      Approved by {request.remarks} on{" "}
-                      {formatDate(request.updatedAt)}
+            {filteredRequests.map((request) => {
+              const statusText = getStatusText(request);
+
+              return (
+                <div key={request._id} className="request-item">
+                  <div className="request-item-content">
+                    <div className="request-item-header">
+                      <h3 className="request-item-title">
+                        {getRequestTypeLabel(request)}
+                      </h3>
+                      {getStatusBadge(request.status)}
                     </div>
-                  )}
-                </div>
-                <div className="request-item-actions">
-                  {request.status === "PENDING" && (
-                    <button
-                      className="withdraw-btn"
-                      onClick={() => handleWithdraw(request._id)}
-                    >
-                      Withdraw
+
+                    <div className="request-item-meta">
+                      Request ID: {request.requestId} • Submitted:{" "}
+                      {formatDate(request.submittedAt)}
+                    </div>
+
+                    <div className="request-item-details">
+                      {getRequestDetails(request)}
+                    </div>
+
+                    {/* ✅ STATUS NOTE */}
+                    {statusText && (
+                      <div className="request-status-note">
+                        {statusText}
+                      </div>
+                    )}
+
+                    {/* ✅ REJECTION REASON */}
+                    {request.status === "REJECTED" &&
+                      request.rejectionReason && (
+                        <div className="request-rejection-reason">
+                          <strong>Rejection Reason:</strong>{" "}
+                          {request.rejectionReason}
+                        </div>
+                      )}
+                  </div>
+
+                  <div className="request-item-actions">
+                    {request.status === "PENDING" && (
+                      <button
+                        className="withdraw-btn"
+                        onClick={() => handleWithdraw(request._id)}
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                    {/* ✅ UPDATED: Download button for completed document requests */}
+                    {request.requestType === "DOCUMENT" && 
+                     request.status === "COMPLETED" && 
+                     request.uploadedDocument && (
+                      <button
+                        className="download-btn"
+                        onClick={() => handleDownloadDocument(request._id)}
+                      >
+                        Download Document
+                      </button>
+                    )}
+                    <button className="view-details-btn">
+                      View Details
                     </button>
-                  )}
-                  <button className="view-details-btn">View Details</button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {openModal && (
+        <SubmitRequestModal
+          onClose={() => setOpenModal(false)}
+          onSuccess={fetchRequests}
+        />
+      )}
     </div>
   );
 }
-

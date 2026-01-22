@@ -1,32 +1,60 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "../../style/SubmitRequestModal.css";
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
+import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
 import { toast } from "react-toastify";
 
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
-  
+  const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
+
+  // ✅ NEW: SubType state for Salary requests
+  const [salarySubType, setSalarySubType] = useState("salary_advance");
+
   // Form states
   const [leaveForm, setLeaveForm] = useState({
-    leaveType: "Annual Leave",
+    leaveType: "", // Changed from "Annual Leave" to ""
+    leaveTypeId: "", // ✅ NEW: Track ID
+    isPaid: true,    // ✅ NEW: Track Paid status
     numberOfDays: "",
     fromDate: "",
     toDate: "",
     reason: ""
   });
-  
+
   const [salaryForm, setSalaryForm] = useState({
     amount: "",
     repaymentPeriod: "3 Months",
     reason: ""
   });
-  
+
   const [documentForm, setDocumentForm] = useState({
     documentType: "Salary Certificate",
     purpose: ""
   });
+
+  // ✅ NEW: Fetch Leave Types
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      try {
+        const data = await leaveTypeService.getAll();
+        setLeaveTypes(data);
+        if (data.length > 0) {
+          setLeaveForm(prev => ({
+            ...prev,
+            leaveType: data[0].name,
+            leaveTypeId: data[0]._id,
+            isPaid: data[0].metadata?.isPaid !== false // Default to true if not specified
+          }));
+        }
+      } catch (error) {
+        console.error("Failed to fetch leave types:", error);
+      }
+    };
+    fetchLeaveTypes();
+  }, []);
 
   const handleSubmit = async () => {
     try {
@@ -46,6 +74,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         }
         requestData.details = {
           leaveType: leaveForm.leaveType,
+          leaveTypeId: leaveForm.leaveTypeId, // ✅ NEW
+          isPaid: leaveForm.isPaid,           // ✅ NEW
           numberOfDays: leaveForm.numberOfDays,
           fromDate: leaveForm.fromDate,
           toDate: leaveForm.toDate,
@@ -57,6 +87,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
+        // ✅ NEW: Include subType for salary requests
+        requestData.subType = salarySubType;
         requestData.details = {
           amount: salaryForm.amount,
           repaymentPeriod: salaryForm.repaymentPeriod,
@@ -80,7 +112,9 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         toast.success(response.message || "Request submitted successfully");
         // Reset forms
         setLeaveForm({
-          leaveType: "Annual Leave",
+          leaveType: leaveTypes.length > 0 ? leaveTypes[0].name : "",
+          leaveTypeId: leaveTypes.length > 0 ? leaveTypes[0]._id : "",
+          isPaid: leaveTypes.length > 0 ? (leaveTypes[0].metadata?.isPaid !== false) : true,
           numberOfDays: "",
           fromDate: "",
           toDate: "",
@@ -96,6 +130,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           purpose: ""
         });
         setActiveType("leave");
+        setSalarySubType("salary_advance"); // Reset subType
         onClose();
         if (onSuccess) {
           onSuccess();
@@ -131,9 +166,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {/* REQUEST TYPE CARDS */}
         <div className="request-type-grid">
           <div
-            className={`request-type-card ${
-              activeType === "leave" ? "active" : ""
-            }`}
+            className={`request-type-card ${activeType === "leave" ? "active" : ""
+              }`}
             onClick={() => setActiveType("leave")}
           >
             <div className="icon blue"><SvgIcon name="calendar" /></div>
@@ -141,9 +175,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           </div>
 
           <div
-            className={`request-type-card ${
-              activeType === "salary" ? "active" : ""
-            }`}
+            className={`request-type-card ${activeType === "salary" ? "active" : ""
+              }`}
             onClick={() => setActiveType("salary")}
           >
             <div className="icon green"><SvgIcon name="dollar" /></div>
@@ -151,9 +184,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           </div>
 
           <div
-            className={`request-type-card ${
-              activeType === "document" ? "active" : ""
-            }`}
+            className={`request-type-card ${activeType === "document" ? "active" : ""
+              }`}
             onClick={() => setActiveType("document")}
           >
             <div className="icon purple"><SvgIcon name="document" /></div>
@@ -170,15 +202,24 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
               <div>
                 <label>Leave Type</label>
                 <select
-                  value={leaveForm.leaveType}
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, leaveType: e.target.value })
-                  }
+                  value={leaveForm.leaveTypeId}
+                  onChange={(e) => {
+                    const selected = leaveTypes.find(t => t._id === e.target.value);
+                    if (selected) {
+                      setLeaveForm({
+                        ...leaveForm,
+                        leaveTypeId: selected._id,
+                        leaveType: selected.name,
+                        isPaid: selected.metadata?.isPaid !== false
+                      });
+                    }
+                  }}
                 >
-                  <option>Annual Leave</option>
-                  <option>Sick Leave</option>
-                  <option>Unpaid Leave</option>
-                  <option>Maternity Leave</option>
+                  {leaveTypes.map(type => (
+                    <option key={type._id} value={type._id}>
+                      {type.name} {type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -235,6 +276,33 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {/* SALARY ADVANCE FORM */}
         {activeType === "salary" && (
           <div className="leave-form">
+            {/* ✅ NEW: RADIO BUTTONS FOR SUB-TYPE */}
+            <div className="salary-subtype-section">
+              <label className="subtype-label">Request Type</label>
+              <div className="radio-group">
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="salarySubType"
+                    value="salary_advance"
+                    checked={salarySubType === "salary_advance"}
+                    onChange={(e) => setSalarySubType(e.target.value)}
+                  />
+                  <span className="radio-text">Salary Advance</span>
+                </label>
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="salarySubType"
+                    value="loan"
+                    checked={salarySubType === "loan"}
+                    onChange={(e) => setSalarySubType(e.target.value)}
+                  />
+                  <span className="radio-text">Loan Application</span>
+                </label>
+              </div>
+            </div>
+
             <div>
               <label>Request Amount (AED)</label>
               <input
@@ -267,7 +335,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div>
               <label>Reason</label>
               <textarea
-                placeholder="Enter reason for salary advance..."
+                placeholder={`Enter reason for ${salarySubType === "loan" ? "loan" : "salary advance"}...`}
                 value={salaryForm.reason}
                 onChange={(e) =>
                   setSalaryForm({ ...salaryForm, reason: e.target.value })

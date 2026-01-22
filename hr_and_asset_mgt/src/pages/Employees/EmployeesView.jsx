@@ -1,43 +1,20 @@
 // import React, { useEffect, useState } from "react";
+// import { useSearchParams } from "react-router-dom";
 // import EmployeesHeader from "./EmployeesHeader.jsx";
 // import EmployeesTable from "./EmployeesTable.jsx";
 // import AddEmployeeModal from "./AddEmployeeModal.jsx";
-// import { getEmployees, addEmployee } from "../../services/employeeService.js";
+// import EditEmployeeModal from "./EditEmployeeModal.jsx";
+// import {
+//   getEmployees,
+//   addEmployee,
+//   updateEmployee,
+//   deleteEmployee,
+//   exportEmployees
+// } from "../../services/employeeService.js";
 // import { toast } from "react-toastify";
+// import { getDepartments } from "../../services/masterService";
 
-// export default function Employees() {
-//   // 🔹 Filters & search
-//   const [department, setDepartment] = useState("All Departments");
-//   const [status, setStatus] = useState("All Status");
-//   const [search, setSearch] = useState("");
-
-//   // 🔹 Data & UI
-//   const [employees, setEmployees] = useState([]);
-//   const [showModal, setShowModal] = useState(false);
-
-//   // 🔹 Fetch employees on page load
-//   useEffect(() => {
-//     fetchEmployees();
-//   }, []);
-
-
-
-
-//   const fetchEmployees = async () => {
-//   try {
-//     const response = await getEmployees();
-
-
-//     const employeesArray = Array.isArray(response) ? response : [];
-
-//     // Transform API data to match table format
-//     const formattedEmployees = employeesArray.map((emp, index) => ({
-//       id: emp._id || index + 1,
-//       name: emp.name,
-//       code: emp.code,
-//       role: emp.role,
-//       department: emp.department,
-//       email: emp.email,
+//export default function Employees() {
 //       phone: emp.phone,
 //       joinDate: emp.joinDate ? new Date(emp.joinDate).toISOString().split('T')[0] : emp.joinDate,
 //       status: emp.status
