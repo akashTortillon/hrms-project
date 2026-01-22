@@ -1,7 +1,7 @@
 
 import express from "express";
 import {
-  getDashboardMetrics,
+  getDashboardSummary ,
   getCompanyDocumentExpiries,
   getEmployeeVisaExpiries,
   getPendingApprovals,
@@ -10,7 +10,7 @@ import {
 
 const router = express.Router();
 
-router.get("/metrics", getDashboardMetrics);
+router.get("/summary", getDashboardSummary);
 router.get("/company-documents", getCompanyDocumentExpiries);
 router.get("/employee-visas", getEmployeeVisaExpiries);
 router.get("/pending-approvals", getPendingApprovals);

@@ -12,6 +12,7 @@ import Documents from "../pages/Documents/DocumentView.jsx";
 import Assets from "../pages/Assets/AssetsView.jsx";
 import MyRequests from "../pages/MyRequests/MyRequests.jsx";
 import Reports from "../pages/Reports/ReportsView.jsx";
+import CustomReportBuilder from "../pages/Reports/pages/CustomReportBuilder.jsx";
 import Masters from "../pages/Masters/MastersView.jsx";
 
 export default function Layout() {
@@ -35,6 +36,7 @@ export default function Layout() {
               <Route path="assets" element={<Assets />} />
               <Route path="requests" element={<MyRequests />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="reports/builder" element={<CustomReportBuilder />} />
               <Route path="masters" element={<Masters />} />
             </Routes>
           </div>
