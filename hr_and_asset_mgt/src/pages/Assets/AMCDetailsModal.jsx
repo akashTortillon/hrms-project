@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
+import { vendorService } from "../../services/masterService.js";
 
 export default function AMCDetailsModal({ onClose, onSave, asset }) {
   const [form, setForm] = useState({
@@ -11,6 +12,20 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
     coverageDetails: "",
     status: "Active"
   });
+  const [vendors, setVendors] = useState([]);
+
+  useEffect(() => {
+    fetchVendors();
+  }, []);
+
+  const fetchVendors = async () => {
+    try {
+      const data = await vendorService.getAll();
+      setVendors(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch vendors", error);
+    }
+  };
 
   useEffect(() => {
     if (asset?.amcDetails) {
@@ -29,9 +44,9 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm({ 
-      ...form, 
-      [name]: name === "cost" ? parseFloat(value) || "" : value 
+    setForm({
+      ...form,
+      [name]: name === "cost" ? parseFloat(value) || "" : value
     });
   };
 
@@ -106,16 +121,16 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
                 background: daysUntilExpiry < 0 ? "#fef2f2" : daysUntilExpiry <= 30 ? "#fffbeb" : "#f0fdf4",
                 border: `1px solid ${daysUntilExpiry < 0 ? "#fecaca" : daysUntilExpiry <= 30 ? "#fef3c7" : "#bbf7d0"}`
               }}>
-                <div style={{ 
-                  fontSize: "13px", 
+                <div style={{
+                  fontSize: "13px",
                   fontWeight: "500",
                   color: daysUntilExpiry < 0 ? "#dc2626" : daysUntilExpiry <= 30 ? "#f59e0b" : "#16a34a"
                 }}>
-                  {daysUntilExpiry < 0 
+                  {daysUntilExpiry < 0
                     ? `⚠️ AMC Expired ${Math.abs(daysUntilExpiry)} days ago`
                     : daysUntilExpiry <= 30
-                    ? `⚠️ AMC Expiring in ${daysUntilExpiry} days`
-                    : `✓ AMC Valid for ${daysUntilExpiry} days`
+                      ? `⚠️ AMC Expiring in ${daysUntilExpiry} days`
+                      : `✓ AMC Valid for ${daysUntilExpiry} days`
                   }
                 </div>
               </div>
@@ -126,13 +141,18 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Service Provider *
               </label>
-              <input
-                type="text"
+              <select
                 name="provider"
-                placeholder="Provider name or company"
                 value={form.provider}
                 onChange={handleChange}
-              />
+              >
+                <option value="">Choose a service provider...</option>
+                {vendors.map((vendor) => (
+                  <option key={vendor._id} value={vendor.name}>
+                    {vendor.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Contract Number */}

@@ -4,6 +4,7 @@ import authRoutes from "./routes/authRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
+import payrollRoutes from "./routes/payrollRoutes.js";
 import requestRoutes from "./routes/requestRoutes.js";
 import assetRoutes from "./routes/assetRoutes.js";
 
@@ -40,6 +41,10 @@ console.log("Attendance routes registered at /api/attendance");
 
 // 🔹 Request APIs
 app.use("/api/requests", requestRoutes);
+
+// 🔹 Payroll APIs
+app.use("/api/payroll", payrollRoutes);
+console.log("✅ Payroll routes registered at /api/payroll");
 // 🔹 Unified Master API
 import masterRoutes from "./routes/masterRoutes.js";
 app.use("/api/masters", masterRoutes);
@@ -53,12 +58,28 @@ console.log("System Settings routes registered at /api/system-settings");
 // 🔹 Company Documents API
 import companyDocRoutes from "./routes/companyDocRoutes.js";
 app.use("/api/documents", companyDocRoutes);
+
+// 🔹 Employee Documents API (Specific to Employee)
+import employeeDocumentRoutes from "./routes/employeeDocumentRoutes.js";
+app.use("/api/employee-docs", employeeDocumentRoutes);
+console.log("✅ Employee Document routes registered at /api/employee-docs");
+
 // Serve uploaded files statically
 app.use("/uploads", express.static("uploads"));
 
 // 🔹 Asset APIs
 app.use("/api/assets", assetRoutes);
 console.log("Asset routes registered at /api/assets");
+
+// 🔹 Report APIs
+import reportRoutes from "./routes/reportRoutes.js";
+app.use("/api/reports", reportRoutes);
+console.log("✅ Report routes registered at /api/reports");
+
+// 🔹 Training APIs
+import trainingRoutes from "./routes/trainingRoutes.js";
+app.use("/api/trainings", trainingRoutes);
+console.log("✅ Training routes registered at /api/trainings");
 
 
 

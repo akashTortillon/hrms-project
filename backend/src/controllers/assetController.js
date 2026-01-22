@@ -3,11 +3,11 @@
 // // Generate next asset code (AST001, AST002, etc.)
 // const generateAssetCode = async () => {
 //   const lastAsset = await Asset.findOne().sort({ assetCode: -1 });
-  
+
 //   if (!lastAsset || !lastAsset.assetCode) {
 //     return "AST001";
 //   }
-  
+
 //   const lastNumber = parseInt(lastAsset.assetCode.replace("AST", ""));
 //   const nextNumber = lastNumber + 1;
 //   return `AST${nextNumber.toString().padStart(3, "0")}`;
@@ -142,7 +142,7 @@
 //       { isDeleted: true,
 //         status: "Disposed"
 //        },
-       
+
 //       { new: true }
 //     );
 
@@ -174,11 +174,11 @@ import XLSX from "xlsx";
 // Generate next asset code (AST001, AST002, etc.)
 const generateAssetCode = async () => {
   const lastAsset = await Asset.findOne().sort({ assetCode: -1 });
-  
+
   if (!lastAsset || !lastAsset.assetCode) {
     return "AST001";
   }
-  
+
   const lastNumber = parseInt(lastAsset.assetCode.replace("AST", ""));
   const nextNumber = lastNumber + 1;
   return `AST${nextNumber.toString().padStart(3, "0")}`;
@@ -187,20 +187,20 @@ const generateAssetCode = async () => {
 // ✅ CREATE ASSET
 export const createAsset = async (req, res) => {
   try {
-    const { 
-      name, 
+    const {
+      name,
       serialNumber,
       type,
-      category, 
-      location, 
-      subLocation, 
-      custodian, 
-      department, 
-      purchaseCost, 
-      purchaseDate, 
-      status, 
+      category,
+      location,
+      subLocation,
+      custodian,
+      department,
+      purchaseCost,
+      purchaseDate,
+      status,
       warrantyPeriod,
-      serviceDueDate 
+      serviceDueDate
     } = req.body;
 
     // Validation
@@ -310,9 +310,11 @@ export const getAssets = async (req, res) => {
     }
 
     const assets = await Asset.find(filter)
-      .populate({ path: "custodian", select: "name code email department" })
+      .populate({ path: "custodian.employee", select: "name code email department" })
       .populate({ path: "currentLocation.employee", select: "name email code" })
       .populate({ path: "currentLocation.shop", select: "name code" })
+      .populate({ path: "maintenanceLogs.serviceType", select: "name" })
+      .populate({ path: "maintenanceLogs.provider", select: "name" })
       .sort({ createdAt: -1 });
 
     // IMPORTANT: Return plain array (matches existing frontend expectations)
@@ -332,10 +334,12 @@ export const getAssetById = async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await Asset.findById(id)
-      .populate({ path: 'custodian', select: 'name code email department' })
+      .populate({ path: 'custodian.employee', select: 'name code email department' })
       .populate({ path: 'currentLocation.employee', select: 'name email code' })
       .populate({ path: 'currentLocation.shop', select: 'name code' })
       .populate({ path: 'maintenanceLogs.performedBy', select: 'name' })
+      .populate({ path: 'maintenanceLogs.serviceType', select: 'name' })
+      .populate({ path: 'maintenanceLogs.provider', select: 'name' })
       .populate({ path: 'documents.uploadedBy', select: 'name' });
 
     if (!asset) {
@@ -410,7 +414,7 @@ export const deleteAsset = async (req, res) => {
 
     const asset = await Asset.findByIdAndUpdate(
       id,
-      { 
+      {
         isDeleted: true,
         status: "Disposed"
       },
@@ -421,9 +425,9 @@ export const deleteAsset = async (req, res) => {
       return res.status(404).json({ message: "Asset not found" });
     }
 
-    res.json({ 
+    res.json({
       message: "Asset deleted successfully",
-      asset 
+      asset
     });
   } catch (error) {
     console.error("Delete asset error:", error);
@@ -543,8 +547,8 @@ export const scheduleMaintenance = async (req, res) => {
     const { scheduledDate, serviceType, provider, cost, description } = req.body;
 
     if (!scheduledDate || !serviceType || !provider) {
-      return res.status(400).json({ 
-        message: "Scheduled date, service type, and provider are required" 
+      return res.status(400).json({
+        message: "Scheduled date, service type, and provider are required"
       });
     }
 
@@ -564,6 +568,10 @@ export const scheduleMaintenance = async (req, res) => {
     };
 
     asset.maintenanceLogs.push(maintenanceLog);
+
+    // Sync serviceDueDate with the newly scheduled date to update dashboard alerts
+    asset.serviceDueDate = new Date(scheduledDate);
+
     await asset.save();
 
     const updatedAsset = await Asset.findById(id)
@@ -714,7 +722,7 @@ export const deleteMaintenanceLog = async (req, res) => {
 //       }
 //     ]);
 //     const worksheet = XLSX.utils.json_to_sheet(assets);
-    
+
 //     // Auto-width columns
 //     const maxWidth = assets.reduce((w, r) => Math.max(w, r["Asset Name"] ? r["Asset Name"].length : 15), 15);
 //     worksheet["!cols"] = [
@@ -848,8 +856,8 @@ export const updateAmcDetails = async (req, res) => {
     const { provider, contractNumber, startDate, endDate, cost, coverageDetails, status } = req.body;
 
     if (!provider || !startDate || !endDate) {
-      return res.status(400).json({ 
-        message: "Provider, start date, and end date are required" 
+      return res.status(400).json({
+        message: "Provider, start date, and end date are required"
       });
     }
 
@@ -988,8 +996,8 @@ export const disposeAsset = async (req, res) => {
     const { disposalDate, disposalMethod, disposalReason, disposalValue, remarks, disposalDocument } = req.body;
 
     if (!disposalDate || !disposalMethod || !disposalReason) {
-      return res.status(400).json({ 
-        message: "Disposal date, method, and reason are required" 
+      return res.status(400).json({
+        message: "Disposal date, method, and reason are required"
       });
     }
 
@@ -1085,7 +1093,8 @@ export const getEmployeeAssets = async (req, res) => {
     const { employeeId } = req.params;
 
     const assets = await Asset.find({
-      custodian: employeeId,
+      "custodian.employee": employeeId,
+      "custodian.type": "EMPLOYEE",
       isDeleted: false
     }).populate({ path: 'currentLocation.shop', select: 'name code' });
 
@@ -1093,5 +1102,59 @@ export const getEmployeeAssets = async (req, res) => {
   } catch (error) {
     console.error("Get employee assets error:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ✅ BULK IMPORT ASSETS
+export const importAssets = async (req, res) => {
+  try {
+    const { assets } = req.body;
+    if (!Array.isArray(assets) || assets.length === 0) {
+      return res.status(400).json({ message: "No assets provided" });
+    }
+
+    // Get last asset code to start incrementing from
+    const lastAsset = await Asset.findOne().sort({ assetCode: -1 });
+    let nextNumber = 1;
+    if (lastAsset && lastAsset.assetCode) {
+      // Extract all digits at the end of the string
+      const match = lastAsset.assetCode.match(/(\d+)$/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    const newAssets = [];
+    for (const rawAsset of assets) {
+      const assetCode = `AST${nextNumber.toString().padStart(3, "0")}`;
+      nextNumber++;
+
+      newAssets.push({
+        ...rawAsset,
+        assetCode,
+        // Ensure defaults are set if not provided
+        status: rawAsset.status || "Available",
+        currentLocation: {
+          type: "STORE",
+          employee: null,
+          shop: null
+        },
+        isDeleted: false,
+        purchaseCost: Number(rawAsset.purchaseCost) || 0,
+        // Ensure date is valid or null
+        purchaseDate: rawAsset.purchaseDate || new Date().toISOString().split("T")[0]
+      });
+    }
+
+    await Asset.insertMany(newAssets);
+
+    res.status(201).json({
+      message: `${newAssets.length} assets imported successfully`,
+      count: newAssets.length
+    });
+
+  } catch (error) {
+    console.error("Import error:", error);
+    res.status(500).json({ message: "Server error during import: " + error.message });
   }
 };

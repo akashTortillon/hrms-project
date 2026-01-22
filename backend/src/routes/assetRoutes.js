@@ -1,28 +1,29 @@
 import express from "express";
 import {
-  createAsset,
-  getAssets,
-  getAssetById,
-  updateAsset,
-  deleteAsset,
-  scheduleMaintenance,
-  updateMaintenanceLog,
-  deleteMaintenanceLog,
-  updateAmcDetails,
-  uploadDocument,
-  deleteDocument,
-  downloadDocument,
-  disposeAsset,
-  getAssetAlerts,
-  getEmployeeAssets,
-  exportAssets
+   createAsset,
+   getAssets,
+   getAssetById,
+   updateAsset,
+   deleteAsset,
+   scheduleMaintenance,
+   updateMaintenanceLog,
+   deleteMaintenanceLog,
+   updateAmcDetails,
+   uploadDocument,
+   deleteDocument,
+   downloadDocument,
+   disposeAsset,
+   getAssetAlerts,
+   getEmployeeAssets,
+   exportAssets,
+   importAssets
 } from "../controllers/assetController.js";
 import {
-  assignAssetToEmployee,
-  transferAsset,
-  returnAssetToStore,
-  getAssetHistory,
-  getCurrentAssignment
+   assignAssetToEmployee,
+   transferAsset,
+   returnAssetToStore,
+   getAssetHistory,
+   getCurrentAssignment
 } from "../controllers/assignmentController.js";
 import { protect } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
@@ -30,8 +31,9 @@ import upload from "../config/multer.js";
 const router = express.Router();
 
 /* =========================
-   EXPORT ROUTE (FIRST)
+   IMPORT/EXPORT ROUTES
 ========================= */
+router.post("/import", protect, importAssets);
 router.get("/export", protect, exportAssets);
 
 /* =========================

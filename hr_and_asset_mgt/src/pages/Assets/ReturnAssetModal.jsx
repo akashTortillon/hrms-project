@@ -181,6 +181,7 @@ import { getCurrentAssignment } from "../../services/assignmentService.js";
 export default function ReturnAssetModal({ onClose, onReturn, asset }) {
   const [employees, setEmployees] = useState([]);
   const [maintenanceShops, setMaintenanceShops] = useState([]);
+  const [returnToType, setReturnToType] = useState("EMPLOYEE"); // New toggle
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
   const [remarks, setRemarks] = useState("");
@@ -237,19 +238,19 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
 
 
   const fetchCurrentAssignment = async () => {
-  try {
-    const assignment = await getCurrentAssignment(asset._id || asset.id);
+    try {
+      const assignment = await getCurrentAssignment(asset._id || asset.id);
 
-    if (assignment && assignment.shop) {
-      setCurrentMaintenanceShop(`${assignment.shop.name} ${assignment.shop.code ? `(${assignment.shop.code})` : ''}`);
-    } else {
+      if (assignment && assignment.shop) {
+        setCurrentMaintenanceShop(`${assignment.shop.name} ${assignment.shop.code ? `(${assignment.shop.code})` : ''}`);
+      } else {
+        setCurrentMaintenanceShop("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch current assignment", error);
       setCurrentMaintenanceShop("");
     }
-  } catch (error) {
-    console.error("Failed to fetch current assignment", error);
-    setCurrentMaintenanceShop("");
-  }
-};
+  };
 
 
 
@@ -258,7 +259,7 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
 
 
   const handleSubmit = () => {
-    if (!selectedEmployee) {
+    if (returnToType === "EMPLOYEE" && !selectedEmployee) {
       alert("Please select an employee");
       return;
     }
@@ -270,8 +271,9 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
 
     onReturn({
       assetId: asset._id || asset.id,
-      toEntityType: "EMPLOYEE", 
-      toEmployee: selectedEmployee,
+      toEntityType: returnToType,
+      toEmployee: returnToType === "EMPLOYEE" ? selectedEmployee : null,
+      toStore: returnToType === "STORE" ? "Store" : null, // Default store name
       actionType: "RETURN_FROM_MAINTENANCE",
       returnDate: returnDate,
       serviceCost: parseFloat(serviceCost) || 0,
@@ -315,21 +317,37 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
 
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
-                Return To Employee *
+                Return To *
               </label>
               <select
-                value={selectedEmployee}
-                onChange={(e) => setSelectedEmployee(e.target.value)}
-                style={{ width: "100%" }}
+                value={returnToType}
+                onChange={(e) => setReturnToType(e.target.value)}
+                style={{ width: "100%", marginBottom: "10px" }}
               >
-                <option value="">Choose an employee...</option>
-                {employees.map((emp) => (
-                  <option key={emp._id} value={emp._id}>
-                    {emp.name} ({emp.code}) - {emp.department}
-                  </option>
-                ))}
+                <option value="EMPLOYEE">Employee</option>
+                <option value="STORE">Store</option>
               </select>
             </div>
+
+            {returnToType === "EMPLOYEE" && (
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
+                  Select Employee *
+                </label>
+                <select
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  style={{ width: "100%" }}
+                >
+                  <option value="">Choose an employee...</option>
+                  {employees.map((emp) => (
+                    <option key={emp._id} value={emp._id}>
+                      {emp.name} ({emp.code}) - {emp.department}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
@@ -346,7 +364,7 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
 
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
-                Service Cost *
+                Service Cost (AED) *
               </label>
               <input
                 type="number"

@@ -40,11 +40,11 @@
 // // Generate next request ID (REQ001, REQ002, etc.)
 // const generateRequestId = async () => {
 //   const lastRequest = await Request.findOne().sort({ requestId: -1 });
-  
+
 //   if (!lastRequest || !lastRequest.requestId) {
 //     return "REQ001";
 //   }
-  
+
 //   const lastNumber = parseInt(lastRequest.requestId.replace("REQ", ""));
 //   const nextNumber = lastNumber + 1;
 //   return `REQ${nextNumber.toString().padStart(3, "0")}`;
@@ -68,7 +68,7 @@
 
 //     const hrAdmins = await User.find({ role: { $in: ["HR Admin", "Admin"] } });
 //     const financeTeam = await User.find({ role: "Finance" });
-    
+
 //     const toEmails = [
 //       ...hrAdmins.map(admin => admin.email),
 //       ...financeTeam.map(finance => finance.email)
@@ -91,7 +91,7 @@
 //     // ✅ Dynamic subject based on subType
 //     const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
 //     const subject = `${requestLabel} Submitted – ${employeeUser.name}`;
-    
+
 //     const html = `
 //       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
 //         <h2 style="color: #333;">${requestLabel} Submitted</h2>
@@ -128,7 +128,7 @@
 //     // ✅ Dynamic subject based on subType
 //     const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
 //     const subject = `${requestLabel} Approved`;
-    
+
 //     const html = `
 //       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
 //         <h2 style="color: #28a745;">${requestLabel} Approved</h2>
@@ -161,7 +161,7 @@
 //     // ✅ Dynamic subject based on subType
 //     const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
 //     const subject = `${requestLabel} Rejected`;
-    
+
 //     const html = `
 //       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
 //         <h2 style="color: #dc3545;">${requestLabel} Rejected</h2>
@@ -416,7 +416,7 @@ import upload from "../config/multer.js";
 import path from "path";
 import fs from "fs";
 
-const markLeaveAttendance = async (userId, fromDate, toDate) => {
+const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
 
@@ -440,7 +440,9 @@ const markLeaveAttendance = async (userId, fromDate, toDate) => {
         checkIn: null,
         checkOut: null,
         workHours: null,
-        shift: "Day Shift"
+        shift: "Day Shift",
+        leaveType,
+        isPaid
       },
       { upsert: true, new: true }
     );
@@ -450,11 +452,11 @@ const markLeaveAttendance = async (userId, fromDate, toDate) => {
 // Generate next request ID (REQ001, REQ002, etc.)
 const generateRequestId = async () => {
   const lastRequest = await Request.findOne().sort({ requestId: -1 });
-  
+
   if (!lastRequest || !lastRequest.requestId) {
     return "REQ001";
   }
-  
+
   const lastNumber = parseInt(lastRequest.requestId.replace("REQ", ""));
   const nextNumber = lastNumber + 1;
   return `REQ${nextNumber.toString().padStart(3, "0")}`;
@@ -478,7 +480,7 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
 
     const hrAdmins = await User.find({ role: { $in: ["HR Admin", "Admin"] } });
     const financeTeam = await User.find({ role: "Finance" });
-    
+
     const toEmails = [
       ...hrAdmins.map(admin => admin.email),
       ...financeTeam.map(finance => finance.email)
@@ -501,7 +503,7 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
     // ✅ Dynamic subject based on subType
     const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
     const subject = `${requestLabel} Submitted – ${employeeUser.name}`;
-    
+
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">${requestLabel} Submitted</h2>
@@ -538,7 +540,7 @@ const sendSalaryAdvanceApprovalEmail = async (request, employeeUser) => {
     // ✅ Dynamic subject based on subType
     const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
     const subject = `${requestLabel} Approved`;
-    
+
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #28a745;">${requestLabel} Approved</h2>
@@ -571,7 +573,7 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
     // ✅ Dynamic subject based on subType
     const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
     const subject = `${requestLabel} Rejected`;
-    
+
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #dc3545;">${requestLabel} Rejected</h2>
@@ -772,9 +774,9 @@ export const updateRequestStatus = async (req, res) => {
     }
 
     if (request.requestType === "LEAVE" && action === "APPROVE") {
-      const { fromDate, toDate } = request.details;
+      const { fromDate, toDate, leaveType, isPaid } = request.details;
       if (fromDate && toDate) {
-        await markLeaveAttendance(request.userId, fromDate, toDate);
+        await markLeaveAttendance(request.userId, fromDate, toDate, leaveType, isPaid);
       }
     }
 
@@ -964,7 +966,7 @@ export const downloadDocument = async (req, res) => {
     // Get file extension and set appropriate content type
     const fileExt = path.extname(request.uploadedDocument).toLowerCase();
     let contentType = 'application/octet-stream';
-    
+
     if (fileExt === '.pdf') {
       contentType = 'application/pdf';
     } else if (fileExt === '.jpg' || fileExt === '.jpeg') {

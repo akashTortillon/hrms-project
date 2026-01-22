@@ -198,4 +198,10 @@ export const exportAssets = async (params = {}) => {
   return res.data;
 };
 
+// Bulk Import Assets
+export const importAssets = async (assets) => {
+  const res = await api.post(`${ASSET_API}/import`, { assets });
+  return res.data;
+};
+
 //EMPLOYEE_API + "/export"

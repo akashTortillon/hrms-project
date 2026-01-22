@@ -13,13 +13,16 @@ export const updateGlobalSettings = async (data) => {
 };
 
 // Holidays
-export const addHoliday = async (name) => {
-    const res = await api.post(`${BASE_URL}/holidays`, { name });
+// Holidays
+export const addHoliday = async (payload) => {
+    // payload: { name, date }
+    const res = await api.post(`${BASE_URL}/holidays`, payload);
     return res.data;
 };
 
-export const updateHoliday = async (id, name) => {
-    const res = await api.put(`${BASE_URL}/holidays/${id}`, { name });
+export const updateHoliday = async (id, payload) => {
+    // payload: { name, date }
+    const res = await api.put(`${BASE_URL}/holidays/${id}`, payload);
     return res.data;
 };
 

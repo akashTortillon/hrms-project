@@ -424,37 +424,39 @@ const AssetsTable = ({
     // }
 
 
-    
+
     {
-  key: "custodian",
-  header: "CUSTODIAN",
-  width: "14%",
-  render: (row) => {
-    const custodian = row.custodian;
+      key: "custodian",
+      header: "CUSTODIAN",
+      width: "14%",
+      render: (row) => {
+        const custodian = row.custodian;
 
-    let primaryText = "Unassigned";
-    let secondaryText = null;
+        let primaryText = "Unassigned";
 
-    if (custodian?.type === "EMPLOYEE") {
-      primaryText = row.custodianName || "Employee";
-      secondaryText = row.employeeCode || null;
+        
+        let secondaryText = null;
+
+        if (custodian?.type === "EMPLOYEE") {
+          primaryText = custodian.employee?.name || row.custodianName || "Employee";
+          secondaryText = custodian.employee?.code || row.employeeCode || null;
+        }
+
+        if (custodian?.type === "DEPARTMENT") {
+          primaryText = custodian.department;
+          secondaryText = "Department";
+        }
+
+        return (
+          <div className="cell-stack">
+            <div className="cell-primary">{primaryText}</div>
+            {secondaryText && (
+              <div className="cell-secondary">{secondaryText}</div>
+            )}
+          </div>
+        );
+      },
     }
-
-    if (custodian?.type === "DEPARTMENT") {
-      primaryText = custodian.department;
-      secondaryText = "Department";
-    }
-
-    return (
-      <div className="cell-stack">
-        <div className="cell-primary">{primaryText}</div>
-        {secondaryText && (
-          <div className="cell-secondary">{secondaryText}</div>
-        )}
-      </div>
-    );
-  },
-}
 
 
 
@@ -578,8 +580,8 @@ const AssetsTable = ({
                   >
                     <SvgIcon name="ellipsis-vertical" size={16} />
                   </button>
-                  
-                  <div 
+
+                  <div
                     className="dropdown-menu"
                     // style={{
                     //   position: "absolute",

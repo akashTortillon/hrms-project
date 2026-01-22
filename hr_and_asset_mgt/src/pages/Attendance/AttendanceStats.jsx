@@ -60,58 +60,38 @@
 
 import { useEffect, useState } from "react";
 import StatCard from "../../components/reusable/StatCard";
-import { getAttendanceStats } from "../../services/attendanceService";
+// import { getAttendanceStats } from "../../services/attendanceService";
 import "../../style/Attendance.css";
 
-export default function AttendanceStats({ selectedDate }) {
-  const [stats, setStats] = useState(null);
-
-  useEffect(() => {
-    if (!selectedDate) return;
-
-    const fetchStats = async () => {
-      try {
-        const data = await getAttendanceStats(selectedDate);
-        setStats(data);
-      } catch (error) {
-        console.error("Failed to fetch attendance stats", error);
-      }
-    };
-
-    fetchStats();
-  }, [selectedDate]);
-
-  const percent = (value) =>
-    stats?.total ? Math.round((value / stats.total) * 100) + "%" : "0%";
-
+export default function AttendanceStats({ stats }) {
   if (!stats) return null;
 
-  const attendanceStatsConfig = [
+  const config = [
     {
       title: "Present",
       value: stats.present,
-      percentage: percent(stats.present),
+      percentage: `${stats.total ? Math.round((stats.present / stats.total) * 100) : 0}%`,
       icon: "circle-tick",
       iconColor: "#16a34a",
     },
     {
       title: "Late",
       value: stats.late,
-      percentage: percent(stats.late),
+      percentage: `${stats.total ? Math.round((stats.late / stats.total) * 100) : 0}%`,
       icon: "exclamation",
       iconColor: "#f97316",
     },
     {
       title: "Absent",
       value: stats.absent,
-      percentage: percent(stats.absent),
+      percentage: `${stats.total ? Math.round((stats.absent / stats.total) * 100) : 0}%`,
       icon: "circle-xmark",
       iconColor: "#dc2626",
     },
     {
       title: "On Leave",
-      value: stats.onLeave,
-      percentage: percent(stats.onLeave),
+      value: stats.leave,
+      percentage: `${stats.total ? Math.round((stats.leave / stats.total) * 100) : 0}%`,
       icon: "calendar",
       iconColor: "#f59e0b",
     },
@@ -126,7 +106,7 @@ export default function AttendanceStats({ selectedDate }) {
 
   return (
     <div className="attendance-stats">
-      {attendanceStatsConfig.map((stat) => (
+      {config.map((stat) => (
         <StatCard
           key={stat.title}
           title={stat.title}

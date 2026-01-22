@@ -5,12 +5,14 @@ import { RoleProvider } from "../contexts/RoleContext.jsx";
 
 import Dashboard from "../pages/Dashboard/DashboardView.jsx";
 import Employees from "../pages/Employees/EmployeesView.jsx";
+import EmployeeDetail from "../pages/Employees/EmployeeDetail.jsx";
 import Payroll from "../pages/Payroll/PayrollView.jsx";
 import Attendance from "../pages/Attendance/AttendanceView.jsx";
 import Documents from "../pages/Documents/DocumentView.jsx";
 import Assets from "../pages/Assets/AssetsView.jsx";
 import MyRequests from "../pages/MyRequests/MyRequests.jsx";
 import Reports from "../pages/Reports/ReportsView.jsx";
+import CustomReportBuilder from "../pages/Reports/pages/CustomReportBuilder.jsx";
 import Masters from "../pages/Masters/MastersView.jsx";
 
 export default function Layout() {
@@ -27,12 +29,14 @@ export default function Layout() {
               <Route path="" element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="employees" element={<Employees />} />
+              <Route path="employees/:id" element={<EmployeeDetail />} />
               <Route path="payroll" element={<Payroll />} />
               <Route path="attendance" element={<Attendance />} />
               <Route path="documents" element={<Documents />} />
               <Route path="assets" element={<Assets />} />
               <Route path="requests" element={<MyRequests />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="reports/builder" element={<CustomReportBuilder />} />
               <Route path="masters" element={<Masters />} />
             </Routes>
           </div>

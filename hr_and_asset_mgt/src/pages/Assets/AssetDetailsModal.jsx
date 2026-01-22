@@ -20,7 +20,7 @@ export default function AssetDetailsModal({ onClose, asset }) {
 
   const getWarrantyStatus = () => {
     if (!asset.warrantyExpiryDate) return { status: "N/A", color: "#6b7280" };
-    
+
     const today = new Date();
     const expiryDate = new Date(asset.warrantyExpiryDate);
     const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
@@ -41,9 +41,9 @@ export default function AssetDetailsModal({ onClose, asset }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div 
-        className="modal-container" 
-        style={{ maxWidth: "900px", width: "95%" }} 
+      <div
+        className="modal-container"
+        style={{ maxWidth: "900px", width: "95%" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
@@ -58,9 +58,9 @@ export default function AssetDetailsModal({ onClose, asset }) {
 
         <div className="modal-body">
           {/* Tabs */}
-          <div style={{ 
-            display: "flex", 
-            gap: "8px", 
+          <div style={{
+            display: "flex",
+            gap: "8px",
             borderBottom: "1px solid #e2e8f0",
             marginBottom: "20px"
           }}>
@@ -97,13 +97,13 @@ export default function AssetDetailsModal({ onClose, asset }) {
                   <DetailRow label="Serial Number" value={asset.serialNumber || "N/A"} />
                   <DetailRow label="Type" value={asset.type || "N/A"} />
                   <DetailRow label="Category" value={asset.category} />
-                  <DetailRow 
-                    label="Status" 
+                  <DetailRow
+                    label="Status"
                     value={
                       <span className={`status-pill status-${asset.status?.toLowerCase().replace(/\s+/g, '-')}`}>
                         {asset.status}
                       </span>
-                    } 
+                    }
                   />
                 </div>
               </div>
@@ -117,18 +117,18 @@ export default function AssetDetailsModal({ onClose, asset }) {
                   <DetailRow label="Location" value={asset.location} />
                   <DetailRow label="Sub Location" value={asset.subLocation || "N/A"} />
                   <DetailRow label="Department" value={asset.department || "N/A"} />
-                  <DetailRow 
-                    label="Custodian" 
-                    value={asset.custodian?.name || asset.custodian || "N/A"} 
+                  <DetailRow
+                    label="Custodian"
+                    value={asset.custodian?.name || asset.custodian || "N/A"}
                   />
-                  <DetailRow 
-                    label="Current Location" 
+                  <DetailRow
+                    label="Current Location"
                     value={
                       asset.currentLocation?.type === "EMPLOYEE"
                         ? asset.currentLocation?.employee?.name || "Employee"
                         : asset.currentLocation?.type === "MAINTENANCE_SHOP"
-                        ? asset.currentLocation?.shop?.name || "Maintenance Shop"
-                        : "Store"
+                          ? asset.currentLocation?.shop?.name || "Maintenance Shop"
+                          : "Store"
                     }
                   />
                 </div>
@@ -154,18 +154,18 @@ export default function AssetDetailsModal({ onClose, asset }) {
                   Warranty Information
                 </h4>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <DetailRow 
-                    label="Warranty Period" 
-                    value={asset.warrantyPeriod ? `${asset.warrantyPeriod} years` : "N/A"} 
+                  <DetailRow
+                    label="Warranty Period"
+                    value={asset.warrantyPeriod ? `${asset.warrantyPeriod} years` : "N/A"}
                   />
                   <DetailRow label="Warranty Expiry" value={formatDate(asset.warrantyExpiryDate)} />
-                  <DetailRow 
-                    label="Warranty Status" 
+                  <DetailRow
+                    label="Warranty Status"
                     value={
                       <span style={{ color: warrantyStatus.color, fontWeight: "500" }}>
                         {warrantyStatus.status}
                       </span>
-                    } 
+                    }
                   />
                   <DetailRow label="Service Due Date" value={formatDate(asset.serviceDueDate)} />
                 </div>
@@ -177,40 +177,40 @@ export default function AssetDetailsModal({ onClose, asset }) {
           {activeTab === "maintenance" && (
             <div>
               {asset.maintenanceLogs?.length === 0 || !asset.maintenanceLogs ? (
-                <EmptyState 
-                  icon="🔧" 
-                  message="No maintenance records" 
+                <EmptyState
+                  icon="🔧"
+                  message="No maintenance records"
                   description="Schedule maintenance to start tracking service history"
                 />
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   {asset.maintenanceLogs.map((log, index) => (
-                    <div 
+                    <div
                       key={index}
-                      style={{ 
-                        padding: "16px", 
-                        background: "#f8fafc", 
+                      style={{
+                        padding: "16px",
+                        background: "#f8fafc",
                         borderRadius: "8px",
                         border: "1px solid #e2e8f0"
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                        <div style={{ fontWeight: "600" }}>{log.serviceType}</div>
+                        <div style={{ fontWeight: "600" }}>{log.serviceType?.name || log.serviceType || "N/A"}</div>
                         <div style={{ fontSize: "13px", color: "#64748b" }}>
                           {formatCurrency(log.cost)}
                         </div>
                       </div>
                       <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
-                        {log.provider}
+                        {log.provider?.name || log.provider || "N/A"}
                       </div>
                       <div style={{ display: "flex", gap: "16px", fontSize: "12px" }}>
                         <span>Scheduled: {formatDate(log.scheduledDate)}</span>
                         {log.completedDate && (
                           <span>Completed: {formatDate(log.completedDate)}</span>
                         )}
-                        <span 
-                          style={{ 
-                            padding: "2px 8px", 
+                        <span
+                          style={{
+                            padding: "2px 8px",
                             borderRadius: "10px",
                             background: log.status === "Completed" ? "#f0fdf4" : "#fffbeb",
                             color: log.status === "Completed" ? "#16a34a" : "#f59e0b"
@@ -235,19 +235,19 @@ export default function AssetDetailsModal({ onClose, asset }) {
           {activeTab === "documents" && (
             <div>
               {asset.documents?.length === 0 || !asset.documents ? (
-                <EmptyState 
-                  icon="📄" 
-                  message="No documents uploaded" 
+                <EmptyState
+                  icon="📄"
+                  message="No documents uploaded"
                   description="Upload invoices, LPOs, warranty certificates"
                 />
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   {asset.documents.map((doc, index) => (
-                    <div 
+                    <div
                       key={index}
-                      style={{ 
-                        padding: "16px", 
-                        background: "#f8fafc", 
+                      style={{
+                        padding: "16px",
+                        background: "#f8fafc",
                         borderRadius: "8px",
                         border: "1px solid #e2e8f0",
                         display: "flex",
@@ -275,15 +275,15 @@ export default function AssetDetailsModal({ onClose, asset }) {
           {activeTab === "amc" && (
             <div>
               {!asset.amcDetails?.provider ? (
-                <EmptyState 
-                  icon="📝" 
-                  message="No AMC details" 
+                <EmptyState
+                  icon="📝"
+                  message="No AMC details"
                   description="Add AMC contract information to track maintenance coverage"
                 />
               ) : (
-                <div style={{ 
-                  padding: "20px", 
-                  background: "#f8fafc", 
+                <div style={{
+                  padding: "20px",
+                  background: "#f8fafc",
                   borderRadius: "8px",
                   border: "1px solid #e2e8f0"
                 }}>
@@ -293,11 +293,11 @@ export default function AssetDetailsModal({ onClose, asset }) {
                     <DetailRow label="Start Date" value={formatDate(asset.amcDetails.startDate)} />
                     <DetailRow label="End Date" value={formatDate(asset.amcDetails.endDate)} />
                     <DetailRow label="Cost" value={formatCurrency(asset.amcDetails.cost)} />
-                    <DetailRow 
-                      label="Status" 
+                    <DetailRow
+                      label="Status"
                       value={
-                        <span style={{ 
-                          padding: "4px 12px", 
+                        <span style={{
+                          padding: "4px 12px",
                           borderRadius: "12px",
                           background: asset.amcDetails.status === "Active" ? "#f0fdf4" : "#fef2f2",
                           color: asset.amcDetails.status === "Active" ? "#16a34a" : "#dc2626",
@@ -306,7 +306,7 @@ export default function AssetDetailsModal({ onClose, asset }) {
                         }}>
                           {asset.amcDetails.status}
                         </span>
-                      } 
+                      }
                     />
                   </div>
                   {asset.amcDetails.coverageDetails && (
@@ -326,17 +326,17 @@ export default function AssetDetailsModal({ onClose, asset }) {
 
           {/* Disposal Details (if disposed) */}
           {asset.status === "Disposed" && asset.disposalDetails && (
-            <div style={{ 
+            <div style={{
               marginTop: "20px",
-              padding: "16px", 
-              background: "#fef2f2", 
+              padding: "16px",
+              background: "#fef2f2",
               borderRadius: "8px",
               border: "1px solid #fecaca"
             }}>
-              <h4 style={{ 
-                fontSize: "14px", 
-                fontWeight: "600", 
-                marginBottom: "12px", 
+              <h4 style={{
+                fontSize: "14px",
+                fontWeight: "600",
+                marginBottom: "12px",
                 color: "#dc2626",
                 display: "flex",
                 alignItems: "center",
@@ -420,10 +420,10 @@ const DetailRow = ({ label, value }) => {
 
 
 const EmptyState = ({ icon, message, description }) => (
-  <div style={{ 
-    textAlign: "center", 
-    padding: "40px", 
-    background: "#f8fafc", 
+  <div style={{
+    textAlign: "center",
+    padding: "40px",
+    background: "#f8fafc",
     borderRadius: "8px",
     color: "#64748b"
   }}>
