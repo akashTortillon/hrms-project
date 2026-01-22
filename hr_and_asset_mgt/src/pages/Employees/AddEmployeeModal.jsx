@@ -22,7 +22,13 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     basicSalary: "",
     accommodation: "",
     visaExpiry: "",
-    shift: ""
+    shift: "",
+    laborCardNumber: "",
+    agentId: "",
+    bankName: "",
+    iban: "",
+    bankAccount: "",
+    personalId: ""
   });
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
@@ -177,6 +183,16 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Labor Card No</label>
+              <input name="laborCardNumber" placeholder="e.g. 876321" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Agent ID (WPS)</label>
+              <input name="agentId" placeholder="e.g. AGENT001" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
               <label>Basic Salary (AED)</label>
               <input name="basicSalary" placeholder="e.g. 15000" onChange={handleChange} />
             </div>
@@ -206,6 +222,11 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Personal ID (14 Digit)</label>
+              <input name="personalId" placeholder="e.g. 784-1990..." onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
               <label>Nationality</label>
               <input name="nationality" placeholder="e.g. Indian" onChange={handleChange} />
             </div>
@@ -223,6 +244,26 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Emirates ID Expiry</label>
               <input name="emiratesIdExpiry" type="date" onChange={handleChange} />
+            </div>
+
+            {/* Bank Details */}
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1', margin: '15px 0 10px 0' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#1f2937', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>Bank Information</h4>
+            </div>
+
+            <div className="form-group">
+              <label>Bank Name</label>
+              <input name="bankName" placeholder="e.g. FAB" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>IBAN</label>
+              <input name="iban" placeholder="AE..." onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Account Number</label>
+              <input name="bankAccount" placeholder="1234567890" onChange={handleChange} />
             </div>
           </div>
         </div>
