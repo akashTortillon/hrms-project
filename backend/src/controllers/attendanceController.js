@@ -271,7 +271,7 @@ const getShiftRules = async (shiftName) => {
  */
 export const syncBiometrics = async (req, res) => {
   try {
-    console.log("Starting Biometric Sync...");
+    // console.log("Starting Biometric Sync...");
     const dataPath = path.join(__dirname, "../data/mockBiometricData.json");
     if (!fs.existsSync(dataPath)) {
       return res.status(404).json({ message: "Biometric data file not found" });
@@ -279,7 +279,7 @@ export const syncBiometrics = async (req, res) => {
 
     const rawData = fs.readFileSync(dataPath, "utf-8");
     const logs = JSON.parse(rawData);
-    console.log(`Found ${logs.length} biometric logs.`);
+    // console.log(`Found ${logs.length} biometric logs.`);
 
     // 1. Group logs by Employee + Date
     const groupedData = {};
@@ -334,7 +334,7 @@ export const syncBiometrics = async (req, res) => {
 
       // ✅ CHECK LEAVE FIRST: If employee is on approved leave, ignore biometric entry
       if (isLeave(employee._id, record.date, leaveMap)) {
-        console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} has Approved Leave. Skipping biometric overwrite.`);
+        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} has Approved Leave. Skipping biometric overwrite.`);
         continue;
       }
 
@@ -353,12 +353,12 @@ export const syncBiometrics = async (req, res) => {
       // Calculate Work Hours
       const workHours = calculateDuration(record.checkIn, record.checkOut);
 
-      console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
+      // console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
 
       // ✅ NEW: Protect "On Leave" status from being overwritten
       const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
       if (existingRecord && existingRecord.status === "On Leave") {
-        console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
+        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
         continue;
       }
 
@@ -379,11 +379,11 @@ export const syncBiometrics = async (req, res) => {
       syncedCount++;
     }
 
-    console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
+    // console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
 
     res.json({ message: "Sync successful", synced: syncedCount, errors });
   } catch (error) {
-    console.error("Sync error:", error);
+    // console.error("Sync error:", error);
     res.status(500).json({ message: "Server error during sync" });
   }
 };
@@ -483,7 +483,12 @@ const getApprovedLeavesMap = async (employees) => {
         const e = new Date(endDate);
         s.setHours(0, 0, 0, 0);
         e.setHours(23, 59, 59, 999);
-        map[empId].push({ start: s, end: e });
+        // ✅ Include leaveType for Payroll
+        map[empId].push({
+          start: s,
+          end: e,
+          leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave"
+        });
       }
     }
   });
@@ -572,7 +577,7 @@ export const getDailyAttendance = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error("Get daily attendance error:", error);
+    // console.error("Get daily attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -677,7 +682,7 @@ export const getMonthlyAttendance = async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error("Get monthly attendance error:", error);
+    // console.error("Get monthly attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -719,7 +724,7 @@ export const markAttendance = async (req, res) => {
 
     res.status(201).json(attendance);
   } catch (error) {
-    console.error("Mark attendance error:", error);
+    // console.error("Mark attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -742,7 +747,7 @@ export const updateAttendance = async (req, res) => {
 
     res.json(updated);
   } catch (error) {
-    console.error("Update attendance error:", error);
+    // console.error("Update attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -818,7 +823,7 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get attendance stats error:", error);
+    // console.error("Get attendance stats error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -892,7 +897,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
 
     res.json(history);
   } catch (error) {
-    console.error("Get History Error:", error);
+    // console.error("Get History Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -1074,7 +1079,7 @@ export const exportAttendance = async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    console.error("Export Attendance Error:", error);
+    // console.error("Export Attendance Error:", error);
     res.status(500).json({ message: "Export failed" });
   }
 };

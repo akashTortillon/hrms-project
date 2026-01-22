@@ -257,7 +257,7 @@ export const createAsset = async (req, res) => {
       asset: populatedAsset
     });
   } catch (error) {
-    console.error("Create asset error:", error);
+    // console.error("Create asset error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -320,7 +320,7 @@ export const getAssets = async (req, res) => {
     // IMPORTANT: Return plain array (matches existing frontend expectations)
     res.status(200).json(assets);
   } catch (error) {
-    console.error("Get assets error:", error);
+    // console.error("Get assets error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -348,7 +348,7 @@ export const getAssetById = async (req, res) => {
 
     res.json(asset);
   } catch (error) {
-    console.error("Get asset by ID error:", error);
+    // console.error("Get asset by ID error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -402,7 +402,7 @@ export const updateAsset = async (req, res) => {
       asset: updatedAsset
     });
   } catch (error) {
-    console.error("Update asset error:", error);
+    // console.error("Update asset error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -430,7 +430,7 @@ export const deleteAsset = async (req, res) => {
       asset
     });
   } catch (error) {
-    console.error("Delete asset error:", error);
+    // console.error("Delete asset error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -582,7 +582,7 @@ export const scheduleMaintenance = async (req, res) => {
       asset: updatedAsset
     });
   } catch (error) {
-    console.error("Schedule maintenance error:", error);
+    // console.error("Schedule maintenance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -632,7 +632,7 @@ export const updateMaintenanceLog = async (req, res) => {
       asset: updatedAsset
     });
   } catch (error) {
-    console.error("Update maintenance log error:", error);
+    // console.error("Update maintenance log error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -654,7 +654,7 @@ export const deleteMaintenanceLog = async (req, res) => {
       message: "Maintenance log deleted successfully"
     });
   } catch (error) {
-    console.error("Delete maintenance log error:", error);
+    // console.error("Delete maintenance log error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

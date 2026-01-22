@@ -93,4 +93,4 @@ if (!fs.existsSync(dir)) {
 }
 
 fs.writeFileSync(outputPath, JSON.stringify(data, null, 4));
-console.log(`Successfully generated ${data.length} biometric logs for ${EMPLOYEES.join(', ')} from Jan ${START_DAY} to ${END_DAY}`);
+// console.log(`Successfully generated ${data.length} biometric logs for ${EMPLOYEES.join(', ')} from Jan ${START_DAY} to ${END_DAY}`);
