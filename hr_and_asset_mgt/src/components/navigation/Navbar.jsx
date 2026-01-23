@@ -15,6 +15,7 @@ import NotificationDropdown from "../reusable/NotificationDropdown";
 import ProfileDropdown from "../reusable/ProfileDropdown";
 import "../../style/Profile.css";
 import { useRole } from "../../contexts/RoleContext.jsx";
+import { logoutUser } from "../../api/authService";
 
 
 const quickActions = [
@@ -35,10 +36,16 @@ export default function NavigationBar() {
   const profileAnchorRef = useRef(null);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("userPermissions");
     // navigate("/login");
     window.location.href = "/login"; // Force full reload to clear all states
   };
@@ -122,7 +129,7 @@ export default function NavigationBar() {
               role={role}
               onRoleChange={setRole}
               onClose={() => setProfileOpen(false)}
-              onProfile={() => console.log("My Profile")}
+              onProfile={() => navigate("/app/employees/me")}
               onSettings={() => console.log("Settings")}
               onLogout={handleLogout}
               anchorRef={profileAnchorRef}

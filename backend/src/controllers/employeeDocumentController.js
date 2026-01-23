@@ -1,4 +1,5 @@
 import EmployeeDocument from "../models/employeeDocumentModel.js";
+import Employee from "../models/employeeModel.js";
 import fs from "fs";
 import path from "path";
 
@@ -57,6 +58,40 @@ export const getEmployeeDocuments = async (req, res) => {
         res.json(documents);
     } catch (error) {
         // console.error("Get Employee Docs Error:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+// Get My Documents (Logged in user)
+// Get My Documents (Logged in user)
+export const getMyDocuments = async (req, res) => {
+    try {
+        const user = req.user;
+        let employeeId = user.employeeId;
+
+        // Fallback: If no linked employeeId, try to find by email
+        if (!employeeId) {
+            const employee = await Employee.findOne({ email: user.email });
+            if (employee) {
+                employeeId = employee._id;
+
+                // Optional: Self-heal the link in User model for future
+                // We use findByIdAndUpdate to avoid saving potential stale data on user object
+                // import User model if needed, or rely on req.user.save() 
+                // But req.user is a mongoose doc from middleware, so we can save it.
+                user.employeeId = employee._id;
+                await user.save({ validateBeforeSave: false }); // Skip validation to be safe
+            }
+        }
+
+        if (!employeeId) {
+            return res.status(404).json({ message: "No linked employee profile found for this user." });
+        }
+
+        const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
+        res.json(documents);
+    } catch (error) {
+        // console.error("Get My Docs Error:", error);
         res.status(500).json({ message: "Server error" });
     }
 };

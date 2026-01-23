@@ -18,9 +18,14 @@ import {
     getReportStats,
     logManualActivity
 } from "../controllers/reportController.js";
+import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import { generateSIF, generateMOLReport } from "../controllers/payrollController.js";
 
 const router = express.Router();
+
+// Apply auth and permission check to ALL report routes
+router.use(protect);
+router.use(hasPermission("VIEW_REPORTS"));
 
 // Attendance Reports
 router.get("/department-attendance", getDepartmentAttendanceReport);

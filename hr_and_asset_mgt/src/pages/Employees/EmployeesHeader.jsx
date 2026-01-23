@@ -26,10 +26,12 @@ export default function EmployeesHeader({
           </p>
         </div>
 
-        <button className="employees-add-btn" onClick={onAddEmployee}>
-          <SvgIcon name="plus" size={16} />
-          Add Employee
-        </button>
+        {onAddEmployee && (
+          <button className="employees-add-btn" onClick={onAddEmployee}>
+            <SvgIcon name="plus" size={16} />
+            Add Employee
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -71,10 +73,12 @@ export default function EmployeesHeader({
           </select>
 
           {/* Export */}
-          <button className="employees-export-btn" onClick={onExport}>
-            <SvgIcon name="download" size={16} />
-            Export
-          </button>
+          {onExport && (
+            <button className="employees-export-btn" onClick={onExport}>
+              <SvgIcon name="download" size={16} />
+              Export
+            </button>
+          )}
         </div>
 
         <div className="employees-count">

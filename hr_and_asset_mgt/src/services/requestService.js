@@ -21,7 +21,7 @@
 //   return config;
 // });
 
-import api from "./getAxiosInstance"; 
+import api from "../api/apiClient";
 
 const REQUEST_API = "/api/requests";
 

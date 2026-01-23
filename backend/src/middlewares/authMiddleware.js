@@ -1,28 +1,70 @@
 import jwt from "jsonwebtoken";
 import { jwtConfig } from "../config/jwt.js";
+import User from "../models/userModel.js";
+import Master from "../models/masterModel.js";
 
-export const protect = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+export const protect = async (req, res, next) => {
+  let token;
 
-  // console.log("Auth header:", authHeader);
-  // console.log("Has Bearer prefix:", authHeader?.startsWith("Bearer "));
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, jwtConfig.secret);
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    // console.log("Auth failed: Missing or invalid Bearer prefix");
-    return res.status(401).json({ message: "Not authorized" });
+      // Fetch user without password
+      const user = await User.findById(decoded.id).select("-password");
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Fetch Role Permissions
+      let permissions = [];
+      if (user.role === "Admin") {
+        permissions = ["ALL"];
+      } else {
+        const roleData = await Master.findOne({ type: 'ROLE', name: user.role });
+        permissions = roleData ? roleData.permissions : [];
+      }
+
+      // Attach to request
+      req.user = user;
+      req.user.permissions = permissions;
+
+      next();
+    } catch (error) {
+      console.error("Auth Middleware Error:", error);
+      res.status(401).json({ message: "Not authorized, token failed" });
+    }
+  } else {
+    res.status(401).json({ message: "Not authorized, no token" });
   }
+};
 
-  try {
-    const token = authHeader.split(" ")[1];
-    // console.log("Token extracted:", token ? "exists" : "missing");
-    // console.log("Token length:", token?.length || 0);
+// 🔹 Middleware: Check for specific permission
+export const hasPermission = (requiredPermission) => {
+  return (req, res, next) => {
+    if (!req.user || !req.user.permissions) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
-    const decoded = jwt.verify(token, jwtConfig.secret);
-    // console.log("Token decoded successfully:", decoded);
-    req.user = decoded;
+    // Admin or matching permission
+    if (req.user.role === "Admin" || req.user.permissions.includes("ALL") || req.user.permissions.includes(requiredPermission)) {
+      return next();
+    }
+
+    return res.status(403).json({ message: "Access Denied: Insufficient Permissions" });
+  };
+};
+
+// 🔹 Middleware: Restrict to specific roles
+export const restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Access Denied: Role not allowed" });
+    }
     next();
-  } catch (error) {
-    // console.error("JWT verification failed:", error.message);
-    res.status(401).json({ message: "Token invalid" });
-  }
+  };
 };
