@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../../api/apiClient";
 import { toast } from "react-toastify";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -72,7 +72,7 @@ export default function PrebuiltReports() {
         url = `/api/reports/payroll-summary?month=${month}&year=${year}`;
       }
 
-      const response = await axios.get(url);
+      const response = await api.get(url);
 
       if (response.data.success) {
         const data = response.data.data || [];
@@ -95,29 +95,47 @@ export default function PrebuiltReports() {
     }
   };
 
-  const handleExport = (format) => {
+  const handleExport = async (format) => {
     if (!reportType) return;
 
     let url = "";
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
+    // Note: using relative paths for api client
     if (reportType === "attendance") {
       url = mode === "daily"
-        ? `${baseUrl}/api/reports/department-attendance/daily?date=${date}&export=true`
-        : `${baseUrl}/api/reports/department-attendance?month=${month}&year=${year}&export=true`;
+        ? `/api/reports/department-attendance/daily?date=${date}&export=true`
+        : `/api/reports/department-attendance?month=${month}&year=${year}&export=true`;
     } else if (reportType === "expiry") {
-      url = `${baseUrl}/api/reports/document-expiry?days=${days}&export=true`;
+      url = `/api/reports/document-expiry?days=${days}&export=true`;
     } else if (reportType === "depreciation") {
-      url = `${baseUrl}/api/reports/asset-depreciation?export=true`;
+      url = `/api/reports/asset-depreciation?export=true`;
     } else if (reportType === "payroll") {
-      url = `${baseUrl}/api/reports/payroll-summary?month=${month}&year=${year}&export=true`;
+      url = `/api/reports/payroll-summary?month=${month}&year=${year}&export=true`;
     } else if (reportType === "wps") {
-      url = `${baseUrl}/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
+      url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
     }
 
     if (url) {
       if (format === "excel" || reportType === "wps") {
-        window.open(url, "_blank");
+        try {
+          const response = await api.get(url, { responseType: 'blob' });
+          const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = blobUrl;
+
+          // Generate Filename
+          let filename = "Report.xlsx";
+          if (reportType === "wps") filename = "WPS_SIF.sif";
+          else if (reportType === "attendance") filename = `Attendance_${mode}_${date || `${month}_${year}`}.xlsx`;
+          else if (reportType === "payroll") filename = `Payroll_${month}_${year}.xlsx`;
+
+          link.setAttribute('download', filename);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        } catch (e) {
+          console.error("Export error", e);
+          toast.error("Export failed");
+        }
       } else if (format === "pdf") {
         generatePDF();
       }
@@ -200,7 +218,7 @@ export default function PrebuiltReports() {
       toast.success("PDF generated successfully");
 
       // Log the activity to update the dashboard stats
-      await axios.post("/api/reports/log-activity", {
+      await api.post("/api/reports/log-activity", {
         type: "Export",
         reportName: title
       });
@@ -220,7 +238,7 @@ export default function PrebuiltReports() {
       setReportType("wps");
 
       const url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}&format=json`;
-      const response = await axios.get(url);
+      const response = await api.get(url);
 
       if (response.data.success) {
         setReportData(response.data.data || []);

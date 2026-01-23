@@ -67,7 +67,7 @@
 //   },
 // });
 
-import api from "./getAxiosInstance";
+import api from "../api/apiClient";
 
 
 

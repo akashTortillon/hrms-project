@@ -25,7 +25,7 @@ import {
    getAssetHistory,
    getCurrentAssignment
 } from "../controllers/assignmentController.js";
-import { protect } from "../middlewares/authMiddleware.js";
+import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
 
 const router = express.Router();
@@ -33,8 +33,8 @@ const router = express.Router();
 /* =========================
    IMPORT/EXPORT ROUTES
 ========================= */
-router.post("/import", protect, importAssets);
-router.get("/export", protect, exportAssets);
+router.post("/import", protect, hasPermission("MANAGE_ASSETS"), importAssets);
+router.get("/export", protect, hasPermission("MANAGE_ASSETS"), exportAssets);
 
 /* =========================
    ASSET CRUD ROUTES
@@ -44,15 +44,15 @@ router.get("/export", protect, exportAssets);
 router.get("/", protect, getAssets);
 
 // CREATE new asset
-router.post("/", protect, createAsset);
+router.post("/", protect, hasPermission("MANAGE_ASSETS"), createAsset);
 
-// ASSIGNMENT ROUTES (must be before /:id)
-router.post("/assign", protect, assignAssetToEmployee);
-router.post("/transfer", protect, transferAsset);
-router.post("/return", protect, returnAssetToStore);
+// ASSIGNMENT ROUTES (must be before /:id) - Managing assignments requires MANAGE_ASSETS
+router.post("/assign", protect, hasPermission("MANAGE_ASSETS"), assignAssetToEmployee);
+router.post("/transfer", protect, hasPermission("MANAGE_ASSETS"), transferAsset);
+router.post("/return", protect, hasPermission("MANAGE_ASSETS"), returnAssetToStore);
 
 // ALERTS & REPORTS (must be before /:id)
-router.get("/alerts/all", protect, getAssetAlerts);
+router.get("/alerts/all", protect, hasPermission("MANAGE_ASSETS"), getAssetAlerts);
 
 // EMPLOYEE ASSETS (must be before /:id)
 router.get("/employee/:employeeId", protect, getEmployeeAssets);
@@ -67,33 +67,34 @@ router.get("/:id/assignments/current", protect, getCurrentAssignment);
 router.get("/:id", protect, getAssetById);
 
 // UPDATE asset
-router.put("/:id", protect, updateAsset);
+router.put("/:id", protect, hasPermission("MANAGE_ASSETS"), updateAsset);
 
 // DELETE asset
-router.delete("/:id", protect, deleteAsset);
+router.delete("/:id", protect, hasPermission("MANAGE_ASSETS"), deleteAsset);
 
 /* =========================
    MAINTENANCE ROUTES
 ========================= */
-router.post("/:id/maintenance", protect, scheduleMaintenance);
-router.put("/:id/maintenance/:maintenanceId", protect, updateMaintenanceLog);
-router.delete("/:id/maintenance/:maintenanceId", protect, deleteMaintenanceLog);
+router.post("/:id/maintenance", protect, hasPermission("MANAGE_ASSETS"), scheduleMaintenance);
+router.put("/:id/maintenance/:maintenanceId", protect, hasPermission("MANAGE_ASSETS"), updateMaintenanceLog);
+router.delete("/:id/maintenance/:maintenanceId", protect, hasPermission("MANAGE_ASSETS"), deleteMaintenanceLog);
 
 /* =========================
    AMC ROUTES
 ========================= */
-router.put("/:id/amc", protect, updateAmcDetails);
+router.put("/:id/amc", protect, hasPermission("MANAGE_ASSETS"), updateAmcDetails);
 
 /* =========================
    DOCUMENT ROUTES
 ========================= */
-router.post("/:id/documents", protect, upload.single("document"), uploadDocument);
-router.delete("/:id/documents/:documentId", protect, deleteDocument);
-router.get("/:id/documents/:documentId/download", protect, downloadDocument);
+// Uploading asset docs should probably be restricted to managers
+router.post("/:id/documents", protect, hasPermission("MANAGE_ASSETS"), upload.single("document"), uploadDocument);
+router.delete("/:id/documents/:documentId", protect, hasPermission("MANAGE_ASSETS"), deleteDocument);
+router.get("/:id/documents/:documentId/download", protect, downloadDocument); // Viewing might be open
 
 /* =========================
    DISPOSAL ROUTES
 ========================= */
-router.post("/:id/dispose", protect, disposeAsset);
+router.post("/:id/dispose", protect, hasPermission("MANAGE_ASSETS"), disposeAsset);
 
 export default router;

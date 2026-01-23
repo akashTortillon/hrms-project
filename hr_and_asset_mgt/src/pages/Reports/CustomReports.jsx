@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../api/apiClient";
 import { toast } from "react-toastify";
 import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
@@ -18,7 +18,7 @@ export default function CustomReports() {
 
   const fetchReports = async () => {
     try {
-      const response = await axios.get("/api/reports/custom-configs");
+      const response = await api.get("/api/reports/custom-configs");
       if (response.data.success) {
         setReports(response.data.data);
       }
@@ -33,7 +33,7 @@ export default function CustomReports() {
   const handleDownload = async (report) => {
     try {
       toast.info(`Downloading ${report.title}...`);
-      const response = await axios.post("/api/reports/custom", {
+      const response = await api.post("/api/reports/custom", {
         dataset: report.dataset,
         columns: report.columns,
         filters: report.filters || {},
@@ -55,7 +55,7 @@ export default function CustomReports() {
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this report configuration?")) return;
     try {
-      const response = await axios.delete(`/api/reports/custom-configs/${id}`);
+      const response = await api.delete(`/api/reports/custom-configs/${id}`);
       if (response.data.success) {
         setReports(reports.filter(r => r._id !== id));
         toast.success("Report deleted");

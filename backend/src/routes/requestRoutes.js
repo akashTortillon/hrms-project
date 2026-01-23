@@ -67,7 +67,7 @@ import {
   rejectDocumentRequest,
   downloadDocument
 } from "../controllers/requestController.js";
-import { protect } from "../middlewares/authMiddleware.js";
+import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
 
 const router = express.Router();
@@ -97,6 +97,7 @@ router.patch("/:id/withdraw", protect, withdrawRequest);
 router.get(
   "/admin/pending",
   protect,
+  hasPermission("APPROVE_REQUESTS"),
   getPendingRequestsForAdmin
 );
 
@@ -105,6 +106,7 @@ router.get(
 router.put(
   "/:requestId/action",
   protect,
+  hasPermission("APPROVE_REQUESTS"),
   updateRequestStatus
 );
 
@@ -117,6 +119,7 @@ router.put(
 router.put(
   "/:requestId/approve-document",
   protect,
+  hasPermission("APPROVE_REQUESTS"),
   upload.single('document'),
   approveDocumentRequest
 );
@@ -126,6 +129,7 @@ router.put(
 router.put(
   "/:requestId/reject-document",
   protect,
+  hasPermission("APPROVE_REQUESTS"),
   rejectDocumentRequest
 );
 
