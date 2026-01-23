@@ -119,7 +119,7 @@ const WorkflowTab = ({ employeeId, type }) => {
                         <div className="item-info">
                             <div className="item-status-icon">
                                 {item.status === "Completed" ? (
-                                    <SvgIcon name="check" size={20} color="#22c55e" />
+                                    <SvgIcon name="circle-tick" size={20} color="#22c55e" />
                                 ) : (
                                     <div className="pending-circle"></div>
                                 )}
@@ -159,7 +159,7 @@ const WorkflowTab = ({ employeeId, type }) => {
                                 onClick={() => handleStatusToggle(item._id, item.status)}
                                 title={item.status === "Completed" ? "Mark as Pending" : "Mark as Completed"}
                             >
-                                <SvgIcon name={item.status === "Completed" ? "close" : "check"} size={16} />
+                                <SvgIcon name={item.status === "Completed" ? "circle-xmark" : "circle-tick"} size={16} />
                             </button>
                         </div>
                     </div>

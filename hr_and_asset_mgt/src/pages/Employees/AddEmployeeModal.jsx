@@ -13,7 +13,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     email: "",
     phone: "",
     joinDate: "",
-    status: "Active",
+    status: "Onboarding",
     dob: "",
     nationality: "",
     address: "",
@@ -146,6 +146,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Status</label>
               <select name="status" onChange={handleChange}>
+                <option>Onboarding</option>
                 <option>Active</option>
                 <option>Inactive</option>
                 <option>On Leave</option>

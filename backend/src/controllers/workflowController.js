@@ -1,4 +1,6 @@
 import Workflow from "../models/workflowModel.js";
+import Master from "../models/masterModel.js";
+import Employee from "../models/employeeModel.js";
 import path from "path";
 import fs from "fs";
 
@@ -32,16 +34,56 @@ export const getEmployeeWorkflow = async (req, res) => {
         const defaultItems = type === 'Onboarding' ? ONBOARDING_ITEMS : OFFBOARDING_ITEMS;
 
         if (!workflow) {
-            // Auto-create if not exists (Lazy initialization)
+            // Fetch Template from Masters
+            let template = await Master.findOne({
+                type: "WORKFLOW_TEMPLATE",
+                name: type
+            });
+
+            let initialItems = [];
+
+            if (template && template.metadata && template.metadata.steps) {
+                initialItems = template.metadata.steps;
+            } else {
+                // Fallback to hardcoded if Master not found
+                initialItems = type === 'Onboarding' ? ONBOARDING_ITEMS : (type === 'Offboarding' ? OFFBOARDING_ITEMS : []);
+
+                // Auto-create Master for future editing
+                if (initialItems.length > 0) {
+                    try {
+                        const newTemplate = await Master.create({
+                            type: "WORKFLOW_TEMPLATE",
+                            name: type,
+                            metadata: { steps: initialItems },
+                            isActive: true
+                        });
+                        console.log(`Auto-created Master Template for ${type}`);
+                        template = newTemplate;
+                    } catch (err) {
+                        console.warn("Auto-create master template failed (likely race condition):", err.message);
+                    }
+                }
+            }
+
+            // Auto-create Workflow Instance
             workflow = await Workflow.create({
                 employee: employeeId,
                 type,
-                items: defaultItems,
+                items: initialItems,
                 createdBy: req.user._id
             });
         } else if (!workflow.items || workflow.items.length === 0) {
-            // Populate if exists but empty (Self-healing)
-            workflow.items = defaultItems;
+            // Self-healing / Populating empty
+            const template = await Master.findOne({
+                type: "WORKFLOW_TEMPLATE",
+                name: type
+            });
+
+            if (template && template.metadata && template.metadata.steps) {
+                workflow.items = template.metadata.steps;
+            } else {
+                workflow.items = type === 'Onboarding' ? ONBOARDING_ITEMS : OFFBOARDING_ITEMS;
+            }
             await workflow.save();
         }
 
@@ -108,6 +150,13 @@ export const updateWorkflowItem = async (req, res) => {
         if (allCompleted) {
             workflow.status = "Completed";
             workflow.completedAt = new Date();
+
+            // AUTOMATION: Update Employee Status based on Workflow Type
+            if (workflow.type === 'Offboarding') {
+                await Employee.findByIdAndUpdate(workflow.employee, { status: 'Inactive' });
+            } else if (workflow.type === 'Onboarding') {
+                await Employee.findByIdAndUpdate(workflow.employee, { status: 'Active' });
+            }
         } else {
             workflow.status = "In Progress";
         }
