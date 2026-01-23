@@ -4,8 +4,12 @@ import { useNavigate } from "react-router-dom";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Employees.css";
 
+import { useRole } from "../../contexts/RoleContext";
+
 export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
   const navigate = useNavigate();
+  const { hasPermission } = useRole();
+
   return (
     <div className="employees-table-card">
       <table className="employees-table">
@@ -16,7 +20,7 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
             <th>CONTACT</th>
             <th>JOIN DATE</th>
             <th>STATUS</th>
-            <th className="actions-col">ACTIONS</th>
+            {hasPermission("MANAGE_EMPLOYEES") && <th className="actions-col">ACTIONS</th>}
           </tr>
         </thead>
 
@@ -67,21 +71,23 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
               </td>
 
               {/* Actions */}
-              <td className="actions-col">
-                <div className="actions-btn">
-                  <button
-                    type="button"
-                    className="icon-btn delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete && onDelete(emp);
-                    }}
-                    title="Delete Employee"
-                  >
-                    <SvgIcon name="delete" size={18} />
-                  </button>
-                </div>
-              </td>
+              {hasPermission("MANAGE_EMPLOYEES") && (
+                <td className="actions-col">
+                  <div className="actions-btn">
+                    <button
+                      type="button"
+                      className="icon-btn delete-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete && onDelete(emp);
+                      }}
+                      title="Delete Employee"
+                    >
+                      <SvgIcon name="delete" size={18} />
+                    </button>
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
 
