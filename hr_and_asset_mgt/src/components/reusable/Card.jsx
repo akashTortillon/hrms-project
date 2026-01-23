@@ -1,9 +1,9 @@
 import { Card as RBCard } from "react-bootstrap";
 import "../../style/layout.css";
 
-export default function Card({ title, subtitle, children, className = "" }) {
+export default function Card({ title, subtitle, children, className = "", ...props }) {
   return (
-    <RBCard className={`card-container ${className}`}>
+    <RBCard className={`card-container ${className}`} {...props}>
       {(title || subtitle) && (
         <RBCard.Header className="card-header">
           <div className="card-title">{title}</div>

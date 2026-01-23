@@ -9,6 +9,7 @@ export default function DashboardInfoCard({
   icon,
   actionLabel,
   onActionClick,
+  onRowClick,
   items = [],
 }) {
   return (
@@ -32,111 +33,112 @@ export default function DashboardInfoCard({
 
       {/* Body */}
       <div className="dashboard-info-card-body">
-        {items.map((item) => (
-          <div key={item.id} className="dashboard-info-row">
-            {/* LEFT SECTION */}
-            {/* LEFT SECTION (hide for progress items) */}
-                {!item.progress && (
-                <div className="dashboard-info-left">
-                    <div className="dashboard-info-primary">
-                    {item.primaryText}
-                    </div>
+        {items.map((item, index) => {
+          const isClickable = !item.progress && onRowClick;
 
-                    {item.secondaryText && (
+          return (
+            <div
+              key={item.id || index}
+              className={`dashboard-info-row ${isClickable ? "clickable" : ""}`}
+              onClick={isClickable ? () => onRowClick(item) : undefined}
+            >
+              {/* LEFT SECTION */}
+              {!item.progress && (
+                <div className="dashboard-info-left">
+                  <div className="dashboard-info-primary">
+                    {item.primaryText}
+                  </div>
+
+                  {item.secondaryText && (
                     <div className="dashboard-info-secondary">
-                        {item.secondaryText}
+                      {item.secondaryText}
                     </div>
-                    )}
+                  )}
                 </div>
+              )}
+
+              {/* RIGHT SECTION */}
+              <div className="dashboard-info-right">
+                {/* Badge (Documents / Visa cards) */}
+                {item.badge && (
+                  <span className={`dashboard-info-badge ${item.badge.variant}`}>
+                    {item.badge.text}
+                  </span>
                 )}
 
+                {/* Date */}
+                {item.dateText && (
+                  <div className="dashboard-info-date">
+                    {item.dateText}
+                  </div>
+                )}
 
-            {/* RIGHT SECTION */}
-            <div className="dashboard-info-right">
-              {/* Badge (Documents / Visa cards) */}
-              {item.badge && (
-                <span
-                  className={`dashboard-info-badge ${item.badge.variant}`}
-                >
-                  {item.badge.text}
-                </span>
-              )}
+                {/* Action buttons (Pending Approvals) */}
+                {item.actions && (
+                  <div className="dashboard-info-actions">
+                    {item.actions.map((action, actionIdx) => (
+                      <button
+                        key={actionIdx}
+                        className={`dashboard-action-btn ${action.variant}`}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent row click
+                          action.onClick();
+                        }}
+                      >
+                        <SvgIcon name={action.icon} size={14} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              {/* Date */}
-              {item.dateText && (
-                <div className="dashboard-info-date">
-                  {item.dateText}
-                </div>
-              )}
+              {/* PROGRESS SECTION (Today's Attendance) */}
+              {item.progress && (
+                <div className="dashboard-info-progress">
+                  <div className="dashboard-info-progress-header">
+                    <span className="dashboard-info-progress-title">
+                      {item.primaryText}
+                    </span>
+                    <span className="dashboard-info-progress-count">
+                      {item.progress.present}/{item.progress.total}
+                    </span>
+                  </div>
 
-              {/* Action buttons (Pending Approvals) */}
-              {item.actions && (
-                <div className="dashboard-info-actions">
-                  {item.actions.map((action, index) => (
-                    <button
-                      key={index}
-                      className={`dashboard-action-btn ${action.variant}`}
-                      onClick={action.onClick}
-                    >
-                      <SvgIcon name={action.icon} size={14} />
-                    </button>
-                  ))}
+                  <div className="dashboard-progress-bar">
+                    <div
+                      className="dashboard-progress-present"
+                      style={{
+                        width: `${(item.progress.present / item.progress.total) * 100}%`,
+                      }}
+                    />
+
+                    {/* Leave */}
+                    <div
+                      className="dashboard-progress-leave"
+                      style={{
+                        width: `${(item.progress.leave / item.progress.total) * 100}%`,
+                      }}
+                    />
+
+                    {/* Absent */}
+                    <div
+                      className="dashboard-progress-absent"
+                      style={{
+                        width: `${(item.progress.absent / item.progress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="dashboard-progress-legend">
+                    <span>✓ {item.progress.present} Present</span>
+                    <span>○ {item.progress.leave} Leave</span>
+                    <span>× {item.progress.absent} Absent</span>
+                  </div>
                 </div>
               )}
             </div>
-
-            {/* PROGRESS SECTION (Today's Attendance) */}
-            {item.progress && (
-              <div className="dashboard-info-progress">
-                <div className="dashboard-info-progress-header">
-                  <span className="dashboard-info-progress-title">
-                    {item.primaryText}
-                  </span>
-                  <span className="dashboard-info-progress-count">
-                    {item.progress.present}/{item.progress.total}
-                  </span>
-                </div>
-
-                <div className="dashboard-progress-bar">
-                  <div
-                    className="dashboard-progress-present"
-                    style={{
-                      width: `${
-                        (item.progress.present /
-                          item.progress.total) *
-                        100
-                      }%`,
-                    }}
-                  />
-
-                  {/* Leave */}
-                <div
-                    className="dashboard-progress-leave"
-                    style={{
-                    width: `${(item.progress.leave / item.progress.total) * 100}%`,
-                    }}
-                />
-
-                {/* Absent */}
-                <div
-                    className="dashboard-progress-absent"
-                    style={{
-                    width: `${(item.progress.absent / item.progress.total) * 100}%`,
-                    }}
-                />
-                </div>
-
-                
-
-                <div className="dashboard-progress-legend">
-                  <span>✓ {item.progress.present} Present</span>
-                  <span>○ {item.progress.leave} Leave</span>
-                  <span>× {item.progress.absent} Absent</span>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
