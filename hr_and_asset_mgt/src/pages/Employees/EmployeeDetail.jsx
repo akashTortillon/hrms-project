@@ -49,10 +49,23 @@ import { getEmployeeAssets } from "../../services/assetService";
 import { assignAssetToEmployee } from "../../services/assignmentService";
 import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
+import { useRole } from "../../contexts/RoleContext";
 
 export default function EmployeeDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { hasPermission } = useRole();
+
+    // Resolve "me" to logged-in user's employeeId
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const isSelf = id === "me";
+    const effectiveId = isSelf ? user.employeeId : id;
+
+    // Permissions
+    const canEdit = hasPermission("MANAGE_EMPLOYEES");
+    const canManageDocs = hasPermission("MANAGE_DOCUMENTS");
+    const canManageAssets = hasPermission("MANAGE_ASSETS");
+
     const [activeTab, setActiveTab] = useState("Personal Info");
     const [employee, setEmployee] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -77,8 +90,15 @@ export default function EmployeeDetail() {
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
+        if (!effectiveId) {
+            console.warn("No effective ID for profile view");
+            setError("No employee profile found for this user.");
+            setLoading(false);
+            return;
+        }
+
         try {
-            const data = await getEmployeeById(id);
+            const data = await getEmployeeById(effectiveId);
             const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
             const passportExpiry = data.passportExpiry ? new Date(data.passportExpiry).toISOString().split("T")[0] : "N/A";
             const visaExpiry = data.visaExpiry ? new Date(data.visaExpiry).toISOString().split("T")[0] : "N/A";
@@ -94,7 +114,7 @@ export default function EmployeeDetail() {
     useEffect(() => {
         fetchEmployee();
         loadDepartments();
-    }, [id]);
+    }, [effectiveId]);
 
     const loadDepartments = async () => {
         try {
@@ -122,6 +142,7 @@ export default function EmployeeDetail() {
 
     // Document Handlers
     useEffect(() => {
+        if (!effectiveId) return;
         if (activeTab === "Documents") {
             fetchDocuments();
         } else if (activeTab === "Attendance") {
@@ -129,11 +150,12 @@ export default function EmployeeDetail() {
         } else if (activeTab === "Assets") {
             fetchEmployeeAssetsData();
         }
-    }, [activeTab]);
+    }, [activeTab, effectiveId]);
 
     const fetchDocuments = async () => {
+        if (!effectiveId) return;
         try {
-            const docs = await getEmployeeDocuments(id);
+            const docs = await getEmployeeDocuments(effectiveId);
             setDocuments(docs);
         } catch (e) {
             console.error(e);
@@ -153,10 +175,11 @@ export default function EmployeeDetail() {
     };
 
     const fetchAttendanceData = async () => {
+        if (!effectiveId) return;
         try {
             const [stats, tr] = await Promise.all([
-                getEmployeeAttendanceStats(id),
-                getEmployeeTrainings(id)
+                getEmployeeAttendanceStats(effectiveId),
+                getEmployeeTrainings(effectiveId)
             ]);
             setAttendanceStats(stats);
             setTrainings(tr);
@@ -166,8 +189,9 @@ export default function EmployeeDetail() {
     };
 
     const fetchEmployeeAssetsData = async () => {
+        if (!effectiveId) return;
         try {
-            const assets = await getEmployeeAssets(id);
+            const assets = await getEmployeeAssets(effectiveId);
             setEmployeeAssets(Array.isArray(assets) ? assets : []);
         } catch (e) {
             console.error("Assets fetch error:", e);
@@ -197,14 +221,16 @@ export default function EmployeeDetail() {
             {/* Header */}
             <div className="employee-detail-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button onClick={() => navigate("/app/employees")} className="back-btn">
-                        <BackArrowIcon />
-                    </button>
+                    {!isSelf && (
+                        <button onClick={() => navigate("/app/employees")} className="back-btn">
+                            <BackArrowIcon />
+                        </button>
+                    )}
                     <h1 className="employee-detail-title">
-                        Employee Profile
+                        {isSelf ? "My Profile" : "Employee Profile"}
                     </h1>
                 </div>
-                <p className="employee-detail-subtitle">View and manage employee information</p>
+                <p className="employee-detail-subtitle">{isSelf ? "Manage your information" : "View and manage employee information"}</p>
             </div>
 
             {/* Profile Card */}
@@ -236,15 +262,17 @@ export default function EmployeeDetail() {
                 </div>
 
                 <div className="profile-actions">
-                    <button
-                        className="edit-profile-btn"
-                        onClick={() => {
-                            setEditMode("profile");
-                            setShowEditModal(true);
-                        }}
-                    >
-                        Edit Profile
-                    </button>
+                    {canEdit && (
+                        <button
+                            className="edit-profile-btn"
+                            onClick={() => {
+                                setEditMode("profile");
+                                setShowEditModal(true);
+                            }}
+                        >
+                            Edit Profile
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -268,25 +296,27 @@ export default function EmployeeDetail() {
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Personal Information</h3>
-                            <button
-                                onClick={() => {
-                                    setEditMode("personal");
-                                    setShowEditModal(true);
-                                }}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '14px',
-                                    fontWeight: '500',
-                                    color: '#2563eb',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                <EditIcon /> Edit
-                            </button>
+                            {canEdit && (
+                                <button
+                                    onClick={() => {
+                                        setEditMode("personal");
+                                        setShowEditModal(true);
+                                    }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        fontSize: '14px',
+                                        fontWeight: '500',
+                                        color: '#2563eb',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    <EditIcon /> Edit
+                                </button>
+                            )}
                         </div>
 
                         <div className="info-grid">
@@ -327,25 +357,27 @@ export default function EmployeeDetail() {
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Employment Information</h3>
-                            <button
-                                onClick={() => {
-                                    setEditMode("employment");
-                                    setShowEditModal(true);
-                                }}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '14px',
-                                    fontWeight: '500',
-                                    color: '#2563eb',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                <EditIcon /> Edit
-                            </button>
+                            {canEdit && (
+                                <button
+                                    onClick={() => {
+                                        setEditMode("employment");
+                                        setShowEditModal(true);
+                                    }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        fontSize: '14px',
+                                        fontWeight: '500',
+                                        color: '#2563eb',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    <EditIcon /> Edit
+                                </button>
+                            )}
                         </div>
 
                         <div className="info-grid">
@@ -419,15 +451,17 @@ export default function EmployeeDetail() {
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Document Tracker</h3>
-                            <button
-                                onClick={() => setShowUploadModal(true)}
-                                style={{
-                                    background: '#2563eb', color: 'white', border: 'none',
-                                    padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer'
-                                }}
-                            >
-                                Upload Document
-                            </button>
+                            {canManageDocs && (
+                                <button
+                                    onClick={() => setShowUploadModal(true)}
+                                    style={{
+                                        background: '#2563eb', color: 'white', border: 'none',
+                                        padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer'
+                                    }}
+                                >
+                                    Upload Document
+                                </button>
+                            )}
                         </div>
                         <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                             {documents.map(doc => (
@@ -534,16 +568,18 @@ export default function EmployeeDetail() {
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Allocated Assets</h3>
-                            <button
-                                onClick={() => setShowAssignAssetModal(true)}
-                                style={{
-                                    background: '#2563eb', color: 'white', border: 'none',
-                                    padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', gap: '6px'
-                                }}
-                            >
-                                <span style={{ fontSize: "18px", fontWeight: "bold" }}>+</span> Assign Asset
-                            </button>
+                            {canManageAssets && (
+                                <button
+                                    onClick={() => setShowAssignAssetModal(true)}
+                                    style={{
+                                        background: '#2563eb', color: 'white', border: 'none',
+                                        padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '6px'
+                                    }}
+                                >
+                                    <span style={{ fontSize: "18px", fontWeight: "bold" }}>+</span> Assign Asset
+                                </button>
+                            )}
                         </div>
 
                         <div className="assets-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -612,7 +648,7 @@ export default function EmployeeDetail() {
             {/* Upload Document Modal */}
             {showUploadModal && (
                 <UploadEmployeeDocumentModal
-                    employeeId={id}
+                    employeeId={effectiveId}
                     onClose={() => setShowUploadModal(false)}
                     onUpload={handleUploadDocument}
                 />
@@ -621,7 +657,7 @@ export default function EmployeeDetail() {
             {/* Assign Asset Modal */}
             {showAssignAssetModal && (
                 <AssignAssetToEmployeeModal
-                    employeeId={id}
+                    employeeId={effectiveId}
                     onClose={() => setShowAssignAssetModal(false)}
                     onAssign={handleAssignAsset}
                 />

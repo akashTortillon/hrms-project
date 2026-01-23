@@ -1,4 +1,4 @@
-import api from "./getAxiosInstance";
+import api from "../api/apiClient";
 
 const BASE_URL = "/api/employee-docs";
 

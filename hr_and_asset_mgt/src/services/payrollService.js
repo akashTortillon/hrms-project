@@ -1,49 +1,34 @@
 
-import axios from "axios";
-
-// Create Axios Instance
-const api = axios.create({
-    baseURL: "http://localhost:5000/api",
-    withCredentials: true // Important for cookies
-});
-
-// Interceptor for Auth Token
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
+import api from "../api/apiClient";
 
 export const payrollService = {
     // Generate Payroll for a Month
     generate: async (month, year) => {
-        const response = await api.post("/payroll/generate", { month, year });
+        const response = await api.post("/api/payroll/generate", { month, year });
         return response.data;
     },
 
     // Get Payroll Summary (Records)
     getSummary: async (month, year) => {
-        const response = await api.get(`/payroll/summary?month=${month}&year=${year}`);
+        const response = await api.get(`/api/payroll/summary?month=${month}&year=${year}`);
         return response.data;
     },
 
     // Add Manual Adjustment
     addAdjustment: async (payload) => {
-        const response = await api.post("/payroll/adjust", payload);
+        const response = await api.post("/api/payroll/adjust", payload);
         return response.data;
     },
 
     // Finalize Payroll
     finalize: async (month, year) => {
-        const response = await api.post("/payroll/finalize", { month, year });
+        const response = await api.post("/api/payroll/finalize", { month, year });
         return response.data;
     },
 
     // Export Excel
     exportExcel: async (month, year) => {
-        const response = await api.get(`/payroll/export?month=${month}&year=${year}`, {
+        const response = await api.get(`/api/payroll/export?month=${month}&year=${year}`, {
             responseType: 'blob'
         });
         const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -57,7 +42,7 @@ export const payrollService = {
 
     // Generate SIF
     generateSIF: async (month, year) => {
-        const response = await api.get(`/payroll/export-sif?month=${month}&year=${year}`, {
+        const response = await api.get(`/api/payroll/export-sif?month=${month}&year=${year}`, {
             responseType: 'blob'
         });
         // Try to get filename from header
@@ -80,7 +65,7 @@ export const payrollService = {
 
     // Download MOL Report
     downloadMOLReport: async (month, year) => {
-        const response = await api.get(`/payroll/export-mol?month=${month}&year=${year}`, { responseType: 'blob' });
+        const response = await api.get(`/api/payroll/export-mol?month=${month}&year=${year}`, { responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
@@ -92,7 +77,7 @@ export const payrollService = {
 
     // Download Payment History
     downloadPaymentHistory: async (year) => {
-        const response = await api.get(`/payroll/history?year=${year}`, { responseType: 'blob' });
+        const response = await api.get(`/api/payroll/history?year=${year}`, { responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;

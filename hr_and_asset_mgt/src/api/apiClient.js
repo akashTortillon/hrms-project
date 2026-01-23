@@ -2,10 +2,11 @@ import axios from "axios";
 
 // Create shared axios instance
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE,
+    baseURL: import.meta.env.VITE_API_BASE || "http://localhost:5000",
     headers: {
         "Content-Type": "application/json",
     },
+    withCredentials: true, // Important for cookies (refreshToken)
 });
 
 // Request Interceptor: Attach Token
@@ -58,19 +59,19 @@ api.interceptors.response.use(
 
             try {
                 // Call refresh endpoint
-                // We utilize the same api instance but we must ensure we don't get into infinite loop
-                // Ideally use a fresh axios instance or skip interceptors if possible, 
-                // but here for simplicity we assume /auth/refresh won't return 401 unless truly invalid
-                const response = await api.post('/api/auth/refresh', {}, {
-                    withCredentials: true // Important to send cookie
-                });
+                // We utilize axios directly to avoid interceptor loop for this specific call
+                const response = await axios.post(
+                    `${api.defaults.baseURL}/api/auth/refresh`,
+                    {},
+                    { withCredentials: true }
+                );
 
                 const { token } = response.data;
 
                 // Save new token
                 localStorage.setItem("token", token);
 
-                // Update header
+                // Update defaults and original request
                 api.defaults.headers.common['Authorization'] = 'Bearer ' + token;
                 originalRequest.headers['Authorization'] = 'Bearer ' + token;
 
@@ -85,12 +86,12 @@ api.interceptors.response.use(
 
                 // Logout user
                 localStorage.removeItem("token");
-                localStorage.removeItem("user");
-                localStorage.removeItem("role");
-                localStorage.removeItem("permissions");
+                // localStorage.removeItem("user"); // Clear other auth data if needed
 
-                // Redirect to login
-                window.location.href = "/login";
+                // Redirect to login only if not already there
+                if (window.location.pathname !== "/login") {
+                    window.location.href = "/login";
+                }
 
                 return Promise.reject(err);
             }
