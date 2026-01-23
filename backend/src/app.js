@@ -83,6 +83,10 @@ import trainingRoutes from "./routes/trainingRoutes.js";
 app.use("/api/trainings", trainingRoutes);
 // console.log("✅ Training routes registered at /api/trainings");
 
+// 🔹 Workflow APIs (Onboarding/Offboarding)
+import workflowRoutes from "./routes/workflowRoutes.js";
+app.use("/api/workflows", workflowRoutes);
+
 
 
 

@@ -50,6 +50,7 @@ import { assignAssetToEmployee } from "../../services/assignmentService";
 import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
 import { useRole } from "../../contexts/RoleContext";
+import WorkflowTab from "../../components/employee/WorkflowTab";
 
 export default function EmployeeDetail() {
     const { id } = useParams();
@@ -215,6 +216,11 @@ export default function EmployeeDetail() {
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
 
     const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets"];
+    // Conditionally add Onboarding/Offboarding for Admin/HR
+    if (canEdit) {
+        tabs.push("Onboarding");
+        tabs.push("Offboarding");
+    }
 
     return (
         <div className="employee-detail-container">
@@ -627,7 +633,17 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && (
+
+
+                {activeTab === "Onboarding" && (
+                    <WorkflowTab employeeId={effectiveId} type="Onboarding" />
+                )}
+
+                {activeTab === "Offboarding" && (
+                    <WorkflowTab employeeId={effectiveId} type="Offboarding" />
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
