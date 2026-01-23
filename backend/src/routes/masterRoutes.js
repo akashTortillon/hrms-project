@@ -5,7 +5,7 @@ import {
     updateItem,
     deleteItem
 } from "../controllers/masterController.js";
-import { protect } from "../middlewares/authMiddleware.js";
+import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
@@ -13,8 +13,8 @@ const router = express.Router();
 router.use(protect);
 
 router.get("/:type", getItems);
-router.post("/:type", addItem);
-router.put("/:type/:id", updateItem); // Note: Update usually doesn't change type, just ID
-router.delete("/:type/:id", deleteItem);
+router.post("/:type", hasPermission("MANAGE_MASTERS"), addItem);
+router.put("/:type/:id", hasPermission("MANAGE_MASTERS"), updateItem); // Note: Update usually doesn't change type, just ID
+router.delete("/:type/:id", hasPermission("MANAGE_MASTERS"), deleteItem);
 
 export default router;

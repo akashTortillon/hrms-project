@@ -122,8 +122,10 @@ import {
 import { toast } from "react-toastify";
 
 import { getDepartments } from "../../services/masterService";
+import { useRole } from "../../contexts/RoleContext";
 
 export default function Employees() {
+  const { hasPermission } = useRole();
   // 🔹 URL Filters (Source of Truth)
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -310,7 +312,7 @@ export default function Employees() {
     <div className="employees-page">
       {/* HEADER */}
       <EmployeesHeader
-        onAddEmployee={() => setShowAddModal(true)}
+        onAddEmployee={hasPermission("MANAGE_EMPLOYEES") ? () => setShowAddModal(true) : null}
         department={department}
         setDepartment={handleSetDepartment}
         status={status}
@@ -318,7 +320,7 @@ export default function Employees() {
         search={searchInput}
         setSearch={setSearchInput}
         deptOptions={deptOptions}
-        onExport={handleExport}
+        onExport={hasPermission("MANAGE_EMPLOYEES") ? handleExport : null}
         count={employees.length}
       />
 
