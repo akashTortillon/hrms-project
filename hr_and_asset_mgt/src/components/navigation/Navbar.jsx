@@ -129,7 +129,7 @@ export default function NavigationBar() {
               role={role}
               onRoleChange={setRole}
               onClose={() => setProfileOpen(false)}
-              onProfile={() => console.log("My Profile")}
+              onProfile={() => navigate("/app/employees/me")}
               onSettings={() => console.log("Settings")}
               onLogout={handleLogout}
               anchorRef={profileAnchorRef}
