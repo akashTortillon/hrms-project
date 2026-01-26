@@ -171,7 +171,7 @@ export const addEmployee = async (req, res) => {
       email,
       phone,
       joinDate,
-      status: status || "Active",
+      status: status || "Onboarding",
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
       designation, contractType, basicSalary, accommodation, visaExpiry,
       shift: shift || "Day Shift"

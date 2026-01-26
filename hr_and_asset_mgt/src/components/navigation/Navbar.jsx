@@ -3,12 +3,9 @@ import { useNavigate } from "react-router-dom";
 import {
   Navbar,
   Container,
-  Form,
-  InputGroup,
-  Button,
 } from "react-bootstrap";
-import SvgView from "../svgIcon/svgView.jsx";
-import "../../style/layout.css";
+import GlobalSearch from "./GlobalSearch";
+
 import SvgIcon from "../svgIcon/svgView.jsx";
 import QuickActionMenu from "../reusable/QuickActionMenu";
 import NotificationDropdown from "../reusable/NotificationDropdown";
@@ -32,7 +29,7 @@ const notifications = [
 
 export default function NavigationBar() {
   const [profileOpen, setProfileOpen] = useState(false);
-  const { role, setRole } = useRole();
+  const { role, setRole, hasPermission } = useRole();
   const profileAnchorRef = useRef(null);
   const navigate = useNavigate();
 
@@ -58,19 +55,7 @@ export default function NavigationBar() {
 
         </div>
 
-        <Form className="search-form">
-          <InputGroup>
-            <InputGroup.Text className="search-icon">
-              <span aria-hidden="true"><SvgIcon name="search" size={15} /></span>
-            </InputGroup.Text>
-            <Form.Control
-              type="search"
-              placeholder="Search employees, documents, assets..."
-              aria-label="Search"
-              className="search-input"
-            />
-          </InputGroup>
-        </Form>
+        {hasPermission("GLOBAL_SEARCH") && <GlobalSearch />}
 
         <div className="topbar-actions">
           <QuickActionMenu
@@ -93,7 +78,7 @@ export default function NavigationBar() {
               onClick: () => console.log("View all clicked"),
             }}
           >
-            <SvgView name="notification" size={20} />
+            <SvgIcon name="notification" size={20} />
           </NotificationDropdown>
 
           <div

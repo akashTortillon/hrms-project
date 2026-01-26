@@ -11,7 +11,7 @@ const employeeSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ["Active", "Inactive", "On Leave"],
+    enum: ["Active", "Inactive", "On Leave", "Onboarding"],
     default: "Active"
   },
   dob: { type: Date },

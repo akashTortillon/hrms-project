@@ -246,7 +246,7 @@ const assetSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Index for efficient queries
-assetSchema.index({ assetCode: 1 });
+// assetSchema.index({ assetCode: 1 }); // Removed duplicate index
 assetSchema.index({ status: 1 });
 assetSchema.index({ custodian: 1 });
 assetSchema.index({ warrantyExpiryDate: 1 });

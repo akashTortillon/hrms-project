@@ -32,7 +32,11 @@ export default function HRManagement() {
         setPayrollState,
         shifts,
         shiftState,
-        setShiftState
+        setShiftState,
+        workflowState,
+        setWorkflowState,
+        tempStepName,
+        setTempStepName
     } = useHRManagement();
 
     return (
@@ -419,6 +423,71 @@ export default function HRManagement() {
                             <p className="text-xs text-gray-500 mt-1">Employee checked in after this time will be marked Late</p>
                         </div>
                     </div>
+                ) : modalType === "Workflow Template" ? (
+                    <div className="space-y-4">
+                        <div className="form-group">
+                            <label className="modal-form-label">Template Name</label>
+                            <input
+                                type="text"
+                                className="modal-form-input"
+                                placeholder="e.g. Onboarding, Offboarding"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="modal-form-label mb-2 block">Checklist Steps</label>
+                            <div className="flex gap-2 mb-3">
+                                <input
+                                    type="text"
+                                    className="modal-form-input"
+                                    placeholder="Enter step name (e.g. Join Form)"
+                                    value={tempStepName}
+                                    onChange={(e) => setTempStepName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (tempStepName.trim()) {
+                                                setWorkflowState({ ...workflowState, steps: [...workflowState.steps, { name: tempStepName.trim(), required: true, description: '' }] });
+                                                setTempStepName("");
+                                            }
+                                        }
+                                    }}
+                                />
+                                <button
+                                    onClick={() => {
+                                        if (tempStepName.trim()) {
+                                            setWorkflowState({ ...workflowState, steps: [...workflowState.steps, { name: tempStepName.trim(), required: true, description: '' }] });
+                                            setTempStepName("");
+                                        }
+                                    }}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+                                >
+                                    Add
+                                </button>
+                            </div>
+
+                            <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-100 p-2 rounded-md">
+                                {workflowState.steps.map((step, index) => (
+                                    <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200">
+                                        <span className="text-sm text-gray-700 font-medium">{index + 1}. {step.name}</span>
+                                        <button
+                                            onClick={() => {
+                                                const newSteps = [...workflowState.steps];
+                                                newSteps.splice(index, 1);
+                                                setWorkflowState({ ...workflowState, steps: newSteps });
+                                            }}
+                                            className="text-red-500 hover:text-red-700"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                                {workflowState.steps.length === 0 && <p className="text-sm text-gray-400 text-center py-2">No steps added yet.</p>}
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     // Generic Form for other Masters
                     <div className="form-group">
@@ -433,7 +502,7 @@ export default function HRManagement() {
                         />
                     </div>
                 )}
-            </CustomModal >
+            </CustomModal>
 
             {/* Delete Confirmation Modal */}
             <DeleteConfirmationModal
