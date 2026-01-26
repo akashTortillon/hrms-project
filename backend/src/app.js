@@ -87,6 +87,10 @@ app.use("/api/trainings", trainingRoutes);
 import workflowRoutes from "./routes/workflowRoutes.js";
 app.use("/api/workflows", workflowRoutes);
 
+// 🔹 Global Search API
+import searchRoutes from "./routes/searchRoutes.js";
+app.use("/api/search", searchRoutes);
+
 
 
 
