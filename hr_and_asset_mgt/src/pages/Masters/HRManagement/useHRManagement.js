@@ -38,6 +38,11 @@ export default function useHRManagement() {
         description: ''
     });
 
+    const [workflowState, setWorkflowState] = useState({
+        steps: [] // Array of { name: '', description: '', required: true }
+    });
+    const [tempStepName, setTempStepName] = useState("");
+
     const [shifts, setShifts] = useState([]);
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
@@ -93,6 +98,8 @@ export default function useHRManagement() {
             lateLimit: '09:15',
             workHours: '9'
         });
+        setWorkflowState({ steps: [] });
+        setTempStepName("");
         setShowModal(true);
     };
 
@@ -134,6 +141,12 @@ export default function useHRManagement() {
                 endTime: meta.endTime || '18:00',
                 lateLimit: meta.lateLimit || '09:15',
                 workHours: meta.workHours || '9'
+            });
+            setInputValue(item.name);
+        } else if (type === "Workflow Template") {
+            const meta = item.metadata || {};
+            setWorkflowState({
+                steps: meta.steps || []
             });
             setInputValue(item.name);
         } else {
@@ -220,8 +233,14 @@ export default function useHRManagement() {
                 else await payrollRuleService.add(payload);
                 setPayrollRules(await payrollRuleService.getAll());
             } else if (modalType === "Workflow Template") {
-                if (editId) await workflowTemplateService.update(editId, inputValue);
-                else await workflowTemplateService.add(inputValue);
+                const payload = {
+                    name: inputValue,
+                    metadata: {
+                        steps: workflowState.steps
+                    }
+                };
+                if (editId) await workflowTemplateService.update(editId, payload);
+                else await workflowTemplateService.add(payload);
                 setWorkflowTemplates(await workflowTemplateService.getAll());
             } else if (modalType === "Shift") {
                 const payload = {
@@ -334,6 +353,10 @@ export default function useHRManagement() {
         setPayrollState,
         shifts,
         shiftState,
-        setShiftState
+        setShiftState,
+        workflowState,
+        setWorkflowState,
+        tempStepName,
+        setTempStepName
     };
 }

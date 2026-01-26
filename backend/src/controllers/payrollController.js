@@ -7,6 +7,7 @@ import User from "../models/userModel.js";
 import mongoose from "mongoose";
 import SystemSettings from "../models/systemSettingsModel.js";
 import * as XLSX from "xlsx";
+import PayrollAudit from "../models/payrollAuditModel.js";
 
 // --- HELPER: Calculate Attendance Stats ---
 // --- HELPER: Parse "8h 45m" to decimal hours ---
@@ -442,6 +443,17 @@ export const generatePayroll = async (req, res) => {
         // Execute Batch
         if (payrollRecords.length > 0) {
             await Payroll.bulkWrite(payrollRecords);
+
+            // AUDIT LOG
+            await PayrollAudit.create({
+                action: "GENERATED",
+                performedBy: req.user ? req.user._id : null,
+                performedByName: req.user ? req.user.name : "System",
+                month,
+                year,
+                details: `Generated payroll for ${payrollRecords.length} employees`,
+                totalEmployees: payrollRecords.length
+            });
         }
 
         res.status(200).json({
@@ -513,6 +525,17 @@ export const addAdjustment = async (req, res) => {
         payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
 
         await payroll.save();
+
+        // AUDIT LOG
+        await PayrollAudit.create({
+            action: "ADJUSTMENT",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month: payroll.month,
+            year: payroll.year,
+            details: `Manual adjustment [${type}]: ${name} (${amount}) for Payroll ID ${payrollId}`
+        });
+
         res.json({ message: "Adjustment Added Successfully", payroll });
 
     } catch (error) {
@@ -537,6 +560,18 @@ export const finalizePayroll = async (req, res) => {
         }
 
         res.json({ message: `Success! Payroll Finalized for ${result.modifiedCount} employees. The payroll is now locked.` });
+
+        // AUDIT LOG
+        if (result.modifiedCount > 0) {
+            await PayrollAudit.create({
+                action: "FINALIZED",
+                performedBy: req.user ? req.user._id : null,
+                performedByName: req.user ? req.user.name : "System",
+                month,
+                year,
+                details: `Finalized payroll for ${result.modifiedCount} records`
+            });
+        }
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -692,6 +727,17 @@ export const exportPayroll = async (req, res) => {
 
         res.setHeader("Content-Disposition", `attachment; filename="Payroll_Export_${month}_${year}.xlsx"`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        // AUDIT LOG
+        PayrollAudit.create({
+            action: "EXPORTED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            details: "Exported Payroll Excel Report"
+        }).catch(console.error);
+
         res.send(buffer);
 
     } catch (error) {
@@ -753,6 +799,18 @@ export const generateSIF = async (req, res) => {
 
         res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.csv"`);
         res.setHeader("Content-Type", "text/csv");
+
+        // AUDIT LOG
+        PayrollAudit.create({
+            action: "SIF_GENERATED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            details: `Generated SIF File: SIF_${employerId}_${creationDate}.csv`,
+            totalNetSalary: totalAmount
+        }).catch(console.error);
+
         res.send(sifContent);
 
     } catch (error) {
