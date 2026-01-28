@@ -18,6 +18,7 @@ import {
 } from "../../services/attendanceService.js";
 import { getDepartments, shiftService } from "../../services/masterService.js";
 import { toast } from "react-toastify";
+import { useRole } from "../../contexts/RoleContext.jsx";
 
 // Utility → today's date
 const getTodayDate = () => {
@@ -38,6 +39,8 @@ const getStatusClass = (status) => {
 
 function Attendance() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { role } = useRole();
+  const isEmployee = role === "Employee";
 
   // Read State from URL Params
   const viewMode = searchParams.get("view") || "day";
@@ -235,9 +238,9 @@ function Attendance() {
       <AttendanceHeader
         viewMode={viewMode}
         setViewMode={(m) => updateParams({ view: m })}
-        onSync={handleSync}
+        onSync={isEmployee ? null : handleSync}
         loading={loading}
-        onExport={handleExport}
+        onExport={isEmployee ? null : handleExport}
       />
       <AttendanceStats stats={stats} />
 
@@ -249,12 +252,14 @@ function Attendance() {
         setSelectedMonth={(m) => updateParams({ month: m })}
         selectedYear={selectedYear}
         setSelectedYear={(y) => updateParams({ year: y })}
-        departments={departments}
-        shifts={shifts}
-        selectedDepartment={selectedDepartment}
+        departments={isEmployee ? [] : departments}
+        shifts={isEmployee ? [] : shifts}
+        selectedDepartment={isEmployee ? "" : selectedDepartment}
         setSelectedDepartment={(d) => updateParams({ department: d })}
-        selectedShift={selectedShift}
+        selectedShift={isEmployee ? "" : selectedShift}
         setSelectedShift={(s) => updateParams({ shift: s })}
+        showDepartmentFilter={!isEmployee}
+        showShiftFilter={!isEmployee}
       />
 
       <AttendanceTable
@@ -266,7 +271,7 @@ function Attendance() {
         })}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
-        onEdit={openAttendanceModal}
+        onEdit={isEmployee ? null : openAttendanceModal}
         loading={loading}
         year={selectedYear}
         month={selectedMonth}

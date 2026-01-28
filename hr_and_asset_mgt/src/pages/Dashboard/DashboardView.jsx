@@ -6,6 +6,7 @@ import "../../style/Dashboard.css";
 import DashboardInfoCard from "../../components/reusable/DashboardInfoCard.jsx";
 import { useNavigate } from "react-router-dom";
 import { getDocumentStats } from "../../services/documentService.js";
+import { useRole } from "../../contexts/RoleContext.jsx";
 
 import {
   fetchMetrics,
@@ -17,6 +18,7 @@ import {
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { role } = useRole();
 
   /** 🔢 REAL METRICS (ONLY FIRST CARD) */
   const [metrics, setMetrics] = useState({
@@ -90,6 +92,7 @@ function Dashboard() {
       })
       .catch(() => setCompanyDocumentExpiries([]));
 
+    /** ⛔ Dummy calls — DO NOT TOUCH */
     fetchEmployeeVisas()
       .then((res) =>
         setEmployeeVisaExpiries(Array.isArray(res.data) ? res.data : [])
@@ -280,7 +283,7 @@ function Dashboard() {
       </Row>
 
       {/* ⚡ QUICK ACTIONS */}
-      <div className="dashboard-quick-actions">
+      {/* <div className="dashboard-quick-actions">
         <div className="dashboard-quick-actions-title">Quick Actions</div>
 
         <Card className="dashboard-quick-actions-wrapper">
@@ -297,7 +300,29 @@ function Dashboard() {
             ))}
           </div>
         </Card>
-      </div>
+      </div> */}
+
+            {/* ⚡ QUICK ACTIONS - Hidden for Employees */}
+      {role !== "Employee" && (
+        <div className="dashboard-quick-actions">
+          <div className="dashboard-quick-actions-title">Quick Actions</div>
+
+          <Card className="dashboard-quick-actions-wrapper">
+            <div className="dashboard-quick-actions-grid">
+              {quickActions.map((action, index) => (
+                <Card
+                  key={index}
+                  className="dashboard-quick-action-card"
+                  onClick={() => navigate(action.path)}
+                >
+                  <SvgIcon name={action.icon} size={22} />
+                  <span>{action.label}</span>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* 📄 INFO SECTIONS */}
       <Row className="mt-4">
@@ -318,25 +343,27 @@ function Dashboard() {
             icon="exclamation"
             actionLabel="View All"
             onActionClick={() => navigate("/app/employees")}
-            onRowClick={(item) => navigate(`/app/employees/${item.employeeId || item._id}`)}
+            onRowClick={(item) => navigate(`/app/employees/${item._id}`)}
             items={normalizedEmployeeVisas}
           />
         </Col>
       </Row>
 
       <Row className="mt-4">
-        <Col md={6}>
-          <DashboardInfoCard
-            title="Pending Approvals"
-            icon="clock (1)"
-            actionLabel="View All"
-            onActionClick={() => navigate("/app/requests")}
-            onRowClick={() => navigate("/app/requests")}
-            items={normalizedPendingApprovals}
-          />
-        </Col>
+        {role !== "Employee" && (
+          <Col md={6}>
+            <DashboardInfoCard
+              title="Pending Approvals"
+              icon="clock (1)"
+              actionLabel="View All"
+              onActionClick={() => navigate("/app/requests")}
+              onRowClick={() => navigate("/app/requests")}
+              items={normalizedPendingApprovals}
+            />
+          </Col>
+        )}
 
-        <Col md={6}>
+        <Col md={role === "Employee" ? 12 : 6}>
           <DashboardInfoCard
             title="Today's Attendance"
             icon="calendar"

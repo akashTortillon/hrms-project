@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api/apiClient";
 import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
@@ -22,7 +22,7 @@ export default function ReportsOverview() {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get("/api/reports/stats");
+      const response = await api.get("/api/reports/stats");
       if (response.data.success) {
         setStats(response.data.data);
       }

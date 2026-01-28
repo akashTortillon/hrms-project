@@ -161,20 +161,20 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
             <th>CHECK OUT</th>
             <th>WORK HOURS</th>
             <th>STATUS</th>
-            <th className="actions-col">ACTIONS</th>
+            {onEdit && <th className="actions-col">ACTIONS</th>}
           </tr>
         </thead>
 
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan="7" style={{ textAlign: "center", padding: "20px" }}>
+              <td colSpan={onEdit ? "7" : "6"} style={{ textAlign: "center", padding: "20px" }}>
                 Loading...
               </td>
             </tr>
           ) : records.length === 0 ? (
             <tr>
-              <td colSpan="7" style={{ textAlign: "center", padding: "20px" }}>
+              <td colSpan={onEdit ? "7" : "6"} style={{ textAlign: "center", padding: "20px" }}>
                 No employees found
               </td>
             </tr>
@@ -213,14 +213,16 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                     </span>
                   </td>
 
-                  <td className="actions-col">
-                    <button
-                      className="edit-link"
-                      onClick={() => handleEditClick(row)}
-                    >
-                      Edit
-                    </button>
-                  </td>
+                  {onEdit && (
+                    <td className="actions-col">
+                      <button
+                        className="edit-link"
+                        onClick={() => handleEditClick(row)}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })

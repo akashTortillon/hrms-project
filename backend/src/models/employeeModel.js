@@ -11,7 +11,7 @@ const employeeSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ["Active", "Inactive", "On Leave"],
+    enum: ["Active", "Inactive", "On Leave", "Onboarding"],
     default: "Active"
   },
   dob: { type: Date },
@@ -24,7 +24,13 @@ const employeeSchema = new mongoose.Schema({
   basicSalary: { type: String },
   accommodation: { type: String },
   shift: { type: String, default: "Day Shift" },
-  visaExpiry: { type: Date }
+  visaExpiry: { type: Date },
+  laborCardNumber: { type: String },
+  personalId: { type: String },
+  bankName: { type: String },
+  iban: { type: String },
+  bankAccount: { type: String },
+  agentId: { type: String }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);

@@ -1,11 +1,12 @@
 
 import express from "express";
 import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory } from "../controllers/payrollController.js";
-import { protect } from "../middlewares/authMiddleware.js";
+import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
 router.use(protect);
+router.use(hasPermission("MANAGE_PAYROLL"));
 
 router.post("/generate", generatePayroll);
 router.get("/summary", getPayrollSummary);

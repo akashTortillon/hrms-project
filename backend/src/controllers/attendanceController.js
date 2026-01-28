@@ -271,7 +271,7 @@ const getShiftRules = async (shiftName) => {
  */
 export const syncBiometrics = async (req, res) => {
   try {
-    console.log("Starting Biometric Sync...");
+    // console.log("Starting Biometric Sync...");
     const dataPath = path.join(__dirname, "../data/mockBiometricData.json");
     if (!fs.existsSync(dataPath)) {
       return res.status(404).json({ message: "Biometric data file not found" });
@@ -279,15 +279,17 @@ export const syncBiometrics = async (req, res) => {
 
     const rawData = fs.readFileSync(dataPath, "utf-8");
     const logs = JSON.parse(rawData);
-    console.log(`Found ${logs.length} biometric logs.`);
+    // console.log(`Found ${logs.length} biometric logs.`);
 
     // 1. Group logs by Employee + Date
     const groupedData = {};
+    const employeeCodes = new Set(); // To fetch relevant employees later
 
     for (const log of logs) {
       const date = log.timestamp.split("T")[0];
       const time = log.timestamp.split("T")[1].substring(0, 5); // HH:MM
       const key = `${log.employeeCode}_${date}`;
+      employeeCodes.add(log.employeeCode);
 
       if (!groupedData[key]) {
         groupedData[key] = {
@@ -311,6 +313,10 @@ export const syncBiometrics = async (req, res) => {
       }
     }
 
+    // Fetch relevant employees to check for leaves
+    const employeesList = await Employee.find({ code: { $in: Array.from(employeeCodes) } });
+    const leaveMap = await getApprovedLeavesMap(employeesList);
+
     // 2. Process each grouped record
     let syncedCount = 0;
     const errors = [];
@@ -319,10 +325,16 @@ export const syncBiometrics = async (req, res) => {
       const record = groupedData[key];
       // console.log(`Processing: ${record.employeeCode} on ${record.date} | In: ${record.checkIn} Out: ${record.checkOut}`);
 
-      const employee = await Employee.findOne({ code: record.employeeCode });
+      const employee = employeesList.find(e => e.code === record.employeeCode);
 
       if (!employee) {
         errors.push(`Employee not found: ${record.employeeCode}`);
+        continue;
+      }
+
+      // ✅ CHECK LEAVE FIRST: If employee is on approved leave, ignore biometric entry
+      if (isLeave(employee._id, record.date, leaveMap)) {
+        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} has Approved Leave. Skipping biometric overwrite.`);
         continue;
       }
 
@@ -341,14 +353,21 @@ export const syncBiometrics = async (req, res) => {
       // Calculate Work Hours
       const workHours = calculateDuration(record.checkIn, record.checkOut);
 
-      console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
+      // console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
 
       // ✅ NEW: Protect "On Leave" status from being overwritten
       const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
       if (existingRecord && existingRecord.status === "On Leave") {
-        console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
+        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
         continue;
       }
+
+      // // ✅ NEW: Protect "On Leave" status from being overwritten
+      // const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
+      // if (existingRecord && existingRecord.status === "On Leave") {
+      //   console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
+      //   continue;
+      // }
 
       // Upsert Attendance
       await Attendance.findOneAndUpdate(
@@ -359,19 +378,19 @@ export const syncBiometrics = async (req, res) => {
           shift: shiftName,
           checkIn: record.checkIn,
           checkOut: record.checkOut,
-          status: status,
-          workHours: workHours
+          status,
+          workHours
         },
         { upsert: true, new: true }
       );
       syncedCount++;
     }
 
-    console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
+    // console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
 
     res.json({ message: "Sync successful", synced: syncedCount, errors });
   } catch (error) {
-    console.error("Sync error:", error);
+    // console.error("Sync error:", error);
     res.status(500).json({ message: "Server error during sync" });
   }
 };
@@ -432,6 +451,69 @@ const getApprovedLeaves = async (date, employees) => {
   return onLeaveEmployeeIds;
 };
 
+// ✅ NEW HELPER: Get Map of Approved Leaves for Multiple Employees
+const getApprovedLeavesMap = async (employees) => {
+  const emailToEmpId = {};
+  const emails = [];
+  employees.forEach(emp => {
+    if (emp.email) {
+      emailToEmpId[emp.email] = emp._id.toString();
+      emails.push(emp.email);
+    }
+  });
+
+  const users = await User.find({ email: { $in: emails } });
+  const userIdToEmpId = {};
+  const userIds = [];
+  users.forEach(u => {
+    userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
+    userIds.push(u._id);
+  });
+
+  const requests = await Request.find({
+    userId: { $in: userIds },
+    requestType: "LEAVE",
+    status: "APPROVED"
+  });
+
+  const map = {}; // empId -> [{start, end}]
+  requests.forEach(req => {
+    const details = req.details || {};
+    const startDate = details.startDate || details.fromDate;
+    const endDate = details.endDate || details.toDate;
+
+    if (startDate && endDate) {
+      const empId = userIdToEmpId[req.userId.toString()];
+      if (empId) {
+        if (!map[empId]) map[empId] = [];
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        s.setHours(0, 0, 0, 0);
+        e.setHours(23, 59, 59, 999);
+        // ✅ Include leaveType for Payroll
+        map[empId].push({
+          start: s,
+          end: e,
+          leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave"
+        });
+      }
+    }
+  });
+  return map;
+};
+
+// ✅ NEW HELPER: Check if a date is within any leave range
+const isLeave = (empId, dateStr, map) => {
+  const ranges = map[empId.toString()];
+  if (!ranges) return false;
+  const d = new Date(dateStr);
+  d.setHours(12, 0, 0, 0); // Mid-day check
+  for (const r of ranges) {
+    if (d >= r.start && d <= r.end) return true;
+  }
+  return false;
+};
+
 /**
  * GET daily attendance
  * /api/attendance?date=YYYY-MM-DD
@@ -444,14 +526,19 @@ export const getDailyAttendance = async (req, res) => {
       return res.status(400).json({ message: "Date is required" });
     }
 
-    // Get all employees
-    const employees = await Employee.find({ status: "Active" }).sort({ code: 1 }); // Only Active employees
+    // Get employees (Personalized for Employee role)
+    const employeeQuery = { status: "Active" };
+    if (req.user.role === "Employee") {
+      employeeQuery._id = req.user.employeeId;
+    }
+
+    const employees = await Employee.find(employeeQuery).sort({ code: 1 }); // Only Active employees
 
     // Get attendance for the date
     const attendanceRecords = await Attendance.find({ date }).populate("employee");
 
-    // Get Approved Leaves for this date
-    const onLeaveSet = await getApprovedLeaves(date, employees);
+    // Get Approved Leaves for this date (Consistent with Monthly View)
+    const leaveMap = await getApprovedLeavesMap(employees);
 
     // Merge
     const attendanceMap = {};
@@ -459,29 +546,12 @@ export const getDailyAttendance = async (req, res) => {
       if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
     });
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // 3️⃣ Get approved leave requests covering this date
-    // const approvedLeaves = await Request.find({
-    //   requestType: "LEAVE",
-    //   status: "APPROVED",
-    //   "details.fromDate": { $lte: dayEnd },
-    //   "details.toDate": { $gte: dayStart }
-    // });
-
-    // const leaveMap = {};
-    // approvedLeaves.forEach((leave) => {
-    //   leaveMap[leave.userId.toString()] = true;
-    // });
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
     // 4️⃣ Merge employees + attendance + leave
     const result = employees.map((emp) => {
       const record = attendanceMap[emp._id.toString()];
       // Check if employee is strictly On Leave in their profile OR has an approved leave request
       const isProfileOnLeave = emp.status === "On Leave";
-      const isRequestOnLeave = onLeaveSet.has(emp._id.toString());
+      const isRequestOnLeave = isLeave(emp._id, date, leaveMap);
 
       return {
         _id: record?._id || null, // If null, no record yet
@@ -493,8 +563,10 @@ export const getDailyAttendance = async (req, res) => {
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
         workHours: record?.workHours || "-",
-        // If record exists, use its status. 
-        // If not, check if profile says "On Leave" OR Leave Request Approved. Otherwise "Absent".
+        // If record exists AND it's not Absent (or if record says On Leave), use its status.
+        // If record doesn't exist, calculate implied status.
+        // If profile says On Leave or Request Approved -> "On Leave"
+        // Else "Absent"
         status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
         avatar: emp.avatar // if available
       };
@@ -502,7 +574,7 @@ export const getDailyAttendance = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error("Get daily attendance error:", error);
+    // console.error("Get daily attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -528,13 +600,21 @@ export const getMonthlyAttendance = async (req, res) => {
     // Construct regex or range query
     const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
 
-    const employees = await Employee.find({ status: "Active" }).sort({ code: 1 });
+    // Get employees (Personalized for Employee role)
+    const employeeQuery = { status: "Active" };
+    if (req.user.role === "Employee") {
+      employeeQuery._id = req.user.employeeId;
+    }
+
+    const employees = await Employee.find(employeeQuery).sort({ code: 1 });
     const attendanceRecords = await Attendance.find({
       date: { $regex: regex }
     });
 
     // Get Holidays
     const holidaySet = await getHolidaysSet();
+    // ✅ NEW: Get Leave Map
+    const leaveMap = await getApprovedLeavesMap(employees);
 
     // Map attendance by Employee -> Date
     const attendanceMap = {};
@@ -566,7 +646,10 @@ export const getMonthlyAttendance = async (req, res) => {
         if (record) {
           status = record.status;
         } else {
+          // ✅ Updated Priority Logic
           if (emp.status === "On Leave") {
+            status = "On Leave";
+          } else if (isLeave(emp._id, day, leaveMap)) { // Check approved leave requests
             status = "On Leave";
           } else if (isSunday) {
             status = "Weekend";
@@ -602,7 +685,7 @@ export const getMonthlyAttendance = async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error("Get monthly attendance error:", error);
+    // console.error("Get monthly attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -644,7 +727,7 @@ export const markAttendance = async (req, res) => {
 
     res.status(201).json(attendance);
   } catch (error) {
-    console.error("Mark attendance error:", error);
+    // console.error("Mark attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -667,7 +750,7 @@ export const updateAttendance = async (req, res) => {
 
     res.json(updated);
   } catch (error) {
-    console.error("Update attendance error:", error);
+    // console.error("Update attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -693,6 +776,9 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     const records = await Attendance.find({ employee: employeeId });
 
     const holidaySet = await getHolidaysSet();
+    // ✅ NEW: Get Leave Map for this employee
+    const leaveMap = await getApprovedLeavesMap([employee]);
+
     const recordMap = {};
     records.forEach(r => recordMap[r.date] = r);
 
@@ -719,7 +805,10 @@ export const getEmployeeAttendanceStats = async (req, res) => {
       } else {
         // No record -> Implicit Status
         // Only count implicit absent if typically a working day (not Sunday, not Holiday)
-        if (!isSunday && !isHoliday) {
+        // ✅ Check for Leave
+        if (isLeave(employee._id, dateStr, leaveMap)) {
+          leave++;
+        } else if (!isSunday && !isHoliday) {
           absent++;
         }
       }
@@ -737,7 +826,7 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get attendance stats error:", error);
+    // console.error("Get attendance stats error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -766,6 +855,9 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
     });
 
     const holidaySet = await getHolidaysSet();
+    // ✅ NEW: Leave Map
+    const leaveMap = await getApprovedLeavesMap([employee]);
+
     const attendanceMap = {};
     attendanceRecords.forEach(rec => attendanceMap[rec.date] = rec);
 
@@ -791,6 +883,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
       } else {
         if (dateObj > today) status = "-"; // Future
         else if (employee.status === "On Leave") status = "On Leave";
+        else if (isLeave(employee._id, dateStr, leaveMap)) status = "On Leave"; // ✅ Check Approved Leaves
         else if (isSunday) status = "Weekend";
         else if (isHoliday) status = "Holiday";
         else status = "Absent";
@@ -807,7 +900,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
 
     res.json(history);
   } catch (error) {
-    console.error("Get History Error:", error);
+    // console.error("Get History Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -850,6 +943,8 @@ export const exportAttendance = async (req, res) => {
 
       const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
       const holidaySet = await getHolidaysSet();
+      // ✅ NEW: Leave Map
+      const leaveMap = await getApprovedLeavesMap(employees);
 
       // Attendance Map
       const attendanceMap = {};
@@ -891,6 +986,7 @@ export const exportAttendance = async (req, res) => {
                   record.status === "On Leave" ? "OL" : record.status;
           } else {
             if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
+            else if (isLeave(emp._id, dateKey, leaveMap)) { status = "On Leave"; cellValue = "OL"; } // ✅ Checked
             else if (isSunday) { status = "Weekend"; cellValue = "W"; }
             else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
             else { status = "Absent"; cellValue = "A"; }
@@ -986,7 +1082,7 @@ export const exportAttendance = async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    console.error("Export Attendance Error:", error);
+    // console.error("Export Attendance Error:", error);
     res.status(500).json({ message: "Export failed" });
   }
 };

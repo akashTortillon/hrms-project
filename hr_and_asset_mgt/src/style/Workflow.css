@@ -1,0 +1,150 @@
+.workflow-container {
+    padding: 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.workflow-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.workflow-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #1f2937;
+}
+
+.workflow-progress {
+    width: 200px;
+    text-align: right;
+}
+
+.workflow-progress span {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.progress-bar {
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.workflow-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.workflow-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.workflow-item:hover {
+    background: #f9fafb;
+}
+
+.workflow-item.completed {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.item-info {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.pending-circle {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 50%;
+}
+
+.item-name {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.item-desc {
+    margin: 3px 0 0 0;
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.item-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.view-doc-link {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: #3b82f6;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.view-doc-link:hover {
+    text-decoration: underline;
+}
+
+.upload-btn-label {
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #4b5563;
+    transition: all 0.2s;
+}
+
+.upload-btn-label:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.toggle-status-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+}
+
+.toggle-status-btn:hover {
+    background: #e5e7eb;
+    color: #374151;
+}

@@ -7,7 +7,7 @@ export const getEmployeeTrainings = async (req, res) => {
         const trainings = await EmployeeTraining.find({ employee: employeeId }).sort({ date: -1 });
         res.json(trainings);
     } catch (error) {
-        console.error("Get trainings error:", error);
+        // console.error("Get trainings error:", error);
         res.status(500).json({ message: "Server error" });
     }
 };
@@ -27,7 +27,7 @@ export const addEmployeeTraining = async (req, res) => {
 
         res.status(201).json(training);
     } catch (error) {
-        console.error("Add training error:", error);
+        // console.error("Add training error:", error);
         res.status(500).json({ message: "Server error" });
     }
 };

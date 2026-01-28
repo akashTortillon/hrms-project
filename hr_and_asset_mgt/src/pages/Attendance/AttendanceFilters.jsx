@@ -14,7 +14,9 @@ export default function AttendanceFilters({
   selectedDepartment,
   setSelectedDepartment,
   selectedShift,
-  setSelectedShift
+  setSelectedShift,
+  showDepartmentFilter = true,
+  showShiftFilter = true
 }) {
   return (
     <div className="attendance-filters">
@@ -63,33 +65,37 @@ export default function AttendanceFilters({
         </>
       )}
 
-      <div className="filter-group">
-        <label className="filter-label">Department</label>
-        <select
-          className="filter-input filter-select"
-          value={selectedDepartment}
-          onChange={(e) => setSelectedDepartment(e.target.value)}
-        >
-          <option value="">All Departments</option>
-          {departments.map(dept => (
-            <option key={dept._id || dept.name} value={dept.name}>{dept.name}</option>
-          ))}
-        </select>
-      </div>
+      {showDepartmentFilter && (
+        <div className="filter-group">
+          <label className="filter-label">Department</label>
+          <select
+            className="filter-input filter-select"
+            value={selectedDepartment}
+            onChange={(e) => setSelectedDepartment(e.target.value)}
+          >
+            <option value="">All Departments</option>
+            {departments.map(dept => (
+              <option key={dept._id || dept.name} value={dept.name}>{dept.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
-      <div className="filter-group">
-        <label className="filter-label">Shift</label>
-        <select
-          className="filter-input filter-select"
-          value={selectedShift}
-          onChange={(e) => setSelectedShift(e.target.value)}
-        >
-          <option value="">All Shifts</option>
-          {shifts.map(shift => (
-            <option key={shift._id || shift.name} value={shift.name}>{shift.name}</option>
-          ))}
-        </select>
-      </div>
+      {showShiftFilter && (
+        <div className="filter-group">
+          <label className="filter-label">Shift</label>
+          <select
+            className="filter-input filter-select"
+            value={selectedShift}
+            onChange={(e) => setSelectedShift(e.target.value)}
+          >
+            <option value="">All Shifts</option>
+            {shifts.map(shift => (
+              <option key={shift._id || shift.name} value={shift.name}>{shift.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }

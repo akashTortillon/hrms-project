@@ -1,20 +1,25 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Navbar,
   Container,
-  Form,
-  InputGroup,
-  Button,
 } from "react-bootstrap";
-import SvgView from "../svgIcon/svgView.jsx";
-import "../../style/layout.css";
+import GlobalSearch from "./GlobalSearch";
+
 import SvgIcon from "../svgIcon/svgView.jsx";
 import QuickActionMenu from "../reusable/QuickActionMenu";
 import NotificationDropdown from "../reusable/NotificationDropdown";
 import ProfileDropdown from "../reusable/ProfileDropdown";
 import "../../style/Profile.css";
 import { useRole } from "../../contexts/RoleContext.jsx";
+import { logoutUser } from "../../api/authService";
+import {
+  fetchNotifications,
+  getUnreadCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification
+} from "../../services/notificationService";
 
 
 const quickActions = [
@@ -23,22 +28,97 @@ const quickActions = [
   { label: "Upload Document", key: "uploadDocument" },
 ];
 
-const notifications = [
-  { title: "5 Documents Expiring Soon", time: "2 hours ago" },
-  { title: "3 Leave Requests Pending", time: "5 hours ago" },
-  { title: "Payroll Processing Due", time: "1 day ago" },
-];
-
 export default function NavigationBar() {
   const [profileOpen, setProfileOpen] = useState(false);
-  const { role, setRole } = useRole();
+  const { role, setRole, hasPermission } = useRole();
   const profileAnchorRef = useRef(null);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
+  // Dynamic Notifications State
+  const [notifications, setNotifications] = useState([]);
+  const [badgeCount, setBadgeCount] = useState(0);
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 60000); // Poll every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const data = await fetchNotifications();
+      const count = await getUnreadCount();
+
+      // Format time for the reusable component
+      const formatted = data.map(n => ({
+        ...n,
+        time: formatNotificationTime(n.createdAt)
+      }));
+
+      setNotifications(formatted);
+      setBadgeCount(count);
+    } catch (error) {
+      console.error("Failed to load notifications", error);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllNotificationsAsRead();
+      loadNotifications();
+    } catch (error) {
+      console.error("Failed to mark all as read", error);
+    }
+  };
+
+  const handleDeleteNotification = async (id) => {
+    try {
+      // If it's a virtual ID, we don't delete from DB, 
+      // but the user expects it to disappear from the session list.
+      if (id && String(id).startsWith("virtual-")) {
+        setNotifications(prev => prev.filter(n => n._id !== id));
+        // Note: Virtuals will reappear on next reload if the condition persists.
+        // This is standard practice for aggregated business logic.
+      } else {
+        await deleteNotification(id);
+        loadNotifications();
+      }
+    } catch (error) {
+      console.error("Failed to delete notification", error);
+    }
+  };
+
+  const handleNotificationClick = async (item) => {
+    if (!item.isRead && !item.isVirtual) {
+      await markNotificationAsRead(item._id);
+      loadNotifications(); // Refresh
+    }
+    if (item.link) {
+      navigate(item.link);
+    }
+  };
+
+  const formatNotificationTime = (dateStr) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInSecs = Math.floor((now - date) / 1000);
+
+    if (diffInSecs < 60) return "Just now";
+    if (diffInSecs < 3600) return `${Math.floor(diffInSecs / 60)}m ago`;
+    if (diffInSecs < 86400) return `${Math.floor(diffInSecs / 3600)}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("userPermissions");
     // navigate("/login");
     window.location.href = "/login"; // Force full reload to clear all states
   };
@@ -51,19 +131,7 @@ export default function NavigationBar() {
 
         </div>
 
-        <Form className="search-form">
-          <InputGroup>
-            <InputGroup.Text className="search-icon">
-              <span aria-hidden="true"><SvgIcon name="search" size={15} /></span>
-            </InputGroup.Text>
-            <Form.Control
-              type="search"
-              placeholder="Search employees, documents, assets..."
-              aria-label="Search"
-              className="search-input"
-            />
-          </InputGroup>
-        </Form>
+        {role && <GlobalSearch />}
 
         <div className="topbar-actions">
           <QuickActionMenu
@@ -79,14 +147,16 @@ export default function NavigationBar() {
 
           <NotificationDropdown
             title="Notifications"
-            badgeCount={3}
+            badgeCount={badgeCount}
             items={notifications}
-            footerAction={{
-              label: "View All Notifications",
-              onClick: () => console.log("View all clicked"),
-            }}
+            onItemClick={handleNotificationClick}
+            onMarkAllRead={handleMarkAllAsRead}
+            onDeleteItem={handleDeleteNotification}
           >
-            <SvgView name="notification" size={20} />
+            <div className="bell-wrapper" style={{ position: 'relative' }}>
+              <SvgIcon name="notification" size={20} />
+              {badgeCount > 0 && <span className="notification-dot">{badgeCount}</span>}
+            </div>
           </NotificationDropdown>
 
           <div
@@ -122,7 +192,7 @@ export default function NavigationBar() {
               role={role}
               onRoleChange={setRole}
               onClose={() => setProfileOpen(false)}
-              onProfile={() => console.log("My Profile")}
+              onProfile={() => navigate("/app/employees/me")}
               onSettings={() => console.log("Settings")}
               onLogout={handleLogout}
               anchorRef={profileAnchorRef}

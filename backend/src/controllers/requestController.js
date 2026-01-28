@@ -412,9 +412,26 @@ import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import User from "../models/userModel.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { createNotification } from "./notificationController.js";
 import upload from "../config/multer.js";
 import path from "path";
 import fs from "fs";
+
+/**
+ * Helper to notify all Admins and HR
+ */
+const notifyAdmins = async (title, message, link) => {
+  const admins = await User.find({ role: { $in: ["Admin", "HR Admin", "HR Manager"] } });
+  for (const admin of admins) {
+    await createNotification({
+      recipient: admin._id,
+      title,
+      message,
+      type: "REQUEST",
+      link
+    });
+  }
+};
 
 const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true) => {
   const user = await User.findById(userId);
@@ -474,7 +491,7 @@ const getRequestTypeLabel = (request) => {
 const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
   try {
     if (!process.env.SMTP_EMAIL || !process.env.SMTP_APP_PASSWORD) {
-      console.error("❌ Email configuration missing");
+      // console.error("❌ Email configuration missing");
       return;
     }
 
@@ -524,9 +541,9 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
     if (ccEmails.length > 0) emailOptions.cc = ccEmails.join(', ');
 
     await sendEmail(emailOptions);
-    console.log(`✅ ${requestLabel} submission email sent successfully`);
+    // console.log(`✅ ${requestLabel} submission email sent successfully`);
   } catch (error) {
-    console.error("❌ Failed to send submission email:", error);
+    // console.error("❌ Failed to send submission email:", error);
   }
 };
 
@@ -557,9 +574,9 @@ const sendSalaryAdvanceApprovalEmail = async (request, employeeUser) => {
     `;
 
     await sendEmail({ to: employeeUser.email, subject, html });
-    console.log(`✅ ${requestLabel} approval email sent successfully`);
+    // console.log(`✅ ${requestLabel} approval email sent successfully`);
   } catch (error) {
-    console.error("❌ Failed to send approval email:", error);
+    // console.error("❌ Failed to send approval email:", error);
   }
 };
 
@@ -588,9 +605,9 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
     `;
 
     await sendEmail({ to: employeeUser.email, subject, html });
-    console.log(`✅ ${requestLabel} rejection email sent successfully`);
+    // console.log(`✅ ${requestLabel} rejection email sent successfully`);
   } catch (error) {
-    console.error("❌ Failed to send rejection email:", error);
+    // console.error("❌ Failed to send rejection email:", error);
   }
 };
 
@@ -634,12 +651,19 @@ export const createRequest = async (req, res) => {
       submittedAt: new Date()
     });
 
-    // Send email notification for Salary Advance/Loan requests
-    if (requestType === "SALARY") {
-      const employeeUser = await User.findById(userId);
-      if (employeeUser) {
+    // Send notifications
+    const employeeUser = await User.findById(userId);
+    if (employeeUser) {
+      if (requestType === "SALARY") {
         await sendSalaryAdvanceSubmissionEmail(request, employeeUser);
       }
+
+      // Notify Admins
+      await notifyAdmins(
+        `New ${requestType} Request`,
+        `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
+        `/app/requests`
+      );
     }
 
     return res.status(201).json({
@@ -648,7 +672,7 @@ export const createRequest = async (req, res) => {
       data: request
     });
   } catch (error) {
-    console.error("Create request error:", error);
+    // console.error("Create request error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to submit request"
@@ -673,7 +697,7 @@ export const getMyRequests = async (req, res) => {
       data: requests
     });
   } catch (error) {
-    console.error("Get my requests error:", error);
+    // console.error("Get my requests error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch requests"
@@ -718,7 +742,7 @@ export const withdrawRequest = async (req, res) => {
       data: populatedRequest
     });
   } catch (error) {
-    console.error("Withdraw request error:", error);
+    // console.error("Withdraw request error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to withdraw request"
@@ -740,7 +764,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       data: requests
     });
   } catch (error) {
-    console.error("Admin pending requests error:", error);
+    // console.error("Admin pending requests error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch pending requests"
@@ -782,6 +806,15 @@ export const updateRequestStatus = async (req, res) => {
 
     await request.save();
 
+    // Notify Employee
+    await createNotification({
+      recipient: request.userId,
+      title: `Request ${newStatus}`,
+      message: `Your ${request.requestType.toLowerCase()} request (${request.requestId}) has been ${newStatus.toLowerCase()}.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    });
+
     // Send email notifications for Salary Advance/Loan requests
     if (request.requestType === "SALARY") {
       const employeeUser = await User.findById(request.userId);
@@ -803,7 +836,7 @@ export const updateRequestStatus = async (req, res) => {
       data: populatedRequest
     });
   } catch (err) {
-    console.error("❌ Update request error:", err);
+    // console.error("❌ Update request error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -853,6 +886,15 @@ export const approveDocumentRequest = async (req, res) => {
 
     await request.save();
 
+    // Notify Employee
+    await createNotification({
+      recipient: request.userId,
+      title: `Request Completed`,
+      message: `Your document request (${request.requestId}) has been completed and the document is ready.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    });
+
     const populatedRequest = await Request.findById(request._id)
       .populate("userId", "name")
       .populate("approvedBy", "name role")
@@ -864,7 +906,7 @@ export const approveDocumentRequest = async (req, res) => {
       data: populatedRequest
     });
   } catch (err) {
-    console.error("❌ Approve document request error:", err);
+    // console.error("❌ Approve document request error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to approve document request"
@@ -916,6 +958,15 @@ export const rejectDocumentRequest = async (req, res) => {
 
     await request.save();
 
+    // Notify Employee
+    await createNotification({
+      recipient: request.userId,
+      title: `Request Rejected`,
+      message: `Your document request (${request.requestId}) has been rejected.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    });
+
     const populatedRequest = await Request.findById(request._id)
       .populate("userId", "name")
       .populate("approvedBy", "name role")
@@ -927,7 +978,7 @@ export const rejectDocumentRequest = async (req, res) => {
       data: populatedRequest
     });
   } catch (err) {
-    console.error("❌ Reject document request error:", err);
+    // console.error("❌ Reject document request error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to reject document request"
@@ -984,7 +1035,7 @@ export const downloadDocument = async (req, res) => {
     const fileStream = fs.createReadStream(request.uploadedDocument);
     fileStream.pipe(res);
   } catch (err) {
-    console.error("❌ Download document error:", err);
+    // console.error("❌ Download document error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to download document"

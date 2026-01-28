@@ -434,9 +434,9 @@ const [status, setStatus] = useState("All");
                         Download Document
                       </button>
                     )}
-                    <button className="view-details-btn">
+                    {/* <button className="view-details-btn">
                       View Details
-                    </button>
+                    </button> */}
                   </div>
                 </div>
               );
