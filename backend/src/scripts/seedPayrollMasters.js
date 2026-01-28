@@ -15,9 +15,9 @@ dotenv.config({ path: envPath });
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.MONGODB_URI);
-        console.log("MongoDB Connected");
+        // console.log("MongoDB Connected");
     } catch (error) {
-        console.error("DB Connection Error:", error);
+        // console.error("DB Connection Error:", error);
         process.exit(1);
     }
 };
@@ -141,23 +141,23 @@ const leaveTypes = [
 const seed = async () => {
     await connectDB();
 
-    console.log("Seeding Payroll & Leave Masters...");
+    // console.log("Seeding Payroll & Leave Masters...");
 
     // Helper to Upsert
     const upsert = async (item) => {
         const exists = await Master.findOne({ type: item.type, name: item.name });
         if (!exists) {
             await Master.create(item);
-            console.log(` Created: ${item.name} (${item.type})`);
+            // console.log(` Created: ${item.name} (${item.type})`);
         } else {
-            console.log(` Skipped: ${item.name} (Already exists)`);
+            // console.log(` Skipped: ${item.name} (Already exists)`);
         }
     };
 
     for (const item of payrollRules) await upsert(item);
     for (const item of leaveTypes) await upsert(item);
 
-    console.log("Seeding Completed.");
+    // console.log("Seeding Completed.");
     process.exit();
 };
 

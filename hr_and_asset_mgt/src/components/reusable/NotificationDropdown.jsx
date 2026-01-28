@@ -6,7 +6,9 @@ export default function NotificationDropdown({
   title = "Notifications",
   badgeCount,
   items = [],
-  footerAction,
+  onItemClick,
+  onMarkAllRead,
+  onDeleteItem,
   children,
 }) {
   const [open, setOpen] = useState(false);
@@ -37,37 +39,62 @@ export default function NotificationDropdown({
         aria-label="Notifications"
       >
         {children}
-        <span className="notification-dot" />
       </button>
 
       {open && (
         <Card className="notification-dropdown-menu">
           <Card.Body style={{ padding: 0 }}>
             <div className="notification-header">
-              <div className="notification-title">{title}</div>
-              {badgeCount && (
+              <div className="notification-title-group">
+                <span className="notification-title">{title}</span>
+                {/* {items.length > 0 && onMarkAllRead && (
+                  <button className="mark-read-btn" onClick={onMarkAllRead}>
+                    Mark all as read
+                  </button>
+                )} */}
+              </div>
+              {badgeCount > 0 && (
                 <span className="notification-badge">{badgeCount} new</span>
               )}
             </div>
             <div className="notification-items">
-              {items.map((item, index) => (
-                <div key={index} className="notification-item">
-                  <div className="notification-item-title">{item.title}</div>
-                  <div className="notification-item-time">{item.time}</div>
+              {items.length === 0 ? (
+                <div className="notification-empty">
+                  No new notifications
                 </div>
-              ))}
+              ) : (
+                items.map((item, index) => (
+                  <div
+                    key={item._id || index}
+                    className={`notification-item ${!item.isRead ? 'unread' : ''}`}
+                    onClick={() => {
+                      onItemClick?.(item);
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="notification-item-content">
+                      <div className="notification-item-title">
+                        {item.title}
+                      </div>
+                      <div className="notification-item-time">{item.time}</div>
+                    </div>
+                    <div className="notification-item-actions">
+                      {!item.isRead && <span className="unread-dot" />}
+                      <button
+                        className="delete-item-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteItem?.(item._id);
+                        }}
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-            {footerAction && (
-              <div
-                className="notification-footer"
-                onClick={() => {
-                  setOpen(false);
-                  footerAction.onClick?.();
-                }}
-              >
-                {footerAction.label}
-              </div>
-            )}
           </Card.Body>
         </Card>
       )}

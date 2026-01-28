@@ -1,4 +1,6 @@
 import { useState } from "react";
+import api from "../../api/apiClient";
+import { toast } from "react-toastify"; // Added toast import if not present, though assuming toast might be needed for errors.
 import Card from "../../components/reusable/Card";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Reports.css";
@@ -23,16 +25,30 @@ export default function ComplianceExports() {
   const [month, setMonth] = useState(currentDate.getMonth() + 1);
   const [year, setYear] = useState(currentDate.getFullYear());
 
-  const handleExport = (type) => {
+  const handleExport = async (type) => {
     let url = "";
     if (type === "wps") {
-      url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"}/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
+      url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
     } else if (type === "mol") {
-      url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"}/api/reports/compliance/mol-report?month=${month}&year=${year}`;
+      url = `/api/reports/compliance/mol-report?month=${month}&year=${year}`;
     }
 
     if (url) {
-      window.open(url, "_blank");
+      try {
+        const response = await api.get(url, { responseType: 'blob' });
+        const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        // Extract filename from header if possible, or generate one
+        const filename = type === "wps" ? `WPS_SIF_${month}_${year}.sif` : `MOL_Report_${month}_${year}.xlsx`;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (error) {
+        console.error("Export failed", error);
+        // toast.error("Export failed"); // Ideally add toast
+      }
     }
   };
 

@@ -8,7 +8,7 @@ const logActivity = async (type, reportName) => {
   try {
     await ReportActivity.create({ type, reportName });
   } catch (error) {
-    console.error(`Activity Logging Error (${type} - ${reportName}):`, error);
+    // console.error(`Activity Logging Error (${type} - ${reportName}):`, error);
   }
 };
 
@@ -43,7 +43,7 @@ export const getDepartmentAttendanceReport = async (req, res) => {
     await logActivity("Generation", "Department Attendance");
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Departmental Attendance Report Error:", error);
+    // console.error("Departmental Attendance Report Error:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
@@ -67,7 +67,7 @@ export const getDailyDepartmentAttendanceReport = async (req, res) => {
     await logActivity("Generation", "Daily Attendance");
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Daily Departmental Attendance Report Error:", error);
+    // console.error("Daily Departmental Attendance Report Error:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
@@ -94,7 +94,7 @@ export const getDocumentExpiryReport = async (req, res) => {
     await logActivity("Generation", "Document Expiry");
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Document Expiry Report Error:", error);
+    // console.error("Document Expiry Report Error:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
@@ -122,7 +122,7 @@ export const getAssetDepreciationReport = async (req, res) => {
     await logActivity("Generation", "Asset Depreciation");
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Asset Depreciation Report Error:", error);
+    // console.error("Asset Depreciation Report Error:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
@@ -154,7 +154,7 @@ export const getPayrollSummaryReport = async (req, res) => {
     await logActivity("Generation", "Payroll Summary");
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Payroll Summary Report Error:", error);
+    // console.error("Payroll Summary Report Error:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
@@ -183,7 +183,7 @@ export const generateCustomReport = async (req, res) => {
     await logActivity("Generation", `Custom Report (${dataset})`);
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Custom Report Generation Error:", error);
+    // console.error("Custom Report Generation Error:", error);
     res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };

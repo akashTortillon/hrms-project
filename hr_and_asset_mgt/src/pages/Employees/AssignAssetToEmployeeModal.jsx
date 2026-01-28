@@ -43,6 +43,7 @@ export default function AssignAssetToEmployeeModal({ onClose, onAssign, employee
         try {
             await onAssign({
                 assetId: selectedAssetId,
+                custodianType: "EMPLOYEE", // ✅ Required by backend
                 toEmployee: employeeId,
                 remarks: remarks
             });

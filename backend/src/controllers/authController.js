@@ -1,12 +1,26 @@
 import bcrypt from "bcryptjs";
 import User from "../models/userModel.js";
-import { generateToken } from "../utils/token.js";
+import { generateAccessToken, generateRefreshToken } from "../utils/token.js";
 import { generateOtp } from "../utils/generateOtp.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { jwtConfig } from "../config/jwt.js";
+import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from 'uuid'; // You might need to install uuid or use a custom random string generator
+import Master from "../models/masterModel.js";
+
+// Helper to set refresh token cookie
+const setRefreshTokenCookie = (res, token) => {
+  res.cookie("refreshToken", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // Set to true in production
+    sameSite: "strict",
+    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+  });
+};
 
 export const register = async (req, res) => {
   try {
-    const { name, email,phone, password, confirmPassword } = req.body;
+    const { name, email, phone, password, confirmPassword } = req.body;
 
     // Basic validation
     if (!name || !email || !phone || !password || !confirmPassword) {
@@ -25,10 +39,9 @@ export const register = async (req, res) => {
     }
 
     // Check if user already exists
-    // Check if user already exists
-const existingUser = await User.findOne({ 
-  email: { $regex: new RegExp(`^${email}$`, 'i') } 
-});
+    const existingUser = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, 'i') }
+    });
     if (existingUser) {
       return res.status(409).json({ message: "User already exists" });
     }
@@ -43,22 +56,29 @@ const existingUser = await User.findOne({
       role: req.body.role || "Employee"
     });
 
-    const token = generateToken(user._id);
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+    const family = uuidv4();
+
+    // Save refresh token
+    user.refreshTokens.push({
+      token: refreshToken,
+      family: family,
+      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
+    await user.save();
+
+    setRefreshTokenCookie(res, refreshToken);
 
     res.status(201).json({
       message: "User registered successfully",
-      token
+      token: accessToken
     });
   } catch (error) {
-    console.error(error);
+    // console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
-
-
-import Master from "../models/masterModel.js";
-
-// ... existing code ...
 
 export const login = async (req, res) => {
   try {
@@ -66,11 +86,9 @@ export const login = async (req, res) => {
 
     
     // ✅ Make email case-insensitive
-    const user = await User.findOne({ 
-      email: { $regex: new RegExp(`^${email}$`, 'i') } 
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, 'i') }
     });
-    
-    
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -79,70 +97,123 @@ export const login = async (req, res) => {
     // Fetch Permissions from Master DB
     let permissions = [];
     if (user.role === 'Admin') {
-        permissions = ["ALL"];
+      permissions = ["ALL"];
     } else {
-        const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
-        permissions = roleDef ? roleDef.permissions : [];
+      const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
+      permissions = roleDef ? roleDef.permissions : [];
     }
 
-    const token = generateToken(user._id);
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+    const family = uuidv4();
 
-    res.json({ 
-      token,
+    // Remove expired tokens
+    if (!user.refreshTokens) user.refreshTokens = [];
+    user.refreshTokens = user.refreshTokens.filter(t => t.expires > Date.now());
+
+    // Save new refresh token
+    user.refreshTokens.push({
+      token: refreshToken,
+      family: family,
+      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
+    await user.save();
+
+    setRefreshTokenCookie(res, refreshToken);
+
+    res.json({
+      token: accessToken,
       role: user.role,
-      permissions, // <--- Optimized: Send permissions directly
+      permissions,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        employeeId: user.employeeId // Include linked Employee ID
       }
     });
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + error.message });
   }
+};
+
+export const refresh = async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (!refreshToken) {
+    return res.status(401).json({ message: "No refresh token provided" });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, jwtConfig.refreshSecret);
+    const user = await User.findById(decoded.id);
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    // Find the token in the DB
+    const tokenDoc = user.refreshTokens?.find(t => t.token === refreshToken);
+
+    if (!tokenDoc) {
+      // Token reuse detected!
+      // Check if this token belongs to a family that was already rotated
+      // In this simple implementation, if a valid signed token is not in DB, it might be reuse.
+      // A more robust way is to store 'used' tokens or check family specifically.
+      // But clearing all tokens is a safe fail-safe for reuse detection.
+
+      // If we could determine the family, we would better target. 
+      // Since we can't easily find the family of a deleted token without a 'used' collection,
+      // we'll clear all refresh tokens for security as a reuse attempt was made.
+      user.refreshTokens = [];
+      await user.save();
+      res.clearCookie("refreshToken");
+      return res.status(403).json({ message: "Token reuse detected. access denied." });
+    }
+
+    // Token Rotation
+    const newAccessToken = generateAccessToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    // Replace the old token with the new one (same family)
+    tokenDoc.token = newRefreshToken;
+    tokenDoc.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    // Remove expired tokens while we are here
+    user.refreshTokens = user.refreshTokens.filter(t => t.expires > Date.now());
+
+    await user.save();
+
+    setRefreshTokenCookie(res, newRefreshToken);
+
+    res.json({ token: newAccessToken });
+
+  } catch (error) {
+    // console.error("Refresh error:", error);
+    res.clearCookie("refreshToken");
+    res.status(401).json({ message: "Invalid refresh token" });
+  }
+};
+
+export const logout = async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (refreshToken) {
+    try {
+      const decoded = jwt.verify(refreshToken, jwtConfig.refreshSecret);
+      const user = await User.findById(decoded.id);
+      if (user && user.refreshTokens) {
+        user.refreshTokens = user.refreshTokens.filter(t => t.token !== refreshToken);
+        await user.save();
+      }
+    } catch (e) {
+      // Ignore invalid tokens on logout
+    }
+  }
+
+  res.clearCookie("refreshToken");
+  res.json({ message: "Logged out successfully" });
 };
 
 
 
-// export const login = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     // ✅ Case-insensitive email lookup
-//     const user = await User.findOne({ 
-//       email: { $regex: new RegExp(`^${email}$`, 'i') } 
-//     });
-    
-//     if (!user) {
-//       console.log("Login failed: User not found for email:", email);
-//       return res.status(401).json({ message: "Invalid credentials" });
-//     }
-
-//     // ✅ Check if password is hashed (starts with $2a$ or $2b$)
-//     const isPasswordHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
-    
-//     if (!isPasswordHashed) {
-//       console.log("Login failed: Password not hashed for user:", email);
-//       return res.status(401).json({ 
-//         message: "Invalid credentials. Please reset your password." 
-//       });
-//     }
-
-//     const isMatch = await bcrypt.compare(password, user.password);
-    
-//     if (!isMatch) {
-//       console.log("Login failed: Password mismatch for user:", email);
-//       return res.status(401).json({ message: "Invalid credentials" });
-//     }
-
-//     const token = generateToken(user._id);
-//     console.log("Login successful for user:", email);
-//     res.json({ token });
-    
-//   } catch (error) {
-//     console.error("Login error:", error);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };

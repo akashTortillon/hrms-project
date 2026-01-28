@@ -8,13 +8,10 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Assets.css";
 
 export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
-  const [importing, setImporting] = useState(false);
+  // const [importing, setImporting] = useState(false); // Removed internal state
 
-  const handleImportClick = async () => {
-    if (importing) return;
-    setImporting(true);
-    await onImport();
-    setImporting(false);
+  const handleImportClick = () => {
+    if (onImport) onImport();
   };
 
   return (
@@ -31,10 +28,8 @@ export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
         <button
           className="asset-import-btn"
           onClick={handleImportClick}
-          disabled={importing}
-          style={{ opacity: importing ? 0.7 : 1, cursor: importing ? 'wait' : 'pointer' }}
         >
-          <span>{importing ? "Importing..." : "Import Assets"}</span>
+          <span>Import Assets</span>
         </button>
 
         <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>

@@ -44,6 +44,7 @@ const payrollSchema = new mongoose.Schema({
     attendanceSummary: {
         totalDays: Number,
         daysPresent: Number,
+        paidLeaves: Number, // ✅ NEW
         daysAbsent: Number,
         unpaidLeaves: Number,
         overtimeHours: Number,

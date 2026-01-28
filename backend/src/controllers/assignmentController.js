@@ -97,7 +97,7 @@
 //       newStatus
 //     });
 //   } catch (error) {
-//     console.error(error);
+//     // console.error(error);
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
@@ -212,7 +212,7 @@
 //       newStatus
 //     });
 //   } catch (error) {
-//     console.error(error);
+//     // console.error(error);
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
@@ -286,7 +286,7 @@
 //       newStatus
 //     });
 //   } catch (error) {
-//     console.error(error);
+//     // console.error(error);
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
@@ -388,7 +388,7 @@
 //       totalRecords: history.length
 //     });
 //   } catch (error) {
-//     console.error(error);
+//     // console.error(error);
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
@@ -426,7 +426,7 @@
 
 //     res.json(currentAssignment);
 //   } catch (error) {
-//     console.error("Get current assignment error:", error);
+//     // console.error("Get current assignment error:", error);
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
@@ -610,7 +610,7 @@ export const assignAssetToEmployee = async (req, res) => {
       newStatus
     });
   } catch (error) {
-    console.error(error);
+    // console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -755,7 +755,7 @@ export const transferAsset = async (req, res) => {
       newStatus
     });
   } catch (error) {
-    console.error("Transfer Error:", error);
+    // console.error("Transfer Error:", error);
     res.status(500).json({ message: "Server error handling transfer" });
   }
 };

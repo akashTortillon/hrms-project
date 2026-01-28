@@ -48,10 +48,12 @@ export default function DocumentLibraryHeader({ stats = { total: 0, valid: 0, ex
           </p>
         </div>
 
-        <AppButton variant="primary" className="upload-btn" onClick={onUploadClick}>
-          <SvgIcon name="upload" size={18} />
-          <span>Upload Document</span>
-        </AppButton>
+        {onUploadClick && (
+          <AppButton variant="primary" className="upload-btn" onClick={onUploadClick}>
+            <SvgIcon name="upload" size={18} />
+            <span>Upload Document</span>
+          </AppButton>
+        )}
       </div>
 
       {/* Stats */}

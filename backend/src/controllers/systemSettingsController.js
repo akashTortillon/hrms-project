@@ -84,10 +84,10 @@ export const updateGlobalSettings = async (req, res) => {
 // Holidays
 export const addHoliday = async (req, res) => {
     try {
-        console.log("Adding Holiday. Payload:", req.body);
+
         const { name, date } = req.body;
         if (!name) {
-            console.error("Add Holiday Error: Name is missing");
+            // console.error("Add Holiday Error: Name is missing");
             return res.status(400).json({ message: "Name is required" });
         }
 
@@ -96,7 +96,7 @@ export const addHoliday = async (req, res) => {
         await settings.save();
         res.status(200).json(settings);
     } catch (error) {
-        console.error("Add Holiday Error:", error);
+        // console.error("Add Holiday Error:", error);
         res.status(500).json({ message: error.message });
     }
 };

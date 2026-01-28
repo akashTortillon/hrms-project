@@ -99,9 +99,9 @@ export default function Login() {
               </button>
             </form>
 
-            <div className="login-footer">
+            {/* <div className="login-footer">
               Don’t have an account? <Link to="/register">Register</Link>
-            </div>
+            </div> */}
 
 
           </div>

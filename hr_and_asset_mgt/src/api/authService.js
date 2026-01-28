@@ -25,6 +25,7 @@ export const loginUser = async (data) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+    credentials: "include", // Important for receiving httpOnly cookies
   });
 
   const result = await res.json();
@@ -34,4 +35,16 @@ export const loginUser = async (data) => {
   }
 
   return result;
+};
+
+export const logoutUser = async () => {
+  try {
+    await fetch(`${API_URL}/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include", // Important for sending httpOnly cookies
+    });
+  } catch (error) {
+    console.error("Logout API call failed", error);
+  }
 };
