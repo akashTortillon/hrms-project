@@ -334,6 +334,84 @@ export const generatePayroll = async (req, res) => {
                 leaveRulesMap
             );
 
+            // --- 2.5 SHIFT-BASED PENALTIES (Dynamic Late Deduction) ---
+            // If the employee's shift has a "latePolicy", we apply it here.
+            // This overrides or adds to standard deductions?
+            // "Inegrated with Late Count" -> If we apply specific penalties, we might skip the generic "LATE_COUNT" rule later?
+            // Or let them coexist? Usually specific overrides generic.
+            // Let's implement as: If shift penalties found, apply them.
+            // NOTE: This logic assumes 'stats' tracks counts for tier1, tier2, tier3.
+
+            const empShiftMeta = shiftMap[empShiftName] || {};
+            const latePolicy = empShiftMeta.latePolicy || [];
+            let shiftPenaltyApplied = false;
+
+            if (latePolicy.length > 0) {
+                // Policy: [{ tier: 1, type: 'FIXED', value: 10 }, ...]
+                let penaltyAmount = 0;
+                let penaltyDescParts = [];
+
+                // Calculate for Tier 1
+                if (stats.lateTier1 > 0) {
+                    const rule = latePolicy.find(p => p.tier === 1);
+                    if (rule) {
+                        const val = Number(rule.value || 0);
+                        let subTotal = 0;
+                        if (rule.type === 'FIXED') subTotal = stats.lateTier1 * val;
+                        else if (rule.type === 'PERCENTAGE') subTotal = stats.lateTier1 * (basicSalary * val / 100); // % of Monthly Basic per instance? Or Pro-rated? Let's assume % of Basic.
+                        else if (rule.type === 'DAILY_RATE') subTotal = stats.lateTier1 * (dailySalary * val);
+
+                        if (subTotal > 0) {
+                            penaltyAmount += subTotal;
+                            penaltyDescParts.push(`${stats.lateTier1}x T1`);
+                        }
+                    }
+                }
+                // Calculate for Tier 2
+                if (stats.lateTier2 > 0) {
+                    const rule = latePolicy.find(p => p.tier === 2);
+                    if (rule) {
+                        const val = Number(rule.value || 0);
+                        let subTotal = 0;
+                        if (rule.type === 'FIXED') subTotal = stats.lateTier2 * val;
+                        else if (rule.type === 'PERCENTAGE') subTotal = stats.lateTier2 * (basicSalary * val / 100);
+                        else if (rule.type === 'DAILY_RATE') subTotal = stats.lateTier2 * (dailySalary * val);
+
+                        if (subTotal > 0) {
+                            penaltyAmount += subTotal;
+                            penaltyDescParts.push(`${stats.lateTier2}x T2`);
+                        }
+                    }
+                }
+                // Calculate for Tier 3
+                if (stats.lateTier3 > 0) {
+                    const rule = latePolicy.find(p => p.tier === 3);
+                    if (rule) {
+                        const val = Number(rule.value || 0);
+                        let subTotal = 0;
+                        if (rule.type === 'FIXED') subTotal = stats.lateTier3 * val;
+                        else if (rule.type === 'PERCENTAGE') subTotal = stats.lateTier3 * (basicSalary * val / 100);
+                        else if (rule.type === 'DAILY_RATE') subTotal = stats.lateTier3 * (dailySalary * val);
+
+                        if (subTotal > 0) {
+                            penaltyAmount += subTotal;
+                            penaltyDescParts.push(`${stats.lateTier3}x T3`);
+                        }
+                    }
+                }
+
+                if (penaltyAmount > 0) {
+                    deductionList.push({
+                        name: "Late Penalty (Shift Policy)",
+                        amount: parseFloat(penaltyAmount.toFixed(2)),
+                        type: "AUTO",
+                        meta: penaltyDescParts.join(', ')
+                    });
+                    totalDeductions += penaltyAmount;
+                    shiftPenaltyApplied = true;
+                }
+            }
+
 
 
             // 3. Dynamic Rule Engine
@@ -372,18 +450,26 @@ export const generatePayroll = async (req, res) => {
 
                     // 1. Get the Statistic Value
                     if (basis === "LATE_COUNT") {
+                        // If shift penalty applied, do we skip generic count? 
+                        // User asked for "integrated".
+                        // Logic: If specific penalties applied (shiftPenaltyApplied=true), skip generic "Late Count" rule.
+                        if (shiftPenaltyApplied) continue;
+
                         statValue = stats.late;
                         if (statValue > 0) description = `${statValue} Days Late`;
                     }
                     else if (basis === "LATE_TIER_1_COUNT") {
+                        if (shiftPenaltyApplied) continue; // Skip if handled by Shift Policy
                         statValue = stats.lateTier1;
                         if (statValue > 0) description = `${statValue} Days Late (Tier 1)`;
                     }
                     else if (basis === "LATE_TIER_2_COUNT") {
+                        if (shiftPenaltyApplied) continue; // Skip if handled by Shift Policy
                         statValue = stats.lateTier2;
                         if (statValue > 0) description = `${statValue} Days Late (Tier 2)`;
                     }
                     else if (basis === "LATE_TIER_3_COUNT") {
+                        if (shiftPenaltyApplied) continue; // Skip if handled by Shift Policy
                         statValue = stats.lateTier3;
                         if (statValue > 0) description = `${statValue} Days Late (Tier 3)`;
                     }
