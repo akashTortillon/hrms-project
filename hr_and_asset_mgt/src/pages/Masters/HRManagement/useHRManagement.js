@@ -47,7 +47,9 @@ export default function useHRManagement() {
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
         endTime: '18:00',
-        lateLimit: '09:15',
+        buffer1: '09:15',
+        buffer2: '09:30',
+        buffer3: '10:00',
         workHours: '9'
     });
 
@@ -95,7 +97,9 @@ export default function useHRManagement() {
         setShiftState({
             startTime: '09:00',
             endTime: '18:00',
-            lateLimit: '09:15',
+            buffer1: '09:15',
+            buffer2: '09:30',
+            buffer3: '10:00',
             workHours: '9'
         });
         setWorkflowState({ steps: [] });
@@ -136,10 +140,13 @@ export default function useHRManagement() {
             setInputValue(item.name);
         } else if (type === "Shift") {
             const meta = item.metadata || {};
+            const buffers = meta.buffers || [];
             setShiftState({
                 startTime: meta.startTime || '09:00',
                 endTime: meta.endTime || '18:00',
-                lateLimit: meta.lateLimit || '09:15',
+                buffer1: buffers[0] || meta.lateLimit || '09:15',
+                buffer2: buffers[1] || '09:30',
+                buffer3: buffers[2] || '10:00',
                 workHours: meta.workHours || '9'
             });
             setInputValue(item.name);
@@ -248,7 +255,8 @@ export default function useHRManagement() {
                     metadata: {
                         startTime: shiftState.startTime,
                         endTime: shiftState.endTime,
-                        lateLimit: shiftState.lateLimit,
+                        lateLimit: shiftState.buffer1, // Keep legacy field for backward compatibility
+                        buffers: [shiftState.buffer1, shiftState.buffer2, shiftState.buffer3],
                         workHours: Number(shiftState.workHours)
                     }
                 };
