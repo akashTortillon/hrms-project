@@ -255,15 +255,25 @@ const calculateDuration = (start, end) => {
 const getShiftRules = async (shiftName) => {
   const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
   if (shiftMaster && shiftMaster.metadata) {
+    const meta = shiftMaster.metadata;
+    // Extract buffers from latePolicy if available, otherwise fallback to buffers or lateLimit
+    let buffers = [];
+    if (meta.latePolicy && Array.isArray(meta.latePolicy)) {
+      buffers = meta.latePolicy.map(p => p.time).filter(t => t);
+    } else {
+      buffers = meta.buffers || [meta.lateLimit || "09:15"];
+    }
+
     return {
-      start: shiftMaster.metadata.startTime || "09:00",
-      end: shiftMaster.metadata.endTime || "18:00",
-      lateLimit: shiftMaster.metadata.lateLimit || "09:15",
-      buffers: shiftMaster.metadata.buffers || [shiftMaster.metadata.lateLimit || "09:15"] // Fallback to single buffer
+      start: meta.startTime || "09:00",
+      end: meta.endTime || "18:00",
+      lateLimit: meta.lateLimit || "09:15",
+      latePolicy: meta.latePolicy || [], // Pass full policy for other controllers if needed
+      buffers: buffers.length > 0 ? buffers : ["09:15"]
     };
   }
-  // Default fallback if shift not found
-  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"] };
+  // Default fallback
+  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
 };
 
 const calculateLateTier = (checkInTime, rules) => {

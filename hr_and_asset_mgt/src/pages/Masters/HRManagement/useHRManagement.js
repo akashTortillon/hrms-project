@@ -47,10 +47,11 @@ export default function useHRManagement() {
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
         endTime: '18:00',
-        buffer1: '09:15',
-        buffer2: '09:30',
-        buffer3: '10:00',
-        workHours: '9'
+        latePolicy: [
+            { tier: 1, time: '09:15', type: 'FIXED', value: 0 },
+            { tier: 2, time: '09:30', type: 'DAILY_RATE', value: 0.5 },
+            { tier: 3, time: '10:00', type: 'DAILY_RATE', value: 1.0 }
+        ]
     });
 
     useEffect(() => {
@@ -97,10 +98,11 @@ export default function useHRManagement() {
         setShiftState({
             startTime: '09:00',
             endTime: '18:00',
-            buffer1: '09:15',
-            buffer2: '09:30',
-            buffer3: '10:00',
-            workHours: '9'
+            latePolicy: [
+                { tier: 1, time: '09:15', type: 'FIXED', value: 0 },
+                { tier: 2, time: '09:30', type: 'DAILY_RATE', value: 0.5 },
+                { tier: 3, time: '10:00', type: 'DAILY_RATE', value: 1.0 }
+            ]
         });
         setWorkflowState({ steps: [] });
         setTempStepName("");
@@ -140,14 +142,16 @@ export default function useHRManagement() {
             setInputValue(item.name);
         } else if (type === "Shift") {
             const meta = item.metadata || {};
-            const buffers = meta.buffers || [];
             setShiftState({
                 startTime: meta.startTime || '09:00',
                 endTime: meta.endTime || '18:00',
-                buffer1: buffers[0] || meta.lateLimit || '09:15',
-                buffer2: buffers[1] || '09:30',
-                buffer3: buffers[2] || '10:00',
-                workHours: meta.workHours || '9'
+                latePolicy: meta.latePolicy && meta.latePolicy.length > 0
+                    ? meta.latePolicy
+                    : [
+                        { tier: 1, time: meta.buffer1 || meta.lateLimit || '09:15', type: 'FIXED', value: 0 },
+                        { tier: 2, time: meta.buffer2 || '09:30', type: 'DAILY_RATE', value: 0.5 },
+                        { tier: 3, time: meta.buffer3 || '10:00', type: 'DAILY_RATE', value: 1.0 }
+                    ]
             });
             setInputValue(item.name);
         } else if (type === "Workflow Template") {
@@ -255,9 +259,8 @@ export default function useHRManagement() {
                     metadata: {
                         startTime: shiftState.startTime,
                         endTime: shiftState.endTime,
-                        lateLimit: shiftState.buffer1, // Keep legacy field for backward compatibility
-                        buffers: [shiftState.buffer1, shiftState.buffer2, shiftState.buffer3],
-                        workHours: Number(shiftState.workHours)
+                        lateLimit: shiftState.latePolicy[0]?.time || '09:15', // Fallback for legacy
+                        latePolicy: shiftState.latePolicy
                     }
                 };
                 if (editId) await shiftService.update(editId, payload);

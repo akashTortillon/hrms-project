@@ -301,10 +301,6 @@ export default function HRManagement() {
                                             onChange={(e) => setPayrollState({ ...payrollState, basis: e.target.value })}
                                         >
                                             <option value="">None (Fixed / Flat)</option>
-                                            <option value="LATE_COUNT">Late Count (Any)</option>
-                                            <option value="LATE_TIER_1_COUNT">Late Tier 1 Count</option>
-                                            <option value="LATE_TIER_2_COUNT">Late Tier 2 Count</option>
-                                            <option value="LATE_TIER_3_COUNT">Late Tier 3 Count</option>
                                             <option value="OVERTIME_HOURS">Overtime Hours</option>
                                             <option value="ABSENT_DAYS">Absent Days</option>
                                         </select>
@@ -415,36 +411,70 @@ export default function HRManagement() {
                             />
                             <p className="text-xs text-gray-500 mt-1">Defines the base hours for Hourly Rate & Overtime calculation (Default: 9)</p>
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="form-group">
-                                <label className="modal-form-label">Buffer 1 (Late)</label>
-                                <input
-                                    type="time"
-                                    className="modal-form-input"
-                                    value={shiftState.buffer1}
-                                    onChange={(e) => setShiftState({ ...shiftState, buffer1: e.target.value })}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="modal-form-label">Buffer 2 (Late)</label>
-                                <input
-                                    type="time"
-                                    className="modal-form-input"
-                                    value={shiftState.buffer2}
-                                    onChange={(e) => setShiftState({ ...shiftState, buffer2: e.target.value })}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="modal-form-label">Buffer 3 (Late)</label>
-                                <input
-                                    type="time"
-                                    className="modal-form-input"
-                                    value={shiftState.buffer3}
-                                    onChange={(e) => setShiftState({ ...shiftState, buffer3: e.target.value })}
-                                />
+                        {/* --- LATE POLICY CONFIGURATION --- */}
+                        <div className="mt-4">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Late Deductions Policy</h4>
+                            <div className="space-y-3">
+                                {shiftState.latePolicy && shiftState.latePolicy.map((policy, index) => (
+                                    <div key={index} className="grid grid-cols-12 gap-2 items-end p-2 bg-gray-50 rounded border border-gray-200">
+                                        <div className="col-span-3">
+                                            <label className="text-xs font-medium text-gray-600 block mb-1">
+                                                Tier {policy.tier} Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={policy.time}
+                                                onChange={(e) => {
+                                                    const newPolicy = [...shiftState.latePolicy];
+                                                    newPolicy[index] = { ...newPolicy[index], time: e.target.value };
+                                                    setShiftState({ ...shiftState, latePolicy: newPolicy });
+                                                }}
+                                                className="w-full p-1.5 text-sm border rounded focus:ring-1 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <div className="col-span-5">
+                                            <label className="text-xs font-medium text-gray-600 block mb-1">
+                                                Deduction Type
+                                            </label>
+                                            <select
+                                                value={policy.type}
+                                                onChange={(e) => {
+                                                    const newPolicy = [...shiftState.latePolicy];
+                                                    newPolicy[index] = { ...newPolicy[index], type: e.target.value };
+                                                    setShiftState({ ...shiftState, latePolicy: newPolicy });
+                                                }}
+                                                className="w-full p-1.5 text-sm border rounded focus:ring-1 focus:ring-blue-500"
+                                            >
+                                                <option value="FIXED">Fixed Amount</option>
+                                                <option value="PERCENTAGE">Percentage (%)</option>
+                                                <option value="DAILY_RATE">Daily Rate Multiplier</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-span-4">
+                                            <label className="text-xs font-medium text-gray-600 block mb-1">
+                                                Value
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                placeholder="Value"
+                                                value={policy.value}
+                                                onChange={(e) => {
+                                                    const newPolicy = [...shiftState.latePolicy];
+                                                    newPolicy[index] = { ...newPolicy[index], value: e.target.value };
+                                                    setShiftState({ ...shiftState, latePolicy: newPolicy });
+                                                }}
+                                                className="w-full p-1.5 text-sm border rounded focus:ring-1 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">Define late tiers. E.g. Check-in after Buffer 1 = Tier 1, after Buffer 2 = Tier 2...</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                            Configure thresholds for late marking. Tier 1 is typically the grace period. Tier 2 & 3 can trigger higher penalties (e.g. Half Day).
+                        </p>
                     </div>
                 ) : modalType === "Workflow Template" ? (
                     <div className="space-y-4">
