@@ -301,7 +301,10 @@ export default function HRManagement() {
                                             onChange={(e) => setPayrollState({ ...payrollState, basis: e.target.value })}
                                         >
                                             <option value="">None (Fixed / Flat)</option>
-                                            <option value="LATE_COUNT">Late Count</option>
+                                            <option value="LATE_COUNT">Late Count (Any)</option>
+                                            <option value="LATE_TIER_1_COUNT">Late Tier 1 Count</option>
+                                            <option value="LATE_TIER_2_COUNT">Late Tier 2 Count</option>
+                                            <option value="LATE_TIER_3_COUNT">Late Tier 3 Count</option>
                                             <option value="OVERTIME_HOURS">Overtime Hours</option>
                                             <option value="ABSENT_DAYS">Absent Days</option>
                                         </select>
@@ -412,16 +415,36 @@ export default function HRManagement() {
                             />
                             <p className="text-xs text-gray-500 mt-1">Defines the base hours for Hourly Rate & Overtime calculation (Default: 9)</p>
                         </div>
-                        <div className="form-group">
-                            <label className="modal-form-label">Late Mark After</label>
-                            <input
-                                type="time"
-                                className="modal-form-input"
-                                value={shiftState.lateLimit}
-                                onChange={(e) => setShiftState({ ...shiftState, lateLimit: e.target.value })}
-                            />
-                            <p className="text-xs text-gray-500 mt-1">Employee checked in after this time will be marked Late</p>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="form-group">
+                                <label className="modal-form-label">Buffer 1 (Late)</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.buffer1}
+                                    onChange={(e) => setShiftState({ ...shiftState, buffer1: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="modal-form-label">Buffer 2 (Late)</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.buffer2}
+                                    onChange={(e) => setShiftState({ ...shiftState, buffer2: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="modal-form-label">Buffer 3 (Late)</label>
+                                <input
+                                    type="time"
+                                    className="modal-form-input"
+                                    value={shiftState.buffer3}
+                                    onChange={(e) => setShiftState({ ...shiftState, buffer3: e.target.value })}
+                                />
+                            </div>
                         </div>
+                        <p className="text-xs text-gray-500 mt-1">Define late tiers. E.g. Check-in after Buffer 1 = Tier 1, after Buffer 2 = Tier 2...</p>
                     </div>
                 ) : modalType === "Workflow Template" ? (
                     <div className="space-y-4">

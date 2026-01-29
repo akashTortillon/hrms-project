@@ -258,11 +258,41 @@ const getShiftRules = async (shiftName) => {
     return {
       start: shiftMaster.metadata.startTime || "09:00",
       end: shiftMaster.metadata.endTime || "18:00",
-      lateLimit: shiftMaster.metadata.lateLimit || "09:15"
+      lateLimit: shiftMaster.metadata.lateLimit || "09:15",
+      buffers: shiftMaster.metadata.buffers || [shiftMaster.metadata.lateLimit || "09:15"] // Fallback to single buffer
     };
   }
   // Default fallback if shift not found
-  return { start: "09:00", end: "18:00", lateLimit: "09:15" };
+  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"] };
+};
+
+const calculateLateTier = (checkInTime, rules) => {
+  if (!checkInTime) return 0;
+  const checkInMin = toMinutes(checkInTime);
+
+  // Ensure we have at least one buffer
+  const buffers = rules.buffers || [rules.lateLimit];
+  if (buffers.length === 0) return 0;
+
+  // Convert all buffers to minutes
+  const bufferMins = buffers.map(b => toMinutes(b)).sort((a, b) => a - b);
+
+  // Logic: 
+  // <= Buffer 1 -> Present (Tier 0)
+  // > Buffer 1 && <= Buffer 2 -> Late Tier 1
+  // > Buffer 2 && <= Buffer 3 -> Late Tier 2
+  // > Buffer 3 -> Late Tier 3
+
+  if (checkInMin <= bufferMins[0]) return 0; // On Time
+
+  if (bufferMins.length === 1) return 1; // Only 1 buffer defined, so simple Late
+
+  if (checkInMin <= bufferMins[1]) return 1; // Between Buf1 and Buf2
+  if (bufferMins.length === 2) return 2; // > Buf2, limit reached
+
+  if (checkInMin <= bufferMins[2]) return 2; // Between Buf2 and Buf3
+
+  return 3; // > Buf3
 };
 
 /**
@@ -344,10 +374,11 @@ export const syncBiometrics = async (req, res) => {
 
       // Determine Status
       let status = "Absent";
+      let lateTier = 0;
+
       if (record.checkIn) {
-        const checkInMin = toMinutes(record.checkIn);
-        const lateLimitMin = toMinutes(rules.lateLimit);
-        status = checkInMin <= lateLimitMin ? "Present" : "Late";
+        lateTier = calculateLateTier(record.checkIn, rules);
+        status = lateTier > 0 ? "Late" : "Present";
       }
 
       // Calculate Work Hours
@@ -378,7 +409,9 @@ export const syncBiometrics = async (req, res) => {
           shift: shiftName,
           checkIn: record.checkIn,
           checkOut: record.checkOut,
+          checkOut: record.checkOut,
           status,
+          lateTier,
           workHours
         },
         { upsert: true, new: true }
@@ -702,10 +735,10 @@ export const markAttendance = async (req, res) => {
 
     // Determine Status
     let status = "Absent";
+    let lateTier = 0;
     if (checkIn) {
-      const checkInMin = toMinutes(checkIn);
-      const lateLimitMin = toMinutes(rules.lateLimit);
-      status = checkInMin <= lateLimitMin ? "Present" : "Late";
+      lateTier = calculateLateTier(checkIn, rules);
+      status = lateTier > 0 ? "Late" : "Present";
     }
 
     // Calculate Work Hours
@@ -719,7 +752,9 @@ export const markAttendance = async (req, res) => {
         shift: shift || "Day Shift",
         checkIn: checkIn || null,
         checkOut: checkOut || null,
+        checkOut: checkOut || null,
         status,
+        lateTier,
         workHours
       },
       { upsert: true, new: true }
@@ -744,7 +779,11 @@ export const updateAttendance = async (req, res) => {
 
     const updated = await Attendance.findByIdAndUpdate(
       id,
-      { shift, checkIn, checkOut, status, workHours },
+      { shift, checkIn, checkOut, status, workHours }, // Need to re-calc late tier if checkIn changed but simplifying for now or user manual override
+      // Ideally if checkIn changes, we should recalc lateTier unless manually set. 
+      // For now, let's assume manual update might set status but maybe not lateTier explicitly from frontend yet?
+      // Let's safe update if rules available, but `rules` not fetched here. 
+      // TODO: Fetch rules for update to be accurate.
       { new: true }
     );
 

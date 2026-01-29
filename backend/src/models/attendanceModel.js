@@ -39,6 +39,11 @@ const attendanceSchema = new mongoose.Schema(
       default: "Absent"
     },
 
+    lateTier: {
+      type: Number,
+      default: 0 // 0=None/OnTime, 1=Tier1, 2=Tier2, 3=Tier3(Max)
+    },
+
     leaveType: {
       type: String,
       default: null

@@ -119,6 +119,9 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     let paidDays = 0;
     let lopDays = 0;
     let lateCount = 0;
+    let lateTier1 = 0;
+    let lateTier2 = 0;
+    let lateTier3 = 0;
     let overtimeHours = 0;
     let unpaidLeavesCount = 0;
     let paidLeavesCount = 0; // ✅ NEW
@@ -147,7 +150,14 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
 
             if (status === 'Present' || status === 'Late') {
                 isDayPresent = true;
-                if (status === 'Late') isDayLate = true;
+                if (status === 'Late') {
+                    isDayLate = true;
+                    // Count Tiers
+                    const tier = record.lateTier || 1; // Default to 1 if missing
+                    if (tier === 1) lateTier1++;
+                    else if (tier === 2) lateTier2++;
+                    else if (tier >= 3) lateTier3++;
+                }
 
                 // Calculate Overtime based on THIS DAY'S Shift
                 if (record.workHours) {
@@ -246,7 +256,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         unpaidLeaves: unpaidLeavesCount,
         paidLeaves: paidLeavesCount, // ✅ NEW
         overtimeHours: parseFloat(overtimeHours.toFixed(2)),
-        late: lateCount
+        late: lateCount,
+        lateTier1,
+        lateTier2,
+        lateTier3
     };
 };
 
@@ -361,6 +374,18 @@ export const generatePayroll = async (req, res) => {
                     if (basis === "LATE_COUNT") {
                         statValue = stats.late;
                         if (statValue > 0) description = `${statValue} Days Late`;
+                    }
+                    else if (basis === "LATE_TIER_1_COUNT") {
+                        statValue = stats.lateTier1;
+                        if (statValue > 0) description = `${statValue} Days Late (Tier 1)`;
+                    }
+                    else if (basis === "LATE_TIER_2_COUNT") {
+                        statValue = stats.lateTier2;
+                        if (statValue > 0) description = `${statValue} Days Late (Tier 2)`;
+                    }
+                    else if (basis === "LATE_TIER_3_COUNT") {
+                        statValue = stats.lateTier3;
+                        if (statValue > 0) description = `${statValue} Days Late (Tier 3)`;
                     }
                     else if (basis === "ABSENT_DAYS") {
                         statValue = stats.daysAbsent + stats.unpaidLeaves;
