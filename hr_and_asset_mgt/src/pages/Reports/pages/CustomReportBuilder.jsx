@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../../api/apiClient"; // ✅ Use configured API client
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import Card from "../../../components/reusable/Card";
@@ -31,7 +31,7 @@ export default function CustomReportBuilder() {
 
     const fetchConfig = async () => {
         try {
-            const response = await axios.get("/api/reports/custom-configs");
+            const response = await api.get("/api/reports/custom-configs"); // ✅ api
             const config = response.data.data.find(c => c._id === editingId);
             if (config) {
                 setReportTitle(config.title);
@@ -54,7 +54,7 @@ export default function CustomReportBuilder() {
     const handlePreviewRequest = async (dataset, columns) => {
         try {
             setLoading(true);
-            const response = await axios.post("/api/reports/custom", {
+            const response = await api.post("/api/reports/custom", { // ✅ api
                 dataset,
                 columns,
                 filters: {}
@@ -86,7 +86,7 @@ export default function CustomReportBuilder() {
 
         try {
             setLoading(true);
-            const response = await axios.post("/api/reports/custom", {
+            const response = await api.post("/api/reports/custom", { // ✅ api
                 dataset: selectedDataset,
                 columns: selectedColumns,
                 filters: {}
@@ -110,7 +110,7 @@ export default function CustomReportBuilder() {
         // We'll use axios with responseType blob
         try {
             toast.info("Preparing export...");
-            const response = await axios.post("/api/reports/custom", {
+            const response = await api.post("/api/reports/custom", { // ✅ api
                 dataset: selectedDataset,
                 columns: selectedColumns,
                 filters: {},
@@ -144,10 +144,10 @@ export default function CustomReportBuilder() {
             };
 
             if (editingId) {
-                await axios.patch(`/api/reports/custom-configs/${editingId}`, payload);
+                await api.patch(`/api/reports/custom-configs/${editingId}`, payload); // ✅ api
                 toast.success("Report updated");
             } else {
-                await axios.post("/api/reports/custom-configs", payload);
+                await api.post("/api/reports/custom-configs", payload); // ✅ api
                 toast.success("Report saved to Recent Reports");
             }
         } catch (err) {
