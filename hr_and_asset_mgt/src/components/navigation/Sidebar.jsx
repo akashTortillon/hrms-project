@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
 import { useState, useMemo } from "react";
 import { useRole } from "../../contexts/RoleContext.jsx";
+import leptisLogo from "../../assets/images/logo-leptis.png"
 
 // All navigation items with their access roles
 const allNavItems = [
@@ -46,10 +47,10 @@ export default function Sidebar() {
           </Button>
         ) : (
           <>
-            <div className="brand-icon">HR</div>
+            <div className="brand-icon"><img src={leptisLogo} alt="Leptis Logo" /></div>
             <div className="brand-text-wrapper">
-              <div className="brand-title">HRMS Pro</div>
-              <div className="brand-subtitle">UAE Edition</div>
+              <div className="brand-title" style={{color:"white"}}>LEPTIS</div>
+              <div className="brand-subtitle" style={{color:"red"}}>ENTERPRISE</div>
             </div>
             <Button
               variant="light"

@@ -3,6 +3,7 @@ import api from "../../api/apiClient";
 import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
+import StatCard from "../../components/reusable/StatCard"; // ✅ Integrated Card
 import { useNavigate } from "react-router-dom";
 import "../../style/Reports.css";
 
@@ -51,25 +52,30 @@ export default function ReportsOverview() {
 
       {/* Stats Cards */}
       <div className="reports-stats-grid">
-        {stats.map((item, index) => (
-          <Card key={index} className="report-stat-card">
-            <div className="stat-card-content">
-              <div>
-                <div className="stat-title">{item.title}</div>
-                <div className="stat-value">
-                  {item.value}
-                  <span className="stat-change" style={{ color: item.change.includes('+') ? '#16a34a' : '#dc2626' }}>
-                    {item.change}
-                  </span>
-                </div>
-              </div>
+        {stats.map((item, index) => {
+          // Determine variant based on icon type for variety
+          const getVariant = (icon) => {
+            if (icon === 'reports') return 'blue';
+            if (icon === 'calendar') return 'green';
+            if (icon === 'document') return 'yellow';
+            return 'gray';
+          };
 
-              <div className="stat-icon">
-                <SvgIcon name={item.icon === "document" ? "reports" : item.icon} size={22} />
-              </div>
-            </div>
-          </Card>
-        ))}
+          return (
+            <StatCard
+              key={index}
+              title={item.title}
+              value={item.value}
+              subtext={
+                <span style={{ color: item.change.includes('+') ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 500 }}>
+                  {item.change}
+                </span>
+              }
+              iconName={item.icon === "document" ? "reports" : item.icon}
+              colorVariant={getVariant(item.icon)}
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -236,27 +236,43 @@
   border-radius: 14px;
   margin-top: 24px;
   /* overflow: hidden; Removed to allow dropdowns */
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
 /* Header */
 .payroll-table-header {
+  
+  background: #2563eb; 
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 18px 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  
 }
 
 .payroll-table-header h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: #ffffff;
+  
 }
 
 .payroll-table-actions {
   display: flex;
   gap: 10px;
 }
+
+.payroll-table-header .outline-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  transition: background-color 0.2s ease;
+}
+
 
 .outline-btn {
   padding: 8px 14px;
@@ -265,6 +281,11 @@
   background: #fff;
   font-size: 14px;
   cursor: pointer;
+}
+
+
+.payroll-table-header .outline-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 /* Table */
@@ -279,7 +300,13 @@
   letter-spacing: 0.04em;
   color: #374151;
   padding: 14px 20px;
+  background: #2563eb;
   border-bottom: 1px solid #e5e7eb;
+}
+
+.payroll-table th {
+  color: #ffffff;
+  border-bottom: none;
 }
 
 .payroll-table td {
@@ -329,6 +356,25 @@
 }
 
 /* Total row */
+
+
+
+
+/* =========================
+   ROW HOVER EFFECT
+========================= */
+
+.payroll-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.payroll-table tbody tr:hover {
+  background-color: #eff6ff; /* light blue */
+  cursor: pointer;
+}
+
+
+
 .payroll-total-row {
   background: #f9fafb;
   font-weight: 600;
@@ -358,10 +404,14 @@
 }
 
 .wps-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 400;
   margin-bottom: 16px;
   color: #111827;
+}
+
+.wps-title .svg-icon {
+  fill: #2563eb; /* blue-600 */
 }
 
 /* Card layout */

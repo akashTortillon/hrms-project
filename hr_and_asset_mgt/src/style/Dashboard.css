@@ -16,9 +16,9 @@
 .dashboard-metric-card {
   height: 100%;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  background: var(--color-bg-card);
 }
 
 .dashboard-metric-card .card-body {
@@ -75,11 +75,11 @@
 }
 
 .dashboard-icon-bg-blue {
-  background: #3b82f6;
+  background: var(--color-primary);
 }
 
 .dashboard-icon-bg-yellow {
-  background: #f59e0b;
+  background: var(--color-warning);
 }
 
 .dashboard-icon-bg-orange {
@@ -87,7 +87,7 @@
 }
 
 .dashboard-icon-bg-green {
-  background: #10b981;
+  background: var(--color-success);
 }
 
 @media (max-width: 1200px) {
@@ -143,30 +143,53 @@
   gap: 16px;
 }
 
+/* Quick Action Card */
 .dashboard-quick-action-card {
   height: 84px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-bg-card);
+
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+
+  gap: 10px; /* 👈 slightly increased gap */
   cursor: pointer;
+
+  transition: 
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
 }
 
+/* Icon – normal state */
+.dashboard-quick-action-card .svg-icon {
+  /* color: var(--color-primary);  */
+  filter: invert(36%) sepia(85%) saturate(2331%) hue-rotate(338deg) brightness(97%) contrast(93%);
+}
+
+/* Text */
 .dashboard-quick-action-card span {
   font-size: 14px;
   font-weight: 500;
   color: var(--text);
   text-align: center;
+  padding-left: 8px;
 }
 
+/* Hover state */
+.dashboard-quick-action-card:hover {
+  background: var(--color-primary-light); /* 👈 light blue */
+  border-color: var(--color-primary);
+  transform: translateY(-2px); /* subtle lift */
+  box-shadow: 0 8px 20px rgba(44, 92, 255, 0.12);
+}
 
-
-.dashboard-quick-action-card svg {
-  color: #2563eb;
+/* Optional: icon emphasis on hover */
+.dashboard-quick-action-card:hover svg {
+  color: var(--color-primary);
 }
 
 /* Responsive */
@@ -178,6 +201,7 @@
 
 
 
+
 /* =========================
    DASHBOARD INFO CARDS
 ========================= */
@@ -185,43 +209,69 @@
 .dashboard-info-card {
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-bg-card);
 }
 
 .dashboard-info-card .card-body {
   padding: 0;
+  
 }
 
 /* ---------- Header ---------- */
+
+
 
 .dashboard-info-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
+
+  background: var(--color-primary); /* 🔵 blue header */
+  border-radius: 12px 12px 0 0;
 }
+
+
+
 
 .dashboard-info-card-title {
   display: flex;
   align-items: center;
   gap: 10px;
+
   font-size: 15px;
   font-weight: 500;
-  color: var(--text);
+  color: #ffffff; /* ⚪ white title */
 }
 
-.dashboard-info-card-title svg {
-  color: #2563eb;
+.dashboard-info-card-title .svg-icon {
+  /* color: var(--color-danger); */
+  filter: invert(36%) sepia(85%) saturate(2331%) hue-rotate(338deg) brightness(97%) contrast(93%);
 }
+
+
+
 
 .dashboard-info-card-action {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: #2563eb;
-  background: none;
+
+  padding: 6px 14px;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.2); /* light blue-ish */
+  color: #ffffff;
+
   border: none;
   cursor: pointer;
+
+  transition: background-color 0.2s ease;
+}
+
+.dashboard-info-card-action:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* ---------- Body ---------- */
@@ -245,11 +295,11 @@
 }
 
 .dashboard-info-row.clickable:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-primary-light); /* 🔵 light blue */
 }
 
 .dashboard-info-row:not(:last-child) {
-  border-bottom: 1px solid #f1f3f5;
+  border-bottom: 1px solid var(--border);
 }
 
 /* ---------- Left Section ---------- */
@@ -290,18 +340,18 @@
 }
 
 .dashboard-info-badge.warning {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .dashboard-info-badge.danger {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 .dashboard-info-badge.success {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 /* ---------- Date ---------- */
@@ -330,13 +380,13 @@
 }
 
 .dashboard-action-btn.success {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .dashboard-action-btn.danger {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 /* ---------- Attendance Progress ---------- */

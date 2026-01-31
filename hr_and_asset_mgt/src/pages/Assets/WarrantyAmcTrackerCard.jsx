@@ -96,9 +96,9 @@ export default function WarrantyAmcTrackerCard({ assets = [], onViewAll }) {
           </p>
         </div>
 
-        <button className="warranty-view-all" onClick={onViewAll}>
+        {/* <button className="warranty-view-all" onClick={onViewAll}>
           View All
-        </button>
+        </button> */}
       </div>
 
       {/* List */}

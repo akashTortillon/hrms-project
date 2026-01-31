@@ -204,7 +204,7 @@ export default function AssetAlertsCard() {
                 {alerts.serviceAlerts.length === 0 ? (
                   <div className="warranty-empty">
                     <div className="warranty-empty-icon">
-                      <SvgIcon name="circle-tick" size={32} color="#16a34a" />
+                      <SvgIcon name="circle-tick" size={16} color="#16a34a" />
                     </div>
                     <div className="warranty-empty-text">
                       <div>No service due soon</div>
@@ -227,7 +227,7 @@ export default function AssetAlertsCard() {
                 {alerts.amcAlerts.length === 0 ? (
                   <div className="warranty-empty">
                     <div className="warranty-empty-icon">
-                      <SvgIcon name="circle-tick" size={32} color="#16a34a" />
+                      <SvgIcon name="circle-tick" size={16} color="#16a34a" />
                     </div>
                     <div className="warranty-empty-text">
                       <div>No AMC expiring soon</div>
