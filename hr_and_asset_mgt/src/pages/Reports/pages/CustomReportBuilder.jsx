@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import Card from "../../../components/reusable/Card";
 import Button from "../../../components/reusable/Button";
 import SvgIcon from "../../../components/svgIcon/svgView";
+import "../../../style/CustomReportBuilder.css"; // ✅ Import new CSS
 
 const DATASETS = {
     Employees: ["name", "code", "department", "designation", "status", "joinDate", "basicSalary", "email"],
@@ -31,14 +32,13 @@ export default function CustomReportBuilder() {
 
     const fetchConfig = async () => {
         try {
-            const response = await api.get("/api/reports/custom-configs"); // ✅ api
+            const response = await api.get("/api/reports/custom-configs");
             const config = response.data.data.find(c => c._id === editingId);
             if (config) {
                 setReportTitle(config.title);
                 setSelectedDataset(config.dataset);
                 setSelectedColumns(config.columns);
 
-                // --- NEW: Trigger preview if 'run' param is present ---
                 if (searchParams.get("run") === "true") {
                     setTimeout(() => {
                         handlePreviewRequest(config.dataset, config.columns);
@@ -50,11 +50,10 @@ export default function CustomReportBuilder() {
         }
     };
 
-    // Helper to request preview directly
     const handlePreviewRequest = async (dataset, columns) => {
         try {
             setLoading(true);
-            const response = await api.post("/api/reports/custom", { // ✅ api
+            const response = await api.post("/api/reports/custom", {
                 dataset,
                 columns,
                 filters: {}
@@ -86,7 +85,7 @@ export default function CustomReportBuilder() {
 
         try {
             setLoading(true);
-            const response = await api.post("/api/reports/custom", { // ✅ api
+            const response = await api.post("/api/reports/custom", {
                 dataset: selectedDataset,
                 columns: selectedColumns,
                 filters: {}
@@ -106,11 +105,9 @@ export default function CustomReportBuilder() {
     const handleExport = async () => {
         if (!selectedColumns.length) return;
 
-        // Using a form or direct link for POST download is tricky with window.open
-        // We'll use axios with responseType blob
         try {
             toast.info("Preparing export...");
-            const response = await api.post("/api/reports/custom", { // ✅ api
+            const response = await api.post("/api/reports/custom", {
                 dataset: selectedDataset,
                 columns: selectedColumns,
                 filters: {},
@@ -144,10 +141,10 @@ export default function CustomReportBuilder() {
             };
 
             if (editingId) {
-                await api.patch(`/api/reports/custom-configs/${editingId}`, payload); // ✅ api
+                await api.patch(`/api/reports/custom-configs/${editingId}`, payload);
                 toast.success("Report updated");
             } else {
-                await api.post("/api/reports/custom-configs", payload); // ✅ api
+                await api.post("/api/reports/custom-configs", payload);
                 toast.success("Report saved to Recent Reports");
             }
         } catch (err) {
@@ -156,29 +153,29 @@ export default function CustomReportBuilder() {
     };
 
     return (
-        <div className="custom-report-builder" style={{ padding: '20px' }}>
-            <div style={{ marginBottom: '20px' }}>
+        <div className="custom-report-page">
+            <div className="report-back-btn">
                 <Button variant="outline" onClick={() => window.history.back()}>
                     <SvgIcon name="arrow-left" size={16} /> Back to Reports
                 </Button>
             </div>
 
-            <div style={{ display: 'flex', gap: '24px' }}>
+            <div className="report-builder-layout">
                 {/* Left: Configuration */}
-                <div style={{ flex: '1' }}>
-                    <Card style={{ padding: '20px' }}>
-                        <h3>1. Report Title</h3>
+                <div className="report-config-panel">
+                    <Card className="report-config-card">
+                        <h3 className="report-section-title">1. Report Title</h3>
                         <input
                             type="text"
                             placeholder="Enter report title (e.g., Sales 2024)"
-                            style={{ width: '100%', padding: '10px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ddd' }}
+                            className="report-input"
                             value={reportTitle}
                             onChange={(e) => setReportTitle(e.target.value)}
                         />
 
-                        <h3>2. Select Dataset</h3>
+                        <h3 className="report-section-title">2. Select Dataset</h3>
                         <select
-                            style={{ width: '100%', padding: '10px', borderRadius: '8px', marginBottom: '20px' }}
+                            className="report-select"
                             value={selectedDataset}
                             onChange={(e) => {
                                 setSelectedDataset(e.target.value);
@@ -189,12 +186,13 @@ export default function CustomReportBuilder() {
                             {Object.keys(DATASETS).map(ds => <option key={ds} value={ds}>{ds}</option>)}
                         </select>
 
-                        <h3>3. Select Columns</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                        <h3 className="report-section-title">3. Select Columns</h3>
+                        <div className="report-columns-grid">
                             {DATASETS[selectedDataset].map(col => (
-                                <label key={col} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                                <label key={col} className="checkbox-label">
                                     <input
                                         type="checkbox"
+                                        className="checkbox-input"
                                         checked={selectedColumns.includes(col)}
                                         onChange={() => toggleColumn(col)}
                                     />
@@ -203,26 +201,32 @@ export default function CustomReportBuilder() {
                             ))}
                         </div>
 
-                        <div style={{ marginTop: '30px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                            <Button onClick={handlePreview} disabled={loading} style={{ flex: 1 }}>
-                                {loading ? "Loading..." : "Preview Data"}
-                            </Button>
-                            <Button variant="outline" onClick={handleSave} disabled={loading || !selectedColumns.length} style={{ flex: 1 }}>
-                                Save Report
-                            </Button>
-                            <Button variant="outline" onClick={handleExport} disabled={loading || !reportData.length} style={{ width: '100%' }}>
-                                Export Excel
-                            </Button>
+                        <div className="report-actions">
+                            <div className="report-btn-preview">
+                                <Button onClick={handlePreview} disabled={loading} style={{ width: '100%' }}>
+                                    {loading ? "Loading..." : "Preview Data"}
+                                </Button>
+                            </div>
+                            <div className="report-btn-save">
+                                <Button variant="outline" onClick={handleSave} disabled={loading || !selectedColumns.length} style={{ width: '100%' }}>
+                                    Save Report
+                                </Button>
+                            </div>
+                            <div className="report-btn-export">
+                                <Button variant="outline" onClick={handleExport} disabled={loading || !reportData.length} style={{ width: '100%' }}>
+                                    Export Excel
+                                </Button>
+                            </div>
                         </div>
                     </Card>
                 </div>
 
                 {/* Right: Preview */}
-                <div style={{ flex: '2' }}>
-                    <Card style={{ padding: '20px', minHeight: '400px', overflowX: 'auto' }}>
-                        <h3>Preview (Top 10 records)</h3>
+                <div className="report-preview-panel">
+                    <Card className="report-preview-card">
+                        <h3 className="report-section-title" style={{ marginTop: 0 }}>Preview (Top 10 records)</h3>
                         {!reportData.length ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '300px', color: '#999' }}>
+                            <div className="preview-empty-state">
                                 <SvgIcon name="reports" size={48} />
                                 <p>Select columns and click Preview to see data</p>
                             </div>

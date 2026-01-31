@@ -266,14 +266,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 18px 22px;
-  border-bottom: 1px solid #e5e7eb;
+    border-bottom: none;
+    background: #2563eb;
 }
 
 .attendance-table-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: #ffffff;
 }
 
 .mark-all-btn {
@@ -297,8 +298,8 @@
   font-size: 13px;
   font-weight: 600;
   text-align: left;
-  color: #374151;
-  background: #f9fafb;
+  color: #fff;
+  background: #2563eb;
 }
 
 .attendance-table td {
@@ -307,6 +308,15 @@
   border-top: 1px solid #e5e7eb;
 }
 
+
+.attendance-table tbody tr {
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+}
+
+.attendance-table tbody tr:hover {
+  background-color: #eff6ff; /* light blue */
+}
 /* ===== EMPLOYEE CELL ===== */
 
 .attendance-employee-cell {
@@ -335,7 +345,7 @@
   display: inline-block;
 }
 
-.status-present {
+/* .status-present {
   background: #dcfce7;
   color: #15803d;
 }
@@ -365,6 +375,35 @@
   background: #f3e8ff;
   color: #7e22ce;
   border: 1px solid #d8b4fe;
+} */
+
+
+
+.status-pill.status-present {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+.status-pill.status-late {
+  background: #ffedd5 !important;
+  color: #c2410c !important;
+}
+.status-pill.status-absent {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+.status-pill.status-leave {
+  background: #fef9c3 !important;
+  color: #a16207 !important;
+}
+.status-pill.status-weekend {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.status-pill.status-holiday {
+  background: #f3e8ff !important;
+  color: #7e22ce !important;
+  border: 1px solid #d8b4fe !important;
 }
 
 /* ===== ACTION ===== */

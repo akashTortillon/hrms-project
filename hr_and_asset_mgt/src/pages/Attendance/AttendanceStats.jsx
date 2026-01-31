@@ -70,37 +70,37 @@ export default function AttendanceStats({ stats }) {
     {
       title: "Present",
       value: stats.present,
-      percentage: `${stats.total ? Math.round((stats.present / stats.total) * 100) : 0}%`,
-      icon: "circle-tick",
-      iconColor: "#16a34a",
+      subtext: `${stats.total ? Math.round((stats.present / stats.total) * 100) : 0}%`,
+      iconName: "circle-tick",
+      colorVariant: "green",
     },
     {
       title: "Late",
       value: stats.late,
-      percentage: `${stats.total ? Math.round((stats.late / stats.total) * 100) : 0}%`,
-      icon: "exclamation",
-      iconColor: "#f97316",
+      subtext: `${stats.total ? Math.round((stats.late / stats.total) * 100) : 0}%`,
+      iconName: "exclamation",
+      colorVariant: "orange",
     },
     {
       title: "Absent",
       value: stats.absent,
-      percentage: `${stats.total ? Math.round((stats.absent / stats.total) * 100) : 0}%`,
-      icon: "circle-xmark",
-      iconColor: "#dc2626",
+      subtext: `${stats.total ? Math.round((stats.absent / stats.total) * 100) : 0}%`,
+      iconName: "circle-xmark",
+      colorVariant: "red",
     },
     {
       title: "On Leave",
       value: stats.leave,
-      percentage: `${stats.total ? Math.round((stats.leave / stats.total) * 100) : 0}%`,
-      icon: "calendar",
-      iconColor: "#f59e0b",
+      subtext: `${stats.total ? Math.round((stats.leave / stats.total) * 100) : 0}%`,
+      iconName: "calendar",
+      colorVariant: "yellow",
     },
     {
       title: "Total",
       value: stats.total,
-      icon: "clock (1)",
-      iconColor: "#2563eb",
-      footerLabel: "Employees",
+      iconName: "clock (1)",
+      colorVariant: "blue",
+      subtext: "Employees",
     },
   ];
 
@@ -111,10 +111,9 @@ export default function AttendanceStats({ stats }) {
           key={stat.title}
           title={stat.title}
           value={stat.value}
-          percentage={stat.percentage}
-          icon={stat.icon}
-          iconColor={stat.iconColor}
-          footerLabel={stat.footerLabel}
+          subtext={stat.subtext}
+          iconName={stat.iconName}
+          colorVariant={stat.colorVariant}
         />
       ))}
     </div>

@@ -1,8 +1,6 @@
-
-import Card from "../../components/reusable/Card.jsx";
-
-import SvgIcon from "../../components/svgIcon/svgView";
+import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
+import SvgIcon from "../../components/svgIcon/svgView";
 
 
 export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
@@ -10,22 +8,22 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
     {
       title: "Total Basic Salary",
       amount: `${(stats?.totalBasic || 0).toLocaleString()} AED`,
-      iconColor: "blue",
+      variant: "blue",
     },
     {
       title: "Total Allowances",
       amount: `${(stats?.totalAllowances || 0).toLocaleString()} AED`,
-      iconColor: "green",
+      variant: "green",
     },
     {
       title: "Total Deductions",
       amount: `${(stats?.totalDeductions || 0).toLocaleString()} AED`,
-      iconColor: "red",
+      variant: "red",
     },
     {
       title: "Net Payable",
       amount: `${(stats?.totalNet || 0).toLocaleString()} AED`,
-      iconColor: "purple",
+      variant: "blue", // purple maps to blue or we can use another variant if needed
     },
   ];
 
@@ -76,23 +74,14 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
       </div>
 
       <div className="payroll-summary-grid">
-
         {cards.map((item, index) => (
-
-          <Card key={index} className="payroll-summary-card">
-            <div className="payroll-summary-content">
-              <div>
-                <div className="payroll-summary-title">{item.title}</div>
-                <div className="payroll-summary-amount">{item.amount}</div>
-              </div>
-
-              <SvgIcon
-                name="dollar"
-                size={22}
-                className={`payroll-summary-icon ${item.iconColor}`}
-              />
-            </div>
-          </Card>
+          <StatCard
+            key={index}
+            title={item.title}
+            value={item.amount}
+            iconName="dollar"
+            colorVariant={item.variant}
+          />
         ))}
       </div>
     </>
