@@ -637,7 +637,10 @@ export const generatePayroll = async (req, res) => {
 export const getPayrollSummary = async (req, res) => {
     try {
         const { month, year } = req.query;
-        const records = await Payroll.find({ month, year }).populate("employee", "name code department designation role");
+        const records = await Payroll.find({ month, year })
+            .populate("employee", "name code department designation role")
+            .populate("allowances.addedBy", "name") // ✅ Populate Allowance Editor
+            .populate("deductions.addedBy", "name"); // ✅ Populate Deduction Editor
 
         let totalNet = 0;
         let totalBasic = 0;
@@ -670,19 +673,34 @@ export const getPayrollSummary = async (req, res) => {
 // --- API: Add Manual Adjustment ---
 export const addAdjustment = async (req, res) => {
     try {
-        const { payrollId, type, name, amount } = req.body;
+        const { payrollId, type, name, amount, reason } = req.body;
         const payroll = await Payroll.findById(payrollId);
 
         if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
         if (payroll.status !== "DRAFT") return res.status(400).json({ message: "Cannot adjust a finalized payroll." });
 
+        // ✅ Enforce Mandatory Reason
+        if (!reason || reason.trim() === "") {
+            return res.status(400).json({ message: "Reason is required for manual adjustments." });
+        }
+
         const numAmount = Number(amount);
 
+        const newItem = {
+            name,
+            amount: numAmount,
+            type: "MANUAL",
+            // ✅ Manual Tracking
+            addedBy: req.user._id,
+            addedAt: new Date(),
+            reason: reason
+        };
+
         if (type === "ALLOWANCE") {
-            payroll.allowances.push({ name, amount: numAmount, type: "MANUAL" });
+            payroll.allowances.push(newItem);
             payroll.totalAllowances = (payroll.totalAllowances || 0) + numAmount;
         } else {
-            payroll.deductions.push({ name, amount: numAmount, type: "MANUAL" });
+            payroll.deductions.push(newItem);
             payroll.totalDeductions = (payroll.totalDeductions || 0) + numAmount;
         }
 

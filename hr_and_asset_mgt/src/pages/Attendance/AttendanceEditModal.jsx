@@ -33,6 +33,7 @@ const AttendanceEditModal = ({
   const [workHours, setWorkHours] = useState("0h 0m");
 
   const [onLeave] = useState(false);
+  const [reason, setReason] = useState("");
 
   /* =========================
      Load employee
@@ -136,7 +137,14 @@ const AttendanceEditModal = ({
 
   if (!isOpen || !employee) return null;
 
+
+
   const handleSave = () => {
+    if (!reason || reason.trim() === "") {
+      alert("Please provide a reason for this manual edit.");
+      return;
+    }
+
     onSave({
       _id: employee._id,
       employeeId: employee.employeeId,
@@ -145,7 +153,8 @@ const AttendanceEditModal = ({
       checkIn: status === "Absent" ? null : checkIn,
       checkOut: status === "Absent" ? null : checkOut,
       status,
-      workHours
+      workHours,
+      reason // ✅ Pass reason
     });
   };
 
@@ -206,6 +215,17 @@ const AttendanceEditModal = ({
           <div>
             <label>Work Hours</label>
             <input value={workHours} disabled />
+          </div>
+
+          <div className="full-width">
+            <label>Reason for Edit <span style={{ color: 'red' }}>*</span></label>
+            <textarea
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="Required: Why are you editing this record?"
+              rows={3}
+              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+            />
           </div>
         </div>
 

@@ -52,6 +52,25 @@ const attendanceSchema = new mongoose.Schema(
     isPaid: {
       type: Boolean,
       default: true
+    },
+
+    // ✅ Manual Edit Tracking
+    isManuallyEdited: {
+      type: Boolean,
+      default: false
+    },
+    editedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    editedAt: {
+      type: Date,
+      default: null
+    },
+    editReason: {
+      type: String, // Reason is mandatory for manual edits
+      default: ""
     }
   },
   {

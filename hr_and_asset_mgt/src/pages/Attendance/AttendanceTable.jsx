@@ -1,6 +1,8 @@
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Attendance.css";
 
+
+
 /* =========================
    Helpers (LOCAL – SAFE)
    ========================= */
@@ -127,9 +129,19 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                           {status && (
                             <div
                               className={`status-badge ${cls}`}
-                              title={`${dateKey}: ${status} ${record.checkIn ? `(${record.checkIn} - ${record.checkOut})` : ''}`}
+                              title={`${dateKey}: ${status} ${record.checkIn ? `(${record.checkIn} - ${record.checkOut})` : ''}${record.isManuallyEdited ? `\n[EDITED] by ${record.editedBy?.name || 'Admin'}\nReason: ${record.editReason}` : ''}`}
                             >
                               {abbr}
+                              {record.isManuallyEdited && (
+                                <span
+                                  style={{
+                                    position: 'absolute', top: -2, right: -2,
+                                    width: '6px', height: '6px',
+                                    backgroundColor: '#0284c7', borderRadius: '50%', border: '1px solid white'
+                                  }}
+                                  title={`Edited by ${record.editedBy?.name || 'Admin'}. Reason: ${record.editReason}`}
+                                ></span>
+                              )}
                             </div>
                           )}
                         </td>
@@ -211,6 +223,15 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                     >
                       {row.status || "Absent"}
                     </span>
+                    {row.isManuallyEdited && (
+                      <div
+                        className="status-edited"
+                        title={`Edited by ${row.editedBy?.name || 'Admin'} on ${new Date(row.editedAt).toLocaleDateString()}. Reason: ${row.editReason}`}
+                      >
+                        EDITED
+                      </div>
+                    )}
+                    {/* Tooltip for hover is handled by title attribute for simplicity as requested */}
                   </td>
 
                   {onEdit && (

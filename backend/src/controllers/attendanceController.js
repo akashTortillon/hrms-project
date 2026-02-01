@@ -578,7 +578,9 @@ export const getDailyAttendance = async (req, res) => {
     const employees = await Employee.find(employeeQuery).sort({ code: 1 }); // Only Active employees
 
     // Get attendance for the date
-    const attendanceRecords = await Attendance.find({ date }).populate("employee");
+    const attendanceRecords = await Attendance.find({ date })
+      .populate("employee")
+      .populate("editedBy", "name"); // ✅ Populate Editor Name
 
     // Get Approved Leaves for this date (Consistent with Monthly View)
     const leaveMap = await getApprovedLeavesMap(employees);
@@ -611,7 +613,12 @@ export const getDailyAttendance = async (req, res) => {
         // If profile says On Leave or Request Approved -> "On Leave"
         // Else "Absent"
         status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
-        avatar: emp.avatar // if available
+        avatar: emp.avatar, // if available
+        // ✅ Return Edit Info
+        isManuallyEdited: record?.isManuallyEdited || false,
+        editedBy: record?.editedBy || null,
+        editedAt: record?.editedAt || null,
+        editReason: record?.editReason || null
       };
     });
 
@@ -652,7 +659,7 @@ export const getMonthlyAttendance = async (req, res) => {
     const employees = await Employee.find(employeeQuery).sort({ code: 1 });
     const attendanceRecords = await Attendance.find({
       date: { $regex: regex }
-    });
+    }).populate("editedBy", "name"); // ✅ Populate Editor
 
     // Get Holidays
     const holidaySet = await getHolidaysSet();
@@ -706,7 +713,12 @@ export const getMonthlyAttendance = async (req, res) => {
         attendanceData[day] = {
           status,
           checkIn: record?.checkIn,
-          checkOut: record?.checkOut
+          checkOut: record?.checkOut,
+          // ✅ New Fields
+          isManuallyEdited: record?.isManuallyEdited,
+          editedBy: record?.editedBy,
+          editedAt: record?.editedAt,
+          editReason: record?.editReason
         };
 
         if (status === "Present") present++;
@@ -738,7 +750,7 @@ export const getMonthlyAttendance = async (req, res) => {
  */
 export const markAttendance = async (req, res) => {
   try {
-    const { employeeId, date, checkIn, checkOut, shift } = req.body;
+    const { employeeId, date, checkIn, checkOut, shift, reason } = req.body;
 
     // Get Shift Rules
     const rules = await getShiftRules(shift || "Day Shift");
@@ -754,19 +766,29 @@ export const markAttendance = async (req, res) => {
     // Calculate Work Hours
     const workHours = calculateDuration(checkIn, checkOut);
 
+    const updateData = {
+      employee: employeeId,
+      date,
+      shift: shift || "Day Shift",
+      checkIn: checkIn || null,
+      checkOut: checkOut || null,
+      checkOut: checkOut || null,
+      status,
+      lateTier,
+      workHours
+    };
+
+    // ✅ Track Manual Creation/Edit if Reason provided
+    if (reason && req.user) {
+      updateData.isManuallyEdited = true;
+      updateData.editedBy = req.user._id;
+      updateData.editedAt = new Date();
+      updateData.editReason = reason;
+    }
+
     const attendance = await Attendance.findOneAndUpdate(
       { employee: employeeId, date },
-      {
-        employee: employeeId,
-        date,
-        shift: shift || "Day Shift",
-        checkIn: checkIn || null,
-        checkOut: checkOut || null,
-        checkOut: checkOut || null,
-        status,
-        lateTier,
-        workHours
-      },
+      updateData,
       { upsert: true, new: true }
     );
 
@@ -783,17 +805,29 @@ export const markAttendance = async (req, res) => {
 export const updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const { checkIn, checkOut, shift, status } = req.body;
+    const { checkIn, checkOut, shift, status, reason } = req.body;
+
+    // ✅ Enforce Mandatory Reason
+    if (!reason || reason.trim() === "") {
+      return res.status(400).json({ message: "Reason is required for manual edits." });
+    }
 
     const workHours = calculateDuration(checkIn, checkOut);
 
     const updated = await Attendance.findByIdAndUpdate(
       id,
-      { shift, checkIn, checkOut, status, workHours }, // Need to re-calc late tier if checkIn changed but simplifying for now or user manual override
-      // Ideally if checkIn changes, we should recalc lateTier unless manually set. 
-      // For now, let's assume manual update might set status but maybe not lateTier explicitly from frontend yet?
-      // Let's safe update if rules available, but `rules` not fetched here. 
-      // TODO: Fetch rules for update to be accurate.
+      {
+        shift,
+        checkIn,
+        checkOut,
+        status,
+        workHours,
+        // ✅ Track Edit
+        isManuallyEdited: true,
+        editedBy: req.user._id,
+        editedAt: new Date(),
+        editReason: reason
+      },
       { new: true }
     );
 

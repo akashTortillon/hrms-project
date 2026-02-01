@@ -123,6 +123,11 @@ function Attendance() {
         statusClass: getStatusClass(record.status || "Present"),
         icon: "user",
         iconColor: "#6b7280",
+        // ✅ Include Edit Metadata
+        isManuallyEdited: record.isManuallyEdited,
+        editedBy: record.editedBy,
+        editedAt: record.editedAt,
+        editReason: record.editReason
       }));
 
       setAttendanceRecords(formattedRecords);
@@ -215,12 +220,12 @@ function Attendance() {
 
   const handleSaveAttendance = async (data) => {
     try {
-      const { _id, employeeId, date, checkIn, checkOut, status, shift, workHours } = data;
+      const { _id, employeeId, date, checkIn, checkOut, status, shift, workHours, reason } = data;
 
       if (_id) {
-        await updateAttendance(_id, { checkIn, checkOut, shift, status, workHours });
+        await updateAttendance(_id, { checkIn, checkOut, shift, status, workHours, reason });
       } else {
-        await markAttendance({ employeeId, date, checkIn, checkOut, shift, status, workHours });
+        await markAttendance({ employeeId, date, checkIn, checkOut, shift, status, workHours, reason });
       }
 
       await fetchAttendanceData();
