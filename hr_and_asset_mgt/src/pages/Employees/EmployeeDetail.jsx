@@ -211,9 +211,11 @@ export default function EmployeeDetail() {
             const result = await getEmployeeRequests(effectiveId);
             // Result is { success: true, data: [...] } based on controller
             if (result && result.data) {
+                console.log("[EmployeeDetail] Raw Requests:", result.data);
                 // Filter for Salary/Loan type only
                 const loanReqs = result.data.filter(r => r.requestType === "SALARY" && r.status === "APPROVED");
-                setLoans(loanReqs);
+                console.log("[EmployeeDetail] Filtered Loans:", loanReqs);
+                setLoans(result.data);
             }
         } catch (e) {
             console.error("Loans fetch error:", e);

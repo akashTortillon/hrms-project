@@ -416,6 +416,7 @@ import { createNotification } from "./notificationController.js";
 import upload from "../config/multer.js";
 import path from "path";
 import fs from "fs";
+import mongoose from "mongoose";
 
 /**
  * Helper to notify all Admins and HR
@@ -1066,14 +1067,62 @@ export const downloadDocument = async (req, res) => {
 export const getEmployeeRequests = async (req, res) => {
   try {
     const { employeeId } = req.params;
+    console.log(`[getEmployeeRequests] Fetching for Employee ID: ${employeeId}`);
 
-    // Find the user associated with this employeeId
-    const user = await User.findOne({ employeeId });
+    // Access Control: Allow if Self OR has Permission
+    let isSelf = req.user.employeeId && req.user.employeeId.toString() === employeeId;
+
+    // Fallback: If ID link is missing, verify identity via Email
+    if (!isSelf) {
+      const targetEmployee = await Employee.findById(employeeId);
+      if (targetEmployee && targetEmployee.email && req.user.email) {
+        if (targetEmployee.email.trim().toLowerCase() === req.user.email.trim().toLowerCase()) {
+          isSelf = true;
+        }
+      }
+    }
+
+    const canManage = req.user.role === 'Admin' || (req.user.permissions && req.user.permissions.includes("MANAGE_EMPLOYEES"));
+
+    if (!isSelf && !canManage) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You can only view your own requests."
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      console.warn(`[getEmployeeRequests] Invalid Employee ID format: ${employeeId}`);
+      return res.status(400).json({ success: false, message: "Invalid Employee ID format" });
+    }
+
+    // 1. Try to find User via explicit employeeId link
+    let user = await User.findOne({ employeeId });
+    console.log(`[getEmployeeRequests] User via direct link: ${user ? user._id : 'Not Found'}`);
+
+    // 2. Fallback: If no direct link, find Employee by ID -> User by Email
+    if (!user) {
+      const employee = await Employee.findById(employeeId);
+      if (employee) {
+        console.log(`[getEmployeeRequests] Found Employee: ${employee.email}`);
+        if (employee.email) {
+          // Case-insensitive email lookup
+          user = await User.findOne({
+            email: { $regex: new RegExp(`^${employee.email}$`, 'i') }
+          });
+          console.log(`[getEmployeeRequests] User via Email Link: ${user ? user._id : 'Not Found'}`);
+        }
+      } else {
+        console.log(`[getEmployeeRequests] Employee not found in DB`);
+      }
+    }
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found for this employee"
+      // If still no user, we can't find requests because they are keyed by User ID
+      console.warn(`[getEmployeeRequests] No User account found for this employee.`);
+      return res.status(200).json({
+        success: true,
+        data: [] // Return empty array instead of 404 to gracefully handle no-user scenarios
       });
     }
 
@@ -1081,6 +1130,8 @@ export const getEmployeeRequests = async (req, res) => {
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .sort({ submittedAt: -1 });
+
+    console.log(`[getEmployeeRequests] Found ${requests.length} requests`);
 
     res.status(200).json({
       success: true,
