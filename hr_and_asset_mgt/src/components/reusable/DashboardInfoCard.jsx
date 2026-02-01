@@ -14,7 +14,7 @@ export default function DashboardInfoCard({
   items = [],
 }) {
   return (
-    <Card className={`dashboard-info-card ${colorVariant}`}>
+    <Card className={`dashboard-info-card ${colorVariant}`} luxury={true}>
       {/* Header */}
       <div className="dashboard-info-card-header">
         <div className="dashboard-info-card-title">
