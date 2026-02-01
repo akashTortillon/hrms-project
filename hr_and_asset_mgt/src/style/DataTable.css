@@ -4,9 +4,7 @@
   overflow: visible;
   border: 1px solid var(--color-border);
   /* SHADOW EFFECT */
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.08),
-    0 2px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-table-blue);
 }
 
 .data-table table {
@@ -20,7 +18,7 @@
   font-weight: 600;
   color: #fff;
   padding: 14px 16px;
-  background: #2563eb; 
+  background: #2563eb;
   letter-spacing: 0.04em;
 }
 
@@ -41,6 +39,7 @@
 }
 
 .data-table tbody tr:hover {
-  background-color: #eff6ff; /* same light blue */
+  background-color: #eff6ff;
+  /* same light blue */
   cursor: pointer;
 }

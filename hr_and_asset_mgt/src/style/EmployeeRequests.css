@@ -179,6 +179,7 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
+  margin-left: 10px;
 }
 
 .status-pending {

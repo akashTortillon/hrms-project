@@ -155,9 +155,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-table-blue);
 }
 
 /* =========================
@@ -203,7 +201,8 @@
 }
 
 .employees-table tbody tr:hover {
-  background-color: #eff6ff; /* light blue (same family as dashboard cards) */
+  background-color: #eff6ff;
+  /* light blue (same family as dashboard cards) */
   cursor: pointer;
 }
 
@@ -243,16 +242,19 @@
 
 /* 🔵 Edit icon color */
 .edit-btn svg {
-  fill: #2563eb; /* blue-600 */
+  fill: #2563eb;
+  /* blue-600 */
 }
 
 /* 🔴 Delete icon color */
 .delete-btn svg {
-  fill: #dc2626; /* red-600 */
+  fill: #dc2626;
+  /* red-600 */
 }
 
 .delete-btn:hover {
-  background: #fee2e2; /* light red */
+  background: #fee2e2;
+  /* light red */
 }
 
 .delete-btn:hover svg {
@@ -345,9 +347,9 @@
 ========================= */
 
 @media (max-width: 1024px) {
+
   .employees-table th,
   .employees-table td {
     padding: 14px 12px;
   }
 }
-

@@ -269,12 +269,12 @@ function Dashboard() {
         {dashboardMetrics.map((metric, index) => {
           // Map old class names to new color variants
           const colorMap = {
-            "dashboard-icon-bg-blue": "blue",
-            "dashboard-icon-bg-yellow": "yellow",
-            "dashboard-icon-bg-orange": "orange",
-            "dashboard-icon-bg-green": "green"
+            "dashboard-icon-bg-blue": "vibrant-blue",
+            "dashboard-icon-bg-yellow": "vibrant-red", // Red in reference (Compliance)
+            "dashboard-icon-bg-orange": "vibrant-lightblue", // Sky Blue in reference
+            "dashboard-icon-bg-green": "vibrant-dark" // Dark in reference
           };
-          const variant = colorMap[metric.iconBgClass] || "blue";
+          const variant = colorMap[metric.iconBgClass] || "vibrant-blue";
 
           return (
             <Col key={index} className="dashboard-card-col">
@@ -321,6 +321,7 @@ function Dashboard() {
           <DashboardInfoCard
             title="Company Document Expiries"
             icon="document"
+            colorVariant="blue"
             actionLabel="View All"
             onActionClick={() => navigate("/app/documents")}
             onRowClick={() => navigate("/app/documents")}
@@ -332,6 +333,7 @@ function Dashboard() {
           <DashboardInfoCard
             title="Employee Visa / ID Expiries"
             icon="exclamation"
+            colorVariant="orange"
             actionLabel="View All"
             onActionClick={() => navigate("/app/employees")}
             onRowClick={(item) => navigate(`/app/employees/${item._id}`)}
@@ -346,6 +348,7 @@ function Dashboard() {
             <DashboardInfoCard
               title="Pending Approvals"
               icon="clock (1)"
+              colorVariant="yellow"
               actionLabel="View All"
               onActionClick={() => navigate("/app/requests")}
               onRowClick={() => navigate("/app/requests")}
@@ -358,6 +361,7 @@ function Dashboard() {
           <DashboardInfoCard
             title="Today's Attendance"
             icon="calendar"
+            colorVariant="green"
             actionLabel="View Details"
             onActionClick={() => navigate("/app/attendance")}
             items={normalizedAttendance}

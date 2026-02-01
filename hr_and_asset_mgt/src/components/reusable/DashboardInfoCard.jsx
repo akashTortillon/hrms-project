@@ -7,13 +7,14 @@ import "../../style/Dashboard.css";
 export default function DashboardInfoCard({
   title,
   icon,
+  colorVariant = "blue",
   actionLabel,
   onActionClick,
   onRowClick,
   items = [],
 }) {
   return (
-    <Card className="dashboard-info-card">
+    <Card className={`dashboard-info-card ${colorVariant}`}>
       {/* Header */}
       <div className="dashboard-info-card-header">
         <div className="dashboard-info-card-title">

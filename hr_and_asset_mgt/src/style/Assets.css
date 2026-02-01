@@ -127,7 +127,7 @@
 }
 
 
-.assets-search:focus-within{
+.assets-search:focus-within {
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
@@ -202,6 +202,7 @@
   border-radius: 12px;
   background: #fff;
   margin-top: 25px;
+  box-shadow: var(--shadow-table-blue);
 }
 
 /* ---------- Base Table ---------- */

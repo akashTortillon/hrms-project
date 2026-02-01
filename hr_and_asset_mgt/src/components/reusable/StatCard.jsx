@@ -21,22 +21,52 @@ const StatCard = ({
   colorVariant = "blue",
   onClick
 }) => {
+  const isVibrant = colorVariant.startsWith("vibrant-");
+
   return (
     <div
-      className="stat-card-modern"
+      className={`stat-card-modern dashboard-metric-card ${colorVariant} ${isVibrant ? 'vibrant-card' : ''}`}
       onClick={onClick}
       style={{ cursor: onClick ? 'pointer' : 'default' }}
     >
-      <div className="stat-card-content">
-        <span className="stat-card-title">{title}</span>
-        <span className="stat-card-value">{value}</span>
-        {subtext && <span className="stat-card-subtext">{subtext}</span>}
-      </div>
+      {isVibrant ? (
+        <>
+          {/* VIBRANT LUXURY LAYOUT */}
+          <div className="stat-card-glow" />
+          <div className="stat-card-inner-content">
+            <div className="stat-card-header-row">
+              {iconName && (
+                <div className={`stat-card-icon-glass stat-icon-${colorVariant}`}>
+                  <SvgIcon name={iconName} size={20} />
+                </div>
+              )}
+             
+            </div>
 
-      {iconName && (
-        <div className={`stat-card-icon stat-icon-${colorVariant}`}>
-          <SvgIcon name={iconName} size={24} />
-        </div>
+            <div className="stat-card-body">
+              <span className="stat-card-label">{title}</span>
+              <div className="stat-card-value-group">
+                <span className="stat-card-value">{value}</span>
+                {subtext && <span className="stat-card-subtext">{subtext}</span>}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* CLASSIC CLEAN LAYOUT */}
+          <div className="stat-card-content dashboard-card-content">
+            <span className="stat-card-title">{title}</span>
+            <span className="stat-card-value">{value}</span>
+            {subtext && <span className="stat-card-subtext">{subtext}</span>}
+          </div>
+
+          {iconName && (
+            <div className={`stat-card-icon stat-icon-${colorVariant}`}>
+              <SvgIcon name={iconName} size={24} />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
