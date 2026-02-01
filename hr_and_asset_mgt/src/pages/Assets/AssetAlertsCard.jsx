@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import Card from "../../components/reusable/Card";
+import { useState, useEffect } from "react";
 import SvgIcon from "../../components/svgIcon/svgView";
-import { getAssetAlerts } from "../../services/assetService";
-import "../../style/WarrantyAmcTrackerCard.css";
 
 export default function AssetAlertsCard() {
   const [alerts, setAlerts] = useState({
@@ -44,13 +43,22 @@ export default function AssetAlertsCard() {
     return "#16a34a";
   };
 
+  const getAlertData = () => {
+    switch (activeTab) {
+      case "warranty": return alerts.warrantyAlerts;
+      case "service": return alerts.serviceAlerts;
+      case "amc": return alerts.amcAlerts;
+      default: return [];
+    }
+  };
+
   const renderAlertItem = (asset, date, type) => {
     const daysLeft = getDaysLeft(date);
     const color = getAlertColor(daysLeft);
 
     return (
-      <div 
-        key={asset._id} 
+      <div
+        key={asset._id}
         className="warranty-item"
         style={{ borderLeft: `3px solid ${color}` }}
       >
@@ -67,8 +75,8 @@ export default function AssetAlertsCard() {
         </div>
 
         <div className="warranty-right">
-          <div style={{ 
-            padding: "4px 12px", 
+          <div style={{
+            padding: "4px 12px",
             borderRadius: "12px",
             background: `${color}20`,
             color: color,
@@ -76,11 +84,11 @@ export default function AssetAlertsCard() {
             fontWeight: "500",
             marginBottom: "4px"
           }}>
-            {daysLeft < 0 
-              ? "Expired" 
-              : daysLeft === 0 
-              ? "Today" 
-              : `${daysLeft} days`
+            {daysLeft < 0
+              ? "Expired"
+              : daysLeft === 0
+                ? "Today"
+                : `${daysLeft} days`
             }
           </div>
           <div className="warranty-expiry">
@@ -98,7 +106,7 @@ export default function AssetAlertsCard() {
   ];
 
   return (
-    <div className="warranty-card">
+    <Card className={`warranty-card ${colorVariant}`} luxury={true}>
       {/* Header */}
       <div className="warranty-card-header">
         <div>
@@ -125,9 +133,9 @@ export default function AssetAlertsCard() {
       </div>
 
       {/* Tabs */}
-      <div style={{ 
-        display: "flex", 
-        gap: "8px", 
+      <div style={{
+        display: "flex",
+        gap: "8px",
         padding: "0 20px",
         borderBottom: "1px solid #e2e8f0",
         marginBottom: "16px"
@@ -191,7 +199,7 @@ export default function AssetAlertsCard() {
                     </div>
                   </div>
                 ) : (
-                  alerts.warrantyAlerts.map(asset => 
+                  alerts.warrantyAlerts.map(asset =>
                     renderAlertItem(asset, asset.warrantyExpiryDate, "warranty")
                   )
                 )}
@@ -214,7 +222,7 @@ export default function AssetAlertsCard() {
                     </div>
                   </div>
                 ) : (
-                  alerts.serviceAlerts.map(asset => 
+                  alerts.serviceAlerts.map(asset =>
                     renderAlertItem(asset, asset.serviceDueDate, "service")
                   )
                 )}
@@ -237,7 +245,7 @@ export default function AssetAlertsCard() {
                     </div>
                   </div>
                 ) : (
-                  alerts.amcAlerts.map(asset => 
+                  alerts.amcAlerts.map(asset =>
                     renderAlertItem(asset, asset.amcDetails.endDate, "amc")
                   )
                 )}
@@ -246,6 +254,6 @@ export default function AssetAlertsCard() {
           </>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

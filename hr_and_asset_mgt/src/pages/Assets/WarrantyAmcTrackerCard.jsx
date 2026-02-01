@@ -1,10 +1,10 @@
 
 
-
-
 import React from "react";
 import "../../style/WarrantyAmcTrackerCard.css";
-import SvgIcon from "../../components/svgIcon/svgView.jsx";
+import SvgIcon from "../../components/svgIcon/svgView";
+
+import Card from "../../components/reusable/Card";
 
 export default function WarrantyAmcTrackerCard({ assets = [], onViewAll }) {
 
@@ -86,7 +86,7 @@ export default function WarrantyAmcTrackerCard({ assets = [], onViewAll }) {
   };
 
   return (
-    <div className="warranty-card">
+    <Card className={`warranty-card ${colorVariant}`} luxury={true}>
       {/* Header */}
       <div className="warranty-card-header">
         <div>
@@ -210,6 +210,6 @@ export default function WarrantyAmcTrackerCard({ assets = [], onViewAll }) {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

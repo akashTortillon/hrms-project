@@ -12,6 +12,11 @@
   --success: var(--color-success);
   --danger: var(--color-danger);
   --shadow-table-blue: 0 10px 30px rgba(37, 99, 235, 0.12);
+
+  /* Luxury 2.0 Global Variables */
+  --luxury-radius: 32px;
+  --luxury-shadow-intensity: 0.35;
+  --luxury-glow-opacity: 0.12;
 }
 
 :root {
@@ -544,6 +549,105 @@ body {
 
 .card-body {
   padding: 16px 20px;
+}
+
+/* ------------------------------
+   GLOBAL LUXURY VARIANTS
+--------------------------------*/
+.luxury-card {
+  border: none !important;
+  border-radius: var(--luxury-radius) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Vibrant cards force white text globally for metric legibility */
+.vibrant-blue,
+.vibrant-red,
+.vibrant-green,
+.vibrant-orange,
+.vibrant-dark,
+.vibrant-lightblue,
+.vibrant-yellow,
+.vibrant-gray {
+  color: #ffffff !important;
+}
+
+/* Explicitly target StatCard elements when in a luxury/vibrant context */
+.luxury-card.vibrant-blue .stat-card-title,
+.luxury-card.vibrant-blue .stat-card-value,
+.luxury-card.vibrant-blue .stat-card-label,
+.luxury-card.vibrant-blue .stat-card-subtext,
+.luxury-card.vibrant-red .stat-card-title,
+.luxury-card.vibrant-red .stat-card-value,
+.luxury-card.vibrant-green .stat-card-title,
+.luxury-card.vibrant-green .stat-card-value,
+.luxury-card.vibrant-orange .stat-card-title,
+.luxury-card.vibrant-orange .stat-card-value,
+.luxury-card.vibrant-dark .stat-card-title,
+.luxury-card.vibrant-dark .stat-card-value,
+.luxury-card.vibrant-lightblue .stat-card-title,
+.luxury-card.vibrant-lightblue .stat-card-value,
+.luxury-card.vibrant-yellow .stat-card-title,
+.luxury-card.vibrant-yellow .stat-card-value,
+.luxury-card.vibrant-gray .stat-card-title,
+.luxury-card.vibrant-gray .stat-card-value {
+  color: #ffffff !important;
+}
+
+.luxury-card:hover {
+  transform: translateY(-8px);
+}
+
+/* Atmospheric Glow Component */
+.luxury-glow {
+  position: absolute;
+  top: -20%;
+  right: -10%;
+  width: 140px;
+  height: 140px;
+  background: rgba(255, 255, 255, var(--luxury-glow-opacity));
+  border-radius: 50%;
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Global Vibrant Gradients */
+.vibrant-blue {
+  background: linear-gradient(145deg, #1d4ed8, #1e40af) !important;
+  box-shadow: 0 12px 32px rgba(29, 78, 216, 0.35);
+}
+
+.vibrant-red {
+  background: linear-gradient(145deg, #dc2626, #b91c1c) !important;
+  box-shadow: 0 12px 32px rgba(220, 38, 38, 0.35);
+}
+
+.vibrant-green {
+  background: linear-gradient(145deg, #059669, #047857) !important;
+  box-shadow: 0 12px 32px rgba(5, 150, 105, 0.35);
+}
+
+.vibrant-orange {
+  background: linear-gradient(145deg, #ea580c, #c2410c) !important;
+  box-shadow: 0 12px 32px rgba(234, 88, 12, 0.35);
+}
+
+.vibrant-dark {
+  background: linear-gradient(145deg, #111827, #030712) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.vibrant-lightblue {
+  background: linear-gradient(145deg, #3b82f6, #2563eb) !important;
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.3);
+}
+
+/* Inversion Filter for Luxury Icons */
+.luxury-icon-wrapper img,
+.luxury-icon-wrapper .svg-icon {
+  filter: brightness(0) invert(1) !important;
+  transition: filter 0.3s ease;
 }
 
 /* Buttons */
