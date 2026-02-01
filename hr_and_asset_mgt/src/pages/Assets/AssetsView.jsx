@@ -412,10 +412,10 @@ function Assets() {
         onAddAsset={() => setShowAddModal(true)}
         onImport={() => setShowImportModal(true)}
         stats={[
-          { title: "Total Assets", value: assetStats.total, icon: "cube", iconColor: "#2563eb" },
-          { title: "In Use", value: assetStats.inUse, icon: "cube", iconColor: "#16a34a" },
-          { title: "Available", value: assetStats.available, icon: "cube", iconColor: "#f59e0b" },
-          { title: "Maintenance", value: assetStats.maintenance, icon: "spanner", iconColor: "#dc2626" },
+          { title: "Total Assets", value: assetStats.total, icon: "cube", colorVariant: "blue" },
+          { title: "In Use", value: assetStats.inUse, icon: "cube", colorVariant: "green" },
+          { title: "Available", value: assetStats.available, icon: "cube", colorVariant: "yellow" },
+          { title: "Maintenance", value: assetStats.maintenance, icon: "spanner", colorVariant: "red" },
         ]}
       />
 
