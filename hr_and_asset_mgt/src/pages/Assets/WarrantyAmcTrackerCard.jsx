@@ -86,7 +86,7 @@ export default function WarrantyAmcTrackerCard({ assets = [], onViewAll }) {
   };
 
   return (
-    <Card className={`warranty-card ${colorVariant}`} luxury={true}>
+    <Card className="warranty-card" luxury={true}>
       {/* Header */}
       <div className="warranty-card-header">
         <div>

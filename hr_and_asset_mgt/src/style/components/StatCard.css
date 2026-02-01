@@ -44,7 +44,7 @@
 }
 
 .stat-card-subtext {
-    font-size: var(--font-xs);
+    font-size: var(--font-sm);
     color: var(--color-text-muted);
     margin-top: 4px;
     display: flex;

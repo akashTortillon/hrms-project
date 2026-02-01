@@ -93,7 +93,7 @@ export default function AttendanceStats({ stats }) {
       value: stats.leave,
       subtext: `${stats.total ? Math.round((stats.leave / stats.total) * 100) : 0}%`,
       iconName: "calendar",
-      colorVariant: "yellow",
+      colorVariant: "orange",
     },
     {
       title: "Total",
