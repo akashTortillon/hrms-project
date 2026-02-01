@@ -25,14 +25,22 @@ const payrollSchema = new mongoose.Schema({
         name: String,
         amount: Number,
         type: { type: String, enum: ["AUTO", "MANUAL"], default: "AUTO" },
-        meta: mongoose.Schema.Types.Mixed // For debugging (e.g. "20% of Basic")
+        meta: mongoose.Schema.Types.Mixed, // For debugging (e.g. "20% of Basic")
+        // ✅ Manual Tracking
+        addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        addedAt: Date,
+        reason: String
     }],
 
     deductions: [{
         name: String,
         amount: Number,
         type: { type: String, enum: ["AUTO", "MANUAL"], default: "AUTO" },
-        meta: mongoose.Schema.Types.Mixed // e.g. "Absent 2 days * Daily Rate"
+        meta: mongoose.Schema.Types.Mixed, // e.g. "Absent 2 days * Daily Rate"
+        // ✅ Manual Tracking
+        addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        addedAt: Date,
+        reason: String
     }],
 
     // Totals

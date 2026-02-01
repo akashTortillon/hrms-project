@@ -239,7 +239,17 @@ export default function PayslipModal({ show, onClose, record }) {
                             </div>
                             {allowances?.map((allow, idx) => (
                                 <div key={idx} style={styles.lineItem}>
-                                    <span>{allow.name}</span>
+                                    <span>
+                                        {allow.name}
+                                        {allow.type === "MANUAL" && allow.addedBy && (
+                                            <span
+                                                style={{ marginLeft: '6px', cursor: 'help', color: '#0284c7', fontSize: '14px' }}
+                                                title={`Added by ${allow.addedBy.name || 'Admin'} on ${new Date(allow.addedAt).toLocaleDateString()}. Reason: ${allow.reason}`}
+                                            >
+                                                ⓘ
+                                            </span>
+                                        )}
+                                    </span>
                                     <span>{allow.amount?.toLocaleString()} AED</span>
                                 </div>
                             ))}
@@ -257,7 +267,17 @@ export default function PayslipModal({ show, onClose, record }) {
                             ) : null}
                             {deductions?.map((deduct, idx) => (
                                 <div key={idx} style={styles.lineItem}>
-                                    <span>{deduct.name}</span>
+                                    <span>
+                                        {deduct.name}
+                                        {deduct.type === "MANUAL" && deduct.addedBy && (
+                                            <span
+                                                style={{ marginLeft: '6px', cursor: 'help', color: '#0284c7', fontSize: '14px' }}
+                                                title={`Added by ${deduct.addedBy.name || 'Admin'} on ${new Date(deduct.addedAt).toLocaleDateString()}. Reason: ${deduct.reason}`}
+                                            >
+                                                ⓘ
+                                            </span>
+                                        )}
+                                    </span>
                                     <span>-{deduct.amount?.toLocaleString()} AED</span>
                                 </div>
                             ))}
