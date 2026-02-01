@@ -26,7 +26,7 @@ export default function DocumentLibraryHeader({ stats = { total: 0, valid: 0, ex
       title: "Expiring Soon",
       value: expiring,
       icon: "exclamation",
-      variant: "yellow",
+      variant: "orange",
     },
     {
       title: "Expired",

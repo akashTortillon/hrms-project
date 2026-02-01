@@ -100,7 +100,7 @@ export default function DisposalReport() {
                     title="Total Disposed"
                     value={stats.totalItems}
                     iconName="waste-disposal"
-                    colorVariant="red"
+                    colorVariant="blue"
                 />
                 <StatCard
                     title="Total Value Recouped"
@@ -112,13 +112,13 @@ export default function DisposalReport() {
                     title="Assets Sold"
                     value={stats.soldCount}
                     iconName="shopping-cart"
-                    colorVariant="yellow"
+                    colorVariant="orange"
                 />
                 <StatCard
                     title="Assets Scrapped"
                     value={stats.scrappedCount}
                     iconName="recycle"
-                    colorVariant="gray"
+                    colorVariant="red"
                 />
             </div>
 

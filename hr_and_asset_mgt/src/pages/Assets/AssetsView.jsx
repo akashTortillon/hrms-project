@@ -414,7 +414,7 @@ function Assets() {
         stats={[
           { title: "Total Assets", value: assetStats.total, icon: "cube", colorVariant: "blue" },
           { title: "In Use", value: assetStats.inUse, icon: "cube", colorVariant: "green" },
-          { title: "Available", value: assetStats.available, icon: "cube", colorVariant: "yellow" },
+          { title: "Available", value: assetStats.available, icon: "cube", colorVariant: "orange" },
           { title: "Maintenance", value: assetStats.maintenance, icon: "spanner", colorVariant: "red" },
         ]}
       />

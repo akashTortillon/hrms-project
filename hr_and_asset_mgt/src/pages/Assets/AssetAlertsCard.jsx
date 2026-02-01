@@ -1,6 +1,7 @@
-import Card from "../../components/reusable/Card";
 import { useState, useEffect } from "react";
+import Card from "../../components/reusable/Card";
 import SvgIcon from "../../components/svgIcon/svgView";
+import { getAssetAlerts } from "../../services/assetService";
 
 export default function AssetAlertsCard() {
   const [alerts, setAlerts] = useState({
@@ -106,7 +107,7 @@ export default function AssetAlertsCard() {
   ];
 
   return (
-    <Card className={`warranty-card ${colorVariant}`} luxury={true}>
+    <Card className="warranty-card" luxury={true}>
       {/* Header */}
       <div className="warranty-card-header">
         <div>

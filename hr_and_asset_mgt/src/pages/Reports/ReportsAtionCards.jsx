@@ -57,8 +57,8 @@ export default function ReportsOverview() {
           const getVariant = (icon) => {
             if (icon === 'reports') return 'blue';
             if (icon === 'calendar') return 'green';
-            if (icon === 'document') return 'yellow';
-            return 'gray';
+            if (icon === 'document') return 'orange';
+            return 'red';
           };
 
           return (
