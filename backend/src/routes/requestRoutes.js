@@ -116,7 +116,6 @@ router.put(
 router.get(
   "/employee/:employeeId",
   protect,
-  hasPermission("MANAGE_EMPLOYEES"),
   getEmployeeRequests
 );
 

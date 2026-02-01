@@ -7,6 +7,7 @@ import { jwtConfig } from "../config/jwt.js";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from 'uuid'; // You might need to install uuid or use a custom random string generator
 import Master from "../models/masterModel.js";
+import Employee from "../models/employeeModel.js";
 
 // Helper to set refresh token cookie
 const setRefreshTokenCookie = (res, token) => {
@@ -121,6 +122,15 @@ export const login = async (req, res) => {
 
     setRefreshTokenCookie(res, refreshToken);
 
+    // Check for linked employee via email if not explicitly linked
+    let finalEmployeeId = user.employeeId;
+    if (!finalEmployeeId) {
+      const linkedEmp = await Employee.findOne({
+        email: { $regex: new RegExp(`^${user.email}$`, 'i') }
+      });
+      if (linkedEmp) finalEmployeeId = linkedEmp._id;
+    }
+
     res.json({
       token: accessToken,
       role: user.role,
@@ -130,7 +140,7 @@ export const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        employeeId: user.employeeId // Include linked Employee ID
+        employeeId: finalEmployeeId // Include resolved Employee ID
       }
     });
   } catch (error) {
