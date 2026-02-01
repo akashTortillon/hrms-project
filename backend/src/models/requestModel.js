@@ -80,9 +80,16 @@ const requestSchema = new mongoose.Schema(
       ref: "User",
       default: null
     },
-    actionDate: {
-      type: Date,
-      default: null
+    // ✅ NEW: Payroll Deduction Tracking (for Loans/Advances)
+    payrollDeductions: [{
+      month: String, // MM
+      year: String,  // YYYY
+      amount: Number, // Amount deducted
+      date: { type: Date, default: Date.now }
+    }],
+    isFullyPaid: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }

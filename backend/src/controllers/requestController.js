@@ -776,7 +776,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
 export const updateRequestStatus = async (req, res) => {
   try {
     const { requestId } = req.params;
-    const { action, rejectionReason } = req.body;
+    const { action, rejectionReason, interestRate } = req.body;
 
     const request = await Request.findById(requestId);
     if (!request) {
@@ -787,6 +787,25 @@ export const updateRequestStatus = async (req, res) => {
 
     if (action === "APPROVE") {
       newStatus = "APPROVED";
+
+      // Calculate Interest for Loans AND Salary Advances
+      if (request.status === "PENDING" && request.requestType === "SALARY") {
+        const rate = interestRate ? Number(interestRate) : 0;
+        const principal = Number(request.details.amount) || 0;
+        const totalRepayment = principal + (principal * rate / 100);
+
+        // Update details with finalized terms
+        request.details = {
+          ...request.details,
+          interestRate: rate,
+          totalRepaymentAmount: totalRepayment
+        };
+
+        // Update Repayment Period if provided (Admin Override)
+        if (req.body.repaymentPeriod) {
+          request.details.repaymentPeriod = Number(req.body.repaymentPeriod);
+        }
+      }
     }
 
     request.status = newStatus;
@@ -1039,6 +1058,39 @@ export const downloadDocument = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to download document"
+    });
+  }
+};
+
+// ✅ NEW: Get requests for a specific employee
+export const getEmployeeRequests = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    // Find the user associated with this employeeId
+    const user = await User.findOne({ employeeId });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found for this employee"
+      });
+    }
+
+    const requests = await Request.find({ userId: user._id })
+      .populate("approvedBy", "name role")
+      .populate("withdrawnBy", "name")
+      .sort({ submittedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: requests
+    });
+  } catch (error) {
+    console.error("Get employee requests error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch employee requests"
     });
   }
 };

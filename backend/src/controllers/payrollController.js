@@ -527,6 +527,60 @@ export const generatePayroll = async (req, res) => {
                 }
             }
 
+            // 3.5. SALARY ADVANCE & LOAN DEDUCTIONS
+            // Find User for this employee to get Requests
+            const user = await User.findOne({ email: emp.email });
+            if (user) {
+                const requests = await Request.find({
+                    userId: user._id,
+                    requestType: "SALARY",
+                    status: "APPROVED",
+                    isFullyPaid: { $ne: true }
+                });
+
+                for (const req of requests) {
+                    const { amount, repaymentPeriod, totalRepaymentAmount } = req.details || {};
+                    const principal = Number(amount) || 0;
+                    const totalPayable = Number(totalRepaymentAmount) || principal; // Fallback to principal if no interest
+                    const period = Number(repaymentPeriod) || 1;
+
+                    // Logic: Deduction Amount
+                    let deductionAmount = 0;
+                    const alreadyPaid = req.payrollDeductions ? req.payrollDeductions.reduce((sum, d) => sum + d.amount, 0) : 0;
+                    const remaining = totalPayable - alreadyPaid;
+
+                    if (remaining <= 0) continue; // Should be handled by isFullyPaid, but safety check
+
+                    if (req.subType === "salary_advance") {
+                        // Assumption: One-time deduction unless period > 1 specified
+                        if (period > 1) {
+                            const installment = totalPayable / period;
+                            deductionAmount = Math.min(installment, remaining);
+                        } else {
+                            deductionAmount = remaining; // Full deduction
+                        }
+                    } else if (req.subType === "loan") {
+                        const installment = totalPayable / period;
+                        deductionAmount = Math.min(installment, remaining);
+                    }
+
+                    // Check if this specific month/year was already deducted (idempotency for re-runs)
+                    // We don't save to Request yet (that's finalize), so we just add to current payroll draft.
+                    // But if we already Finalized a payroll for this month, generatePayroll shouldn't define it again?
+                    // generatePayroll creates DRAFT. If previous finalized payroll exists for this month, user handles it.
+
+                    if (deductionAmount > 0) {
+                        deductionList.push({
+                            name: req.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
+                            amount: parseFloat(deductionAmount.toFixed(2)),
+                            type: "AUTO",
+                            meta: `Req ID: ${req.requestId} | Remaining: ${parseFloat((remaining - deductionAmount).toFixed(2))}`
+                        });
+                        totalDeductions += deductionAmount;
+                    }
+                }
+            }
+
             // 4. Calculate Net
             const netSalary = basicSalary + totalAllowances - totalDeductions;
 
@@ -655,34 +709,121 @@ export const addAdjustment = async (req, res) => {
     }
 };
 
+
+// --- API: Remove Payroll Item (Skip Deduction) ---
+export const removePayrollItem = async (req, res) => {
+    try {
+        const { payrollId, itemId, type } = req.body; // type: 'ALLOWANCE' or 'DEDUCTION'
+        const payroll = await Payroll.findById(payrollId);
+
+        if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
+        if (payroll.status !== "DRAFT") return res.status(400).json({ message: "Cannot edit a finalized payroll." });
+
+        let removedAmount = 0;
+
+        if (type === "ALLOWANCE") {
+            const itemIndex = payroll.allowances.findIndex(i => i._id.toString() === itemId);
+            if (itemIndex > -1) {
+                removedAmount = payroll.allowances[itemIndex].amount;
+                payroll.allowances.splice(itemIndex, 1);
+                payroll.totalAllowances -= removedAmount;
+            }
+        } else {
+            const itemIndex = payroll.deductions.findIndex(i => i._id.toString() === itemId);
+            if (itemIndex > -1) {
+                removedAmount = payroll.deductions[itemIndex].amount;
+                payroll.deductions.splice(itemIndex, 1);
+                payroll.totalDeductions -= removedAmount;
+            }
+        }
+
+        // Recalculate Net
+        payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
+        await payroll.save();
+
+        res.json({ message: "Item removed successfully", payroll });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- API: Finalize Payroll ---
 export const finalizePayroll = async (req, res) => {
     try {
         const { month, year } = req.body;
 
-        // Update all DRAFT records for this month to PROCESSED
-        const result = await Payroll.updateMany(
-            { month, year, status: "DRAFT" },
-            { $set: { status: "PROCESSED" } }
-        );
+        // 1. Fetch DRAFT records to process
+        const records = await Payroll.find({ month, year, status: "DRAFT" });
 
-        if (result.matchedCount === 0) {
+        if (records.length === 0) {
             return res.status(400).json({ message: "No Draft payroll records found to finalize." });
         }
 
-        res.json({ message: `Success! Payroll Finalized for ${result.modifiedCount} employees. The payroll is now locked.` });
+        // 2. Update Request Models (for Loans/Advances)
+        // Find any payroll records that had loan/advance deductions
+        for (const p of records) {
+            // Find User for this employee (needed to link back to Request userId, or use Employee ID if we linking differently)
+            // Requests are linked by userId. Employee model has email. User has email.
+            // Let's rely on finding User by EmployeeId if we stored it, or by Email.
+            // Simpler: The deduction meta has "Req ID: REQ001". We can find by that directly!
+
+            const loanDeductions = p.deductions.filter(d =>
+                (d.name.includes("Loan Repayment") || d.name.includes("Salary Advance"))
+                && d.meta && d.meta.includes("Req ID:")
+            );
+
+            for (const ded of loanDeductions) {
+                const reqIdMatch = ded.meta.match(/Req ID: (REQ\d+)/);
+                const reqId = reqIdMatch ? reqIdMatch[1] : null;
+
+                if (reqId) {
+                    const request = await Request.findOne({ requestId: reqId });
+
+                    if (request) {
+                        // Check if this deduction is already recorded (idempotency)
+                        const alreadyRecorded = request.payrollDeductions.some(pd => pd.month == month && pd.year == year);
+
+                        if (!alreadyRecorded) {
+                            request.payrollDeductions.push({
+                                month,
+                                year,
+                                amount: ded.amount,
+                                date: new Date()
+                            });
+
+                            // Check if fully paid
+                            const totalPaid = request.payrollDeductions.reduce((sum, x) => sum + x.amount, 0);
+                            if (totalPaid >= (request.details.amount - 1)) { // Tolerance of 1 for rounding
+                                request.isFullyPaid = true;
+                                request.status = "COMPLETED";
+                            }
+
+                            await request.save();
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Mark as Processed
+        for (const p of records) {
+            p.status = "PROCESSED";
+            await p.save();
+        }
+
+        res.json({ message: `Success! Payroll Finalized for ${records.length} employees. The payroll is now locked.` });
 
         // AUDIT LOG
-        if (result.modifiedCount > 0) {
-            await PayrollAudit.create({
-                action: "FINALIZED",
-                performedBy: req.user ? req.user._id : null,
-                performedByName: req.user ? req.user.name : "System",
-                month,
-                year,
-                details: `Finalized payroll for ${result.modifiedCount} records`
-            });
-        }
+        await PayrollAudit.create({
+            action: "FINALIZED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            details: `Finalized payroll for ${records.length} records`
+        });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

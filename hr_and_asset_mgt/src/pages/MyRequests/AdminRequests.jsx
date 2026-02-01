@@ -12,6 +12,7 @@ import {
 } from "../../services/requestService";
 import "../../style/myRequests.css";
 import DocumentApproveModal from "./DocumentApproveModal.jsx";
+import SalaryApproveModal from "./SalaryApproveModal.jsx";
 
 export default function AdminRequests() {
   const [requests, setRequests] = useState([]);
@@ -21,6 +22,10 @@ export default function AdminRequests() {
   // ✅ Document request modal states
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+
+  // ✅ Salary request modal states
+  const [showSalaryModal, setShowSalaryModal] = useState(false);
+  const [selectedSalaryReq, setSelectedSalaryReq] = useState(null);
 
   // Rejection dialog states
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
@@ -56,20 +61,41 @@ export default function AdminRequests() {
      ACTION HANDLERS
   ========================= */
 
-  // ✅ UPDATED: Handle approve - check if document request
+  // ✅ UPDATED: Handle approve - check if document or salary request
   const handleApprove = async (request) => {
     if (request.requestType === "DOCUMENT") {
       // Open modal for document upload
       setSelectedRequest(request);
       setShowApproveModal(true);
+    } else if (request.requestType === "SALARY") {
+      // Open modal for Salary (Loan/Advance) approval
+      setSelectedSalaryReq(request);
+      setShowSalaryModal(true);
     } else {
-      // Direct approval for LEAVE and SALARY requests
+      // Direct approval for LEAVE (and others if any)
       try {
         await updateRequestStatus(request._id, { action: "APPROVE" });
         fetchRequests();
       } catch (err) {
         console.error("Failed to approve request", err);
       }
+    }
+  };
+
+  // ✅ Salary approval handler
+  const handleSalaryApprove = async (requestId, data) => {
+    try {
+      await updateRequestStatus(requestId, {
+        action: "APPROVE",
+        interestRate: data.interestRate,
+        repaymentPeriod: data.repaymentPeriod
+      });
+      fetchRequests();
+      setShowSalaryModal(false);
+      setSelectedSalaryReq(null);
+    } catch (err) {
+      console.error("Failed to approve salary request", err);
+      alert("Failed to approve request. Please try again.");
     }
   };
 
@@ -430,6 +456,17 @@ export default function AdminRequests() {
           setSelectedRequest(null);
         }}
         onApprove={handleDocumentApprove}
+      />
+
+      {/* SALARY APPROVE MODAL */}
+      <SalaryApproveModal
+        show={showSalaryModal}
+        request={selectedSalaryReq}
+        onClose={() => {
+          setShowSalaryModal(false);
+          setSelectedSalaryReq(null);
+        }}
+        onApprove={handleSalaryApprove}
       />
 
       {/* REJECT CONFIRM */}

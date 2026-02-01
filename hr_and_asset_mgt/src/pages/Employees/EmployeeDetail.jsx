@@ -39,6 +39,7 @@ const EditIcon = () => (
 
 import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
+import { getEmployeeRequests } from "../../services/requestService"; // New Service Method
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import { toast } from "react-toastify";
@@ -88,6 +89,9 @@ export default function EmployeeDetail() {
     // Asset State
     const [employeeAssets, setEmployeeAssets] = useState([]);
     const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
+
+    // Loan State
+    const [loans, setLoans] = useState([]);
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
@@ -150,6 +154,8 @@ export default function EmployeeDetail() {
             fetchAttendanceData();
         } else if (activeTab === "Assets") {
             fetchEmployeeAssetsData();
+        } else if (activeTab === "Loans") {
+            fetchEmployeeLoans();
         }
     }, [activeTab, effectiveId]);
 
@@ -199,6 +205,23 @@ export default function EmployeeDetail() {
         }
     };
 
+    const fetchEmployeeLoans = async () => {
+        if (!effectiveId) return;
+        try {
+            const result = await getEmployeeRequests(effectiveId);
+            // Result is { success: true, data: [...] } based on controller
+            if (result && result.data) {
+                // Filter for Salary/Loan type only
+                const loanReqs = result.data.filter(r => r.requestType === "SALARY" && r.status === "APPROVED");
+                setLoans(loanReqs);
+            }
+        } catch (e) {
+            console.error("Loans fetch error:", e);
+        }
+    };
+
+
+
     const handleAssignAsset = async (data) => {
         try {
             await assignAssetToEmployee(data);
@@ -215,7 +238,7 @@ export default function EmployeeDetail() {
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets"];
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans"];
     // Conditionally add Onboarding/Offboarding for Admin/HR
     if (canEdit) {
         tabs.push("Onboarding");
@@ -643,7 +666,91 @@ export default function EmployeeDetail() {
                     <WorkflowTab employeeId={effectiveId} type="Offboarding" />
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && (
+                {activeTab === "Loans" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Loans & Advances</h3>
+                        </div>
+
+                        <div className="loans-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {loans.map((loan) => (
+                                <div key={loan._id} style={{
+                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px',
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                        <div>
+                                            <div style={{ fontWeight: '600', color: '#111827', fontSize: '15px' }}>
+                                                {loan.subType === 'loan' ? 'Company Loan' : 'Salary Advance'}
+                                                <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '400', marginLeft: '8px' }}>
+                                                    #{loan.requestId}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                                Approved: {new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}
+                                            </div>
+                                            {(loan.details.interestRate > 0) && (
+                                                <div style={{ fontSize: '12px', color: '#d97706', marginTop: '2px' }}>
+                                                    Interest Rate: {loan.details.interestRate}%
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontWeight: '600', color: '#111827' }}>
+                                                {loan.details.amount} AED
+                                            </div>
+                                            {loan.isFullyPaid ? (
+                                                <span style={{ color: '#166534', fontSize: '12px', fontWeight: '500', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Paid Off</span>
+                                            ) : (
+                                                <span style={{ color: '#854d0e', fontSize: '12px', fontWeight: '500', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Active</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Progress Bar */}
+                                    {(() => {
+                                        const total = loan.details.totalRepaymentAmount || loan.details.amount;
+                                        const paid = (loan.payrollDeductions || []).reduce((acc, curr) => acc + curr.amount, 0);
+                                        const progress = Math.min((paid / total) * 100, 100);
+
+                                        return (
+                                            <div style={{ marginTop: '15px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '5px', color: '#4b5563' }}>
+                                                    <span>Paid: {paid.toFixed(2)} AED</span>
+                                                    <span>Total: {Number(total).toFixed(2)} AED</span>
+                                                </div>
+                                                <div style={{ width: '100%', height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                                                    <div style={{ width: `${progress}%`, height: '100%', background: '#2563eb', transition: 'width 0.3s' }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Deductions History */}
+                                    {loan.payrollDeductions && loan.payrollDeductions.length > 0 && (
+                                        <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #e5e7eb' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px' }}>DEDUCTION HISTORY</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                {loan.payrollDeductions.map((ded, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#374151' }}>
+                                                        <span>{ded.month}/{ded.year} Payroll</span>
+                                                        <span>-{ded.amount} AED</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {loans.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                    No active loans or salary advances.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>

@@ -13,7 +13,7 @@ const setRefreshTokenCookie = (res, token) => {
   res.cookie("refreshToken", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production", // Set to true in production
-    sameSite: "strict",
+    sameSite: "lax", // 'lax' is better for development/redirects than 'strict'
     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
   });
 };
@@ -84,7 +84,7 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    
+
     // ✅ Make email case-insensitive
     const user = await User.findOne({
       email: { $regex: new RegExp(`^${email}$`, 'i') }
@@ -142,7 +142,10 @@ export const login = async (req, res) => {
 export const refresh = async (req, res) => {
   const { refreshToken } = req.cookies;
 
+  // console.log("🔄 Refresh Request Received. Token present?", !!refreshToken);
+
   if (!refreshToken) {
+    console.warn("⚠️ No refresh token in cookies");
     return res.status(401).json({ message: "No refresh token provided" });
   }
 
@@ -150,21 +153,16 @@ export const refresh = async (req, res) => {
     const decoded = jwt.verify(refreshToken, jwtConfig.refreshSecret);
     const user = await User.findById(decoded.id);
 
-    if (!user) return res.status(401).json({ message: "User not found" });
+    if (!user) {
+      console.warn("⚠️ User not found for refresh token");
+      return res.status(401).json({ message: "User not found" });
+    }
 
     // Find the token in the DB
     const tokenDoc = user.refreshTokens?.find(t => t.token === refreshToken);
 
     if (!tokenDoc) {
-      // Token reuse detected!
-      // Check if this token belongs to a family that was already rotated
-      // In this simple implementation, if a valid signed token is not in DB, it might be reuse.
-      // A more robust way is to store 'used' tokens or check family specifically.
-      // But clearing all tokens is a safe fail-safe for reuse detection.
-
-      // If we could determine the family, we would better target. 
-      // Since we can't easily find the family of a deleted token without a 'used' collection,
-      // we'll clear all refresh tokens for security as a reuse attempt was made.
+      console.error("🚨 Token reuse detected! Clearing valid tokens for security.");
       user.refreshTokens = [];
       await user.save();
       res.clearCookie("refreshToken");
@@ -185,11 +183,12 @@ export const refresh = async (req, res) => {
     await user.save();
 
     setRefreshTokenCookie(res, newRefreshToken);
+    // console.log("✅ Token Refreshed Successfully");
 
     res.json({ token: newAccessToken });
 
   } catch (error) {
-    // console.error("Refresh error:", error);
+    console.error("❌ Refresh error:", error.message);
     res.clearCookie("refreshToken");
     res.status(401).json({ message: "Invalid refresh token" });
   }
