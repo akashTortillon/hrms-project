@@ -419,18 +419,35 @@ import fs from "fs";
 import mongoose from "mongoose";
 
 /**
- * Helper to notify all Admins and HR
+ * Helper to notify all Admins and HR (Authorized Users)
  */
 const notifyAdmins = async (title, message, link) => {
-  const admins = await User.find({ role: { $in: ["Admin", "HR Admin", "HR Manager"] } });
-  for (const admin of admins) {
-    await createNotification({
-      recipient: admin._id,
-      title,
-      message,
-      type: "REQUEST",
-      link
-    });
+  try {
+    // 1. Find roles that have 'APPROVE_REQUESTS' or 'ALL' permission
+    const authorizedRoles = await Master.find({
+      type: 'ROLE',
+      permissions: { $in: ['APPROVE_REQUESTS', 'ALL'] }
+    }).select('name');
+
+    const roleNames = authorizedRoles.map(r => r.name);
+
+    // 2. Add 'Admin' as it always has 'ALL' permission
+    if (!roleNames.includes("Admin")) roleNames.push("Admin");
+
+    // 3. Find users with these roles
+    const admins = await User.find({ role: { $in: roleNames } });
+
+    for (const admin of admins) {
+      await createNotification({
+        recipient: admin._id,
+        title,
+        message,
+        type: "REQUEST",
+        link
+      });
+    }
+  } catch (error) {
+    console.error("Notify Admins Error:", error);
   }
 };
 

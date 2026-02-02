@@ -44,8 +44,10 @@ import {
 } from "../../services/assignmentService.js";
 
 import { assetTypeService, assetStatusService } from "../../services/masterService";
+import { useRole } from "../../contexts/RoleContext.jsx";
 
 function Assets() {
+  const { hasPermission } = useRole();
   // Asset data
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -409,8 +411,8 @@ function Assets() {
     <div>
       {/* Header cards */}
       <AssetsHeader
-        onAddAsset={() => setShowAddModal(true)}
-        onImport={() => setShowImportModal(true)}
+        onAddAsset={hasPermission("MANAGE_ASSETS") ? () => setShowAddModal(true) : null}
+        onImport={hasPermission("MANAGE_ASSETS") ? () => setShowImportModal(true) : null}
         stats={[
           { title: "Total Assets", value: assetStats.total, icon: "cube", colorVariant: "blue" },
           { title: "In Use", value: assetStats.inUse, icon: "cube", colorVariant: "green" },
@@ -438,18 +440,18 @@ function Assets() {
       ) : (
         <AssetsTable
           assets={assets}
-          onEdit={handleEditClick}
-          onDelete={handleDeleteAsset}
-          onAssign={handleAssignClick}
-          onTransfer={handleTransferClick}
-          onReturn={handleReturnClick}
-          onHistory={handleHistoryClick}
+          onEdit={hasPermission("MANAGE_ASSETS") ? handleEditClick : null}
+          onDelete={hasPermission("MANAGE_ASSETS") ? handleDeleteAsset : null}
+          onAssign={hasPermission("MANAGE_ASSETS") ? handleAssignClick : null}
+          onTransfer={hasPermission("MANAGE_ASSETS") ? handleTransferClick : null}
+          onReturn={hasPermission("MANAGE_ASSETS") ? handleReturnClick : null}
+          onHistory={hasPermission("MANAGE_ASSETS") ? handleHistoryClick : null}
           onViewDetails={handleViewDetailsClick}
-          onScheduleMaintenance={handleScheduleMaintenanceClick}
+          onScheduleMaintenance={hasPermission("MANAGE_ASSETS") ? handleScheduleMaintenanceClick : null}
           onViewMaintenanceLogs={handleViewMaintenanceLogsClick}
           onManageDocuments={handleManageDocumentsClick}
-          onManageAMC={handleManageAMCClick}
-          onDispose={handleDisposeClick}
+          onManageAMC={hasPermission("MANAGE_ASSETS") ? handleManageAMCClick : null}
+          onDispose={hasPermission("MANAGE_ASSETS") ? handleDisposeClick : null}
         />
       )}
 
