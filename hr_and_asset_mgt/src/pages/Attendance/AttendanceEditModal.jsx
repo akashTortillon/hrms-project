@@ -61,21 +61,30 @@ const AttendanceEditModal = ({
   /* =========================
      STATUS CALCULATION (FIXED)
   ========================= */
-
   useEffect(() => {
+    // Only auto-update status if it's not "On Leave" (unless we want to force recalc)
+    // For now, let's keep it simple: changing times recalculates status.
+    // User can manually change status AFTER changing times.
+
     if (onLeave) {
       setStatus("On Leave");
       return;
     }
 
     if (!checkIn && !checkOut) {
-      setStatus("Absent");
+      // Don't force Absent immediately if user might be setting something else manually?
+      // Actually, if times are empty, it usually IS Absent or On Leave.
+      // We'll trust the user's manual selection if they picked one, but this effect runs on checkIn change.
+      // Let's rely on standard behavior: modifying times triggers this. Modifying status directly triggers onChange.
+      if (status !== 'Holiday' && status !== 'Weekend' && status !== 'On Leave') {
+        setStatus("Absent");
+      }
       return;
     }
 
     const inMin = toMinutes(checkIn);
     if (inMin === null) {
-      setStatus("Absent");
+      // invalid time
       return;
     }
 
@@ -119,8 +128,7 @@ const AttendanceEditModal = ({
 
     let diff = outMin - inMin;
 
-    // ⛔ Subtract 12 hours (720 mins)
-    diff -= 720;
+    // diff -= 720; // ⛔ REMOVED INCORRECT SUBTRACTION
 
     if (diff <= 0) {
       setWorkHours("0h 0m");
@@ -208,8 +216,19 @@ const AttendanceEditModal = ({
           </div>
 
           <div>
-            <label>Status (Auto)</label>
-            <input value={status} disabled />
+            <label>Status</label>
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                // Optional: You might want to set a flag here to disable auto-calc if needed
+              }}
+            >
+              <option value="Present">Present</option>
+              <option value="Absent">Absent</option>
+              <option value="Late">Late</option>
+              <option value="On Leave">On Leave</option>
+            </select>
           </div>
 
           <div>
