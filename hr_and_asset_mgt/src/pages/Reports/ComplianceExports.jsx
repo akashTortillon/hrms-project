@@ -58,7 +58,7 @@ export default function ComplianceExports() {
       <div className="compliance-header-text" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <SvgIcon name="document" size={24} />
-          <h3 style={{ margin: 0 }}>Compliance & Government Exports</h3>
+          <h3 style={{ margin: 0 , fontSize:"20px"}}>Compliance & Government Exports</h3>
         </div>
 
         <div className="report-filters" style={{ marginBottom: 0 }}>

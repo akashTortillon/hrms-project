@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
 import { Link, useNavigate } from "react-router-dom";
-import employeeImage from "../../assets/images/employee_onboard.webp";
+import employeeImage from "../../assets/images/login_page_image.png";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
 
@@ -77,7 +77,7 @@ export default function Login() {
 
         <div className="login-form-wrapper">
           <div className="login-card">
-            <h2>Login</h2>
+            <h2 style={{color:"white"}}>Login</h2>
 
             {error && <div className="error">{error}</div>}
 
@@ -108,6 +108,7 @@ export default function Login() {
         </div>
       </div>
     </div>
+
 
   );
 }
