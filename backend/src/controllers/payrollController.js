@@ -670,6 +670,22 @@ export const getPayrollSummary = async (req, res) => {
     }
 };
 
+// --- API: Get Audit Logs for a Specific Payroll Record ---
+export const getPayrollAuditLogs = async (req, res) => {
+    try {
+        const { payrollId } = req.query;
+        if (!payrollId) return res.status(400).json({ message: "Payroll ID is required" });
+
+        const logs = await PayrollAudit.find({ relatedPayrollId: payrollId })
+            .sort({ createdAt: -1 })
+            .populate("performedBy", "name"); // Get User Name
+
+        res.status(200).json(logs);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- API: Add Manual Adjustment ---
 export const addAdjustment = async (req, res) => {
     try {
@@ -716,7 +732,8 @@ export const addAdjustment = async (req, res) => {
             performedByName: req.user ? req.user.name : "System",
             month: payroll.month,
             year: payroll.year,
-            details: `Manual adjustment [${type}]: ${name} (${amount}) for Payroll ID ${payrollId}`
+            details: `Manual adjustment [${type}]: ${name} (${amount}) for Payroll ID ${payrollId}`,
+            relatedPayrollId: payrollId // ✅ Link to Payroll
         });
 
         res.json({ message: "Adjustment Added Successfully", payroll });
@@ -738,11 +755,13 @@ export const removePayrollItem = async (req, res) => {
         if (payroll.status !== "DRAFT") return res.status(400).json({ message: "Cannot edit a finalized payroll." });
 
         let removedAmount = 0;
+        let removedName = "Unknown Item";
 
         if (type === "ALLOWANCE") {
             const itemIndex = payroll.allowances.findIndex(i => i._id.toString() === itemId);
             if (itemIndex > -1) {
                 removedAmount = payroll.allowances[itemIndex].amount;
+                removedName = payroll.allowances[itemIndex].name;
                 payroll.allowances.splice(itemIndex, 1);
                 payroll.totalAllowances -= removedAmount;
             }
@@ -750,6 +769,7 @@ export const removePayrollItem = async (req, res) => {
             const itemIndex = payroll.deductions.findIndex(i => i._id.toString() === itemId);
             if (itemIndex > -1) {
                 removedAmount = payroll.deductions[itemIndex].amount;
+                removedName = payroll.deductions[itemIndex].name;
                 payroll.deductions.splice(itemIndex, 1);
                 payroll.totalDeductions -= removedAmount;
             }
@@ -758,6 +778,17 @@ export const removePayrollItem = async (req, res) => {
         // Recalculate Net
         payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
         await payroll.save();
+
+        // AUDIT LOG
+        await PayrollAudit.create({
+            action: "ADJUSTMENT",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month: payroll.month,
+            year: payroll.year,
+            details: `Manual removal [${type}]: ${removedName} (${removedAmount}) for Payroll ID ${payrollId}`,
+            relatedPayrollId: payrollId // ✅ Link to Payroll
+        });
 
         res.json({ message: "Item removed successfully", payroll });
 

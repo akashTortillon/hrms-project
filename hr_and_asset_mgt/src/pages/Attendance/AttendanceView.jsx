@@ -39,8 +39,8 @@ const getStatusClass = (status) => {
 
 function Attendance() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { role } = useRole();
-  const isEmployee = role === "Employee";
+  const { hasPermission } = useRole();
+  const isEmployee = !hasPermission("VIEW_ALL_ATTENDANCE");
 
   // Read State from URL Params
   const viewMode = searchParams.get("view") || "day";
@@ -276,7 +276,7 @@ function Attendance() {
         })}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
-        onEdit={isEmployee ? null : openAttendanceModal}
+        onEdit={hasPermission("MANAGE_ATTENDANCE") ? openAttendanceModal : null}
         loading={loading}
         year={selectedYear}
         month={selectedMonth}

@@ -569,9 +569,14 @@ export const getDailyAttendance = async (req, res) => {
       return res.status(400).json({ message: "Date is required" });
     }
 
-    // Get employees (Personalized for Employee role)
+    // Get employees (Personalized for users without VIEW_ALL_ATTENDANCE permission)
+    const canViewAllAttendance = req.user.role === "Admin" || (req.user.permissions && (req.user.permissions.includes("ALL") || req.user.permissions.includes("VIEW_ALL_ATTENDANCE")));
     const employeeQuery = { status: "Active" };
-    if (req.user.role === "Employee") {
+
+    if (!canViewAllAttendance) {
+      if (!req.user.employeeId) {
+        return res.status(403).json({ message: "Access Denied: No employee profile linked" });
+      }
       employeeQuery._id = req.user.employeeId;
     }
 
@@ -650,9 +655,14 @@ export const getMonthlyAttendance = async (req, res) => {
     // Construct regex or range query
     const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
 
-    // Get employees (Personalized for Employee role)
+    // Get employees (Personalized for users without VIEW_ALL_ATTENDANCE permission)
+    const canViewAll = req.user.role === "Admin" || req.user.permissions.includes("ALL") || req.user.permissions.includes("VIEW_ALL_ATTENDANCE");
     const employeeQuery = { status: "Active" };
-    if (req.user.role === "Employee") {
+
+    if (!canViewAll) {
+      if (!req.user.employeeId) {
+        return res.status(403).json({ message: "Access Denied: No employee profile linked" });
+      }
       employeeQuery._id = req.user.employeeId;
     }
 
