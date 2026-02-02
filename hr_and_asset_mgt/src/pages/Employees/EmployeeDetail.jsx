@@ -208,11 +208,15 @@ export default function EmployeeDetail() {
     const fetchEmployeeLoans = async () => {
         if (!effectiveId) return;
         try {
-            const result = await getEmployeeRequests(effectiveId, { type: 'SALARY', status: 'APPROVED,COMPLETED' });
+            const result = await getEmployeeRequests(effectiveId, { type: 'SALARY' });
             // Result is { success: true, data: [...] } based on controller
             if (result && result.data) {
-                console.log("[EmployeeDetail] Filtered Loans:", result.data);
-                setLoans(result.data);
+                console.log("[EmployeeDetail] Raw Loans:", result.data);
+                // Filter out Rejected/Withdrawn. Show everything else (Pending, Approved, Completed)
+                // User said "rejected it myst be not".
+                const visibleLoans = result.data.filter(r => r.status !== 'REJECTED' && r.status !== 'WITHDRAWN');
+                console.log("[EmployeeDetail] Visible Loans:", visibleLoans);
+                setLoans(visibleLoans);
             }
         } catch (e) {
             console.error("Loans fetch error:", e);
