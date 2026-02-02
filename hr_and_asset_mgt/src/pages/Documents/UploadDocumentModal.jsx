@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import "../../style/UploadDocumentModal.css";
-import { getBranches, companyDocumentTypeService } from "../../services/masterService";
+import { getBranches, companyDocumentTypeService, getDepartments } from "../../services/masterService";
 import { toast } from "react-toastify";
 
 export default function UploadDocumentModal({ onClose, onUpload }) {
     const [form, setForm] = useState({
         name: "",
         type: "",
+        department: "",
         location: "",
         issueDate: "",
         expiryDate: "",
@@ -15,6 +16,7 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
 
     const [branches, setBranches] = useState([]);
     const [docTypes, setDocTypes] = useState([]);
+    const [departments, setDepartments] = useState([]);
 
     useEffect(() => {
         loadMasters();
@@ -22,12 +24,14 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
 
     const loadMasters = async () => {
         try {
-            const [branchesData, typesData] = await Promise.all([
+            const [branchesData, typesData, departmentsData] = await Promise.all([
                 getBranches(),
-                companyDocumentTypeService.getAll()
+                companyDocumentTypeService.getAll(),
+                getDepartments()
             ]);
             setBranches(branchesData);
             setDocTypes(typesData);
+            setDepartments(departmentsData);
         } catch (err) {
             console.error("Failed to load form data", err);
         }
@@ -50,6 +54,7 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
         const formData = new FormData();
         formData.append("name", form.name);
         formData.append("type", form.type);
+        formData.append("department", form.department);
         formData.append("location", form.location);
         formData.append("issueDate", form.issueDate);
         formData.append("expiryDate", form.expiryDate);
@@ -89,6 +94,20 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
                                 <option value="">Select Type</option>
                                 {docTypes.map(type => (
                                     <option key={type._id} value={type.name}>{type.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="input-wrapper">
+                            <label className="input-label">Responsible Department</label>
+                            <select
+                                name="department"
+                                value={form.department}
+                                onChange={handleChange}
+                            >
+                                <option value="">Select Department</option>
+                                {departments.map(dept => (
+                                    <option key={dept._id} value={dept.name}>{dept.name}</option>
                                 ))}
                             </select>
                         </div>

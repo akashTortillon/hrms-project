@@ -31,4 +31,20 @@ export const deleteDocument = async (id) => {
     return res.data;
 };
 
+// REPLACE/UPDATE doc (Version Control)
+export const replaceDocument = async (id, formData) => {
+    const res = await api.put(`${BASE_URL}/${id}/replace`, formData, {
+        headers: {
+            "Content-Type": "multipart/form-data",
+        },
+    });
+    return res.data;
+};
+
+// GET Document History
+export const getDocumentHistory = async (id) => {
+    const res = await api.get(`${BASE_URL}/${id}/history`);
+    return res.data;
+};
+
 

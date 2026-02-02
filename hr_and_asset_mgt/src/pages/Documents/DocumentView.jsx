@@ -7,9 +7,17 @@ import DocumentsFilter from "./DocumentsFilter";
 import DocumentsGrid from "./DocumentsGrid";
 import ExpiryReminders from "./DocumentExpiryCards";
 import UploadDocumentModal from "./UploadDocumentModal";
-import { getDocuments, uploadDocument, deleteDocument, getDocumentStats } from "../../services/documentService";
+import ReplaceDocumentModal from "./ReplaceDocumentModal";
+import DocumentHistoryModal from "./DocumentHistoryModal";
+import {
+  getDocuments,
+  uploadDocument,
+  deleteDocument,
+  getDocumentStats,
+  replaceDocument
+} from "../../services/documentService";
 import { getMyDocuments } from "../../services/employeeDocumentService";
-import { companyDocumentTypeService, documentTypeService } from "../../services/masterService";
+import { companyDocumentTypeService, documentTypeService, getDepartments } from "../../services/masterService";
 import { toast } from "react-toastify";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal";
 import { useRole } from "../../contexts/RoleContext";
@@ -17,44 +25,49 @@ import { useRole } from "../../contexts/RoleContext";
 function Documents() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [documents, setDocuments] = useState([]);
-  const [stats, setStats] = useState({ total: 0, valid: 0, expiring: 0, critical: 0, expired: 0 }); // New Stats State
+  const [stats, setStats] = useState({ total: 0, valid: 0, expiring: 0, critical: 0, expired: 0 });
   const [view, setView] = useState("list");
+
+  // Modal States
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState(null);
+
   const [typeOptions, setTypeOptions] = useState(["All Types"]);
-  // Static status options since backend calculates them
+  const [departmentOptions, setDepartmentOptions] = useState(["All Departments"]);
   const statusOptions = ["All Status", "Valid", "Expiring Soon", "Critical", "Expired"];
 
-  // Role Checks
   const { role, hasPermission } = useRole();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  // Managers see Company Docs. Employees see Personal Docs.
   const isManager = hasPermission("MANAGE_DOCUMENTS");
 
-  // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-
   const [loading, setLoading] = useState(false);
 
-  // Read State from URL
   const search = searchParams.get("search") || "";
   const type = searchParams.get("type") || "All Types";
   const statusFilter = searchParams.get("status") || "All Status";
+  const departmentFilter = searchParams.get("department") || "All Departments";
 
-  // FETCH DATA
   useEffect(() => {
-    fetchStats(); // Fetch initial stats
+    fetchStats();
     fetchMasters();
-  }, [role, isManager]); // Re-run if role/manager status changes
+  }, [role, isManager]);
 
   const fetchMasters = async () => {
     try {
       let types = [];
+      let depts = [];
       if (isManager) {
-        types = await companyDocumentTypeService.getAll();
+        [types, depts] = await Promise.all([
+          companyDocumentTypeService.getAll(),
+          getDepartments()
+        ]);
+        setDepartmentOptions(["All Departments", ...depts.map(d => d.name)]);
       } else {
-        // Employees need Employee Document Types (Passport, Visa, etc.)
         types = await documentTypeService.getAll();
       }
 
@@ -67,7 +80,6 @@ function Documents() {
   };
 
   const fetchStats = async () => {
-    // Only fetch global stats if manager
     if (!isManager) return;
     try {
       const data = await getDocumentStats();
@@ -77,13 +89,12 @@ function Documents() {
     }
   };
 
-  // Debounce Search Effect
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchDocs();
-    }, 400); // 400ms debounce
+    }, 400);
     return () => clearTimeout(timer);
-  }, [search, type, statusFilter, role]);
+  }, [search, type, statusFilter, departmentFilter, role]);
 
   const fetchDocs = async () => {
     setLoading(true);
@@ -92,30 +103,19 @@ function Documents() {
       let formatted = [];
 
       if (isManager) {
-        // --- COMPANY DOCUMENTS VIEW (Admin/HR) ---
-        // Build API Filters
         const params = {};
         if (search) params.search = search;
         if (type !== "All Types") params.type = type;
         if (statusFilter !== "All Status") params.status = statusFilter;
+        if (departmentFilter !== "All Departments") params.department = departmentFilter;
 
         data = await getDocuments(params);
         formatted = formatCompanyDocs(data);
-
       } else {
-        // --- EMPLOYEE PERSONAL DOCUMENTS VIEW ---
-        // Fetch personal docs using employee ID
-
-        // Priority: user.employeeId (if linked) > user.id (if direct)
-        // Ensure we have an ID to query
         const empId = user.employeeId || user.id || user._id;
-
         if (empId) {
-          console.log("Fetching personal docs for:", empId);
           data = await getMyDocuments(empId);
           formatted = formatEmployeeDocs(data);
-        } else {
-          console.warn("No employee ID found for current user");
         }
       }
 
@@ -128,7 +128,6 @@ function Documents() {
     }
   };
 
-  // Helper: Format Company Docs
   const formatCompanyDocs = (data) => {
     return data.map(doc => {
       let daysLeft = null;
@@ -145,7 +144,7 @@ function Documents() {
         title: doc.name,
         type: doc.type,
         location: doc.location || "Main Office",
-        department: doc.uploaderRole || "Admin",
+        department: doc.department || doc.uploaderRole || "Admin",
         issueDate: doc.issueDate
           ? new Date(doc.issueDate).toISOString().split("T")[0]
           : "N/A",
@@ -158,7 +157,6 @@ function Documents() {
     });
   };
 
-  // Helper: Format Employee Personal Docs
   const formatEmployeeDocs = (data) => {
     return data.map(doc => {
       let daysLeft = null;
@@ -188,12 +186,16 @@ function Documents() {
     });
   };
 
-
-  // Update URL Helpers
   const updateFilter = (key, value) => {
     setSearchParams(prev => {
       const newParams = new URLSearchParams(prev);
-      if (value && value !== "All Types" && value !== "All Status") {
+      const defaultValues = {
+        type: "All Types",
+        status: "All Status",
+        department: "All Departments"
+      };
+
+      if (value && value !== defaultValues[key]) {
         newParams.set(key, value);
       } else {
         newParams.delete(key);
@@ -202,27 +204,37 @@ function Documents() {
     });
   };
 
-  // HANDLE UPLOAD
   const handleUpload = async (formData) => {
     try {
       await uploadDocument(formData);
       toast.success("Document uploaded successfully");
       setShowUploadModal(false);
-      fetchDocs(); // Refresh list
-      fetchStats(); // Refresh stats too
+      fetchDocs();
+      fetchStats();
     } catch (error) {
       console.error(error);
       toast.error("Upload failed");
     }
   };
 
-  // TRIGGER DELETE MODAL
+  const handleReplace = async (id, formData) => {
+    try {
+      await replaceDocument(id, formData);
+      toast.success("Document version replaced");
+      setShowReplaceModal(false);
+      setSelectedDoc(null);
+      fetchDocs();
+    } catch (error) {
+      console.error(error);
+      toast.error("Replacement failed");
+    }
+  };
+
   const handleDelete = (id) => {
     setDeleteId(id);
     setShowDeleteModal(true);
   };
 
-  // EXECUTE DELETE
   const confirmDelete = async () => {
     if (!deleteId) return;
     setDeleteLoading(true);
@@ -231,7 +243,7 @@ function Documents() {
       toast.success("Document deleted");
       setShowDeleteModal(false);
       fetchDocs();
-      fetchStats(); // Refresh stats too
+      fetchStats();
     } catch (error) {
       toast.error("Delete failed");
     } finally {
@@ -239,18 +251,19 @@ function Documents() {
     }
   };
 
-  // Conditional Rendering Logic
-  // - Managers see Header with Stats & Upload button.
-  // - Employees see Simplified Header (maybe no stats or personal stats only).
-  // - Managers have Delete action. Employees do not.
+  const triggerReplace = (id) => {
+    const d = documents.find(doc => doc.id === id);
+    setSelectedDoc(d);
+    setShowReplaceModal(true);
+  };
+
+  const triggerHistory = (id) => {
+    setSelectedDoc({ id });
+    setShowHistoryModal(true);
+  };
 
   return (
     <div>
-      {/* 
-         If Manager: Show full header with Global Stats. 
-         If Employee: Show simpler header or personal stats (not implemented yet).
-         For now, passing empty stats object for employees to hide cards.
-      */}
       <DocumentLibraryHeader
         stats={isManager ? stats : { total: documents.length, valid: 0, expiring: 0, critical: 0, expired: 0 }}
         onUploadClick={isManager ? () => setShowUploadModal(true) : null}
@@ -263,22 +276,34 @@ function Documents() {
         onTypeChange={(val) => updateFilter("type", val)}
         status={statusFilter}
         onStatusChange={(val) => updateFilter("status", val)}
+        department={departmentFilter}
+        onDepartmentChange={(val) => updateFilter("department", val)}
         total={documents.length}
         view={view}
         onViewChange={setView}
         typeOptions={typeOptions}
         statusOptions={statusOptions}
+        departmentOptions={departmentOptions}
       />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>Loading...</div>
       ) : view === "list" ? (
-        <DocumentsTable documents={documents} onDelete={isManager ? handleDelete : null} />
+        <DocumentsTable
+          documents={documents}
+          onDelete={isManager ? handleDelete : null}
+          onReplace={isManager ? triggerReplace : null}
+          onHistory={isManager ? triggerHistory : null}
+        />
       ) : (
-        <DocumentsGrid documents={documents} />
+        <DocumentsGrid
+          documents={documents}
+          onDelete={isManager ? handleDelete : null}
+          onReplace={isManager ? triggerReplace : null}
+          onHistory={isManager ? triggerHistory : null}
+        />
       )}
 
-      {/* Only show expiry reminders for managers, or maybe personal? */}
       {isManager && <ExpiryReminders documents={documents} />}
 
       {/* MODALS */}
@@ -286,6 +311,21 @@ function Documents() {
         <UploadDocumentModal
           onClose={() => setShowUploadModal(false)}
           onUpload={handleUpload}
+        />
+      )}
+
+      {showReplaceModal && (
+        <ReplaceDocumentModal
+          doc={selectedDoc}
+          onClose={() => setShowReplaceModal(false)}
+          onReplace={handleReplace}
+        />
+      )}
+
+      {showHistoryModal && (
+        <DocumentHistoryModal
+          docId={selectedDoc?.id}
+          onClose={() => setShowHistoryModal(false)}
         />
       )}
 

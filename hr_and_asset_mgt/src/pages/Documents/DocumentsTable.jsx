@@ -16,7 +16,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const DocumentsTable = ({ documents = [], onDelete }) => {
+const DocumentsTable = ({ documents = [], onDelete, onReplace, onHistory }) => {
   const getFileUrl = (path) => {
     if (!path) return "#";
     // Ensure correct URL construction. Backend serves uploads at /uploads
@@ -147,6 +147,28 @@ const DocumentsTable = ({ documents = [], onDelete }) => {
           >
             <SvgIcon name="delete" size={18} />
           </span>
+
+          {onReplace && (
+            <span
+              className="warning"
+              onClick={() => onReplace(row._id || row.id)}
+              style={{ cursor: 'pointer', color: '#f59e0b' }}
+              title="Replace/Update"
+            >
+              <SvgIcon name="arrow-uturn-cw-left" size={18} />
+            </span>
+          )}
+
+          {onHistory && (
+            <span
+              className="info"
+              onClick={() => onHistory(row._id || row.id)}
+              style={{ cursor: 'pointer', color: '#3b82f6' }}
+              title="Audit Trail"
+            >
+              <SvgIcon name="history" size={18} />
+            </span>
+          )}
         </div>
       ),
     },
