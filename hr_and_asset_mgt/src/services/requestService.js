@@ -95,7 +95,7 @@ export const updateRequestStatus = async (id, payload) => {
 };
 
 // Get requests for a specific employee
-export const getEmployeeRequests = async (employeeId) => {
-  const response = await api.get(`${REQUEST_API}/employee/${employeeId}`);
+export const getEmployeeRequests = async (employeeId, params = {}) => {
+  const response = await api.get(`${REQUEST_API}/employee/${employeeId}`, { params });
   return response.data; // expect { success: true, data: [] }
 };

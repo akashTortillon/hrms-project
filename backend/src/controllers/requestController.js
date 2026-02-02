@@ -685,8 +685,20 @@ export const createRequest = async (req, res) => {
 export const getMyRequests = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { type, status } = req.query;
 
-    const requests = await Request.find({ userId })
+    const query = { userId: userId };
+    if (type) query.requestType = type;
+
+    // ✅ If type is SALARY (Loans), filter by status if provided or default to meaningful ones?
+    // User asked to hide rejected/pending. So strict filter? 
+    // Actually, usually headers send status. Let's check if we want to force it or allow query param.
+    if (status) query.status = status;
+    // If specifically for "Loans Tab" which implies active/approved loans:
+    // We can rely on frontend sending ?status=APPROVED or we can filtering here.
+    // Let's support the `status` query param first, then check frontend.
+
+    const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .sort({ submittedAt: -1 })
@@ -1126,7 +1138,20 @@ export const getEmployeeRequests = async (req, res) => {
       });
     }
 
-    const requests = await Request.find({ userId: user._id })
+    const { type, status } = req.query;
+
+    const query = { userId: user._id };
+    if (type) query.requestType = type;
+
+    if (status) {
+      if (status.includes(',')) {
+        query.status = { $in: status.split(',') };
+      } else {
+        query.status = status;
+      }
+    }
+
+    const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .sort({ submittedAt: -1 });
