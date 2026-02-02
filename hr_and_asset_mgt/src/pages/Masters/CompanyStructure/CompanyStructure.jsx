@@ -9,8 +9,12 @@ import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirma
 
 const PERMISSIONS_LIST = [
   "VIEW_DASHBOARD",
+  "VIEW_ADMIN_DASHBOARD",
   "MANAGE_EMPLOYEES",
+  "VIEW_ALL_EMPLOYEES",
   "MANAGE_PAYROLL",
+  "MANAGE_ATTENDANCE",
+  "VIEW_ALL_ATTENDANCE",
   "MANAGE_ASSETS",
   "MANAGE_DOCUMENTS",
   "MANAGE_MASTERS",

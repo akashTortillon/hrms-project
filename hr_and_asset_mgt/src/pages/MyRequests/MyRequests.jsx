@@ -3,9 +3,10 @@ import EmployeeRequests from "./EmployeeRequests.jsx";
 import AdminRequests from "./AdminRequests.jsx";
 
 export default function MyRequests() {
-  const { role } = useRole();
+  const { hasPermission } = useRole();
 
-  if (role === "Employee") {
+  // If user cannot approve requests, show personal requests view
+  if (!hasPermission("APPROVE_REQUESTS")) {
     return <EmployeeRequests />;
   }
 
