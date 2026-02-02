@@ -5,7 +5,7 @@ import { payrollService } from "../../services/payrollService";
 import SvgIcon from "../../components/svgIcon/svgView";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal";
 
-export default function AdjustmentModal({ show, onClose, employees = [], onSuccess, initialRecord }) {
+export default function AdjustmentModal({ show, onClose, employees = [], onSuccess, initialRecord, isFinalized }) {
     const [formData, setFormData] = useState({
         payrollId: '',
         type: 'ALLOWANCE',
@@ -99,8 +99,12 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
 
     const selectedRecord = employees.find(e => e._id === formData.payrollId);
 
+    const displayTitle = showHistory
+        ? "Adjustment History"
+        : (isFinalized ? "View Adjustments (Finalized)" : "Add Manual Adjustment");
+
     return (
-        <CustomModal show={show} onClose={onClose} title={showHistory ? "Adjustment History" : "Add Manual Adjustment"} width="500px">
+        <CustomModal show={show} onClose={onClose} title={displayTitle} width="500px">
             <div style={{ padding: '0 8px' }}>
 
                 {/* Header Actions - Toggle History */}
@@ -150,8 +154,8 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                 className={`modal-input ${initialRecord ? 'disabled-look' : ''}`}
                                 value={formData.payrollId}
                                 onChange={handleChange}
-                                disabled={!!initialRecord}
-                                style={initialRecord ? { backgroundColor: '#f3f4f6' } : {}}
+                                disabled={!!initialRecord || isFinalized}
+                                style={(initialRecord || isFinalized) ? { backgroundColor: '#f3f4f6' } : {}}
                             >
                                 <option value="">-- Choose Employee --</option>
                                 {employees.map(emp => (
@@ -175,13 +179,15 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                             {selectedRecord.allowances.map(item => (
                                                 <li key={item._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '4px 0', borderBottom: '1px dashed #e5e7eb' }}>
                                                     <span>{item.name} ({item.amount})</span>
-                                                    <button
-                                                        onClick={() => handleRemoveClick(item._id, 'ALLOWANCE', item.name)}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
-                                                        title="Remove Allowance"
-                                                    >
-                                                        <SvgIcon name="delete" size={14} />
-                                                    </button>
+                                                    {!isFinalized && (
+                                                        <button
+                                                            onClick={() => handleRemoveClick(item._id, 'ALLOWANCE', item.name)}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
+                                                            title="Remove Allowance"
+                                                        >
+                                                            <SvgIcon name="delete" size={14} />
+                                                        </button>
+                                                    )}
                                                 </li>
                                             ))}
                                         </ul>
@@ -196,13 +202,15 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                             {selectedRecord.deductions.map(item => (
                                                 <li key={item._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '4px 0', borderBottom: '1px dashed #e5e7eb' }}>
                                                     <span>{item.name} ({item.amount})</span>
-                                                    <button
-                                                        onClick={() => handleRemoveClick(item._id, 'DEDUCTION', item.name)}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
-                                                        title="Remove Deduction"
-                                                    >
-                                                        <SvgIcon name="delete" size={14} />
-                                                    </button>
+                                                    {!isFinalized && (
+                                                        <button
+                                                            onClick={() => handleRemoveClick(item._id, 'DEDUCTION', item.name)}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
+                                                            title="Remove Deduction"
+                                                        >
+                                                            <SvgIcon name="delete" size={14} />
+                                                        </button>
+                                                    )}
                                                 </li>
                                             ))}
                                         </ul>
@@ -219,6 +227,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                 className="modal-input"
                                 value={formData.type}
                                 onChange={handleChange}
+                                disabled={isFinalized}
                             >
                                 <option value="ALLOWANCE">Allowance (Add to Salary)</option>
                                 <option value="DEDUCTION">Deduction (Subtract from Salary)</option>
@@ -235,6 +244,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                 placeholder="e.g. Sales Bonus, Uniform Damage"
                                 value={formData.name}
                                 onChange={handleChange}
+                                disabled={isFinalized}
                             />
                         </div>
 
@@ -248,6 +258,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                 placeholder="0.00"
                                 value={formData.amount}
                                 onChange={handleChange}
+                                disabled={isFinalized}
                             />
                         </div>
 
@@ -263,13 +274,14 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                 value={formData.reason}
                                 onChange={handleChange}
                                 style={{ resize: 'vertical' }}
+                                disabled={isFinalized}
                             />
                         </div>
 
                         {/* Actions */}
                         <div className="modal-actions">
-                            <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-                            <button onClick={handleSubmit} className="btn btn-primary">Save Adjustment</button>
+                            <button onClick={onClose} className="btn btn-secondary">{isFinalized ? "Close" : "Cancel"}</button>
+                            {!isFinalized && <button onClick={handleSubmit} className="btn btn-primary">Save Adjustment</button>}
                         </div>
                     </>
                 )}

@@ -45,7 +45,9 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
             <button className="outline-btn" onClick={onExport} style={{ marginRight: '10px' }}>
               Export Excel
             </button>
-            {!isFinalized && (
+            {isFinalized ? (
+              <button className="outline-btn" onClick={() => handleAdjust(null)}>View Adjustments</button>
+            ) : (
               <button className="outline-btn" onClick={() => handleAdjust(null)}>Add Adjustments</button>
             )}
           </div>
@@ -103,7 +105,11 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
                         <button className="action-menu-item" onClick={() => handleView(record)}>
                           View Details
                         </button>
-                        {!isFinalized && (
+                        {isFinalized ? (
+                          <button className="action-menu-item" onClick={() => handleAdjust(record)}>
+                            View Adjustments
+                          </button>
+                        ) : (
                           <button className="action-menu-item" onClick={() => handleAdjust(record)}>
                             Add Adjustment
                           </button>
@@ -132,6 +138,7 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
         employees={employees}
         initialRecord={adjustTarget}
         onSuccess={onRefresh}
+        isFinalized={isFinalized}
       />
     </>
   );
