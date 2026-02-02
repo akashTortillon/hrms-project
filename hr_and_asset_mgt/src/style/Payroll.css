@@ -595,3 +595,63 @@
 .btn-primary:hover {
   background-color: #1d4ed8;
 }
+
+/* History Toggle Button */
+.history-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #2563eb;
+  /* Blue 600 */
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.history-toggle-btn:hover {
+  background-color: #eff6ff;
+  text-decoration: none;
+}
+
+.history-toggle-btn:focus {
+  outline: none;
+  background-color: #eff6ff;
+}
+
+/* History List Styles */
+.history-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background-color: #f9fafb;
+}
+
+.history-item {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 12px;
+  background-color: #fff;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.history-detail {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+}
