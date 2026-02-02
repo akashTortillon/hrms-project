@@ -208,13 +208,10 @@ export default function EmployeeDetail() {
     const fetchEmployeeLoans = async () => {
         if (!effectiveId) return;
         try {
-            const result = await getEmployeeRequests(effectiveId);
+            const result = await getEmployeeRequests(effectiveId, { type: 'SALARY', status: 'APPROVED,COMPLETED' });
             // Result is { success: true, data: [...] } based on controller
             if (result && result.data) {
-                console.log("[EmployeeDetail] Raw Requests:", result.data);
-                // Filter for Salary/Loan type only
-                const loanReqs = result.data.filter(r => r.requestType === "SALARY" && r.status === "APPROVED");
-                console.log("[EmployeeDetail] Filtered Loans:", loanReqs);
+                console.log("[EmployeeDetail] Filtered Loans:", result.data);
                 setLoans(result.data);
             }
         } catch (e) {
