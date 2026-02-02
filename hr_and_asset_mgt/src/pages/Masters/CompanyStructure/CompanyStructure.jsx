@@ -9,14 +9,20 @@ import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirma
 
 const PERMISSIONS_LIST = [
   "VIEW_DASHBOARD",
+  "VIEW_ADMIN_DASHBOARD",
   "MANAGE_EMPLOYEES",
+  "VIEW_ALL_EMPLOYEES",
   "MANAGE_PAYROLL",
+  "MANAGE_ATTENDANCE",
+  "VIEW_ALL_ATTENDANCE",
   "MANAGE_ASSETS",
   "MANAGE_DOCUMENTS",
   "MANAGE_MASTERS",
   "MANAGE_SETTINGS",
   "APPROVE_REQUESTS",
-  "VIEW_REPORTS"
+  "VIEW_REPORTS",
+  "MANAGE_ONBOARDING",
+  "MANAGE_OFFBOARDING"
 ];
 
 export default function CompanyStructure() {
@@ -134,9 +140,18 @@ export default function CompanyStructure() {
           {modalType === "Role" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
-              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '8px',
+                maxHeight: '240px',
+                overflowY: 'auto',
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                padding: '12px'
+              }}>
                 {PERMISSIONS_LIST.map((perm) => (
-                  <label key={perm} className="flex items-center space-x-2 text-sm cursor-pointer">
+                  <label key={perm} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', color: '#374151' }}>
                     <input
                       type="checkbox"
                       checked={selectedPermissions.includes(perm)}
@@ -147,7 +162,7 @@ export default function CompanyStructure() {
                           setSelectedPermissions(selectedPermissions.filter((p) => p !== perm));
                         }
                       }}
-                      className="rounded text-blue-600 focus:ring-blue-500"
+                      style={{ width: '16px', height: '16px', borderRadius: '4px', cursor: 'pointer' }}
                     />
                     <span>{perm.replace(/_/g, " ")}</span>
                   </label>

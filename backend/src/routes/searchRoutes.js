@@ -4,6 +4,6 @@ import { globalSearch } from "../controllers/searchController.js";
 
 const router = express.Router();
 
-router.get("/", protect, hasPermission("GLOBAL_SEARCH"), globalSearch);
+router.get("/", protect, globalSearch);
 
 export default router;

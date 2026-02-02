@@ -6,16 +6,17 @@ import {
   getPendingApprovals,
   getTodaysAttendance
 } from "../controllers/dashboardController.js";
-import { protect } from "../middlewares/authMiddleware.js";
+import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
 router.use(protect); // Secure all dashboard routes
 
-router.get("/summary", getDashboardSummary);
-router.get("/company-documents", getCompanyDocumentExpiries);
-router.get("/employee-visas", getEmployeeVisaExpiries);
-router.get("/pending-approvals", getPendingApprovals);
-router.get("/attendance", getTodaysAttendance);
+// Most dashboard widgets require VIEW_ADMIN_DASHBOARD
+router.get("/summary", hasPermission("VIEW_ADMIN_DASHBOARD"), getDashboardSummary);
+router.get("/company-documents", getCompanyDocumentExpiries); // Filtered by access in future or public company info
+router.get("/employee-visas", getEmployeeVisaExpiries); // Filtered in controller
+router.get("/pending-approvals", hasPermission("APPROVE_REQUESTS"), getPendingApprovals);
+router.get("/attendance", hasPermission("VIEW_ADMIN_DASHBOARD"), getTodaysAttendance);
 
 export default router;

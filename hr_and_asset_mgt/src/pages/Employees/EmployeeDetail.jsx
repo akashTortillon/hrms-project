@@ -39,23 +39,26 @@ const EditIcon = () => (
 
 import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
-import { getEmployeeRequests } from "../../services/requestService"; // New Service Method
+import { getEmployeeRequests } from "../../services/requestService";
+
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import { toast } from "react-toastify";
-
+import { useRole } from "../../contexts/RoleContext";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
 import { getEmployeeTrainings } from "../../services/trainingService";
 import { getEmployeeAssets } from "../../services/assetService";
 import { assignAssetToEmployee } from "../../services/assignmentService";
 import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
-import { useRole } from "../../contexts/RoleContext";
 import WorkflowTab from "../../components/employee/WorkflowTab";
+import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
 
 export default function EmployeeDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const query = new URLSearchParams(window.location.search); // Parse query params
+    const tabParam = query.get("tab");
     const { hasPermission } = useRole();
 
     // Resolve "me" to logged-in user's employeeId
@@ -68,13 +71,16 @@ export default function EmployeeDetail() {
     const canManageDocs = hasPermission("MANAGE_DOCUMENTS");
     const canManageAssets = hasPermission("MANAGE_ASSETS");
 
-    const [activeTab, setActiveTab] = useState("Personal Info");
+
+
+    const [activeTab, setActiveTab] = useState(tabParam || "Personal Info"); // Default to param or Personal Info
     const [employee, setEmployee] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     // Edit Modal State
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Change Password Modal State
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
 
@@ -208,17 +214,15 @@ export default function EmployeeDetail() {
     const fetchEmployeeLoans = async () => {
         if (!effectiveId) return;
         try {
-            const result = await getEmployeeRequests(effectiveId, { type: 'SALARY', status: 'APPROVED,COMPLETED' });
-            // Result is { success: true, data: [...] } based on controller
+            const result = await getEmployeeRequests(effectiveId, { type: 'SALARY' });
             if (result && result.data) {
-                console.log("[EmployeeDetail] Filtered Loans:", result.data);
-                setLoans(result.data);
+                const visibleLoans = result.data.filter(r => r.status !== 'REJECTED' && r.status !== 'WITHDRAWN');
+                setLoans(visibleLoans);
             }
         } catch (e) {
             console.error("Loans fetch error:", e);
         }
     };
-
 
 
     const handleAssignAsset = async (data) => {
@@ -235,12 +239,16 @@ export default function EmployeeDetail() {
 
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+
+
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
 
     const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans"];
-    // Conditionally add Onboarding/Offboarding for Admin/HR
-    if (canEdit) {
+    // Conditionally add Onboarding/Offboarding based on granular permissions
+    if (hasPermission("MANAGE_ONBOARDING")) {
         tabs.push("Onboarding");
+    }
+    if (hasPermission("MANAGE_OFFBOARDING")) {
         tabs.push("Offboarding");
     }
 
@@ -301,6 +309,15 @@ export default function EmployeeDetail() {
                             Edit Profile
                         </button>
                     )}
+                    {isSelf && (
+                        <button
+                            className="edit-profile-btn"
+                            onClick={() => setShowChangePasswordModal(true)}
+                            style={{ marginLeft: '10px', background: 'white', color: '#374151', border: '1px solid #d1d5db' }}
+                        >
+                            Change Password
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -310,7 +327,12 @@ export default function EmployeeDetail() {
                     <button
                         key={tab}
                         className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                        onClick={() => setActiveTab(tab)}
+                        onClick={() => {
+                            setActiveTab(tab);
+                            // Optional: Update URL without reload to persist state
+                            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?tab=${tab}`;
+                            window.history.pushState({ path: newUrl }, '', newUrl);
+                        }}
                     >
                         {/* Icons can be added here if needed, keeping simple for now */}
                         {tab}
@@ -784,6 +806,12 @@ export default function EmployeeDetail() {
                     onAssign={handleAssignAsset}
                 />
             )}
+
+            {/* Change Password Modal */}
+            <ChangePasswordModal
+                show={showChangePasswordModal}
+                onClose={() => setShowChangePasswordModal(false)}
+            />
         </div>
     );
 }
