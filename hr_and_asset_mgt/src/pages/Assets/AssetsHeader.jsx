@@ -1,20 +1,12 @@
-
-
-
-import { useState } from "react";
-import Card from "../../components/reusable/Card";
-import AppButton from "../../components/reusable/Button";
-import SvgIcon from "../../components/svgIcon/svgView.jsx";
+import React from "react";
+import StatCard from "../../components/reusable/StatCard";
 import "../../style/Assets.css";
+import AppButton from "../../components/reusable/Button";
+import SvgIcon from "../../components/svgIcon/svgView";
 
 export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
-  const [importing, setImporting] = useState(false);
-
-  const handleImportClick = async () => {
-    if (importing) return;
-    setImporting(true);
-    await onImport();
-    setImporting(false);
+  const handleImportClick = () => {
+    if (onImport) onImport();
   };
 
   return (
@@ -31,10 +23,8 @@ export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
         <button
           className="asset-import-btn"
           onClick={handleImportClick}
-          disabled={importing}
-          style={{ opacity: importing ? 0.7 : 1, cursor: importing ? 'wait' : 'pointer' }}
         >
-          <span>{importing ? "Importing..." : "Import Assets"}</span>
+          <span>Import Assets</span>
         </button>
 
         <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>
@@ -46,19 +36,13 @@ export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
       {/* Stats */}
       <div className="document-stats">
         {stats.map((item, index) => (
-          <Card key={index} className="document-stat-card">
-            <div className="document-stat-content">
-              <div className="document-stat-top">
-                <span className="stat-title">{item.title}</span>
-                <SvgIcon
-                  name={item.icon}
-                  size={20}
-                  color={item.iconColor}
-                />
-              </div>
-              <div className="stat-value">{item.value}</div>
-            </div>
-          </Card>
+          <StatCard
+            key={index}
+            title={item.title}
+            value={item.value}
+            iconName={item.icon}
+            colorVariant={item.colorVariant}
+          />
         ))}
       </div>
     </div>

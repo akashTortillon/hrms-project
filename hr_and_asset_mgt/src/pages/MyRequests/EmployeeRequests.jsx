@@ -7,6 +7,7 @@ import SubmitRequestModal from "./SubmitRequestModal";
 import { getMyRequests, withdrawRequest, downloadDocument } from "../../services/requestService.js";
 import { toast } from "react-toastify";
 import SvgIcon from "../../components/svgIcon/svgView";
+import Card from "../../components/reusable/Card";
 
 /* ----------------------------------
    ✅ STATUS TEXT HELPER (DYNAMIC)
@@ -46,8 +47,8 @@ export default function EmployeeRequests() {
   const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState("");
-const [requestType, setRequestType] = useState("All");
-const [status, setStatus] = useState("All");
+  const [requestType, setRequestType] = useState("All");
+  const [status, setStatus] = useState("All");
 
   /* ----------------------------------
      LEAVE CONFIG (Denominators)
@@ -89,8 +90,8 @@ const [status, setStatus] = useState("All");
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
-          error.message ||
-          "Failed to withdraw request"
+        error.message ||
+        "Failed to withdraw request"
       );
     }
   };
@@ -233,27 +234,27 @@ const [status, setStatus] = useState("All");
 
 
   const filteredRequests = useMemo(() => {
-  return requests.filter((req) => {
-    // 🔍 Search (ID / type / leave type)
-    const searchText = search.toLowerCase();
+    return requests.filter((req) => {
+      // 🔍 Search (ID / type / leave type)
+      const searchText = search.toLowerCase();
 
-    const matchesSearch =
-      !searchText ||
-      req.requestId?.toLowerCase().includes(searchText) ||
-      req.requestType?.toLowerCase().includes(searchText) ||
-      req.details?.leaveType?.toLowerCase().includes(searchText);
+      const matchesSearch =
+        !searchText ||
+        req.requestId?.toLowerCase().includes(searchText) ||
+        req.requestType?.toLowerCase().includes(searchText) ||
+        req.details?.leaveType?.toLowerCase().includes(searchText);
 
-    // 📌 Request Type filter
-    const matchesType =
-      requestType === "All" || req.requestType === requestType;
+      // 📌 Request Type filter
+      const matchesType =
+        requestType === "All" || req.requestType === requestType;
 
-    //  Status filter
-    const matchesStatus =
-      status === "All" || req.status === status;
+      //  Status filter
+      const matchesStatus =
+        status === "All" || req.status === status;
 
-    return matchesSearch && matchesType && matchesStatus;
-  });
-}, [requests, search, requestType, status]);
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [requests, search, requestType, status]);
 
 
 
@@ -277,90 +278,97 @@ const [status, setStatus] = useState("All");
       {/* LEAVE SUMMARY */}
       <div className="leave-cards">
         {Object.keys(LEAVE_LIMITS).map((leaveType) => {
-          const used = leaveUsage[leaveType];
+          const used = leaveUsage[leaveType] || 0;
           const total = LEAVE_LIMITS[leaveType];
           const progress = getProgress(used, total);
 
-          return (
-            <div key={leaveType} className="leave-card">
-              <div className="leave-card-header">
-                <span className="leave-title">{leaveType}</span>
-                <span className="leave-count">
-                  <strong>{used}</strong>{" "}
-                  {total ? `/ ${total} days` : "days taken"}
-                </span>
-              </div>
+          // Mapping for Luxury 2.0 styling
+          const config = {
+            "Annual Leave": { color: "blue", icon: "calendar" },
+            "Sick Leave": { color: "green", icon: "calendar" }, // use healing or similar
+            "Unpaid Leave": { color: "orange", icon: "calendar" },
+          };
+          const { color, icon } = config[leaveType] || { color: "gray", icon: "cube" };
 
-              <div className="progress-bar">
-                <div
-                  className={`progress-fill ${
-                    leaveType === "Annual Leave"
-                      ? "blue"
-                      : leaveType === "Sick Leave"
-                      ? "green"
-                      : "gray"
-                  }`}
-                  style={{ width: `${progress}%` }}
-                />
-                <div
-                  className="progress-unfilled"
-                  style={{ width: `${100 - progress}%` }}
-                />
+          return (
+            <Card key={leaveType} luxury={true} className={`leave-summary-card vibrant-${color}`}>
+              <div className="leave-card-content">
+                <div className="leave-card-main">
+                  <div className="leave-card-info">
+                    <span className="leave-title">{leaveType}</span>
+                    <span className="leave-count">
+                      <strong>{used}</strong>{" "}
+                      {total ? `/ ${total} days` : "days taken"}
+                    </span>
+                  </div>
+                  <div className="leave-card-icon-wrapper">
+                    <SvgIcon name={icon} size={24} color="#ffffff" />
+                  </div>
+                </div>
+
+                <div className="progress-container">
+                  <div className="progress-bar-luxury">
+                    <div
+                      className="progress-fill-luxury"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
 
 
-        {/* Requests Filters */}
-<div className="requests-filters-card">
-  <div className="requests-filters">
-    
-    {/* Search */}
-    <div className="requests-search">
-      <SvgIcon name="search" size={18} />
-      <input
-        type="text"
-        placeholder="Search by request type ..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-    </div>
+      {/* Requests Filters */}
+      <div className="requests-filters-card">
+        <div className="requests-filters">
 
-    {/* Request Type */}
-    <select
-      className="requests-select"
-      value={requestType}
-      onChange={(e) => setRequestType(e.target.value)}
-    >
-      <option value="All">All Request Types</option>
-      <option value="LEAVE">Leave</option>
-      <option value="SALARY">Salary</option>
-      <option value="DOCUMENT">Document</option>
-    </select>
+          {/* Search */}
+          <div className="requests-search">
+            <SvgIcon name="search" size={18} />
+            <input
+              type="text"
+              placeholder="Search by request type ..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
 
-    {/* Status */}
-    <select
-      className="requests-select"
-      value={status}
-      onChange={(e) => setStatus(e.target.value)}
-    >
-      <option value="All">All Status</option>
-      <option value="PENDING">Pending</option>
-      <option value="APPROVED">Approved</option>
-      <option value="REJECTED">Rejected</option>
-      <option value="COMPLETED">Completed</option>
-    </select>
+          {/* Request Type */}
+          <select
+            className="requests-select"
+            value={requestType}
+            onChange={(e) => setRequestType(e.target.value)}
+          >
+            <option value="All">All Request Types</option>
+            <option value="LEAVE">Leave</option>
+            <option value="SALARY">Salary</option>
+            <option value="DOCUMENT">Document</option>
+          </select>
 
-    
-  </div>
+          {/* Status */}
+          <select
+            className="requests-select"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="All">All Status</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="COMPLETED">Completed</option>
+          </select>
 
-  <div className="requests-count">
-    Showing {filteredRequests.length} Requests
 
-  </div>
-</div>
+        </div>
+
+        <div className="requests-count">
+          Showing {filteredRequests.length} Requests
+
+        </div>
+      </div>
 
 
 
@@ -424,19 +432,19 @@ const [status, setStatus] = useState("All");
                       </button>
                     )}
                     {/* ✅ UPDATED: Download button for completed document requests */}
-                    {request.requestType === "DOCUMENT" && 
-                     request.status === "COMPLETED" && 
-                     request.uploadedDocument && (
-                      <button
-                        className="download-btn"
-                        onClick={() => handleDownloadDocument(request._id)}
-                      >
-                        Download Document
-                      </button>
-                    )}
-                    <button className="view-details-btn">
+                    {request.requestType === "DOCUMENT" &&
+                      request.status === "COMPLETED" &&
+                      request.uploadedDocument && (
+                        <button
+                          className="download-btn"
+                          onClick={() => handleDownloadDocument(request._id)}
+                        >
+                          Download Document
+                        </button>
+                      )}
+                    {/* <button className="view-details-btn">
                       View Details
-                    </button>
+                    </button> */}
                   </div>
                 </div>
               );

@@ -20,22 +20,34 @@ const storage = multer.diskStorage({
     },
 });
 
-// File Filter (PDFs & Images only)
+// File Filter (Docs, Images, Excel)
 const fileFilter = (req, file, cb) => {
-    if (
-        file.mimetype === "application/pdf" ||
-        file.mimetype === "image/jpeg" ||
-        file.mimetype === "image/png"
-    ) {
+    // console.log("Incoming File MimeType:", file.mimetype); // Debugging
+    const allowedMimeTypes = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+        "application/vnd.ms-excel", // .xls
+        "text/csv", // .csv
+        "application/octet-stream" // Sometimes Excel files come as octet-stream
+    ];
+
+    if (allowedMimeTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error("Invalid file type. Only PDF, JPG, and PNG are allowed!"), false);
+        // Fallback: If extension is valid, allow it (Mime-type spoofing/inconsistency check)
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (['.xlsx', '.xls', '.csv'].includes(ext)) {
+            return cb(null, true);
+        }
+        cb(new Error(`Invalid file type: ${file.mimetype}`), false);
     }
 };
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: fileFilter
 });
 

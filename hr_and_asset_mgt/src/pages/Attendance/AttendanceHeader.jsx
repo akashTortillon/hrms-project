@@ -30,19 +30,23 @@ export default function AttendanceHeader({ viewMode, setViewMode, onSync, loadin
       </div>
 
       <div className="attendance-header-actions">
-        <AppButton
-          variant="primary"
-          className="btn-outline-custom"
-          onClick={onSync}
-          disabled={loading}
-        >
-          {loading ? "Syncing..." : "Sync Biometric"}
-        </AppButton>
+        {onSync && (
+          <AppButton
+            variant="primary"
+            className="btn-outline-custom"
+            onClick={onSync}
+            disabled={loading}
+          >
+            {loading ? "Syncing..." : "Sync Biometric"}
+          </AppButton>
+        )}
 
-        <AppButton variant="primary" onClick={onExport}>
-          <SvgIcon name="download" size={16} />
-          <span>Export Report</span>
-        </AppButton>
+        {onExport && (
+          <AppButton variant="primary" onClick={onExport}>
+            <SvgIcon name="download" size={16} />
+            <span>Export Report</span>
+          </AppButton>
+        )}
       </div>
     </div>
   );

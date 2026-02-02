@@ -60,21 +60,9 @@
 //   } catch (error) {
 //     console.error(error);
 //     res.status(500).json({ message: "Server error" });
-//   }
-// };
 
-// export const getAssets = async (req, res) => {
-//   try {
-//     const assets = await Asset.find()
-//       .populate('currentLocation.employee', 'name email')
-//       .populate('currentLocation.shop', 'name code')
-//       .sort({ createdAt: -1 });
-//     res.json(assets);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
+
+
 
 // export const getAssetById = async (req, res) => {
 //   try {
@@ -284,10 +272,16 @@ export const getAssets = async (req, res) => {
   try {
     const { search, type, status } = req.query;
 
-    // Base filter (exclude deleted assets)
-    const filter = {
-      isDeleted: false
-    };
+    // Base filter
+    const filter = {};
+
+    // Filter by Deleted Status (Handle string "true" or boolean true)
+    if (String(req.query.isDeleted) === "true") {
+      filter.isDeleted = true;
+    } else {
+      // Default: Only active assets (isDeleted: false) unless specifically asked for deleted
+      filter.isDeleted = false;
+    }
 
     // Filter by asset type
     if (type && type !== "ALL") {
@@ -1105,56 +1099,103 @@ export const getEmployeeAssets = async (req, res) => {
   }
 };
 
-// ✅ BULK IMPORT ASSETS
+// ✅ BULK IMPORT ASSETS (FROM EXCEL)
 export const importAssets = async (req, res) => {
   try {
-    const { assets } = req.body;
-    if (!Array.isArray(assets) || assets.length === 0) {
-      return res.status(400).json({ message: "No assets provided" });
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded. Please upload a valid Excel or CSV file." });
+    }
+
+    // Read file from path
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    if (!rawData || rawData.length === 0) {
+      // Clean up file
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: "The uploaded file is empty." });
     }
 
     // Get last asset code to start incrementing from
     const lastAsset = await Asset.findOne().sort({ assetCode: -1 });
     let nextNumber = 1;
     if (lastAsset && lastAsset.assetCode) {
-      // Extract all digits at the end of the string
       const match = lastAsset.assetCode.match(/(\d+)$/);
       if (match) {
         nextNumber = parseInt(match[1], 10) + 1;
       }
     }
 
-    const newAssets = [];
-    for (const rawAsset of assets) {
+    const validAssets = [];
+
+    for (const row of rawData) {
+      // Basic Validation - Skip empty rows or rows without Name
+      if (!row["Asset Name"] && !row["Name"]) continue;
+
       const assetCode = `AST${nextNumber.toString().padStart(3, "0")}`;
       nextNumber++;
 
-      newAssets.push({
-        ...rawAsset,
+      // Map Excel Columns to Schema
+      const nm = row["Asset Name"] || row["Name"];
+      const cat = row["Category"] || "General";
+      const typ = row["Type"] || row["Asset Type"] || "General Equipment";
+      const loc = row["Location"] || "Main Store";
+      const cost = row["Purchase Cost"] || row["Cost"] || row["Price"] || 0;
+      const pDate = row["Purchase Date"] || new Date().toISOString().split("T")[0];
+
+      // Date Parsing Logic
+      let parsedDate = pDate;
+      if (typeof pDate === 'number') {
+        const dateObj = new Date(Math.round((pDate - 25569) * 86400 * 1000));
+        parsedDate = dateObj.toISOString().split("T")[0];
+      }
+
+      validAssets.push({
         assetCode,
-        // Ensure defaults are set if not provided
-        status: rawAsset.status || "Available",
+        name: nm,
+        type: typ,
+        category: cat,
+        location: loc,
+        subLocation: row["Sub Location"] || "",
+        purchaseCost: Number(cost),
+        purchaseDate: parsedDate,
+        serialNumber: row["Serial Number"] || "",
+
+        status: "Available",
+        custodian: null,
         currentLocation: {
           type: "STORE",
           employee: null,
           shop: null
         },
-        isDeleted: false,
-        purchaseCost: Number(rawAsset.purchaseCost) || 0,
-        // Ensure date is valid or null
-        purchaseDate: rawAsset.purchaseDate || new Date().toISOString().split("T")[0]
+
+        warrantyPeriod: row["Warranty (Months)"] ? parseInt(row["Warranty (Months)"]) : null,
+        department: "",
+        isDeleted: false
       });
     }
 
-    await Asset.insertMany(newAssets);
+    if (validAssets.length === 0) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: "No valid asset rows found in the file." });
+    }
+
+    await Asset.insertMany(validAssets);
+
+    // Clean up uploaded file
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
 
     res.status(201).json({
-      message: `${newAssets.length} assets imported successfully`,
-      count: newAssets.length
+      message: `${validAssets.length} assets imported successfully`,
+      count: validAssets.length
     });
 
   } catch (error) {
     console.error("Import error:", error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     res.status(500).json({ message: "Server error during import: " + error.message });
   }
 };

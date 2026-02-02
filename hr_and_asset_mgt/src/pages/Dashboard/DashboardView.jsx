@@ -4,8 +4,10 @@ import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Dashboard.css";
 import DashboardInfoCard from "../../components/reusable/DashboardInfoCard.jsx";
+import StatCard from "../../components/reusable/StatCard"; // ✅ Integrated Card
 import { useNavigate } from "react-router-dom";
 import { getDocumentStats } from "../../services/documentService.js";
+import { useRole } from "../../contexts/RoleContext.jsx";
 
 import {
   fetchMetrics,
@@ -17,6 +19,7 @@ import {
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { role } = useRole();
 
   /** 🔢 REAL METRICS (ONLY FIRST CARD) */
   const [metrics, setMetrics] = useState({
@@ -161,82 +164,168 @@ function Dashboard() {
     },
   ];
 
+  /** ⚡ QUICK ACTIONS DATA */
+  const quickActions = [
+    {
+      label: "Add Employee",
+      icon: "users",
+      path: "/app/employees",
+    },
+    {
+      label: "Process Payroll",
+      icon: "dollar",
+      path: "/app/payroll",
+    },
+    {
+      label: "View Documents",
+      icon: "document",
+      path: "/app/documents",
+    },
+    {
+      label: "Generate Report",
+      icon: "reports",
+      path: "/app/reports",
+    },
+  ];
+
+  /** 📄 INFO SECTIONS DATA NORMALIZATION */
+  const normalizedCompanyDocs = companyDocumentExpiries.map((doc) => {
+    const daysLeft = doc.expiryDate
+      ? Math.ceil((new Date(doc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    let variant = "success";
+    if (daysLeft <= 7) variant = "danger";
+    else if (daysLeft <= 30) variant = "warning";
+
+    return {
+      id: doc._id,
+      primaryText: doc.name,
+      secondaryText: doc.location || "Main Office",
+      dateText: doc.expiryDate?.split("T")[0],
+      badge: daysLeft !== null ? { text: `${daysLeft} days`, variant } : null,
+      ...doc,
+    };
+  });
+
+  const normalizedEmployeeVisas = employeeVisaExpiries.map((emp) => {
+    const daysLeft = emp.visaExpiry
+      ? Math.ceil((new Date(emp.visaExpiry) - new Date()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    let variant = "success";
+    if (daysLeft <= 15) variant = "danger";
+    else if (daysLeft <= 45) variant = "warning";
+
+    return {
+      id: emp._id,
+      primaryText: emp.name,
+      secondaryText: emp.designation || "Employment Visa",
+      dateText: emp.visaExpiry?.split("T")[0],
+      badge: daysLeft !== null ? { text: `${daysLeft} days`, variant } : null,
+      ...emp,
+    };
+  });
+
+  const normalizedPendingApprovals = pendingApprovals.map((approval) => ({
+    id: approval._id,
+    primaryText: approval.userId?.name || "Unknown Requester",
+    secondaryText: approval.requestType,
+    actions: [
+      {
+        icon: "circle-tick",
+        variant: "success",
+        onClick: () => console.log("Approve", approval._id),
+      },
+      {
+        icon: "circle-xmark",
+        variant: "danger",
+        onClick: () => console.log("Reject", approval._id),
+      },
+    ],
+    ...approval,
+  }));
+
+  const normalizedAttendance = todaysAttendance.map((dept) => ({
+    id: dept.department,
+    primaryText: dept.department,
+    progress: {
+      present: dept.present,
+      total: dept.total,
+      leave: dept.leave,
+      absent: dept.absent,
+    },
+  }));
+
   return (
     <Container fluid className="dashboard-page">
       {/* 🔝 TOP METRICS */}
+      {/* import StatCard from "../../components/reusable/StatCard";
+
+      // ... (inside the component) */}
+
+      {/* 🔝 TOP METRICS */}
       <Row className="dashboard-cards-row">
-        {dashboardMetrics.map((metric, index) => (
-          <Col key={index} className="dashboard-card-col">
-            <Card className="dashboard-metric-card">
-              <div className="dashboard-card-content">
-                <div className="dashboard-card-text">
-                  <div className="dashboard-card-title">{metric.title}</div>
-                  <div className="dashboard-card-value">{metric.value}</div>
-                  <div className="dashboard-card-subtext">
-                    {metric.subtext}
-                  </div>
-                </div>
-                <div
-                  className={`dashboard-icon-container ${metric.iconBgClass}`}
-                >
-                  <SvgIcon name={metric.iconName} size={24} />
-                </div>
-              </div>
-            </Card>
-          </Col>
-        ))}
+        {dashboardMetrics.map((metric, index) => {
+          // Map old class names to new color variants
+          const colorMap = {
+            "dashboard-icon-bg-blue": "vibrant-blue",
+            "dashboard-icon-bg-yellow": "vibrant-red", // Red in reference (Compliance)
+            "dashboard-icon-bg-orange": "vibrant-lightblue", // Sky Blue in reference
+            "dashboard-icon-bg-green": "vibrant-dark" // Dark in reference
+          };
+          const variant = colorMap[metric.iconBgClass] || "vibrant-blue";
+
+          return (
+            <Col key={index} className="dashboard-card-col">
+              <StatCard
+                title={metric.title}
+                value={metric.value}
+                subtext={metric.subtext}
+                iconName={metric.iconName}
+                colorVariant={variant}
+              />
+            </Col>
+          );
+        })}
       </Row>
 
-      {/* ⚡ QUICK ACTIONS */}
-      <div className="dashboard-quick-actions">
-        <div className="dashboard-quick-actions-title">Quick Actions</div>
 
-        <Card className="dashboard-quick-actions-wrapper">
-          <div className="dashboard-quick-actions-grid">
-            <Card
-              className="dashboard-quick-action-card"
-              onClick={() => navigate("/app/employees")}
-            >
-              <SvgIcon name="users" size={22} />
-              <span>Add Employee</span>
-            </Card>
 
-            <Card
-              className="dashboard-quick-action-card"
-              onClick={() => navigate("/app/payroll")}
-            >
-              <SvgIcon name="dollar" size={22} />
-              <span>Process Payroll</span>
-            </Card>
+      {/* ⚡ QUICK ACTIONS - Hidden for Employees */}
+      {role !== "Employee" && (
+        <div className="dashboard-quick-actions">
+          {/* <div className="dashboard-quick-actions-title">Quick Actions</div> */}
 
-            <Card
-              className="dashboard-quick-action-card"
-              onClick={() => navigate("/app/documents")}
-            >
-              <SvgIcon name="document" size={22} />
-              <span>View Documents</span>
-            </Card>
+          <Card className="dashboard-quick-actions-wrapper">
+            <div className="dashboard-quick-actions-title">Quick Actions</div>
+            <div className="dashboard-quick-actions-grid">
+              {quickActions.map((action, index) => (
+                <Card
+                  key={index}
+                  className="dashboard-quick-action-card"
+                  onClick={() => navigate(action.path)}
+                >
+                  <SvgIcon name={action.icon} size={22} />
+                  <span>{action.label}</span>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
 
-            <Card
-              className="dashboard-quick-action-card"
-              onClick={() => navigate("/app/reports")}
-            >
-              <SvgIcon name="reports" size={22} />
-              <span>Generate Report</span>
-            </Card>
-
-          </div>
-        </Card>
-      </div>
-
-      {/* 📄 INFO SECTIONS (UNCHANGED) */}
+      {/* 📄 INFO SECTIONS */}
       <Row className="mt-4">
         <Col md={6}>
           <DashboardInfoCard
             title="Company Document Expiries"
             icon="document"
+            colorVariant="blue"
             actionLabel="View All"
-            items={companyDocumentExpiries}
+            onActionClick={() => navigate("/app/documents")}
+            onRowClick={() => navigate("/app/documents")}
+            items={normalizedCompanyDocs}
           />
         </Col>
 
@@ -244,28 +333,38 @@ function Dashboard() {
           <DashboardInfoCard
             title="Employee Visa / ID Expiries"
             icon="exclamation"
+            colorVariant="orange"
             actionLabel="View All"
-            items={employeeVisaExpiries}
+            onActionClick={() => navigate("/app/employees")}
+            onRowClick={(item) => navigate(`/app/employees/${item._id}`)}
+            items={normalizedEmployeeVisas}
           />
         </Col>
       </Row>
 
       <Row className="mt-4">
-        <Col md={6}>
-          <DashboardInfoCard
-            title="Pending Approvals"
-            icon="clock (1)"
-            actionLabel="View All"
-            items={pendingApprovals}
-          />
-        </Col>
+        {role !== "Employee" && (
+          <Col md={6}>
+            <DashboardInfoCard
+              title="Pending Approvals"
+              icon="clock (1)"
+              colorVariant="yellow"
+              actionLabel="View All"
+              onActionClick={() => navigate("/app/requests")}
+              onRowClick={() => navigate("/app/requests")}
+              items={normalizedPendingApprovals}
+            />
+          </Col>
+        )}
 
-        <Col md={6}>
+        <Col md={role === "Employee" ? 12 : 6}>
           <DashboardInfoCard
             title="Today's Attendance"
             icon="calendar"
+            colorVariant="green"
             actionLabel="View Details"
-            items={todaysAttendance}
+            onActionClick={() => navigate("/app/attendance")}
+            items={normalizedAttendance}
           />
         </Col>
       </Row>

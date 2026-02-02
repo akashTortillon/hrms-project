@@ -8,7 +8,8 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
         payrollId: '',
         type: 'ALLOWANCE',
         name: '',
-        amount: ''
+        amount: '',
+        reason: '' // ✅ NEW
     });
 
     useEffect(() => {
@@ -26,8 +27,8 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
     };
 
     const handleSubmit = async () => {
-        if (!formData.payrollId || !formData.name || !formData.amount) {
-            toast.error("Please fill all fields");
+        if (!formData.payrollId || !formData.name || !formData.amount || !formData.reason) { // ✅ Reason Check
+            toast.error("Please fill all fields, including Reason.");
             return;
         }
 
@@ -103,6 +104,33 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                         placeholder="0.00"
                         value={formData.amount}
                         onChange={handleChange}
+                    />
+                </div>
+
+                {/* Amount */}
+                <div className="modal-form-group">
+                    <label className="modal-label">Amount (AED)</label>
+                    <input
+                        type="number"
+                        name="amount"
+                        className="modal-input"
+                        placeholder="0.00"
+                        value={formData.amount}
+                        onChange={handleChange}
+                    />
+                </div>
+
+                {/* Reason */}
+                <div className="modal-form-group">
+                    <label className="modal-label">Reason <span style={{ color: 'red' }}>*</span></label>
+                    <textarea
+                        name="reason"
+                        className="modal-input"
+                        placeholder="Why is this adjustment being made?"
+                        rows={2}
+                        value={formData.reason}
+                        onChange={handleChange}
+                        style={{ resize: 'vertical' }}
                     />
                 </div>
 
