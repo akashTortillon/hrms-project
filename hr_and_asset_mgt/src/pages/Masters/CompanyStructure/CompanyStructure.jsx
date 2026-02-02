@@ -16,7 +16,9 @@ const PERMISSIONS_LIST = [
   "MANAGE_MASTERS",
   "MANAGE_SETTINGS",
   "APPROVE_REQUESTS",
-  "VIEW_REPORTS"
+  "VIEW_REPORTS",
+  "MANAGE_ONBOARDING",
+  "MANAGE_OFFBOARDING"
 ];
 
 export default function CompanyStructure() {

@@ -9,6 +9,8 @@ import leptisLogo from "../../assets/images/logo-leptis.png"
 const allNavItems = [
   { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", permission: "VIEW_DASHBOARD" },
   { path: "/app/employees", icon: "users", label: "Employees", permission: "MANAGE_EMPLOYEES" },
+  { path: "/app/onboarding", icon: "clipboard-list", label: "Onboarding", permission: "MANAGE_ONBOARDING" }, // New Onboarding
+  { path: "/app/offboarding", icon: "briefcase", label: "Offboarding", permission: "MANAGE_OFFBOARDING" }, // New Offboarding
   { path: "/app/payroll", icon: "dollar", label: "Payroll", permission: "MANAGE_PAYROLL" },
   { path: "/app/attendance", icon: "clock (1)", label: "Attendance", permission: "VIEW_DASHBOARD" }, // Assuming linked to employee mgmt
   { path: "/app/documents", icon: "document (1)", label: "Documents", permission: "VIEW_DASHBOARD" }, // Changed from MANAGE_DOCUMENTS so everyone can see their own docs
@@ -49,8 +51,8 @@ export default function Sidebar() {
           <>
             <div className="brand-icon"><img src={leptisLogo} alt="Leptis Logo" /></div>
             <div className="brand-text-wrapper">
-              <div className="brand-title" style={{color:"white"}}>LEPTIS</div>
-              <div className="brand-subtitle" style={{color:"red"}}>ENTERPRISE</div>
+              <div className="brand-title" style={{ color: "white" }}>LEPTIS</div>
+              <div className="brand-subtitle" style={{ color: "red" }}>ENTERPRISE</div>
             </div>
             <Button
               variant="light"
