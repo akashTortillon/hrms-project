@@ -4,6 +4,7 @@ import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Dashboard.css";
 import DashboardInfoCard from "../../components/reusable/DashboardInfoCard.jsx";
+import StatCard from "../../components/reusable/StatCard"; // ✅ Integrated Card
 import { useNavigate } from "react-router-dom";
 import { getDocumentStats } from "../../services/documentService.js";
 import { useRole } from "../../contexts/RoleContext.jsx";
@@ -259,55 +260,45 @@ function Dashboard() {
   return (
     <Container fluid className="dashboard-page">
       {/* 🔝 TOP METRICS */}
+      {/* import StatCard from "../../components/reusable/StatCard";
+
+      // ... (inside the component) */}
+
+      {/* 🔝 TOP METRICS */}
       <Row className="dashboard-cards-row">
-        {dashboardMetrics.map((metric, index) => (
-          <Col key={index} className="dashboard-card-col">
-            <Card className="dashboard-metric-card">
-              <div className="dashboard-card-content">
-                <div className="dashboard-card-text">
-                  <div className="dashboard-card-title">{metric.title}</div>
-                  <div className="dashboard-card-value">{metric.value}</div>
-                  <div className="dashboard-card-subtext">
-                    {metric.subtext}
-                  </div>
-                </div>
-                <div
-                  className={`dashboard-icon-container ${metric.iconBgClass}`}
-                >
-                  <SvgIcon name={metric.iconName} size={24} />
-                </div>
-              </div>
-            </Card>
-          </Col>
-        ))}
+        {dashboardMetrics.map((metric, index) => {
+          // Map old class names to new color variants
+          const colorMap = {
+            "dashboard-icon-bg-blue": "vibrant-blue",
+            "dashboard-icon-bg-yellow": "vibrant-red", // Red in reference (Compliance)
+            "dashboard-icon-bg-orange": "vibrant-lightblue", // Sky Blue in reference
+            "dashboard-icon-bg-green": "vibrant-dark" // Dark in reference
+          };
+          const variant = colorMap[metric.iconBgClass] || "vibrant-blue";
+
+          return (
+            <Col key={index} className="dashboard-card-col">
+              <StatCard
+                title={metric.title}
+                value={metric.value}
+                subtext={metric.subtext}
+                iconName={metric.iconName}
+                colorVariant={variant}
+              />
+            </Col>
+          );
+        })}
       </Row>
 
-      {/* ⚡ QUICK ACTIONS */}
-      {/* <div className="dashboard-quick-actions">
-        <div className="dashboard-quick-actions-title">Quick Actions</div>
 
-        <Card className="dashboard-quick-actions-wrapper">
-          <div className="dashboard-quick-actions-grid">
-            {quickActions.map((action, index) => (
-              <Card
-                key={index}
-                className="dashboard-quick-action-card"
-                onClick={() => navigate(action.path)}
-              >
-                <SvgIcon name={action.icon} size={22} />
-                <span>{action.label}</span>
-              </Card>
-            ))}
-          </div>
-        </Card>
-      </div> */}
 
-            {/* ⚡ QUICK ACTIONS - Hidden for Employees */}
+      {/* ⚡ QUICK ACTIONS - Hidden for Employees */}
       {role !== "Employee" && (
         <div className="dashboard-quick-actions">
-          <div className="dashboard-quick-actions-title">Quick Actions</div>
+          {/* <div className="dashboard-quick-actions-title">Quick Actions</div> */}
 
           <Card className="dashboard-quick-actions-wrapper">
+            <div className="dashboard-quick-actions-title">Quick Actions</div>
             <div className="dashboard-quick-actions-grid">
               {quickActions.map((action, index) => (
                 <Card
@@ -330,6 +321,7 @@ function Dashboard() {
           <DashboardInfoCard
             title="Company Document Expiries"
             icon="document"
+            colorVariant="blue"
             actionLabel="View All"
             onActionClick={() => navigate("/app/documents")}
             onRowClick={() => navigate("/app/documents")}
@@ -341,6 +333,7 @@ function Dashboard() {
           <DashboardInfoCard
             title="Employee Visa / ID Expiries"
             icon="exclamation"
+            colorVariant="orange"
             actionLabel="View All"
             onActionClick={() => navigate("/app/employees")}
             onRowClick={(item) => navigate(`/app/employees/${item._id}`)}
@@ -355,6 +348,7 @@ function Dashboard() {
             <DashboardInfoCard
               title="Pending Approvals"
               icon="clock (1)"
+              colorVariant="yellow"
               actionLabel="View All"
               onActionClick={() => navigate("/app/requests")}
               onRowClick={() => navigate("/app/requests")}
@@ -367,6 +361,7 @@ function Dashboard() {
           <DashboardInfoCard
             title="Today's Attendance"
             icon="calendar"
+            colorVariant="green"
             actionLabel="View Details"
             onActionClick={() => navigate("/app/attendance")}
             items={normalizedAttendance}

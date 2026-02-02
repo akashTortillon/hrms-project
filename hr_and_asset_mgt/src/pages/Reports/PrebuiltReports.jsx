@@ -282,10 +282,70 @@ export default function PrebuiltReports() {
             <h4 className="report-title">Departmental Attendance</h4>
             <p className="report-desc">Summary of present, absent, and leave counts by department.</p>
 
-            <div className="report-mode-toggle" style={{ marginTop: '15px' }}>
+            {/* <div className="report-mode-toggle" style={{ marginTop: '15px' }}>
               <button className={mode === "daily" ? "active" : ""} onClick={() => setMode("daily")}>Daily</button>
               <button className={mode === "monthly" ? "active" : ""} onClick={() => setMode("monthly")}>Monthly</button>
-            </div>
+            </div> */}
+
+            
+            <div
+  className="report-mode-toggle"
+  style={{
+    display: "inline-flex",
+    gap: "4px",
+    padding: "4px",
+    border: "1px solid var(--border)",
+    borderRadius: "10px",
+    background: "var(--color-bg-card)",
+    marginTop: "15px"
+  }}
+>
+  <button
+    onClick={() => setMode("daily")}
+    style={{
+      padding: "8px 16px",
+      borderRadius: "8px",
+      border: "none",
+      cursor: "pointer",
+      fontSize: "13px",
+      fontWeight: 500,
+      background: mode === "daily" ? "#ffffff" : "transparent",
+      color: mode === "daily" ? "var(--text)" : "var(--muted)",
+      boxShadow: mode === "daily"
+        ? "0 2px 6px rgba(0,0,0,0.08)"
+        : "none",
+      transition: "all 0.2s ease"
+    }}
+  >
+    Daily
+  </button>
+
+  <button
+    onClick={() => setMode("monthly")}
+    style={{
+      padding: "8px 16px",
+      borderRadius: "8px",
+      border: "none",
+      cursor: "pointer",
+      fontSize: "13px",
+      fontWeight: 500,
+      background: mode === "monthly" ? "#ffffff" : "transparent",
+      color: mode === "monthly" ? "var(--text)" : "var(--muted)",
+      boxShadow: mode === "monthly"
+        ? "0 2px 6px rgba(0,0,0,0.08)"
+        : "none",
+      transition: "all 0.2s ease"
+    }}
+  >
+    Monthly
+  </button>
+</div>
+
+
+
+
+
+
 
             <div className="report-filters">
               {mode === "daily" ? (

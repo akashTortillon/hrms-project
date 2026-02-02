@@ -1,0 +1,251 @@
+/* src/style/components/StatCard.css */
+
+.stat-card-modern {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    padding: 24px;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+}
+
+/* Base Hover for Classic */
+.stat-card-modern:not(.vibrant-card):hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary);
+}
+
+/* --- CLASSIC CONTENT LAYOUT --- */
+.stat-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+    align-items: flex-start;
+}
+
+.stat-card-title {
+    font-size: var(--font-sm);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-muted);
+}
+
+.stat-card-value {
+    font-size: 16px;
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-main);
+    line-height: 1.1;
+}
+
+.stat-card-subtext {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Icon Wrapper (Classic) */
+.stat-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+/* Stat Icon Variants (Classic) */
+.stat-icon-blue {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+}
+
+.stat-icon-green {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.stat-icon-yellow {
+    background: var(--color-warning-bg);
+    color: var(--color-warning-text);
+}
+
+.stat-icon-orange {
+    background: #fff7ed;
+    color: #f97316;
+}
+
+.stat-icon-red {
+    background: var(--color-danger-bg);
+    color: var(--color-danger-text);
+}
+
+.stat-icon-gray {
+    background: var(--color-bg-subtle);
+    color: var(--color-text-secondary);
+}
+
+
+/* --- VIBRANT CARD BASE (DASHBOARD ONLY) --- */
+.vibrant-card {
+    display: flex;
+    flex-direction: column;
+    border: none;
+    border-radius: 32px;
+    padding: 28px;
+    color: #ffffff;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Decorative Corner Glow */
+.stat-card-glow {
+    position: absolute;
+    top: -20%;
+    right: -10%;
+    width: 140px;
+    height: 140px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+    filter: blur(40px);
+    pointer-events: none;
+}
+
+/* --- VIBRANT VARIANTS WITH COLOR-MATCHED SHADOWS --- */
+.vibrant-card.vibrant-blue {
+    background: linear-gradient(145deg, #1d4ed8, #1e40af);
+    box-shadow: 0 12px 32px rgba(29, 78, 216, 0.35);
+}
+
+.vibrant-card.vibrant-red {
+    background: linear-gradient(145deg, #dc2626, #b91c1c);
+    box-shadow: 0 12px 32px rgba(220, 38, 38, 0.35);
+}
+
+.vibrant-card.vibrant-dark {
+    background: linear-gradient(145deg, #111827, #030712);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.vibrant-card.vibrant-lightblue {
+    background: linear-gradient(145deg, #3b82f6, #2563eb);
+    box-shadow: 0 12px 32px rgba(37, 99, 235, 0.3);
+}
+
+/* --- VIBRANT LAYOUT --- */
+.stat-card-inner-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: space-between;
+}
+
+.stat-card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+}
+
+/* Glassmorphism Icon Wrapper */
+.stat-card-icon-glass {
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.2);
+    /* Slightly more opaque glass */
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    /* Force white for icons */
+}
+
+.stat-card-icon-glass svg,
+.stat-card-icon-glass .svg-icon {
+    fill: #ffffff !important;
+    stroke: #ffffff !important;
+    color: #ffffff !important;
+    filter: brightness(0) invert(1) !important;
+    /* Force black to white */
+    transition: filter 0.3s ease;
+}
+
+/* Real Time Badge */
+.stat-card-badge {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Body Text */
+.stat-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stat-card-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.8;
+    color: inherit;
+}
+
+.vibrant-card .stat-card-value {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+    color: #ffffff;
+}
+
+.vibrant-card .stat-card-subtext {
+    font-size: 12px;
+    font-style: italic;
+    opacity: 0.7;
+    margin-top: 4px;
+    color: #ffffff;
+}
+
+/* --- VIBRANT HOVER --- */
+.vibrant-card:hover {
+    transform: translateY(-8px);
+    filter: brightness(1.1);
+}
+
+.vibrant-card.vibrant-blue:hover {
+    box-shadow: 0 20px 48px rgba(29, 78, 216, 0.45);
+}
+
+.vibrant-card.vibrant-red:hover {
+    box-shadow: 0 20px 48px rgba(220, 38, 38, 0.45);
+}
+
+.vibrant-card.vibrant-dark:hover {
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+}
+
+.vibrant-card.vibrant-lightblue:hover {
+    box-shadow: 0 20px 48px rgba(37, 99, 235, 0.45);
+}
