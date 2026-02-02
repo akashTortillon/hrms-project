@@ -41,7 +41,7 @@ export default function PayrollStatus({ onGenerate, onFinalize, loading, status 
       <div className="payroll-status-header">
         <div>
           <h3 className="payroll-status-title">Payroll Status</h3>
-          <p className="payroll-status-subtitle">
+          <p className="payroll-status-subtitle" style={{fontSize:"13px"}}>
             Current processing status for Jan 2026
           </p>
         </div>

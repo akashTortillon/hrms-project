@@ -198,9 +198,17 @@ export const exportAssets = async (params = {}) => {
   return res.data;
 };
 
-// Bulk Import Assets
-export const importAssets = async (assets) => {
-  const res = await api.post(`${ASSET_API}/import`, { assets });
+import axios from "axios";
+
+// Bulk Import Assets (File Upload) - Bypassing global interceptor for FormData stability
+export const importAssets = async (formData) => {
+  const token = localStorage.getItem("token");
+  const res = await axios.post(`${import.meta.env.VITE_API_BASE}/api/assets/import`, formData, {
+    headers: {
+      "Authorization": `Bearer ${token}`
+      // Content-Type left undefined to let browser set multipart/form-data with boundary
+    },
+  });
   return res.data;
 };
 

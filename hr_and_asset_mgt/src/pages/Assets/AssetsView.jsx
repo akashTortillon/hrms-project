@@ -17,6 +17,7 @@ import MaintenanceLogsModal from "./MaintenanceLogsModal";
 import DocumentUploadModal from "./DocumentUploadModal";
 import AMCDetailsModal from "./AMCDetailsModal";
 import DisposalModal from "./DisposalModal";
+import BulkImportModal from "./BulkImportModal"; // ✅ New Component
 import { toast } from "react-toastify";
 
 import {
@@ -34,7 +35,7 @@ import {
   disposeAsset,
   importAssets
 } from "../../services/assetService.js";
-import { mockAssetData } from "../../data/mockAssetData.js";
+// import { mockAssetData } from "../../data/mockAssetData.js"; // ❌ Removed
 
 import {
   assignAssetToEmployee,
@@ -62,6 +63,7 @@ function Assets() {
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [showAMCModal, setShowAMCModal] = useState(false);
   const [showDisposalModal, setShowDisposalModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false); // ✅ Import Modal State
 
   // Selected asset for modal actions
   const [selectedAsset, setSelectedAsset] = useState(null);
@@ -181,14 +183,17 @@ function Assets() {
     }
   };
 
-  // Import assets
-  const handleImportAssets = async () => {
+  // Import assets handler (receives formData from modal)
+  const handleImportAssets = async (formData) => {
     try {
-      const response = await importAssets(mockAssetData);
+      const response = await importAssets(formData);
       toast.success(response.message || "Assets imported successfully");
+      setShowImportModal(false);
       fetchAssets();
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || "Failed to import assets");
+      // toast.error(error.response?.data?.message || "Failed to import assets");
+      // Let the modal handle visual error if needed, or toast here
+      toast.error("Import failed: " + (error.response?.data?.message || error.message));
     }
   };
 
@@ -405,12 +410,12 @@ function Assets() {
       {/* Header cards */}
       <AssetsHeader
         onAddAsset={() => setShowAddModal(true)}
-        onImport={handleImportAssets}
+        onImport={() => setShowImportModal(true)}
         stats={[
-          { title: "Total Assets", value: assetStats.total, icon: "cube", iconColor: "#2563eb" },
-          { title: "In Use", value: assetStats.inUse, icon: "cube", iconColor: "#16a34a" },
-          { title: "Available", value: assetStats.available, icon: "cube", iconColor: "#f59e0b" },
-          { title: "Maintenance", value: assetStats.maintenance, icon: "spanner", iconColor: "#dc2626" },
+          { title: "Total Assets", value: assetStats.total, icon: "cube", colorVariant: "blue" },
+          { title: "In Use", value: assetStats.inUse, icon: "cube", colorVariant: "green" },
+          { title: "Available", value: assetStats.available, icon: "cube", colorVariant: "orange" },
+          { title: "Maintenance", value: assetStats.maintenance, icon: "spanner", colorVariant: "red" },
         ]}
       />
 
@@ -581,6 +586,14 @@ function Assets() {
             setSelectedAsset(null);
           }}
           onDispose={handleDisposeAsset}
+        />
+      )}
+
+      {/* ✅ Bulk Import Modal */}
+      {showImportModal && (
+        <BulkImportModal
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImportAssets}
         />
       )}
     </div>

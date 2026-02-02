@@ -1,0 +1,182 @@
+/* CustomReportBuilder.css */
+
+.custom-report-page {
+    padding: 24px;
+    background-color: var(--color-bg-app);
+    min-height: 100vh;
+}
+
+.report-back-btn {
+    margin-bottom: 20px;
+}
+
+.report-builder-layout {
+    display: flex;
+    gap: 24px;
+}
+
+/* Left Panel: Configuration */
+.report-config-panel {
+    flex: 1;
+    min-width: 320px;
+}
+
+.report-config-card {
+    padding: 24px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.report-section-title {
+    font-size: var(--font-md);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-main);
+    margin-bottom: 12px;
+    margin-top: 24px;
+}
+
+.report-section-title:first-of-type {
+    margin-top: 0;
+}
+
+.report-input,
+.report-select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg-card);
+    color: var(--color-text-main);
+    font-size: var(--font-sm);
+    transition: border-color 0.2s;
+}
+
+.report-input:focus,
+.report-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+/* Checkbox Grid */
+.report-columns-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+}
+
+.checkbox-label:hover {
+    background-color: var(--color-bg-subtle);
+}
+
+.checkbox-input {
+    accent-color: var(--color-primary);
+    width: 16px;
+    height: 16px;
+}
+
+/* Action Buttons */
+.report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 32px;
+}
+
+.report-btn-preview {
+    flex: 1;
+}
+
+.report-btn-save {
+    flex: 1;
+}
+
+.report-btn-export {
+    width: 100%;
+}
+
+/* Right Panel: Preview */
+.report-preview-panel {
+    flex: 2;
+    min-width: 0;
+    /* Prevents flex overflow */
+}
+
+.report-preview-card {
+    padding: 24px;
+    min-height: 500px;
+    overflow-x: auto;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.preview-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 400px;
+    color: var(--color-text-muted);
+    text-align: center;
+    gap: 16px;
+}
+
+/* Table Styles */
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-sm);
+}
+
+.report-table th {
+    text-align: left;
+    padding: 12px 16px;
+    background-color: var(--color-bg-subtle);
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-bold);
+    border-bottom: 2px solid var(--color-border);
+    white-space: nowrap;
+}
+
+.report-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-main);
+    white-space: nowrap;
+}
+
+.report-table tr:hover td {
+    background-color: var(--color-bg-subtle);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .report-builder-layout {
+        flex-direction: column;
+    }
+
+    .report-config-panel,
+    .report-preview-panel {
+        width: 100%;
+    }
+}

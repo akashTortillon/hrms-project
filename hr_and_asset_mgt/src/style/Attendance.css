@@ -257,6 +257,7 @@
   border: 1px solid #e5e7eb;
   border-radius: 16px;
   overflow: hidden;
+  box-shadow: var(--shadow-table-blue);
 }
 
 /* ===== HEADER ===== */
@@ -266,14 +267,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 18px 22px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: none;
+  background: #2563eb;
 }
 
 .attendance-table-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: #ffffff;
 }
 
 .mark-all-btn {
@@ -297,14 +299,25 @@
   font-size: 13px;
   font-weight: 600;
   text-align: left;
-  color: #374151;
-  background: #f9fafb;
+  color: #fff;
+  background: #2563eb;
 }
 
 .attendance-table td {
   padding: 18px 22px;
   font-size: 14px;
   border-top: 1px solid #e5e7eb;
+}
+
+
+.attendance-table tbody tr {
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+}
+
+.attendance-table tbody tr:hover {
+  background-color: #eff6ff;
+  /* light blue */
 }
 
 /* ===== EMPLOYEE CELL ===== */
@@ -335,7 +348,7 @@
   display: inline-block;
 }
 
-.status-present {
+/* .status-present {
   background: #dcfce7;
   color: #15803d;
 }
@@ -365,6 +378,90 @@
   background: #f3e8ff;
   color: #7e22ce;
   border: 1px solid #d8b4fe;
+} */
+
+
+
+.status-pill.status-present {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.status-pill.status-late {
+  background: #ffedd5 !important;
+  color: #c2410c !important;
+}
+
+.status-pill.status-absent {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
+.status-pill.status-leave {
+  background: #fef9c3 !important;
+  color: #a16207 !important;
+}
+
+.status-pill.status-weekend {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.status-pill.status-holiday {
+  background: #f3e8ff !important;
+  color: #7e22ce !important;
+  border: 1px solid #d8b4fe !important;
+}
+
+/* Edited Badge (blends with table) */
+.status-edited {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  /* Pill shape */
+  background: #f1f5f9;
+  /* Subtle gray/blue background */
+  color: #64748b;
+  /* Muted text color */
+  border: 1px solid #e2e8f0;
+  /* Subtle border */
+  cursor: help;
+  transition: all 0.2s ease;
+}
+
+.status-edited:hover {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+/* Edited Badge (blends with table) */
+.status-edited {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  /* Pill shape */
+  background: #f1f5f9;
+  /* Subtle gray/blue background */
+  color: #64748b;
+  /* Muted text color */
+  border: 1px solid #e2e8f0;
+  /* Subtle border */
+  cursor: help;
+  transition: all 0.2s ease;
+}
+
+.status-edited:hover {
+  background: #e2e8f0;
+  color: #475569;
 }
 
 /* ===== ACTION ===== */
@@ -424,12 +521,14 @@
 .sticky-col-header {
   position: sticky;
   left: 0;
-  z-index: 20;
-  background-color: #f9fafb;
+  z-index: 30;
+  background: #1d4ed8 !important;
+  /* Slightly darker blue for sticky */
+  color: #ffffff !important;
   min-width: 200px;
   max-width: 250px;
   width: 220px;
-  box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
 }
 
 .stats-col-header {
@@ -450,19 +549,21 @@
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  color: #111827;
+  color: #ffffff;
 }
 
 .day-name {
   font-size: 10px;
   font-weight: 400;
   line-height: 1.2;
-  color: #6b7280;
+  color: #ffffff;
+  opacity: 0.9;
   text-transform: uppercase;
 }
 
 .header-sunday {
-  background-color: #fef2f2;
+  background-color: #b91c1c !important;
+  /* Darker red for contrast with white text */
 }
 
 .cell-sunday {

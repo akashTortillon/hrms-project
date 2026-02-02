@@ -91,9 +91,8 @@ app.use("/api/workflows", workflowRoutes);
 import searchRoutes from "./routes/searchRoutes.js";
 app.use("/api/search", searchRoutes);
 
-
-
-
-
+// 🔹 Notification API
+import notificationRoutes from "./routes/notificationRoutes.js";
+app.use("/api/notifications", notificationRoutes);
 
 export default app;

@@ -412,9 +412,27 @@ import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import User from "../models/userModel.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { createNotification } from "./notificationController.js";
 import upload from "../config/multer.js";
 import path from "path";
 import fs from "fs";
+import mongoose from "mongoose";
+
+/**
+ * Helper to notify all Admins and HR
+ */
+const notifyAdmins = async (title, message, link) => {
+  const admins = await User.find({ role: { $in: ["Admin", "HR Admin", "HR Manager"] } });
+  for (const admin of admins) {
+    await createNotification({
+      recipient: admin._id,
+      title,
+      message,
+      type: "REQUEST",
+      link
+    });
+  }
+};
 
 const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true) => {
   const user = await User.findById(userId);
@@ -634,12 +652,19 @@ export const createRequest = async (req, res) => {
       submittedAt: new Date()
     });
 
-    // Send email notification for Salary Advance/Loan requests
-    if (requestType === "SALARY") {
-      const employeeUser = await User.findById(userId);
-      if (employeeUser) {
+    // Send notifications
+    const employeeUser = await User.findById(userId);
+    if (employeeUser) {
+      if (requestType === "SALARY") {
         await sendSalaryAdvanceSubmissionEmail(request, employeeUser);
       }
+
+      // Notify Admins
+      await notifyAdmins(
+        `New ${requestType} Request`,
+        `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
+        `/app/requests`
+      );
     }
 
     return res.status(201).json({
@@ -660,8 +685,20 @@ export const createRequest = async (req, res) => {
 export const getMyRequests = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { type, status } = req.query;
 
-    const requests = await Request.find({ userId })
+    const query = { userId: userId };
+    if (type) query.requestType = type;
+
+    // ✅ If type is SALARY (Loans), filter by status if provided or default to meaningful ones?
+    // User asked to hide rejected/pending. So strict filter? 
+    // Actually, usually headers send status. Let's check if we want to force it or allow query param.
+    if (status) query.status = status;
+    // If specifically for "Loans Tab" which implies active/approved loans:
+    // We can rely on frontend sending ?status=APPROVED or we can filtering here.
+    // Let's support the `status` query param first, then check frontend.
+
+    const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .sort({ submittedAt: -1 })
@@ -752,7 +789,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
 export const updateRequestStatus = async (req, res) => {
   try {
     const { requestId } = req.params;
-    const { action, rejectionReason } = req.body;
+    const { action, rejectionReason, interestRate } = req.body;
 
     const request = await Request.findById(requestId);
     if (!request) {
@@ -763,6 +800,25 @@ export const updateRequestStatus = async (req, res) => {
 
     if (action === "APPROVE") {
       newStatus = "APPROVED";
+
+      // Calculate Interest for Loans AND Salary Advances
+      if (request.status === "PENDING" && request.requestType === "SALARY") {
+        const rate = interestRate ? Number(interestRate) : 0;
+        const principal = Number(request.details.amount) || 0;
+        const totalRepayment = principal + (principal * rate / 100);
+
+        // Update details with finalized terms
+        request.details = {
+          ...request.details,
+          interestRate: rate,
+          totalRepaymentAmount: totalRepayment
+        };
+
+        // Update Repayment Period if provided (Admin Override)
+        if (req.body.repaymentPeriod) {
+          request.details.repaymentPeriod = Number(req.body.repaymentPeriod);
+        }
+      }
     }
 
     request.status = newStatus;
@@ -781,6 +837,15 @@ export const updateRequestStatus = async (req, res) => {
     }
 
     await request.save();
+
+    // Notify Employee
+    await createNotification({
+      recipient: request.userId,
+      title: `Request ${newStatus}`,
+      message: `Your ${request.requestType.toLowerCase()} request (${request.requestId}) has been ${newStatus.toLowerCase()}.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    });
 
     // Send email notifications for Salary Advance/Loan requests
     if (request.requestType === "SALARY") {
@@ -853,6 +918,15 @@ export const approveDocumentRequest = async (req, res) => {
 
     await request.save();
 
+    // Notify Employee
+    await createNotification({
+      recipient: request.userId,
+      title: `Request Completed`,
+      message: `Your document request (${request.requestId}) has been completed and the document is ready.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    });
+
     const populatedRequest = await Request.findById(request._id)
       .populate("userId", "name")
       .populate("approvedBy", "name role")
@@ -915,6 +989,15 @@ export const rejectDocumentRequest = async (req, res) => {
     request.approvedAt = new Date();
 
     await request.save();
+
+    // Notify Employee
+    await createNotification({
+      recipient: request.userId,
+      title: `Request Rejected`,
+      message: `Your document request (${request.requestId}) has been rejected.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    });
 
     const populatedRequest = await Request.findById(request._id)
       .populate("userId", "name")
@@ -988,6 +1071,102 @@ export const downloadDocument = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to download document"
+    });
+  }
+};
+
+// ✅ NEW: Get requests for a specific employee
+export const getEmployeeRequests = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    console.log(`[getEmployeeRequests] Fetching for Employee ID: ${employeeId}`);
+
+    // Access Control: Allow if Self OR has Permission
+    let isSelf = req.user.employeeId && req.user.employeeId.toString() === employeeId;
+
+    // Fallback: If ID link is missing, verify identity via Email
+    if (!isSelf) {
+      const targetEmployee = await Employee.findById(employeeId);
+      if (targetEmployee && targetEmployee.email && req.user.email) {
+        if (targetEmployee.email.trim().toLowerCase() === req.user.email.trim().toLowerCase()) {
+          isSelf = true;
+        }
+      }
+    }
+
+    const canManage = req.user.role === 'Admin' || (req.user.permissions && req.user.permissions.includes("MANAGE_EMPLOYEES"));
+
+    if (!isSelf && !canManage) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You can only view your own requests."
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      console.warn(`[getEmployeeRequests] Invalid Employee ID format: ${employeeId}`);
+      return res.status(400).json({ success: false, message: "Invalid Employee ID format" });
+    }
+
+    // 1. Try to find User via explicit employeeId link
+    let user = await User.findOne({ employeeId });
+    console.log(`[getEmployeeRequests] User via direct link: ${user ? user._id : 'Not Found'}`);
+
+    // 2. Fallback: If no direct link, find Employee by ID -> User by Email
+    if (!user) {
+      const employee = await Employee.findById(employeeId);
+      if (employee) {
+        console.log(`[getEmployeeRequests] Found Employee: ${employee.email}`);
+        if (employee.email) {
+          // Case-insensitive email lookup
+          user = await User.findOne({
+            email: { $regex: new RegExp(`^${employee.email}$`, 'i') }
+          });
+          console.log(`[getEmployeeRequests] User via Email Link: ${user ? user._id : 'Not Found'}`);
+        }
+      } else {
+        console.log(`[getEmployeeRequests] Employee not found in DB`);
+      }
+    }
+
+    if (!user) {
+      // If still no user, we can't find requests because they are keyed by User ID
+      console.warn(`[getEmployeeRequests] No User account found for this employee.`);
+      return res.status(200).json({
+        success: true,
+        data: [] // Return empty array instead of 404 to gracefully handle no-user scenarios
+      });
+    }
+
+    const { type, status } = req.query;
+
+    const query = { userId: user._id };
+    if (type) query.requestType = type;
+
+    if (status) {
+      if (status.includes(',')) {
+        query.status = { $in: status.split(',') };
+      } else {
+        query.status = status;
+      }
+    }
+
+    const requests = await Request.find(query)
+      .populate("approvedBy", "name role")
+      .populate("withdrawnBy", "name")
+      .sort({ submittedAt: -1 });
+
+    console.log(`[getEmployeeRequests] Found ${requests.length} requests`);
+
+    res.status(200).json({
+      success: true,
+      data: requests
+    });
+  } catch (error) {
+    console.error("Get employee requests error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch employee requests"
     });
   }
 };

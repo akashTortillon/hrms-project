@@ -33,7 +33,15 @@ const router = express.Router();
 /* =========================
    IMPORT/EXPORT ROUTES
 ========================= */
-router.post("/import", protect, hasPermission("MANAGE_ASSETS"), importAssets);
+router.post("/import", protect, hasPermission("MANAGE_ASSETS"), (req, res, next) => {
+   upload.single("file")(req, res, (err) => {
+      if (err) {
+         console.error("Multer Error:", err);
+         return res.status(400).json({ message: "File Upload Error: " + err.message });
+      }
+      next();
+   });
+}, importAssets);
 router.get("/export", protect, hasPermission("MANAGE_ASSETS"), exportAssets);
 
 /* =========================

@@ -255,14 +255,54 @@ const calculateDuration = (start, end) => {
 const getShiftRules = async (shiftName) => {
   const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
   if (shiftMaster && shiftMaster.metadata) {
+    const meta = shiftMaster.metadata;
+    // Extract buffers from latePolicy if available, otherwise fallback to buffers or lateLimit
+    let buffers = [];
+    if (meta.latePolicy && Array.isArray(meta.latePolicy)) {
+      buffers = meta.latePolicy.map(p => p.time).filter(t => t);
+    } else {
+      buffers = meta.buffers || [meta.lateLimit || "09:15"];
+    }
+
     return {
-      start: shiftMaster.metadata.startTime || "09:00",
-      end: shiftMaster.metadata.endTime || "18:00",
-      lateLimit: shiftMaster.metadata.lateLimit || "09:15"
+      start: meta.startTime || "09:00",
+      end: meta.endTime || "18:00",
+      lateLimit: meta.lateLimit || "09:15",
+      latePolicy: meta.latePolicy || [], // Pass full policy for other controllers if needed
+      buffers: buffers.length > 0 ? buffers : ["09:15"]
     };
   }
-  // Default fallback if shift not found
-  return { start: "09:00", end: "18:00", lateLimit: "09:15" };
+  // Default fallback
+  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
+};
+
+const calculateLateTier = (checkInTime, rules) => {
+  if (!checkInTime) return 0;
+  const checkInMin = toMinutes(checkInTime);
+
+  // Ensure we have at least one buffer
+  const buffers = rules.buffers || [rules.lateLimit];
+  if (buffers.length === 0) return 0;
+
+  // Convert all buffers to minutes
+  const bufferMins = buffers.map(b => toMinutes(b)).sort((a, b) => a - b);
+
+  // Logic: 
+  // <= Buffer 1 -> Present (Tier 0)
+  // > Buffer 1 && <= Buffer 2 -> Late Tier 1
+  // > Buffer 2 && <= Buffer 3 -> Late Tier 2
+  // > Buffer 3 -> Late Tier 3
+
+  if (checkInMin <= bufferMins[0]) return 0; // On Time
+
+  if (bufferMins.length === 1) return 1; // Only 1 buffer defined, so simple Late
+
+  if (checkInMin <= bufferMins[1]) return 1; // Between Buf1 and Buf2
+  if (bufferMins.length === 2) return 2; // > Buf2, limit reached
+
+  if (checkInMin <= bufferMins[2]) return 2; // Between Buf2 and Buf3
+
+  return 3; // > Buf3
 };
 
 /**
@@ -344,10 +384,11 @@ export const syncBiometrics = async (req, res) => {
 
       // Determine Status
       let status = "Absent";
+      let lateTier = 0;
+
       if (record.checkIn) {
-        const checkInMin = toMinutes(record.checkIn);
-        const lateLimitMin = toMinutes(rules.lateLimit);
-        status = checkInMin <= lateLimitMin ? "Present" : "Late";
+        lateTier = calculateLateTier(record.checkIn, rules);
+        status = lateTier > 0 ? "Late" : "Present";
       }
 
       // Calculate Work Hours
@@ -362,6 +403,13 @@ export const syncBiometrics = async (req, res) => {
         continue;
       }
 
+      // // ✅ NEW: Protect "On Leave" status from being overwritten
+      // const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
+      // if (existingRecord && existingRecord.status === "On Leave") {
+      //   console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
+      //   continue;
+      // }
+
       // Upsert Attendance
       await Attendance.findOneAndUpdate(
         { employee: employee._id, date: record.date },
@@ -371,7 +419,9 @@ export const syncBiometrics = async (req, res) => {
           shift: shiftName,
           checkIn: record.checkIn,
           checkOut: record.checkOut,
+          checkOut: record.checkOut,
           status,
+          lateTier,
           workHours
         },
         { upsert: true, new: true }
@@ -519,11 +569,18 @@ export const getDailyAttendance = async (req, res) => {
       return res.status(400).json({ message: "Date is required" });
     }
 
-    // Get all employees
-    const employees = await Employee.find({ status: "Active" }).sort({ code: 1 }); // Only Active employees
+    // Get employees (Personalized for Employee role)
+    const employeeQuery = { status: "Active" };
+    if (req.user.role === "Employee") {
+      employeeQuery._id = req.user.employeeId;
+    }
+
+    const employees = await Employee.find(employeeQuery).sort({ code: 1 }); // Only Active employees
 
     // Get attendance for the date
-    const attendanceRecords = await Attendance.find({ date }).populate("employee");
+    const attendanceRecords = await Attendance.find({ date })
+      .populate("employee")
+      .populate("editedBy", "name"); // ✅ Populate Editor Name
 
     // Get Approved Leaves for this date (Consistent with Monthly View)
     const leaveMap = await getApprovedLeavesMap(employees);
@@ -556,7 +613,12 @@ export const getDailyAttendance = async (req, res) => {
         // If profile says On Leave or Request Approved -> "On Leave"
         // Else "Absent"
         status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
-        avatar: emp.avatar // if available
+        avatar: emp.avatar, // if available
+        // ✅ Return Edit Info
+        isManuallyEdited: record?.isManuallyEdited || false,
+        editedBy: record?.editedBy || null,
+        editedAt: record?.editedAt || null,
+        editReason: record?.editReason || null
       };
     });
 
@@ -588,10 +650,16 @@ export const getMonthlyAttendance = async (req, res) => {
     // Construct regex or range query
     const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
 
-    const employees = await Employee.find({ status: "Active" }).sort({ code: 1 });
+    // Get employees (Personalized for Employee role)
+    const employeeQuery = { status: "Active" };
+    if (req.user.role === "Employee") {
+      employeeQuery._id = req.user.employeeId;
+    }
+
+    const employees = await Employee.find(employeeQuery).sort({ code: 1 });
     const attendanceRecords = await Attendance.find({
       date: { $regex: regex }
-    });
+    }).populate("editedBy", "name"); // ✅ Populate Editor
 
     // Get Holidays
     const holidaySet = await getHolidaysSet();
@@ -645,7 +713,12 @@ export const getMonthlyAttendance = async (req, res) => {
         attendanceData[day] = {
           status,
           checkIn: record?.checkIn,
-          checkOut: record?.checkOut
+          checkOut: record?.checkOut,
+          // ✅ New Fields
+          isManuallyEdited: record?.isManuallyEdited,
+          editedBy: record?.editedBy,
+          editedAt: record?.editedAt,
+          editReason: record?.editReason
         };
 
         if (status === "Present") present++;
@@ -677,33 +750,45 @@ export const getMonthlyAttendance = async (req, res) => {
  */
 export const markAttendance = async (req, res) => {
   try {
-    const { employeeId, date, checkIn, checkOut, shift } = req.body;
+    const { employeeId, date, checkIn, checkOut, shift, reason } = req.body;
 
     // Get Shift Rules
     const rules = await getShiftRules(shift || "Day Shift");
 
     // Determine Status
     let status = "Absent";
+    let lateTier = 0;
     if (checkIn) {
-      const checkInMin = toMinutes(checkIn);
-      const lateLimitMin = toMinutes(rules.lateLimit);
-      status = checkInMin <= lateLimitMin ? "Present" : "Late";
+      lateTier = calculateLateTier(checkIn, rules);
+      status = lateTier > 0 ? "Late" : "Present";
     }
 
     // Calculate Work Hours
     const workHours = calculateDuration(checkIn, checkOut);
 
+    const updateData = {
+      employee: employeeId,
+      date,
+      shift: shift || "Day Shift",
+      checkIn: checkIn || null,
+      checkOut: checkOut || null,
+      checkOut: checkOut || null,
+      status,
+      lateTier,
+      workHours
+    };
+
+    // ✅ Track Manual Creation/Edit if Reason provided
+    if (reason && req.user) {
+      updateData.isManuallyEdited = true;
+      updateData.editedBy = req.user._id;
+      updateData.editedAt = new Date();
+      updateData.editReason = reason;
+    }
+
     const attendance = await Attendance.findOneAndUpdate(
       { employee: employeeId, date },
-      {
-        employee: employeeId,
-        date,
-        shift: shift || "Day Shift",
-        checkIn: checkIn || null,
-        checkOut: checkOut || null,
-        status,
-        workHours
-      },
+      updateData,
       { upsert: true, new: true }
     );
 
@@ -720,13 +805,29 @@ export const markAttendance = async (req, res) => {
 export const updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const { checkIn, checkOut, shift, status } = req.body;
+    const { checkIn, checkOut, shift, status, reason } = req.body;
+
+    // ✅ Enforce Mandatory Reason
+    if (!reason || reason.trim() === "") {
+      return res.status(400).json({ message: "Reason is required for manual edits." });
+    }
 
     const workHours = calculateDuration(checkIn, checkOut);
 
     const updated = await Attendance.findByIdAndUpdate(
       id,
-      { shift, checkIn, checkOut, status, workHours },
+      {
+        shift,
+        checkIn,
+        checkOut,
+        status,
+        workHours,
+        // ✅ Track Edit
+        isManuallyEdited: true,
+        editedBy: req.user._id,
+        editedAt: new Date(),
+        editReason: reason
+      },
       { new: true }
     );
 

@@ -63,36 +63,40 @@ export const getEmployeeDocuments = async (req, res) => {
 };
 
 // Get My Documents (Logged in user)
-// Get My Documents (Logged in user)
 export const getMyDocuments = async (req, res) => {
     try {
         const user = req.user;
         let employeeId = user.employeeId;
 
-        // Fallback: If no linked employeeId, try to find by email
+        // Fallback: If no linked employeeId, try to find by email (Case-Insensitive)
         if (!employeeId) {
-            const employee = await Employee.findOne({ email: user.email });
+            // console.log(`[DEBUG] No direct employeeId for user ${user.email}. Attempting email lookup...`);
+            const employee = await Employee.findOne({
+                email: { $regex: new RegExp(`^${user.email}$`, "i") }
+            });
+
             if (employee) {
                 employeeId = employee._id;
-
-                // Optional: Self-heal the link in User model for future
-                // We use findByIdAndUpdate to avoid saving potential stale data on user object
-                // import User model if needed, or rely on req.user.save() 
-                // But req.user is a mongoose doc from middleware, so we can save it.
+                // console.log(`[DEBUG] Found matching employee ${employeeId} for email ${user.email}. Healing link...`);
                 user.employeeId = employee._id;
-                await user.save({ validateBeforeSave: false }); // Skip validation to be safe
+                await user.save({ validateBeforeSave: false });
             }
         }
 
         if (!employeeId) {
-            return res.status(404).json({ message: "No linked employee profile found for this user." });
+            // console.warn(`[WARN] No linked employee profile found for user: ${user.email}`);
+            return res.status(404).json({
+                message: "No linked employee profile found for this user. Please ensure your user email matches your employee record or contact admin.",
+                code: "NO_LINKED_PROFILE"
+            });
         }
 
         const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
+        // console.log(`[DEBUG] Found ${documents.length} documents for employee ${employeeId}`);
         res.json(documents);
     } catch (error) {
         // console.error("Get My Docs Error:", error);
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ message: "Server error while fetching personal documents" });
     }
 };
 

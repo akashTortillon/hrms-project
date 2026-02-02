@@ -119,6 +119,9 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     let paidDays = 0;
     let lopDays = 0;
     let lateCount = 0;
+    let lateTier1 = 0;
+    let lateTier2 = 0;
+    let lateTier3 = 0;
     let overtimeHours = 0;
     let unpaidLeavesCount = 0;
     let paidLeavesCount = 0; // ✅ NEW
@@ -147,7 +150,14 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
 
             if (status === 'Present' || status === 'Late') {
                 isDayPresent = true;
-                if (status === 'Late') isDayLate = true;
+                if (status === 'Late') {
+                    isDayLate = true;
+                    // Count Tiers
+                    const tier = record.lateTier || 1; // Default to 1 if missing
+                    if (tier === 1) lateTier1++;
+                    else if (tier === 2) lateTier2++;
+                    else if (tier >= 3) lateTier3++;
+                }
 
                 // Calculate Overtime based on THIS DAY'S Shift
                 if (record.workHours) {
@@ -246,7 +256,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         unpaidLeaves: unpaidLeavesCount,
         paidLeaves: paidLeavesCount, // ✅ NEW
         overtimeHours: parseFloat(overtimeHours.toFixed(2)),
-        late: lateCount
+        late: lateCount,
+        lateTier1,
+        lateTier2,
+        lateTier3
     };
 };
 
@@ -321,6 +334,84 @@ export const generatePayroll = async (req, res) => {
                 leaveRulesMap
             );
 
+            // --- 2.5 SHIFT-BASED PENALTIES (Dynamic Late Deduction) ---
+            // If the employee's shift has a "latePolicy", we apply it here.
+            // This overrides or adds to standard deductions?
+            // "Inegrated with Late Count" -> If we apply specific penalties, we might skip the generic "LATE_COUNT" rule later?
+            // Or let them coexist? Usually specific overrides generic.
+            // Let's implement as: If shift penalties found, apply them.
+            // NOTE: This logic assumes 'stats' tracks counts for tier1, tier2, tier3.
+
+            const empShiftMeta = shiftMap[empShiftName] || {};
+            const latePolicy = empShiftMeta.latePolicy || [];
+            let shiftPenaltyApplied = false;
+
+            if (latePolicy.length > 0) {
+                // Policy: [{ tier: 1, type: 'FIXED', value: 10 }, ...]
+                let penaltyAmount = 0;
+                let penaltyDescParts = [];
+
+                // Calculate for Tier 1
+                if (stats.lateTier1 > 0) {
+                    const rule = latePolicy.find(p => p.tier === 1);
+                    if (rule) {
+                        const val = Number(rule.value || 0);
+                        let subTotal = 0;
+                        if (rule.type === 'FIXED') subTotal = stats.lateTier1 * val;
+                        else if (rule.type === 'PERCENTAGE') subTotal = stats.lateTier1 * (basicSalary * val / 100); // % of Monthly Basic per instance? Or Pro-rated? Let's assume % of Basic.
+                        else if (rule.type === 'DAILY_RATE') subTotal = stats.lateTier1 * (dailySalary * val);
+
+                        if (subTotal > 0) {
+                            penaltyAmount += subTotal;
+                            penaltyDescParts.push(`${stats.lateTier1}x T1`);
+                        }
+                    }
+                }
+                // Calculate for Tier 2
+                if (stats.lateTier2 > 0) {
+                    const rule = latePolicy.find(p => p.tier === 2);
+                    if (rule) {
+                        const val = Number(rule.value || 0);
+                        let subTotal = 0;
+                        if (rule.type === 'FIXED') subTotal = stats.lateTier2 * val;
+                        else if (rule.type === 'PERCENTAGE') subTotal = stats.lateTier2 * (basicSalary * val / 100);
+                        else if (rule.type === 'DAILY_RATE') subTotal = stats.lateTier2 * (dailySalary * val);
+
+                        if (subTotal > 0) {
+                            penaltyAmount += subTotal;
+                            penaltyDescParts.push(`${stats.lateTier2}x T2`);
+                        }
+                    }
+                }
+                // Calculate for Tier 3
+                if (stats.lateTier3 > 0) {
+                    const rule = latePolicy.find(p => p.tier === 3);
+                    if (rule) {
+                        const val = Number(rule.value || 0);
+                        let subTotal = 0;
+                        if (rule.type === 'FIXED') subTotal = stats.lateTier3 * val;
+                        else if (rule.type === 'PERCENTAGE') subTotal = stats.lateTier3 * (basicSalary * val / 100);
+                        else if (rule.type === 'DAILY_RATE') subTotal = stats.lateTier3 * (dailySalary * val);
+
+                        if (subTotal > 0) {
+                            penaltyAmount += subTotal;
+                            penaltyDescParts.push(`${stats.lateTier3}x T3`);
+                        }
+                    }
+                }
+
+                if (penaltyAmount > 0) {
+                    deductionList.push({
+                        name: "Late Penalty (Shift Policy)",
+                        amount: parseFloat(penaltyAmount.toFixed(2)),
+                        type: "AUTO",
+                        meta: penaltyDescParts.join(', ')
+                    });
+                    totalDeductions += penaltyAmount;
+                    shiftPenaltyApplied = true;
+                }
+            }
+
 
 
             // 3. Dynamic Rule Engine
@@ -359,8 +450,28 @@ export const generatePayroll = async (req, res) => {
 
                     // 1. Get the Statistic Value
                     if (basis === "LATE_COUNT") {
+                        // If shift penalty applied, do we skip generic count? 
+                        // User asked for "integrated".
+                        // Logic: If specific penalties applied (shiftPenaltyApplied=true), skip generic "Late Count" rule.
+                        if (shiftPenaltyApplied) continue;
+
                         statValue = stats.late;
                         if (statValue > 0) description = `${statValue} Days Late`;
+                    }
+                    else if (basis === "LATE_TIER_1_COUNT") {
+                        if (shiftPenaltyApplied) continue; // Skip if handled by Shift Policy
+                        statValue = stats.lateTier1;
+                        if (statValue > 0) description = `${statValue} Days Late (Tier 1)`;
+                    }
+                    else if (basis === "LATE_TIER_2_COUNT") {
+                        if (shiftPenaltyApplied) continue; // Skip if handled by Shift Policy
+                        statValue = stats.lateTier2;
+                        if (statValue > 0) description = `${statValue} Days Late (Tier 2)`;
+                    }
+                    else if (basis === "LATE_TIER_3_COUNT") {
+                        if (shiftPenaltyApplied) continue; // Skip if handled by Shift Policy
+                        statValue = stats.lateTier3;
+                        if (statValue > 0) description = `${statValue} Days Late (Tier 3)`;
                     }
                     else if (basis === "ABSENT_DAYS") {
                         statValue = stats.daysAbsent + stats.unpaidLeaves;
@@ -412,6 +523,60 @@ export const generatePayroll = async (req, res) => {
                     } else if (meta.category === "DEDUCTION") {
                         deductionList.push(entry);
                         totalDeductions += amount;
+                    }
+                }
+            }
+
+            // 3.5. SALARY ADVANCE & LOAN DEDUCTIONS
+            // Find User for this employee to get Requests
+            const user = await User.findOne({ email: emp.email });
+            if (user) {
+                const requests = await Request.find({
+                    userId: user._id,
+                    requestType: "SALARY",
+                    status: "APPROVED",
+                    isFullyPaid: { $ne: true }
+                });
+
+                for (const req of requests) {
+                    const { amount, repaymentPeriod, totalRepaymentAmount } = req.details || {};
+                    const principal = Number(amount) || 0;
+                    const totalPayable = Number(totalRepaymentAmount) || principal; // Fallback to principal if no interest
+                    const period = Number(repaymentPeriod) || 1;
+
+                    // Logic: Deduction Amount
+                    let deductionAmount = 0;
+                    const alreadyPaid = req.payrollDeductions ? req.payrollDeductions.reduce((sum, d) => sum + d.amount, 0) : 0;
+                    const remaining = totalPayable - alreadyPaid;
+
+                    if (remaining <= 0) continue; // Should be handled by isFullyPaid, but safety check
+
+                    if (req.subType === "salary_advance") {
+                        // Assumption: One-time deduction unless period > 1 specified
+                        if (period > 1) {
+                            const installment = totalPayable / period;
+                            deductionAmount = Math.min(installment, remaining);
+                        } else {
+                            deductionAmount = remaining; // Full deduction
+                        }
+                    } else if (req.subType === "loan") {
+                        const installment = totalPayable / period;
+                        deductionAmount = Math.min(installment, remaining);
+                    }
+
+                    // Check if this specific month/year was already deducted (idempotency for re-runs)
+                    // We don't save to Request yet (that's finalize), so we just add to current payroll draft.
+                    // But if we already Finalized a payroll for this month, generatePayroll shouldn't define it again?
+                    // generatePayroll creates DRAFT. If previous finalized payroll exists for this month, user handles it.
+
+                    if (deductionAmount > 0) {
+                        deductionList.push({
+                            name: req.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
+                            amount: parseFloat(deductionAmount.toFixed(2)),
+                            type: "AUTO",
+                            meta: `Req ID: ${req.requestId} | Remaining: ${parseFloat((remaining - deductionAmount).toFixed(2))}`
+                        });
+                        totalDeductions += deductionAmount;
                     }
                 }
             }
@@ -472,7 +637,10 @@ export const generatePayroll = async (req, res) => {
 export const getPayrollSummary = async (req, res) => {
     try {
         const { month, year } = req.query;
-        const records = await Payroll.find({ month, year }).populate("employee", "name code department designation role");
+        const records = await Payroll.find({ month, year })
+            .populate("employee", "name code department designation role")
+            .populate("allowances.addedBy", "name") // ✅ Populate Allowance Editor
+            .populate("deductions.addedBy", "name"); // ✅ Populate Deduction Editor
 
         let totalNet = 0;
         let totalBasic = 0;
@@ -505,19 +673,34 @@ export const getPayrollSummary = async (req, res) => {
 // --- API: Add Manual Adjustment ---
 export const addAdjustment = async (req, res) => {
     try {
-        const { payrollId, type, name, amount } = req.body;
+        const { payrollId, type, name, amount, reason } = req.body;
         const payroll = await Payroll.findById(payrollId);
 
         if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
         if (payroll.status !== "DRAFT") return res.status(400).json({ message: "Cannot adjust a finalized payroll." });
 
+        // ✅ Enforce Mandatory Reason
+        if (!reason || reason.trim() === "") {
+            return res.status(400).json({ message: "Reason is required for manual adjustments." });
+        }
+
         const numAmount = Number(amount);
 
+        const newItem = {
+            name,
+            amount: numAmount,
+            type: "MANUAL",
+            // ✅ Manual Tracking
+            addedBy: req.user._id,
+            addedAt: new Date(),
+            reason: reason
+        };
+
         if (type === "ALLOWANCE") {
-            payroll.allowances.push({ name, amount: numAmount, type: "MANUAL" });
+            payroll.allowances.push(newItem);
             payroll.totalAllowances = (payroll.totalAllowances || 0) + numAmount;
         } else {
-            payroll.deductions.push({ name, amount: numAmount, type: "MANUAL" });
+            payroll.deductions.push(newItem);
             payroll.totalDeductions = (payroll.totalDeductions || 0) + numAmount;
         }
 
@@ -544,34 +727,121 @@ export const addAdjustment = async (req, res) => {
     }
 };
 
+
+// --- API: Remove Payroll Item (Skip Deduction) ---
+export const removePayrollItem = async (req, res) => {
+    try {
+        const { payrollId, itemId, type } = req.body; // type: 'ALLOWANCE' or 'DEDUCTION'
+        const payroll = await Payroll.findById(payrollId);
+
+        if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
+        if (payroll.status !== "DRAFT") return res.status(400).json({ message: "Cannot edit a finalized payroll." });
+
+        let removedAmount = 0;
+
+        if (type === "ALLOWANCE") {
+            const itemIndex = payroll.allowances.findIndex(i => i._id.toString() === itemId);
+            if (itemIndex > -1) {
+                removedAmount = payroll.allowances[itemIndex].amount;
+                payroll.allowances.splice(itemIndex, 1);
+                payroll.totalAllowances -= removedAmount;
+            }
+        } else {
+            const itemIndex = payroll.deductions.findIndex(i => i._id.toString() === itemId);
+            if (itemIndex > -1) {
+                removedAmount = payroll.deductions[itemIndex].amount;
+                payroll.deductions.splice(itemIndex, 1);
+                payroll.totalDeductions -= removedAmount;
+            }
+        }
+
+        // Recalculate Net
+        payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
+        await payroll.save();
+
+        res.json({ message: "Item removed successfully", payroll });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- API: Finalize Payroll ---
 export const finalizePayroll = async (req, res) => {
     try {
         const { month, year } = req.body;
 
-        // Update all DRAFT records for this month to PROCESSED
-        const result = await Payroll.updateMany(
-            { month, year, status: "DRAFT" },
-            { $set: { status: "PROCESSED" } }
-        );
+        // 1. Fetch DRAFT records to process
+        const records = await Payroll.find({ month, year, status: "DRAFT" });
 
-        if (result.matchedCount === 0) {
+        if (records.length === 0) {
             return res.status(400).json({ message: "No Draft payroll records found to finalize." });
         }
 
-        res.json({ message: `Success! Payroll Finalized for ${result.modifiedCount} employees. The payroll is now locked.` });
+        // 2. Update Request Models (for Loans/Advances)
+        // Find any payroll records that had loan/advance deductions
+        for (const p of records) {
+            // Find User for this employee (needed to link back to Request userId, or use Employee ID if we linking differently)
+            // Requests are linked by userId. Employee model has email. User has email.
+            // Let's rely on finding User by EmployeeId if we stored it, or by Email.
+            // Simpler: The deduction meta has "Req ID: REQ001". We can find by that directly!
+
+            const loanDeductions = p.deductions.filter(d =>
+                (d.name.includes("Loan Repayment") || d.name.includes("Salary Advance"))
+                && d.meta && d.meta.includes("Req ID:")
+            );
+
+            for (const ded of loanDeductions) {
+                const reqIdMatch = ded.meta.match(/Req ID: (REQ\d+)/);
+                const reqId = reqIdMatch ? reqIdMatch[1] : null;
+
+                if (reqId) {
+                    const request = await Request.findOne({ requestId: reqId });
+
+                    if (request) {
+                        // Check if this deduction is already recorded (idempotency)
+                        const alreadyRecorded = request.payrollDeductions.some(pd => pd.month == month && pd.year == year);
+
+                        if (!alreadyRecorded) {
+                            request.payrollDeductions.push({
+                                month,
+                                year,
+                                amount: ded.amount,
+                                date: new Date()
+                            });
+
+                            // Check if fully paid
+                            const totalPaid = request.payrollDeductions.reduce((sum, x) => sum + x.amount, 0);
+                            if (totalPaid >= (request.details.amount - 1)) { // Tolerance of 1 for rounding
+                                request.isFullyPaid = true;
+                                request.status = "COMPLETED";
+                            }
+
+                            await request.save();
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Mark as Processed
+        for (const p of records) {
+            p.status = "PROCESSED";
+            await p.save();
+        }
+
+        res.json({ message: `Success! Payroll Finalized for ${records.length} employees. The payroll is now locked.` });
 
         // AUDIT LOG
-        if (result.modifiedCount > 0) {
-            await PayrollAudit.create({
-                action: "FINALIZED",
-                performedBy: req.user ? req.user._id : null,
-                performedByName: req.user ? req.user.name : "System",
-                month,
-                year,
-                details: `Finalized payroll for ${result.modifiedCount} records`
-            });
-        }
+        await PayrollAudit.create({
+            action: "FINALIZED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            details: `Finalized payroll for ${records.length} records`
+        });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
