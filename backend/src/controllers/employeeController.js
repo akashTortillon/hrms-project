@@ -249,10 +249,20 @@ export const getEmployees = async (req, res) => {
 export const getEmployeeById = async (req, res) => {
   try {
     const { id } = req.params;
+    const { permissions, role, employeeId } = req.user;
+
     const employee = await Employee.findById(id);
 
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Permission Check: Admin or has VIEW_ALL_EMPLOYEES or it's their own profile
+    const canViewAll = role === "Admin" || permissions.includes("ALL") || permissions.includes("VIEW_ALL_EMPLOYEES");
+    const isOwnProfile = employeeId && employeeId.toString() === id;
+
+    if (!canViewAll && !isOwnProfile) {
+      return res.status(403).json({ message: "Access Denied: You cannot view this profile" });
     }
 
     res.json(employee);

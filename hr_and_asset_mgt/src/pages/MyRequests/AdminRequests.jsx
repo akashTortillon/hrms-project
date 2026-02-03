@@ -12,15 +12,21 @@ import {
 } from "../../services/requestService";
 import "../../style/myRequests.css";
 import DocumentApproveModal from "./DocumentApproveModal.jsx";
+import SalaryApproveModal from "./SalaryApproveModal.jsx";
 
 export default function AdminRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   // ✅ Document request modal states
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+
+  // ✅ Salary request modal states
+  const [showSalaryModal, setShowSalaryModal] = useState(false);
+  const [selectedSalaryReq, setSelectedSalaryReq] = useState(null);
 
   // Rejection dialog states
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
@@ -56,33 +62,63 @@ export default function AdminRequests() {
      ACTION HANDLERS
   ========================= */
 
-  // ✅ UPDATED: Handle approve - check if document request
+  // ✅ UPDATED: Handle approve - check if document or salary request
   const handleApprove = async (request) => {
     if (request.requestType === "DOCUMENT") {
       // Open modal for document upload
       setSelectedRequest(request);
       setShowApproveModal(true);
+    } else if (request.requestType === "SALARY") {
+      // Open modal for Salary (Loan/Advance) approval
+      setSelectedSalaryReq(request);
+      setShowSalaryModal(true);
     } else {
-      // Direct approval for LEAVE and SALARY requests
+      // Direct approval for LEAVE (and others if any)
       try {
+        setProcessing(true);
         await updateRequestStatus(request._id, { action: "APPROVE" });
-        fetchRequests();
+        await fetchRequests();
       } catch (err) {
         console.error("Failed to approve request", err);
+      } finally {
+        setProcessing(false);
       }
+    }
+  };
+
+  // ✅ Salary approval handler
+  const handleSalaryApprove = async (requestId, data) => {
+    try {
+      setProcessing(true);
+      await updateRequestStatus(requestId, {
+        action: "APPROVE",
+        interestRate: data.interestRate,
+        repaymentPeriod: data.repaymentPeriod
+      });
+      await fetchRequests();
+      setShowSalaryModal(false);
+      setSelectedSalaryReq(null);
+    } catch (err) {
+      console.error("Failed to approve salary request", err);
+      alert("Failed to approve request. Please try again.");
+    } finally {
+      setProcessing(false);
     }
   };
 
   // ✅ Document request approval handler
   const handleDocumentApprove = async (requestId, formData) => {
     try {
+      setProcessing(true);
       await approveDocumentRequest(requestId, formData);
-      fetchRequests();
+      await fetchRequests();
       setShowApproveModal(false);
       setSelectedRequest(null);
     } catch (err) {
       console.error("Failed to approve document request", err);
       alert("Failed to approve document request. Please try again.");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -106,6 +142,7 @@ export default function AdminRequests() {
     }
 
     try {
+      setProcessing(true);
       if (isDocumentRequest) {
         // Use document-specific rejection endpoint
         await rejectDocumentRequest(selectedRequestId, rejectionReason.trim());
@@ -122,10 +159,12 @@ export default function AdminRequests() {
       setSelectedRequestId(null);
       setIsDocumentRequest(false);
 
-      fetchRequests();
+      await fetchRequests();
     } catch (err) {
       console.error("Failed to reject request", err);
       alert("Failed to reject request. Please try again.");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -303,14 +342,16 @@ export default function AdminRequests() {
                       <AppButton
                         variant="success"
                         onClick={() => handleApprove(req)}
+                        disabled={processing}
                       >
-                        Approve
+                        {processing ? "..." : "Approve"}
                       </AppButton>
                       <AppButton
                         variant="danger"
                         onClick={() => handleRejectClick(req)}
+                        disabled={processing}
                       >
-                        Reject
+                        {processing ? "..." : "Reject"}
                       </AppButton>
                     </div>
                   </ListGroup.Item>
@@ -432,6 +473,17 @@ export default function AdminRequests() {
         onApprove={handleDocumentApprove}
       />
 
+      {/* SALARY APPROVE MODAL */}
+      <SalaryApproveModal
+        show={showSalaryModal}
+        request={selectedSalaryReq}
+        onClose={() => {
+          setShowSalaryModal(false);
+          setSelectedSalaryReq(null);
+        }}
+        onApprove={handleSalaryApprove}
+      />
+
       {/* REJECT CONFIRM */}
       {showRejectConfirm && (
         <div className="dialog-overlay">
@@ -483,8 +535,9 @@ export default function AdminRequests() {
               <button
                 className="dialog-btn dialog-btn-submit"
                 onClick={submitRejection}
+                disabled={processing}
               >
-                Submit
+                {processing ? "Submitting..." : "Submit"}
               </button>
             </div>
           </div>

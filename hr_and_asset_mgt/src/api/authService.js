@@ -48,3 +48,20 @@ export const logoutUser = async () => {
     console.error("Logout API call failed", error);
   }
 };
+
+export const changePassword = async (oldPassword, newPassword) => {
+  const res = await fetch(`${API_URL}/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${localStorage.getItem("token")}`
+    },
+    body: JSON.stringify({ oldPassword, newPassword }),
+  });
+
+  const result = await res.json();
+  if (!res.ok) {
+    throw new Error(result.message || "Failed to change password");
+  }
+  return result;
+};

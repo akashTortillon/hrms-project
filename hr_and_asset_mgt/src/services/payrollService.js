@@ -20,6 +20,18 @@ export const payrollService = {
         return response.data;
     },
 
+    // Remove Payroll Item
+    removePayrollItem: async (payrollId, itemId, type) => {
+        const response = await api.post("/api/payroll/remove-item", { payrollId, itemId, type });
+        return response.data;
+    },
+
+    // Get Audit Logs
+    getAuditLogs: async (payrollId) => {
+        const response = await api.get(`/api/payroll/audit-logs?payrollId=${payrollId}`);
+        return response.data;
+    },
+
     // Finalize Payroll
     finalize: async (month, year) => {
         const response = await api.post("/api/payroll/finalize", { month, year });

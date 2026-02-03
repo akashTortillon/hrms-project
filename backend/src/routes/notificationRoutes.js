@@ -5,6 +5,7 @@ import {
     markAsRead,
     markAllAsRead,
     deleteNotification,
+    dismissVirtualNotification,
 } from "../controllers/notificationController.js";
 import { protect } from "../middlewares/authMiddleware.js";
 
@@ -14,6 +15,7 @@ router.use(protect);
 
 router.get("/", getNotifications);
 router.get("/unread-count", getUnreadCount);
+router.post("/dismiss-virtual/:virtualId", dismissVirtualNotification);
 router.patch("/:id/read", markAsRead);
 router.patch("/read-all", markAllAsRead);
 router.delete("/:id", deleteNotification);

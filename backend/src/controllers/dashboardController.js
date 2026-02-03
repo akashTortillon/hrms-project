@@ -71,8 +71,8 @@ export const getEmployeeVisaExpiries = async (req, res) => {
   try {
     let query = { visaExpiry: { $ne: null } };
 
-    // If role is Employee, only show their own expiry
-    if (req.user.role === "Employee") {
+    // If user DOES NOT have VIEW_ALL_EMPLOYEES permission, only show their own expiry
+    if (!req.user.permissions.includes("VIEW_ALL_EMPLOYEES") && req.user.role !== "Admin") {
       query._id = req.user.employeeId;
     }
 

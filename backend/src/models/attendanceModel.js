@@ -39,6 +39,11 @@ const attendanceSchema = new mongoose.Schema(
       default: "Absent"
     },
 
+    lateTier: {
+      type: Number,
+      default: 0 // 0=None/OnTime, 1=Tier1, 2=Tier2, 3=Tier3(Max)
+    },
+
     leaveType: {
       type: String,
       default: null
@@ -47,6 +52,25 @@ const attendanceSchema = new mongoose.Schema(
     isPaid: {
       type: Boolean,
       default: true
+    },
+
+    // ✅ Manual Edit Tracking
+    isManuallyEdited: {
+      type: Boolean,
+      default: false
+    },
+    editedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    editedAt: {
+      type: Date,
+      default: null
+    },
+    editReason: {
+      type: String, // Reason is mandatory for manual edits
+      default: ""
     }
   },
   {

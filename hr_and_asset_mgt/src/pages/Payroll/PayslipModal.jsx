@@ -1,167 +1,161 @@
-
-import React from 'react';
+import React, { useRef } from 'react';
 import CustomModal from "../../components/reusable/CustomModal.jsx";
-import "../../style/Payroll.css"; // Ensure this has modal styles
+import "../../style/Payroll.css";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function PayslipModal({ show, onClose, record }) {
+    const payslipRef = useRef();
+
     if (!record) return null;
 
     const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary } = record;
     const monthName = record.month ? new Date(2000, record.month - 1).toLocaleString('default', { month: 'long' }) : '';
     const periodStr = `${monthName} ${record.year}`;
 
-    // Styles from user request (converted to const for cleaner JSX)
-    const styles = {
-        container: {
-            backgroundColor: '#f5f5f5',
-            padding: '20px',
-            fontFamily: 'Arial, sans-serif',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderRadius: '8px'
-        },
-        payslip: {
-            width: '100%',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 0 20px rgba(0,0,0,0.05)',
-            padding: '40px'
-        },
-        header: {
-            textAlign: 'center',
-            borderBottom: '3px solid #333',
-            paddingBottom: '15px',
-            marginBottom: '25px'
-        },
-        title: {
-            margin: '0',
-            fontSize: '28px',
-            fontWeight: 'bold',
-            color: '#333'
-        },
-        period: {
-            margin: '5px 0 0 0',
-            fontSize: '14px',
-            color: '#666'
-        },
-        section: {
-            marginBottom: '25px'
-        },
-        infoGrid: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '12px',
-            padding: '15px',
-            backgroundColor: '#f9f9f9',
-            border: '1px solid #e0e0e0'
-        },
-        infoItem: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '5px 0'
-        },
-        label: {
-            fontWeight: '600',
-            color: '#555'
-        },
-        value: {
-            color: '#333',
-            textAlign: 'right'
-        },
-        sectionTitle: {
-            margin: '0 0 15px 0',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            color: '#333',
-            borderBottom: '2px solid #e0e0e0',
-            paddingBottom: '8px'
-        },
-        attendanceGrid: {
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: '15px',
-            padding: '15px',
-            backgroundColor: '#f9f9f9',
-            border: '1px solid #e0e0e0'
-        },
-        attendanceItem: {
-            textAlign: 'center',
-            padding: '10px',
-            backgroundColor: '#fff',
-            border: '1px solid #e0e0e0'
-        },
-        attendanceLabel: {
-            display: 'block',
-            fontSize: '12px',
-            color: '#666',
-            marginBottom: '5px'
-        },
-        attendanceValue: {
-            display: 'block',
-            fontSize: '20px',
-            fontWeight: 'bold',
-            color: '#333'
-        },
-        earningsDeductionsContainer: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '20px',
-            marginBottom: '25px'
-        },
-        column: {
-            border: '1px solid #e0e0e0',
-            padding: '15px'
-        },
-        lineItem: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '10px 0',
-            borderBottom: '1px solid #f0f0f0',
-            fontSize: '14px'
-        },
-        totalLine: {
-            borderTop: '2px solid #333',
-            borderBottom: 'none',
-            marginTop: '10px',
-            paddingTop: '15px'
-        },
-        boldText: {
-            fontWeight: 'bold',
-            fontSize: '16px',
-            color: '#333'
-        },
-        netSalarySection: {
-            marginTop: '30px',
-            marginBottom: '30px'
-        },
-        netSalaryBox: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '20px',
-            backgroundColor: '#2c5f2d',
-            color: '#fff',
-            border: '3px solid #1e4620'
-        },
-        netSalaryLabel: {
-            fontSize: '18px',
-            fontWeight: 'bold'
-        },
-        netSalaryAmount: {
-            fontSize: '28px',
-            fontWeight: 'bold'
-        },
-        footer: {
-            borderTop: '1px solid #e0e0e0',
-            paddingTop: '15px',
-            textAlign: 'center'
-        },
-        footerText: {
-            margin: '0',
-            fontSize: '12px',
-            color: '#999',
-            fontStyle: 'italic'
+    // Calculate Totals
+    const totalAllowances = record.totalAllowances || 0;
+    const totalDeductions = record.totalDeductions || 0;
+    const grossEarnings = basicSalary + totalAllowances;
+
+    // --- PDF GENERATION ---
+    const handleDownloadPDF = () => {
+        const doc = new jsPDF();
+
+        // 1. Header
+        doc.setFontSize(22);
+        doc.setTextColor(40);
+        doc.text("LEPTIS", 105, 20, { align: 'center' }); // Replace with Company Name
+
+        doc.setFontSize(16);
+        doc.text("PAYSLIP", 105, 30, { align: 'center' });
+
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text(`Period: ${periodStr}`, 105, 38, { align: 'center' });
+
+        doc.line(14, 45, 196, 45); // Horizontal line
+
+        // 2. Employee Details (Grid Layout manually)
+        doc.setFontSize(11);
+        doc.setTextColor(0);
+
+        const startY = 55;
+        // Left Column
+        doc.text("Employee Name:", 14, startY);
+        doc.setFont("helvetica", "bold");
+        doc.text(employee?.name || "Unknown", 50, startY);
+        doc.setFont("helvetica", "normal");
+
+        doc.text("Designation:", 14, startY + 8);
+        doc.setFont("helvetica", "bold");
+        doc.text(employee?.designation || "N/A", 50, startY + 8);
+        doc.setFont("helvetica", "normal");
+
+        // Right Column
+        doc.text("Employee ID:", 120, startY);
+        doc.setFont("helvetica", "bold");
+        doc.text(employee?.code || "N/A", 155, startY);
+        doc.setFont("helvetica", "normal");
+
+        doc.text("Department:", 120, startY + 8);
+        doc.setFont("helvetica", "bold");
+        doc.text(employee?.department || "N/A", 155, startY + 8);
+        doc.setFont("helvetica", "normal");
+
+        // 3. Attendance Summary (Optional)
+        autoTable(doc, {
+            startY: startY + 20,
+            head: [['Total Days', 'Present', 'Absent', 'Late', 'Overtime (Hrs)']],
+            body: [[
+                attendanceSummary?.totalDays || 30,
+                attendanceSummary?.daysPresent || 0,
+                attendanceSummary?.daysAbsent || 0,
+                attendanceSummary?.late || 0,
+                attendanceSummary?.overtimeHours || 0
+            ]],
+            theme: 'plain',
+            styles: { fontSize: 10, cellPadding: 2, halign: 'center' },
+            headStyles: { fillColor: [240, 240, 240], textColor: 50 }
+        });
+
+        // 4. Earnings & Deductions Table
+        // We'll prepare rows combining both or side-by-side. 
+        // Standard format often has Earnings Col | Amount | Deductions Col | Amount
+
+        const earningsRows = [
+            ['Basic Salary', basicSalary.toLocaleString()],
+            ...(allowances || []).map(a => [a.name, a.amount.toLocaleString()])
+        ];
+
+        const deductionRows = [
+            ...(deductions || []).map(d => [d.name, d.amount.toLocaleString()])
+        ];
+
+        // Pad rows to match length
+        const maxLength = Math.max(earningsRows.length, deductionRows.length);
+        const tableBody = [];
+
+        for (let i = 0; i < maxLength; i++) {
+            const earn = earningsRows[i] || ['', ''];
+            const deduct = deductionRows[i] || ['', ''];
+            tableBody.push([earn[0], earn[1], deduct[0], deduct[1]]);
         }
+
+        // Add Totals Row
+        tableBody.push([
+            { content: 'Total Earnings', styles: { fontStyle: 'bold' } },
+            { content: grossEarnings.toLocaleString(), styles: { fontStyle: 'bold' } },
+            { content: 'Total Deductions', styles: { fontStyle: 'bold' } },
+            { content: totalDeductions.toLocaleString(), styles: { fontStyle: 'bold' } }
+        ]);
+
+        autoTable(doc, {
+            startY: doc.lastAutoTable.finalY + 15,
+            head: [['Earnings', 'Amount (AED)', 'Deductions', 'Amount (AED)']],
+            body: tableBody,
+            theme: 'grid',
+            headStyles: { fillColor: [55, 65, 81] }, // Dark gray
+            styles: { fontSize: 10 },
+            columnStyles: {
+                0: { cellWidth: 60 },
+                1: { cellWidth: 35, halign: 'right' },
+                2: { cellWidth: 60 },
+                3: { cellWidth: 35, halign: 'right' }
+            }
+        });
+
+        // 5. Net Salary
+        const finalY = doc.lastAutoTable.finalY + 10;
+
+        doc.setFillColor(240, 253, 244); // Light green bg
+        doc.rect(14, finalY, 182, 12, 'F');
+        doc.setDrawColor(22, 163, 74); // Green border
+        doc.rect(14, finalY, 182, 12, 'S');
+
+        doc.setFontSize(12);
+        doc.setTextColor(21, 128, 61); // Green text
+        doc.setFont("helvetica", "bold");
+        doc.text("NET SALARY PAYABLE", 20, finalY + 8);
+        doc.text(`${netSalary.toLocaleString()} AED`, 190, finalY + 8, { align: 'right' });
+
+        // 6. Footer (Signatures)
+        const footerY = finalY + 40;
+        doc.setTextColor(0);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+
+        doc.line(20, footerY, 70, footerY);
+        doc.text("Employee Signature", 45, footerY + 5, { align: 'center' });
+
+        doc.line(140, footerY, 190, footerY);
+        doc.text("Employer Signature", 165, footerY + 5, { align: 'center' });
+
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text("This is a computer-generated document.", 105, 280, { align: 'center' });
+
+        doc.save(`Payslip_${employee?.name || 'Employee'}_${monthName}_${record.year}.pdf`);
     };
 
     return (
@@ -169,118 +163,144 @@ export default function PayslipModal({ show, onClose, record }) {
             show={show}
             title="Payslip Details"
             onClose={onClose}
-            width="900px"
+            width="900px" // Wider for better view
         >
-            <div style={styles.container}>
-                <div style={styles.payslip}>
+            <div className="payslip-container">
+                <div className="payslip-paper" ref={payslipRef}>
+
                     {/* Header */}
-                    <div style={styles.header}>
-                        <h1 style={styles.title}>SALARY SLIP</h1>
-                        <p style={styles.period}>{periodStr}</p>
+                    <div className="payslip-header">
+                        <h1 className="payslip-title">SALARY SLIP</h1>
+                        <h2 className="payslip-company">LEPTIS</h2>
+                        <p className="payslip-period">Period: {periodStr}</p>
                     </div>
 
-                    {/* Employee Info */}
-                    <div style={styles.section}>
-                        <div style={styles.infoGrid}>
-                            <div style={styles.infoItem}>
-                                <span style={styles.label}>Employee Name:</span>
-                                <span style={styles.value}>{employee?.name || "Unknown"}</span>
-                            </div>
-                            <div style={styles.infoItem}>
-                                <span style={styles.label}>Employee ID:</span>
-                                <span style={styles.value}>{employee?.code || 'N/A'}</span>
-                            </div>
-                            <div style={styles.infoItem}>
-                                <span style={styles.label}>Designation:</span>
-                                <span style={styles.value}>{employee?.designation ? `${employee.designation} • ${employee.department}` : 'N/A'}</span>
-                            </div>
-                            <div style={styles.infoItem}>
-                                <span style={styles.label}>Payroll ID:</span>
-                                <span style={styles.value}>{record._id.substring(0, 8)}</span>
-                            </div>
+                    {/* Employee Info Grid */}
+                    <div className="payslip-employee-grid">
+                        <div className="payslip-info-item">
+                            <span className="payslip-label">Employee Name</span>
+                            <span className="payslip-value">{employee?.name || "Unknown"}</span>
+                        </div>
+                        <div className="payslip-info-item">
+                            <span className="payslip-label">Employee ID</span>
+                            <span className="payslip-value">{employee?.code || "N/A"}</span>
+                        </div>
+                        <div className="payslip-info-item">
+                            <span className="payslip-label">Designation</span>
+                            <span className="payslip-value">{employee?.designation || "N/A"}</span>
+                        </div>
+                        <div className="payslip-info-item">
+                            <span className="payslip-label">Department</span>
+                            <span className="payslip-value">{employee?.department || "N/A"}</span>
+                        </div>
+                        <div className="payslip-info-item">
+                            <span className="payslip-label">Joining Date</span>
+                            <span className="payslip-value">{employee?.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'}</span>
+                        </div>
+                        <div className="payslip-info-item">
+                            <span className="payslip-label">Bank Account</span>
+                            <span className="payslip-value">{employee?.bankAccountNumber || 'N/A'}</span>
                         </div>
                     </div>
 
-                    {/* Attendance Summary */}
-                    <div style={styles.section}>
-                        <h3 style={styles.sectionTitle}>ATTENDANCE SUMMARY</h3>
-                        <div style={styles.attendanceGrid}>
-                            <div style={styles.attendanceItem}>
-                                <span style={styles.attendanceLabel}>Total Days</span>
-                                <span style={styles.attendanceValue}>{attendanceSummary?.totalDays || 30}</span>
-                            </div>
-                            <div style={styles.attendanceItem}>
-                                <span style={styles.attendanceLabel}>Present Days</span>
-                                <span style={styles.attendanceValue}>{attendanceSummary?.daysPresent || 0}</span>
-                            </div>
-                            <div style={styles.attendanceItem}>
-                                <span style={styles.attendanceLabel}>Absent Days</span>
-                                <span style={styles.attendanceValue}>{attendanceSummary?.daysAbsent || 0}</span>
-                            </div>
-                            <div style={styles.attendanceItem}>
-                                <span style={styles.attendanceLabel}>Late Count</span>
-                                <span style={styles.attendanceValue}>{attendanceSummary?.late || 0}</span>
-                            </div>
-                            <div style={styles.attendanceItem}>
-                                <span style={styles.attendanceLabel}>Overtime (Hrs)</span>
-                                <span style={styles.attendanceValue}>{attendanceSummary?.overtimeHours || 0}</span>
-                            </div>
+                    {/* Attendance (Optional Display) */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#374151' }}>Attendance Summary</h4>
+                        <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#555', background: '#f9f9f9', padding: '10px', borderRadius: '4px' }}>
+                            <div>Total Days: <strong>{attendanceSummary?.totalDays || 30}</strong></div>
+                            <div>Present: <strong>{attendanceSummary?.daysPresent || 0}</strong></div>
+                            <div>Absent: <strong>{attendanceSummary?.daysAbsent || 0}</strong></div>
                         </div>
                     </div>
 
-                    {/* Earnings and Deductions */}
-                    <div style={styles.earningsDeductionsContainer}>
-                        {/* Earnings */}
-                        <div style={styles.column}>
-                            <h3 style={styles.sectionTitle}>EARNINGS</h3>
-                            <div style={styles.lineItem}>
-                                <span>Basic Salary</span>
-                                <span>{basicSalary?.toLocaleString()} AED</span>
-                            </div>
-                            {allowances?.map((allow, idx) => (
-                                <div key={idx} style={styles.lineItem}>
-                                    <span>{allow.name}</span>
-                                    <span>{allow.amount?.toLocaleString()} AED</span>
-                                </div>
-                            ))}
-                            <div style={{ ...styles.lineItem, ...styles.totalLine }}>
-                                <span style={styles.boldText}>Total Earnings</span>
-                                <span style={styles.boldText}>{(basicSalary + (record.totalAllowances || 0)).toLocaleString()} AED</span>
-                            </div>
-                        </div>
+                    {/* Salary Table */}
+                    <table className="payslip-salary-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '35%' }}>Earnings</th>
+                                <th style={{ width: '15%', textAlign: 'right' }}>Amount</th>
+                                <th style={{ width: '35%', paddingLeft: '24px' }}>Deductions</th>
+                                <th style={{ width: '15%', textAlign: 'right' }}>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {/* We render max rows to keep alignment */}
+                            {Array.from({ length: Math.max((allowances?.length || 0) + 1, (deductions?.length || 0)) }).map((_, i) => {
+                                const isBasic = i === 0;
+                                let earnName = '', earnAmt = '';
+                                let dedName = '', dedAmt = '';
 
-                        {/* Deductions */}
-                        <div style={styles.column}>
-                            <h3 style={styles.sectionTitle}>DEDUCTIONS</h3>
-                            {deductions?.length === 0 ? (
-                                <div style={{ ...styles.lineItem, fontStyle: 'italic', color: '#999' }}>No Deductions</div>
-                            ) : null}
-                            {deductions?.map((deduct, idx) => (
-                                <div key={idx} style={styles.lineItem}>
-                                    <span>{deduct.name}</span>
-                                    <span>-{deduct.amount?.toLocaleString()} AED</span>
-                                </div>
-                            ))}
-                            <div style={{ ...styles.lineItem, ...styles.totalLine }}>
-                                <span style={styles.boldText}>Total Deductions</span>
-                                <span style={styles.boldText}>-{(record.totalDeductions || 0).toLocaleString()} AED</span>
-                            </div>
+                                if (isBasic) {
+                                    earnName = 'Basic Salary';
+                                    earnAmt = basicSalary.toLocaleString();
+                                } else {
+                                    const allow = allowances?.[i - 1]; // -1 because index 0 is Basic
+                                    if (allow) {
+                                        earnName = allow.name;
+                                        earnAmt = allow.amount.toLocaleString();
+                                    }
+                                }
+
+                                const deduct = deductions?.[i];
+                                if (deduct) {
+                                    dedName = deduct.name;
+                                    dedAmt = deduct.amount.toLocaleString();
+                                }
+
+                                if (!earnName && !dedName) return null;
+
+                                return (
+                                    <tr key={i}>
+                                        <td>{earnName}</td>
+                                        <td className="payslip-amount">{earnAmt}</td>
+                                        <td style={{ paddingLeft: '24px' }}>{dedName}</td>
+                                        <td className="payslip-amount">{dedAmt}</td>
+                                    </tr>
+                                );
+                            })}
+
+                            {/* Totals Row */}
+                            <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
+                                <td>Total Earnings</td>
+                                <td className="payslip-amount">{grossEarnings.toLocaleString()}</td>
+                                <td style={{ paddingLeft: '24px' }}>Total Deductions</td>
+                                <td className="payslip-amount">{totalDeductions > 0 ? totalDeductions.toLocaleString() : '0'}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    {/* Net Pay */}
+                    <div className="payslip-net-box">
+                        <span className="payslip-net-label">Net Salary Payable</span>
+                        <span className="payslip-net-amount">{netSalary.toLocaleString()} AED</span>
+                    </div>
+
+                    {/* Footer / Signatures */}
+                    <div className="payslip-footer">
+                        <div className="payslip-signature">
+                            Employee Signature
+                        </div>
+                        <div className="payslip-signature">
+                            Employer Signature
                         </div>
                     </div>
 
-                    {/* Net Salary */}
-                    <div style={styles.netSalarySection}>
-                        <div style={styles.netSalaryBox}>
-                            <span style={styles.netSalaryLabel}>NET SALARY PAYABLE</span>
-                            <span style={styles.netSalaryAmount}>{netSalary?.toLocaleString()} AED</span>
-                        </div>
+                    <div className="payslip-note">
+                        This is a computer-generated payslip.
                     </div>
 
-                    {/* Footer */}
-                    <div style={styles.footer}>
-                        <p style={styles.footerText}>This is a computer-generated payslip and does not require a signature.</p>
-                    </div>
                 </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button onClick={onClose} className="btn btn-secondary">Close</button>
+                <button onClick={handleDownloadPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download PDF
+                </button>
             </div>
         </CustomModal>
     );

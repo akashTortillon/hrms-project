@@ -1,6 +1,8 @@
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Attendance.css";
 
+
+
 /* =========================
    Helpers (LOCAL – SAFE)
    ========================= */
@@ -96,9 +98,9 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                     </td>
                     <td>
                       <div className="stats-cell-content">
-                        <div className="stat-item stat-present">P: {emp.stats?.present || 0}</div>
-                        <div className="stat-item stat-absent">A: {emp.stats?.absent || 0}</div>
-                        <div className="stat-item stat-late">L: {emp.stats?.late || 0}</div>
+                        <div style={{ color: '#16a34a', fontWeight: 'bold' }}>P: {emp.stats?.present || 0}</div>
+                        <div style={{ color: '#dc2626', fontWeight: 'bold' }}>A: {emp.stats?.absent || 0}</div>
+                        <div style={{ color: '#d97706', fontWeight: 'bold' }}>L: {emp.stats?.late || 0}</div>
                       </div>
                     </td>
                     {days.map(d => {
@@ -113,20 +115,33 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
 
                       if (isSunday) {
                         status = "Weekend";
-                      } else if (!status) {
-                        // If not Sunday and no record, default to Absent if past date? 
-                        // For now let's leave it empty or handled by backend 'Absent'. 
-                        // The backend usually fills 'Absent'.
                       }
 
-                      const abbr = status ? getStatusAbbr(status) : "";
-                      const cls = status ? getStatusClass(status) : "";
+                      // Define styles for the letter itself
+                      let color = '#374151'; // default gray
+                      let bg = 'transparent';
+
+                      if (status === 'Present') { color = '#16a34a'; bg = '#dcfce7'; }
+                      else if (status === 'Absent') { color = '#dc2626'; bg = '#fee2e2'; }
+                      else if (status === 'Late') { color = '#d97706'; bg = '#fef3c7'; }
+                      else if (status === 'Weekend') { color = '#9ca3af'; bg = '#f3f4f6'; }
+                      else if (status === 'Holiday') { color = '#7c3aed'; bg = '#f3e8ff'; }
+                      else if (status === 'On Leave') { color = '#ca8a04'; bg = '#fef9c3'; }
+
+                      const abbr = status ? getStatusAbbr(status) : "-";
 
                       return (
-                        <td key={d} className={`status-cell ${isSunday ? 'cell-sunday' : ''}`}>
+                        <td key={d} className={`status-cell ${isSunday ? 'cell-sunday' : ''}`} style={{ textAlign: 'center', padding: '0' }}>
                           {status && (
                             <div
-                              className={`status-badge ${cls}`}
+                              style={{
+                                width: '100%', height: '100%',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: color,
+                                backgroundColor: bg,
+                                fontWeight: '600',
+                                fontSize: '13px'
+                              }}
                               title={`${dateKey}: ${status} ${record.checkIn ? `(${record.checkIn} - ${record.checkOut})` : ''}`}
                             >
                               {abbr}
@@ -211,6 +226,15 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                     >
                       {row.status || "Absent"}
                     </span>
+                    {row.isManuallyEdited && (
+                      <div
+                        className="status-edited"
+                        title={`Edited by ${row.editedBy?.name || 'Admin'} on ${new Date(row.editedAt).toLocaleDateString()}. Reason: ${row.editReason}`}
+                      >
+                        EDITED
+                      </div>
+                    )}
+                    {/* Tooltip for hover is handled by title attribute for simplicity as requested */}
                   </td>
 
                   {onEdit && (
