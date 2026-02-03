@@ -18,7 +18,8 @@ import {
   getUnreadCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
-  deleteNotification
+  deleteNotification,
+  dismissVirtualNotification
 } from "../../services/notificationService";
 
 
@@ -72,19 +73,27 @@ export default function NavigationBar() {
   };
 
   const handleDeleteNotification = async (id) => {
+    // Optimistic Update: Remove from UI immediately
+    setNotifications(prev => {
+      const itemToDelete = prev.find(n => n._id === id);
+      if (itemToDelete && (!itemToDelete.isRead || itemToDelete.isVirtual)) {
+        setBadgeCount(c => Math.max(0, c - 1));
+      }
+      return prev.filter(n => n._id !== id);
+    });
+
     try {
-      // If it's a virtual ID, we don't delete from DB, 
-      // but the user expects it to disappear from the session list.
       if (id && String(id).startsWith("virtual-")) {
-        setNotifications(prev => prev.filter(n => n._id !== id));
-        // Note: Virtuals will reappear on next reload if the condition persists.
-        // This is standard practice for aggregated business logic.
+        await dismissVirtualNotification(id);
       } else {
         await deleteNotification(id);
-        loadNotifications();
       }
+      // Refresh background data to stay in sync
+      loadNotifications();
     } catch (error) {
       console.error("Failed to delete notification", error);
+      // Revert on error
+      loadNotifications();
     }
   };
 

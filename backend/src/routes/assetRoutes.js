@@ -48,8 +48,8 @@ router.get("/export", protect, hasPermission("MANAGE_ASSETS"), exportAssets);
    ASSET CRUD ROUTES
 ========================= */
 
-// GET all assets
-router.get("/", protect, getAssets);
+// GET all assets - Restricted to users with MANAGE_ASSETS permission
+router.get("/", protect, hasPermission("MANAGE_ASSETS"), getAssets);
 
 // CREATE new asset
 router.post("/", protect, hasPermission("MANAGE_ASSETS"), createAsset);
@@ -62,17 +62,18 @@ router.post("/return", protect, hasPermission("MANAGE_ASSETS"), returnAssetToSto
 // ALERTS & REPORTS (must be before /:id)
 router.get("/alerts/all", protect, hasPermission("MANAGE_ASSETS"), getAssetAlerts);
 
-// EMPLOYEE ASSETS (must be before /:id)
-router.get("/employee/:employeeId", protect, getEmployeeAssets);
+// EMPLOYEE ASSETS (must be before /:id) - Usually employees can see their own, so maybe no hasPermission here OR check in controller
+// For now, shielding with MANAGE_ASSETS if it's the admin view
+router.get("/employee/:employeeId", protect, hasPermission("MANAGE_ASSETS"), getEmployeeAssets);
 
 // GET asset history (must be before /:id)
-router.get("/:id/history", protect, getAssetHistory);
+router.get("/:id/history", protect, hasPermission("MANAGE_ASSETS"), getAssetHistory);
 
 // GET current assignment (must be before /:id)
-router.get("/:id/assignments/current", protect, getCurrentAssignment);
+router.get("/:id/assignments/current", protect, hasPermission("MANAGE_ASSETS"), getCurrentAssignment);
 
 // GET asset by ID
-router.get("/:id", protect, getAssetById);
+router.get("/:id", protect, hasPermission("MANAGE_ASSETS"), getAssetById);
 
 // UPDATE asset
 router.put("/:id", protect, hasPermission("MANAGE_ASSETS"), updateAsset);

@@ -39,8 +39,8 @@ const getStatusClass = (status) => {
 
 function Attendance() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { role } = useRole();
-  const isEmployee = role === "Employee";
+  const { hasPermission } = useRole();
+  const isEmployee = !hasPermission("VIEW_ALL_ATTENDANCE");
 
   // Read State from URL Params
   const viewMode = searchParams.get("view") || "day";
@@ -123,6 +123,11 @@ function Attendance() {
         statusClass: getStatusClass(record.status || "Present"),
         icon: "user",
         iconColor: "#6b7280",
+        // ✅ Include Edit Metadata
+        isManuallyEdited: record.isManuallyEdited,
+        editedBy: record.editedBy,
+        editedAt: record.editedAt,
+        editReason: record.editReason
       }));
 
       setAttendanceRecords(formattedRecords);
@@ -215,12 +220,12 @@ function Attendance() {
 
   const handleSaveAttendance = async (data) => {
     try {
-      const { _id, employeeId, date, checkIn, checkOut, status, shift, workHours } = data;
+      const { _id, employeeId, date, checkIn, checkOut, status, shift, workHours, reason } = data;
 
       if (_id) {
-        await updateAttendance(_id, { checkIn, checkOut, shift, status, workHours });
+        await updateAttendance(_id, { checkIn, checkOut, shift, status, workHours, reason });
       } else {
-        await markAttendance({ employeeId, date, checkIn, checkOut, shift, status, workHours });
+        await markAttendance({ employeeId, date, checkIn, checkOut, shift, status, workHours, reason });
       }
 
       await fetchAttendanceData();
@@ -271,7 +276,7 @@ function Attendance() {
         })}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
-        onEdit={isEmployee ? null : openAttendanceModal}
+        onEdit={hasPermission("MANAGE_ATTENDANCE") ? openAttendanceModal : null}
         loading={loading}
         year={selectedYear}
         month={selectedMonth}

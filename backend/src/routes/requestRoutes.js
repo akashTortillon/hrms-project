@@ -65,7 +65,8 @@ import {
   updateRequestStatus,
   approveDocumentRequest,
   rejectDocumentRequest,
-  downloadDocument
+  downloadDocument,
+  getEmployeeRequests
 } from "../controllers/requestController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
@@ -108,6 +109,14 @@ router.put(
   protect,
   hasPermission("APPROVE_REQUESTS"),
   updateRequestStatus
+);
+
+// Get requests for a specific employee
+// GET /api/requests/employee/:employeeId
+router.get(
+  "/employee/:employeeId",
+  protect,
+  getEmployeeRequests
 );
 
 /* =========================

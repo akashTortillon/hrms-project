@@ -27,7 +27,11 @@ const userSchema = new mongoose.Schema({
       expires: { type: Date, required: true },
       createdAt: { type: Date, default: Date.now }
     }
-  ]
+  ],
+  dismissedNotifications: {
+    type: [String],
+    default: []
+  }
 },
   { timestamps: true });
 

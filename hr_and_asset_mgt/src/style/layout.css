@@ -952,16 +952,17 @@ body {
   background: transparent !important;
   border: none !important;
   color: #9ca3af !important;
-  font-size: 18px !important;
+  font-size: 20px !important;
   line-height: 1 !important;
   cursor: pointer !important;
-  padding: 4px !important;
+  padding: 8px !important;
   border-radius: 50% !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  opacity: 0;
+  opacity: 0.6;
   transition: all 0.2s ease !important;
+  z-index: 2 !important;
 }
 
 .notification-item:hover .delete-item-btn {
@@ -971,6 +972,7 @@ body {
 .delete-item-btn:hover {
   background: #fee2e2 !important;
   color: #ef4444 !important;
+  transform: scale(1.1);
 }
 
 .notification-footer {

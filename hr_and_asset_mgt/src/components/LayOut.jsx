@@ -14,6 +14,8 @@ import MyRequests from "../pages/MyRequests/MyRequests.jsx";
 import Reports from "../pages/Reports/ReportsView.jsx";
 import CustomReportBuilder from "../pages/Reports/pages/CustomReportBuilder.jsx";
 import Masters from "../pages/Masters/MastersView.jsx";
+import Onboarding from "../pages/Onboarding/OnboardingView.jsx";
+import Offboarding from "../pages/Offboarding/OffboardingView.jsx";
 
 export default function Layout() {
   return (
@@ -30,6 +32,8 @@ export default function Layout() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="employees" element={<Employees />} />
               <Route path="employees/:id" element={<EmployeeDetail />} />
+              <Route path="onboarding" element={<Onboarding />} />
+              <Route path="offboarding" element={<Offboarding />} />
               <Route path="payroll" element={<Payroll />} />
               <Route path="attendance" element={<Attendance />} />
               <Route path="documents" element={<Documents />} />

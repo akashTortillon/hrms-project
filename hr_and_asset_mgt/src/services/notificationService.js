@@ -41,3 +41,10 @@ export const deleteNotification = async (id) => {
     const response = await api.delete(`${BASE_URL}/${id}`);
     return response.data;
 };
+/**
+ * Dismiss a virtual notification (Persist for Admin/HR)
+ */
+export const dismissVirtualNotification = async (virtualId) => {
+    const response = await api.post(`${BASE_URL}/dismiss-virtual/${virtualId}`);
+    return response.data;
+};

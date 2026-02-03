@@ -80,7 +80,7 @@ const AssetsTable = ({
 
         let primaryText = "Unassigned";
 
-        
+
         let secondaryText = null;
 
         if (custodian?.type === "EMPLOYEE") {
@@ -229,36 +229,13 @@ const AssetsTable = ({
 
                   <div
                     className="dropdown-menu"
-                    // style={{
-                    //   position: "absolute",
-                    //   right: "-12px",
-                    //   top: "100%",
-                    //   marginTop: "4px",
-                    //   background: "white",
-                    //   border: "1px solid #e2e8f0",
-                    //   borderRadius: "8px",
-                    //   boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-                    //   zIndex: 1000,
-                    //   minWidth: "160px"
-                    // }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
+                      className="dropdown-item"
                       onClick={() => {
                         onEdit && onEdit(row);
                         document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px"
                       }}
                     >
                       <SvgIcon name="edit" size={14} />
@@ -266,21 +243,10 @@ const AssetsTable = ({
                     </button>
 
                     <button
+                      className="dropdown-item"
                       onClick={() => {
                         onViewMaintenanceLogs && onViewMaintenanceLogs(row);
                         document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px"
                       }}
                     >
                       <SvgIcon name="spanner" size={14} />
@@ -288,21 +254,10 @@ const AssetsTable = ({
                     </button>
 
                     <button
+                      className="dropdown-item"
                       onClick={() => {
                         onManageDocuments && onManageDocuments(row);
                         document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px"
                       }}
                     >
                       <SvgIcon name="document" size={14} />
@@ -310,21 +265,10 @@ const AssetsTable = ({
                     </button>
 
                     <button
+                      className="dropdown-item"
                       onClick={() => {
                         onManageAMC && onManageAMC(row);
                         document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px"
                       }}
                     >
                       <SvgIcon name="document (1)" size={14} />
@@ -334,22 +278,10 @@ const AssetsTable = ({
                     <div style={{ borderTop: "1px solid #e2e8f0", margin: "4px 0" }} />
 
                     <button
+                      className="dropdown-item danger"
                       onClick={() => {
                         onDispose && onDispose(row);
                         document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        color: "#dc2626",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px"
                       }}
                     >
                       <SvgIcon name="waste-disposal" size={14} />
@@ -357,22 +289,10 @@ const AssetsTable = ({
                     </button>
 
                     <button
+                      className="dropdown-item danger"
                       onClick={() => {
                         onDelete && onDelete(row);
                         document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        color: "#dc2626",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px"
                       }}
                     >
                       <SvgIcon name="delete" size={14} />

@@ -8,6 +8,7 @@ import StatCard from "../../components/reusable/StatCard"; // ✅ Integrated Car
 import { useNavigate } from "react-router-dom";
 import { getDocumentStats } from "../../services/documentService.js";
 import { useRole } from "../../contexts/RoleContext.jsx";
+import EmployeeDashboard from "./EmployeeDashboard";
 
 import {
   fetchMetrics,
@@ -19,7 +20,14 @@ import {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const { role } = useRole();
+  const { role, hasPermission } = useRole();
+
+  // Use granular permission to determine dashboard visibility
+  const hasAdminAccess = hasPermission("VIEW_ADMIN_DASHBOARD");
+
+  if (!hasAdminAccess) {
+    return <EmployeeDashboard />;
+  }
 
   /** 🔢 REAL METRICS (ONLY FIRST CARD) */
   const [metrics, setMetrics] = useState({
@@ -292,8 +300,8 @@ function Dashboard() {
 
 
 
-      {/* ⚡ QUICK ACTIONS - Hidden for Employees */}
-      {role !== "Employee" && (
+      {/* ⚡ QUICK ACTIONS - Hidden if no admin access */}
+      {hasAdminAccess && (
         <div className="dashboard-quick-actions">
           {/* <div className="dashboard-quick-actions-title">Quick Actions</div> */}
 
@@ -343,7 +351,7 @@ function Dashboard() {
       </Row>
 
       <Row className="mt-4">
-        {role !== "Employee" && (
+        {hasPermission("APPROVE_REQUESTS") && (
           <Col md={6}>
             <DashboardInfoCard
               title="Pending Approvals"
@@ -357,7 +365,7 @@ function Dashboard() {
           </Col>
         )}
 
-        <Col md={role === "Employee" ? 12 : 6}>
+        <Col md={!hasAdminAccess ? 12 : 6}>
           <DashboardInfoCard
             title="Today's Attendance"
             icon="calendar"
