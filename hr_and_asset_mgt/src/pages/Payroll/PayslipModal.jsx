@@ -202,56 +202,46 @@ export default function PayslipModal({ show, onClose, record }) {
             onClose={onClose}
             width="900px" // Wider for better view
         >
-            <div className="payslip-container">
-                <div className="payslip-paper" ref={payslipRef}>
+            <div style={{ backgroundColor: '#f3f4f6', padding: '24px', display: 'flex', justifyContent: 'center' }}>
+                <div ref={payslipRef} style={{ backgroundColor: '#fff', width: '100%', maxWidth: '750px', padding: '30px 40px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1px solid #e5e7eb' }}>
 
                     {/* Header */}
-                    <div className="payslip-header" style={{ borderBottom: '2px solid #182d54', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #182d54', paddingBottom: '15px', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <img src={logoLeptis} alt="Logo" style={{ height: '40px' }} />
-                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#182d54' }}>leptis</span>
+                            <img src={logoLeptis} alt="Logo" style={{ height: '35px' }} />
+                            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#182d54' }}>leptis</span>
                         </div>
                         <div style={{ textAlign: 'center' }}>
-                            <h1 className="payslip-title" style={{ fontSize: '18px', margin: 0 }}>SALARY SLIP</h1>
-                            <p className="payslip-period" style={{ margin: 0 }}>Period: {periodStr}</p>
+                            <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827', letterSpacing: '1px' }}>SALARY SLIP</div>
+                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>Period: {periodStr}</div>
                         </div>
-                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#182d54' }}>
-                            لبتس
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#182d54' }}>لبتس</div>
+                    </div>
+
+                    {/* Employee Info */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 30px', marginBottom: '20px', padding: '15px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
+                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Employee Name</span>
+                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.name || "N/A"}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
+                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Employee ID</span>
+                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.code || "N/A"}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
+                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Designation</span>
+                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.designation || "N/A"}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
+                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Department</span>
+                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.department || "N/A"}</span>
                         </div>
                     </div>
 
-                    {/* Employee Info Grid */}
-                    <div className="payslip-employee-grid">
-                        <div className="payslip-info-item">
-                            <span className="payslip-label">Employee Name</span>
-                            <span className="payslip-value">{employee?.name || "Unknown"}</span>
-                        </div>
-                        <div className="payslip-info-item">
-                            <span className="payslip-label">Employee ID</span>
-                            <span className="payslip-value">{employee?.code || "N/A"}</span>
-                        </div>
-                        <div className="payslip-info-item">
-                            <span className="payslip-label">Designation</span>
-                            <span className="payslip-value">{employee?.designation || "N/A"}</span>
-                        </div>
-                        <div className="payslip-info-item">
-                            <span className="payslip-label">Department</span>
-                            <span className="payslip-value">{employee?.department || "N/A"}</span>
-                        </div>
-                        <div className="payslip-info-item">
-                            <span className="payslip-label">Joining Date</span>
-                            <span className="payslip-value">{employee?.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'}</span>
-                        </div>
-                        <div className="payslip-info-item">
-                            <span className="payslip-label">Bank Account</span>
-                            <span className="payslip-value">{employee?.bankAccountNumber || 'N/A'}</span>
-                        </div>
-                    </div>
-
-                    {/* Attendance (Optional Display) */}
+                    {/* Attendance Summary */}
                     <div style={{ marginBottom: '20px' }}>
-                        <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#374151' }}>Attendance Summary</h4>
-                        <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#555', background: '#f9f9f9', padding: '10px', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>Attendance Summary</div>
+                        <div style={{ display: 'flex', gap: '25px', fontSize: '12px', color: '#555', background: '#f9f9f9', padding: '10px 15px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
                             <div>Total Days: <strong>{attendanceSummary?.totalDays || 30}</strong></div>
                             <div>Present: <strong>{attendanceSummary?.daysPresent || 0}</strong></div>
                             <div>Absent: <strong>{attendanceSummary?.daysAbsent || 0}</strong></div>
@@ -259,78 +249,85 @@ export default function PayslipModal({ show, onClose, record }) {
                     </div>
 
                     {/* Salary Table */}
-                    <table className="payslip-salary-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>Earnings</th>
-                                <th style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
-                                <th style={{ textAlign: 'left', padding: '10px 16px', paddingLeft: '30px', borderBottom: '1px solid #e5e7eb' }}>Deductions</th>
-                                <th style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {/* We render max rows to keep alignment */}
-                            {Array.from({ length: Math.max((allowances?.length || 0) + 1, (deductions?.length || 0)) }).map((_, i) => {
-                                const isBasic = i === 0;
-                                let earnName = '', earnAmt = '';
-                                let dedName = '', dedAmt = '';
-
-                                if (isBasic) {
-                                    earnName = 'Basic Salary';
-                                    earnAmt = (Number(basicSalary) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                } else {
-                                    const allow = allowances?.[i - 1]; // -1 because index 0 is Basic
-                                    if (allow) {
-                                        earnName = allow.name;
-                                        earnAmt = (Number(allow.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                    }
-                                }
-
-                                const deduct = deductions?.[i];
-                                if (deduct) {
-                                    dedName = deduct.name;
-                                    dedAmt = (Number(deduct.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                }
-
-                                if (!earnName && !dedName) return null;
-
-                                return (
-                                    <tr key={i}>
-                                        <td style={{ padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>{earnName}</td>
-                                        <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>{earnAmt}</td>
-                                        <td style={{ paddingLeft: '30px', padding: '10px 16px', paddingLeft: '30px', borderBottom: '1px solid #e5e7eb' }}>{dedName}</td>
-                                        <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>{dedAmt}</td>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                        {/* Earnings */}
+                        <div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: '#182d54' }}>
+                                        <th style={{ textAlign: 'left', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Earnings</th>
+                                        <th style={{ textAlign: 'right', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Amount</th>
                                     </tr>
-                                );
-                            })}
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>Basic Salary</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(basicSalary) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    </tr>
+                                    {(allowances || []).map((a, idx) => (
+                                        <tr key={idx}>
+                                            <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>{a.name}</td>
+                                            <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(a.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    ))}
+                                    <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
+                                        <td style={{ padding: '10px 12px', fontSize: '12px' }}>Total Earnings</td>
+                                        <td style={{ padding: '10px 12px', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(grossEarnings) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
 
-                            {/* Totals Row */}
-                            <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
-                                <td style={{ padding: '10px 16px', borderBottom: '2px solid #374151' }}>Total Earnings</td>
-                                <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '2px solid #374151' }}>{(Number(grossEarnings) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                <td style={{ paddingLeft: '30px', padding: '10px 16px', borderBottom: '2px solid #374151' }}>Total Deductions</td>
-                                <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '2px solid #374151' }}>{totalDeductions > 0 ? (Number(totalDeductions) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        {/* Deductions */}
+                        <div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: '#182d54' }}>
+                                        <th style={{ textAlign: 'left', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Deductions</th>
+                                        <th style={{ textAlign: 'right', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(deductions || []).length > 0 ? (
+                                        (deductions || []).map((d, idx) => (
+                                            <tr key={idx}>
+                                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>{d.name}</td>
+                                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(d.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="2" style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>No deductions</td>
+                                        </tr>
+                                    )}
+                                    <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
+                                        <td style={{ padding: '10px 12px', fontSize: '12px' }}>Total Deductions</td>
+                                        <td style={{ padding: '10px 12px', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(totalDeductions) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
                     {/* Net Pay */}
-                    <div className="payslip-net-box">
-                        <span className="payslip-net-label">Net Salary Payable</span>
-                        <span className="payslip-net-amount">{netSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED</span>
+                    <div style={{ backgroundColor: '#f0fdf4', border: '2px solid #16a34a', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '8px', marginBottom: '30px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: '700', color: '#15803d', textTransform: 'uppercase' }}>Net Salary Payable</span>
+                        <span style={{ fontSize: '20px', fontWeight: '800', color: '#111827' }}>{(Number(netSalary) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED</span>
                     </div>
 
                     {/* Footer / Signatures */}
-                    <div className="payslip-footer">
-                        <div className="payslip-signature">
-                            Employee Signature
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ borderTop: '1px solid #374151', width: '150px', marginBottom: '5px' }}></div>
+                            <span style={{ fontSize: '11px', color: '#6b7280' }}>Employee Signature</span>
                         </div>
-                        <div className="payslip-signature">
-                            Employer Signature
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ borderTop: '1px solid #374151', width: '150px', marginBottom: '5px' }}></div>
+                            <span style={{ fontSize: '11px', color: '#6b7280' }}>Employer Signature</span>
                         </div>
                     </div>
 
-                    <div className="payslip-note">
+                    <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px', color: '#9ca3af' }}>
                         This is a computer-generated payslip.
                     </div>
 
