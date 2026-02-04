@@ -10,7 +10,8 @@
 /* ===== MAIN AUTH CONTAINER ===== */
 .auth-container {
   display: flex;
-  width: 900px;
+  width: 95%;
+  max-width: 900px;
   background: #ffffff;
   border-radius: 14px;
   overflow: hidden;

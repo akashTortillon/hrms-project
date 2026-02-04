@@ -21,6 +21,7 @@ import {
   deleteNotification,
   dismissVirtualNotification
 } from "../../services/notificationService";
+import Button from "../reusable/Button.jsx"
 
 
 const quickActions = [
@@ -29,115 +30,66 @@ const quickActions = [
   { label: "Upload Document", key: "uploadDocument" },
 ];
 
-export default function NavigationBar() {
+export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [badgeCount, setBadgeCount] = useState(0);
+
   const { role, setRole, hasPermission } = useRole();
   const profileAnchorRef = useRef(null);
   const navigate = useNavigate();
 
-  // Dynamic Notifications State
-  const [notifications, setNotifications] = useState([]);
-  const [badgeCount, setBadgeCount] = useState(0);
-
-  useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 60000); // Poll every minute
-    return () => clearInterval(interval);
-  }, []);
-
+  // Load notifications
   const loadNotifications = async () => {
     try {
       const data = await fetchNotifications();
+      setNotifications(data);
       const count = await getUnreadCount();
-
-      // Format time for the reusable component
-      const formatted = data.map(n => ({
-        ...n,
-        time: formatNotificationTime(n.createdAt)
-      }));
-
-      setNotifications(formatted);
       setBadgeCount(count);
-    } catch (error) {
-      console.error("Failed to load notifications", error);
+    } catch (err) {
+      console.error("Failed to load notifications", err);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif.isRead) {
+      await markNotificationAsRead(notif._id);
+      loadNotifications();
     }
   };
 
   const handleMarkAllAsRead = async () => {
-    try {
-      await markAllNotificationsAsRead();
-      loadNotifications();
-    } catch (error) {
-      console.error("Failed to mark all as read", error);
-    }
+    await markAllNotificationsAsRead();
+    loadNotifications();
   };
 
   const handleDeleteNotification = async (id) => {
-    // Optimistic Update: Remove from UI immediately
-    setNotifications(prev => {
-      const itemToDelete = prev.find(n => n._id === id);
-      if (itemToDelete && (!itemToDelete.isRead || itemToDelete.isVirtual)) {
-        setBadgeCount(c => Math.max(0, c - 1));
-      }
-      return prev.filter(n => n._id !== id);
-    });
-
-    try {
-      if (id && String(id).startsWith("virtual-")) {
-        await dismissVirtualNotification(id);
-      } else {
-        await deleteNotification(id);
-      }
-      // Refresh background data to stay in sync
-      loadNotifications();
-    } catch (error) {
-      console.error("Failed to delete notification", error);
-      // Revert on error
-      loadNotifications();
-    }
+    await deleteNotification(id);
+    loadNotifications();
   };
 
-  const handleNotificationClick = async (item) => {
-    if (!item.isRead && !item.isVirtual) {
-      await markNotificationAsRead(item._id);
-      loadNotifications(); // Refresh
-    }
-    if (item.link) {
-      navigate(item.link);
-    }
-  };
-
-  const formatNotificationTime = (dateStr) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffInSecs = Math.floor((now - date) / 1000);
-
-    if (diffInSecs < 60) return "Just now";
-    if (diffInSecs < 3600) return `${Math.floor(diffInSecs / 60)}m ago`;
-    if (diffInSecs < 86400) return `${Math.floor(diffInSecs / 3600)}h ago`;
-    return date.toLocaleDateString();
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logoutUser();
-    } catch (error) {
-      console.error("Logout failed", error);
-    }
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("userPermissions");
-    // navigate("/login");
-    window.location.href = "/login"; // Force full reload to clear all states
+  const handleLogout = () => {
+    logoutUser();
+    navigate("/login");
   };
 
   return (
     <Navbar className="topbar" bg="white" expand="lg">
       <Container fluid className="topbar-container">
         <div className="brand">
-
-
+          <Button
+            variant="light"
+            className="hamburger-btn d-lg-none"
+            onClick={toggleSidebar}
+          >
+            <SvgIcon name={isSidebarOpen ? "close" : "menu"} size={22} />
+          </Button>
         </div>
 
         {role && <GlobalSearch />}

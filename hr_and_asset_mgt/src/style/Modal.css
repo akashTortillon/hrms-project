@@ -19,17 +19,23 @@
 
 .custom-modal {
     background: #ffffff;
-    width: 90%;
-    max-width: 550px;
-    /* Increased slightly */
+    width: 95%;
+    max-width: 600px;
     border-radius: 12px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     display: flex;
     flex-direction: column;
     animation: slideDown 0.2s ease-out;
     position: relative;
-    max-height: 90vh;
-    /* Prevent overflow on small screens */
+    max-height: calc(100vh - 40px);
+    margin: 20px;
+}
+
+@media (max-width: 640px) {
+    .custom-modal {
+        width: calc(100% - 32px);
+        margin: 16px;
+    }
 }
 
 @keyframes slideDown {
@@ -98,8 +104,20 @@
     border-top: 1px solid #e5e7eb;
     display: flex;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 12px;
     background-color: #f9fafb;
     border-bottom-left-radius: 12px;
     border-bottom-right-radius: 12px;
+}
+
+@media (max-width: 480px) {
+    .custom-modal-footer {
+        flex-direction: column-reverse;
+    }
+
+    .custom-modal-footer button {
+        width: 100%;
+        margin: 0;
+    }
 }

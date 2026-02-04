@@ -13,9 +13,8 @@
 /* Modal Container */
 .upload-docs-modal-container {
     background: white;
-    width: 600px;
-    /* Spacious width */
-    max-width: 95vw;
+    width: 95%;
+    max-width: 600px;
     border-radius: 12px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
     overflow: hidden;
@@ -61,6 +60,12 @@
     display: grid;
     gap: 24px;
     grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 600px) {
+    .upload-docs-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Input Wrappers */

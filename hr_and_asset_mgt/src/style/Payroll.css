@@ -6,6 +6,18 @@
   margin-bottom: 20px;
 }
 
+@media (max-width: 1024px) {
+  .payroll-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .payroll-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Card spacing override */
 .payroll-summary-card .card-body {
   padding: 18px;
@@ -419,6 +431,12 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .wps-card-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Base card style */
