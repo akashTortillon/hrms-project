@@ -637,6 +637,48 @@ export const generatePayroll = async (req, res) => {
                         // Append rate info if complex
                         if (multiplier !== 1) description += ` (x${multiplier})`;
                     }
+
+                    // --- CAP / ADJUSTMENT FOR ABSENT DAYS ---
+                    // Issue: If Absent Days > 30 (e.g. 31), Deduction (31 * Basic/30) > Basic Salary.
+                    // Fix: If Basis is ABSENT_DAYS, we should ensure deduction doesn't exceed 100% of applicable salary components?
+                    // Simple Fix: For "LOP", if stats.daysPresent == 0, Deduction = Basic.
+                    // Or Cap amount at Basic Salary?
+
+                    if (basis === "ABSENT_DAYS") {
+                        // If daysPresent is 0, employee should get 0 Basic. 
+                        // So Deduction should exactly equal Basic (if no other components involved).
+                        // Current logic: Basic - (Absent * Basic/30) = Net.
+                        // If Absent=31, Net = -Basic/30.
+
+                        // Strict Pro-rating for Full Month Absence?
+                        if (stats.daysPresent === 0) {
+                            // Full Month Absent
+                            // Cap deduction at Basic Salary (to zero it out)
+                            // NOTE: If we have allowances, they might also need LOP deduction separately!
+                            // But usually allowances are paid if present? 
+                            // Current rule engine only deducts from "Net Payable" essentially.
+
+                            // Let's cap the Calculated LOP AMOUNT at the Basic Salary for now.
+                            if (amount > basicSalary) {
+                                amount = basicSalary;
+                                description += " (Capped at Basic)";
+                            }
+                        } else {
+                            // Partial presence.
+                            // If we use 30-day fixed basis, we suffer from 31st day issue.
+                            // Ideally, we should use `daysInMonth` for rate calculation?
+                            // Standard UAE/Labor practice often uses 30 days regardless.
+                            // But for deductions, usually: Pay = Basic * (WorkedDays / 30).
+                            // If WorkedDays < 0 ?? No.
+                            // Correct formula: Pay = Basic - (Absent * Basic/30).
+
+                            // If Absent=31? Pay = 20000 - 20666 = -666.
+                            // We should Cap Deduction at Basic Salary always.
+                            if (amount > basicSalary) {
+                                amount = basicSalary;
+                            }
+                        }
+                    }
                 } else {
                     // Skipped Rule (No Basis found & Not Fixed/Percentage)
                 }
