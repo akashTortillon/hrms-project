@@ -112,6 +112,24 @@
   margin-top: 15px;
 }
 
+@media (max-width: 1200px) {
+  .attendance-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .attendance-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .attendance-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Card base */
 .stat-card {
   border-radius: 14px;
@@ -183,6 +201,12 @@
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
+}
+
+@media (max-width: 900px) {
+  .attendance-filters {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== INDIVIDUAL FILTER ===== */

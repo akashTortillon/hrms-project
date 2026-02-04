@@ -167,92 +167,94 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
         <h3>Attendance Records - {date}</h3>
       </div>
 
-      <table className="attendance-table">
-        <thead>
-          <tr>
-            <th>EMPLOYEE</th>
-            <th>SHIFT</th>
-            <th>CHECK IN</th>
-            <th>CHECK OUT</th>
-            <th>WORK HOURS</th>
-            <th>STATUS</th>
-            {onEdit && <th className="actions-col">ACTIONS</th>}
-          </tr>
-        </thead>
-
-        <tbody>
-          {loading ? (
+      <div className="table-wrapper">
+        <table className="attendance-table">
+          <thead>
             <tr>
-              <td colSpan={onEdit ? "7" : "6"} style={{ textAlign: "center", padding: "20px" }}>
-                Loading...
-              </td>
+              <th>EMPLOYEE</th>
+              <th>SHIFT</th>
+              <th>CHECK IN</th>
+              <th>CHECK OUT</th>
+              <th>WORK HOURS</th>
+              <th>STATUS</th>
+              {onEdit && <th className="actions-col">ACTIONS</th>}
             </tr>
-          ) : records.length === 0 ? (
-            <tr>
-              <td colSpan={onEdit ? "7" : "6"} style={{ textAlign: "center", padding: "20px" }}>
-                No employees found
-              </td>
-            </tr>
-          ) : (
-            records.map((row) => {
-              const workHours = row.workHours && row.workHours !== "0h 0m" ? row.workHours : "0h 0m";
+          </thead>
 
-              return (
-                <tr key={row.id || row.employeeId}>
-                  <td>
-                    <div className="attendance-employee-cell">
-                      <SvgIcon
-                        name={row.icon || "user"}
-                        size={18}
-                        color={row.iconColor || "#6b7280"}
-                      />
-                      <div>
-                        <div className="employee-name">{row.name}</div>
-                        <div className="employee-meta">
-                          {row.code} • {row.department}
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={onEdit ? "7" : "6"} style={{ textAlign: "center", padding: "20px" }}>
+                  Loading...
+                </td>
+              </tr>
+            ) : records.length === 0 ? (
+              <tr>
+                <td colSpan={onEdit ? "7" : "6"} style={{ textAlign: "center", padding: "20px" }}>
+                  No employees found
+                </td>
+              </tr>
+            ) : (
+              records.map((row) => {
+                const workHours = row.workHours && row.workHours !== "0h 0m" ? row.workHours : "0h 0m";
+
+                return (
+                  <tr key={row.id || row.employeeId}>
+                    <td>
+                      <div className="attendance-employee-cell">
+                        <SvgIcon
+                          name={row.icon || "user"}
+                          size={18}
+                          color={row.iconColor || "#6b7280"}
+                        />
+                        <div>
+                          <div className="employee-name">{row.name}</div>
+                          <div className="employee-meta">
+                            {row.code} • {row.department}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-
-                  <td>{row.shift}</td>
-                  <td>{row.checkIn || "-"}</td>
-                  <td>{row.checkOut || "-"}</td>
-                  <td>{workHours}</td>
-
-                  <td>
-                    <span
-                      className={`status-pill ${getStatusClass(row.status)}`}
-                    >
-                      {row.status || "Absent"}
-                    </span>
-                    {row.isManuallyEdited && (
-                      <div
-                        className="status-edited"
-                        title={`Edited by ${row.editedBy?.name || 'Admin'} on ${new Date(row.editedAt).toLocaleDateString()}. Reason: ${row.editReason}`}
-                      >
-                        EDITED
-                      </div>
-                    )}
-                    {/* Tooltip for hover is handled by title attribute for simplicity as requested */}
-                  </td>
-
-                  {onEdit && (
-                    <td className="actions-col">
-                      <button
-                        className="edit-link"
-                        onClick={() => handleEditClick(row)}
-                      >
-                        Edit
-                      </button>
                     </td>
-                  )}
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+
+                    <td>{row.shift}</td>
+                    <td>{row.checkIn || "-"}</td>
+                    <td>{row.checkOut || "-"}</td>
+                    <td>{workHours}</td>
+
+                    <td>
+                      <span
+                        className={`status-pill ${getStatusClass(row.status)}`}
+                      >
+                        {row.status || "Absent"}
+                      </span>
+                      {row.isManuallyEdited && (
+                        <div
+                          className="status-edited"
+                          title={`Edited by ${row.editedBy?.name || 'Admin'} on ${new Date(row.editedAt).toLocaleDateString()}. Reason: ${row.editReason}`}
+                        >
+                          EDITED
+                        </div>
+                      )}
+                      {/* Tooltip for hover is handled by title attribute for simplicity as requested */}
+                    </td>
+
+                    {onEdit && (
+                      <td className="actions-col">
+                        <button
+                          className="edit-link"
+                          onClick={() => handleEditClick(row)}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

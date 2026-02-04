@@ -92,17 +92,6 @@
   border-radius: 10px;
   font-weight: 400;
   background-color: #faf8f8;
-  margin-right: -510px;
-
-}
-
-/* ---------- Filters Card ---------- */
-
-.assets-filters-card {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
 }
 
 /* ---------- Filters Row ---------- */
@@ -112,6 +101,12 @@
   grid-template-columns: 1.6fr 0.8fr 0.8fr auto;
   gap: 16px;
   align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .assets-filters {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- Search ---------- */
