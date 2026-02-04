@@ -115,16 +115,8 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         });
     }
 
-    // 3. Iterate Day by Day
-    let paidDays = 0;
-    let lopDays = 0;
-    let lateCount = 0;
-    let lateTier1 = 0;
-    let lateTier2 = 0;
-    let lateTier3 = 0;
-    let overtimeHours = 0;
-    let unpaidLeavesCount = 0;
-    let paidLeavesCount = 0; // ✅ NEW
+    // --- PHASE 1: BUILD DAY-BY-DAY STATUS ARRAY ---
+    const dayStatuses = []; // Index 0 = Day 1
     const GLOBAL_STANDARD_HOURS = 9;
 
     // Helper to get hours for a specific shift name
@@ -133,129 +125,270 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         return Number(shiftMap[shiftName].workHours) || GLOBAL_STANDARD_HOURS;
     };
 
+    let totalOvertimeHours = 0;
+
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${strMonth}-${String(day).padStart(2, '0')}`;
         const dateObj = new Date(year, month - 1, day);
-        const dayOfWeek = dateObj.getDay();
+        const dayOfWeek = dateObj.getDay(); // 0 = Sun
 
-        let isDayPresent = false;
-        let isDayPaidLeave = false;
-        let isDayUnpaidLeave = false;
-        let isDayLate = false;
+        let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, UNPAID_LEAVE
+        let isLate = false;
+        let lateTier = 0;
 
-        // -- PRIORITY 1: ATTENDANCE RECORD --
+        // A. Check Attendance Record
         if (logMap[dateStr]) {
             const record = logMap[dateStr];
-            const status = record.status;
+            const recStatus = record.status;
 
-            if (status === 'Present' || status === 'Late') {
-                isDayPresent = true;
-                if (status === 'Late') {
-                    isDayLate = true;
-                    // Count Tiers
-                    const tier = record.lateTier || 1; // Default to 1 if missing
-                    if (tier === 1) lateTier1++;
-                    else if (tier === 2) lateTier2++;
-                    else if (tier >= 3) lateTier3++;
+            if (recStatus === 'Present' || recStatus === 'Late') {
+                status = 'PRESENT';
+                if (recStatus === 'Late') {
+                    isLate = true;
+                    lateTier = record.lateTier || 1;
                 }
-
-                // Calculate Overtime based on THIS DAY'S Shift
+                // OT Calculation
                 if (record.workHours) {
                     const worked = parseHours(record.workHours);
-                    const shiftName = record.shift || "Day Shift"; // Fallback to Day Shift
+                    const shiftName = record.shift || "Day Shift";
                     const standardLimit = getShiftHours(shiftName);
-
                     if (worked > standardLimit) {
-                        const dailyOT = worked - standardLimit;
-                        overtimeHours += dailyOT;
+                        totalOvertimeHours += (worked - standardLimit);
                     }
                 }
-            } else if (status === 'On Leave') {
-                // Check if Paid/Unpaid based on record.leaveType or default
-                // Logic: If record has precise info, use it. Else fallback.
-                // Our unified logic below handles this better, but if record exists, trust it? 
-                // Wait, record might be created by biometric sync or manual update without leaveType info.
-                // Let's rely on the Robust Check below if record info is sparse.
-
-                // If record directly says Paid/Unpaid (future proofing)
-                if (record.isPaid === true) isDayPaidLeave = true;
-                else if (record.isPaid === false) isDayUnpaidLeave = true;
-                else {
-                    // Ambiguous. Check Leave Map.
-                }
+            } else if (recStatus === 'On Leave') {
+                // If record says leave, check if Paid/Unpaid
+                if (record.isPaid === false) status = 'UNPAID_LEAVE';
+                else status = 'PAID_LEAVE';
+            } else {
+                status = 'ABSENT';
             }
         }
 
-        // -- PRIORITY 2: APPROVED LEAVE (Override Absent/Ambiguous) --
-        // Check if today is a Leave day
-        const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
-
-        // If we haven't already determined status from a clearer record
-        if (!isDayPresent && !isDayLate) {
-            if (leaveInfo || (logMap[dateStr] && logMap[dateStr].status === 'On Leave')) {
-                // Determine Paid vs Unpaid
-                // 1. Get Leave Type
-                // 2. lookup leaveRules
-                const typeName = leaveInfo?.leaveType || logMap[dateStr]?.leaveType; // Name or ID
-
-                let isPaid = true; // Default to Paid
-
-                // Resolving logic:
-                // Try to match by Name or ID in leaveRules
-                // leaveRules comes as map: { 'Sick Leave': true, 'Unpaid': false } etc via ID or Name
-
+        // B. Check Approved Leave (Override if no present record)
+        if (status === 'UNKNOWN' || status === 'ABSENT') {
+            const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
+            if (leaveInfo) {
+                // Resolved Paid/Unpaid Logic
+                const typeName = leaveInfo.leaveType;
+                let isPaid = true;
                 if (typeName) {
-                    if (leaveRules[typeName] !== undefined) {
-                        isPaid = leaveRules[typeName];
-                    } else {
-                        // Semantic Check
-                        const lower = String(typeName).toLowerCase();
-                        if (lower.includes('unpaid') || lower.includes('loss of pay')) isPaid = false;
-                        else isPaid = true; // Annual, Sick, Maternity -> Paid
-                    }
+                    if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
+                    else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
                 }
-
-                if (isPaid) isDayPaidLeave = true;
-                else isDayUnpaidLeave = true;
+                status = isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE';
             }
         }
 
-        // -- FINAL STATUS AGGREGATION --
-        if (isDayPresent) {
-            paidDays++; // Present is paid
-            if (isDayLate) lateCount++;
-        } else if (isDayPaidLeave) {
-            paidDays++;
-            paidLeavesCount++; // ✅ NEW
-        } else if (isDayUnpaidLeave) {
-            unpaidLeavesCount++;
-            lopDays++; // Unpaid leave is LOP
+        // C. Fallbacks (Weekend/Holiday/Absent)
+        if (status === 'UNKNOWN') {
+            if (dayOfWeek === 0) status = 'WEEKEND'; // Sunday
+            else if (holidaySet.has(dateStr)) status = 'HOLIDAY';
+            else status = 'ABSENT';
+        }
+
+        dayStatuses.push({
+            day,
+            dateStr,
+            status,
+            isLate,
+            lateTier
+        });
+    }
+
+    // --- PHASE 2: APPLY SANDWICH RULE ---
+    // Rule: If (ABSENT) -> [WEEKEND/HOLIDAY] -> (ABSENT), then [WEEKEND/HOLIDAY] becomes (UNPAID_LEAVE/SANDWICH)
+
+    // Helper to get status for any date (including outside current month)
+    const getStatusForDate = (dObj) => {
+        const y = dObj.getFullYear();
+        const m = String(dObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dObj.getDate()).padStart(2, '0');
+        const dStr = `${y}-${m}-${d}`;
+        const dayOfWeek = dObj.getDay();
+
+        // 1. Check Log
+        if (logMap[dStr]) {
+            const r = logMap[dStr];
+            if (r.status === 'Present' || r.status === 'Late') return 'PRESENT';
+            if (r.status === 'On Leave') return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            return 'ABSENT';
+        }
+
+        // 2. Check Leave Map (Assume we fetched enough? Or just basic check)
+        // Note: getLeaveInfo uses the 'map' passed in. 
+        // We might need to ensure 'leaveMap' covers adjacent months? 
+        // getApprovedLeavesMap fetches ALL approved leaves for the employee ideally?
+        // or ensure we requested enough. User's 'getApprovedLeavesMap' implementation fetches ALL matching user. 
+        // So safe to assume we have it.
+        const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
+        if (leaveInfo) {
+            const typeName = leaveInfo.leaveType;
+            let isPaid = true;
+            if (typeName) {
+                if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
+                else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
+            }
+            return isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE'; // Treat Unpaid Leave as Absent-equivalent for Sandwich
+        }
+
+        // 3. Fallback
+        if (dayOfWeek === 0) return 'WEEKEND';
+        // Need to check settings.holidays for this specific date
+        // 'holidaySet' only has current month? 
+        // We should check 'settings.holidays' raw array if available
+        if (settings && settings.holidays) {
+            const isHol = settings.holidays.some(h => {
+                if (!h.date) return false;
+                const hd = new Date(h.date);
+                return hd.getFullYear() === y && hd.getMonth() === dObj.getMonth() && hd.getDate() === dObj.getDate();
+            });
+            if (isHol) return 'HOLIDAY';
+        }
+
+        return 'ABSENT'; // Default fallback if no logs/rules
+    };
+
+    const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
+    const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
+
+    console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
+
+    let i = 0;
+    while (i < dayStatuses.length) {
+        if (isGap(dayStatuses[i].status)) {
+            // Found start of a gap sequence
+            let j = i;
+            while (j < dayStatuses.length && isGap(dayStatuses[j].status)) {
+                j++;
+            }
+            // Gap is from i to j-1
+
+            // Check Left Side
+            let leftIsAbsent = false;
+            if (i > 0) {
+                if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
+            } else {
+                // BOUNDARY CHECK: Scan backwards from Day 1
+                let backDate = new Date(year, month - 1, 1);
+                backDate.setDate(backDate.getDate() - 1); // Last day of prev month
+
+                // Scan up to 7 days back looking for non-gap
+                for (let b = 0; b < 7; b++) {
+                    const st = getStatusForDate(backDate);
+                    if (!isGap(st)) {
+                        if (isAbsentOrLOP(st)) leftIsAbsent = true;
+                        break; // Found the anchor
+                    }
+                    backDate.setDate(backDate.getDate() - 1);
+                }
+            }
+
+            // Check Right Side
+            let rightIsAbsent = false;
+            if (j < dayStatuses.length) {
+                if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
+            } else {
+                // BOUNDARY CHECK: Scan forwards from End of Month
+                let fwdDate = new Date(year, month - 1, daysInMonth);
+                fwdDate.setDate(fwdDate.getDate() + 1); // First day of next month
+
+                for (let f = 0; f < 7; f++) {
+                    const st = getStatusForDate(fwdDate);
+                    if (!isGap(st)) {
+                        if (isAbsentOrLOP(st)) rightIsAbsent = true;
+                        break;
+                    }
+                    fwdDate.setDate(fwdDate.getDate() + 1);
+                }
+            }
+
+            console.log(`[DEBUG] Gap found Days ${i + 1} to ${j}: Left=${leftIsAbsent}, Right=${rightIsAbsent}`);
+
+            if (leftIsAbsent && rightIsAbsent) {
+                for (let k = i; k < j; k++) {
+                    dayStatuses[k].status = 'SANDWICH_LEAVE';
+                    console.log(`  -> Day ${k + 1} marked SANDWICH`);
+                }
+            }
+
+            i = j; // Advance
         } else {
-            // -- PRIORITY 3: WEEKEND (Sunday) --
-            if (dayOfWeek === 0) {
-                paidDays++;
-            }
-            // -- PRIORITY 4: PUBLIC HOLIDAY --
-            else if (holidaySet.has(dateStr)) {
-                paidDays++;
-            }
-            // -- PRIORITY 5: IMPLIED ABSENT --
-            else {
-                lopDays++;
-            }
+            i++;
         }
     }
-    // End Loop
 
-    // console.log(`[Payroll Calc] Emp: ${employeeId} | Paid: ${paidDays} | LOP: ${lopDays} | Late: ${lateCount} | OT: ${overtimeHours.toFixed(2)}`);
+    // --- PHASE 3: CALCULATE METRICS ---
+    let paidDays = 0;
+    let lopDays = 0;
+    let lateCount = 0;
+    let lateTier1 = 0, lateTier2 = 0, lateTier3 = 0;
+    let unpaidLeavesCount = 0;
+    let paidLeavesCount = 0;
+
+    dayStatuses.forEach(d => {
+        // console.log(`[DEBUG] Day ${d.day}: ${d.status}`);
+        switch (d.status) {
+            case 'PRESENT':
+                paidDays++;
+                console.log(`[DEBUG] Day ${d.day} is PRESENT (+Paid)`);
+                if (d.isLate) {
+                    lateCount++;
+                    if (d.lateTier === 1) lateTier1++;
+                    else if (d.lateTier === 2) lateTier2++;
+                    else if (d.lateTier >= 3) lateTier3++;
+                }
+                break;
+            case 'PAID_LEAVE':
+                paidDays++;
+                paidLeavesCount++;
+                console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+Paid)`);
+                break;
+            case 'WEEKEND':
+            case 'HOLIDAY':
+                paidDays++;
+                console.log(`[DEBUG] Day ${d.day} is ${d.status} (+Paid)`);
+                break;
+            case 'UNPAID_LEAVE':
+                unpaidLeavesCount++;
+                // lopDays++; // Removed to prevent double counting in generatePayroll (which adds Absent + Unpaid)
+                break;
+            case 'SANDWICH_LEAVE': // Treated as Unpaid
+                unpaidLeavesCount++; // Or separate 'sandwichLeavesCount'?
+                // lopDays++; // Removed
+                break;
+            case 'ABSENT':
+                lopDays++;
+                break;
+        }
+    });
 
     return {
         totalDays: daysInMonth,
-        daysPresent: paidDays,
+        daysPresent: paidDays, // Note: Present includes weekends/holidays/paid leaves in terms of "Days Paid" usually? 
+        // Wait, previously paidDays meant "Days to be Paid for".
+        // PRESENT, WEEKEND, HOLIDAY, PAID_LEAVE all contribute to Salary (if 30 day basis).
+        // ABSENT, UNPAID_LEAVE, SANDWICH reduce from 30? Or if 'paidDays' is solely 'Worked Days'?
+        // Logic in generatePayroll uses `dailySalary = basic / 30`.
+        // So normally everyone gets 30 days pay unless LOP exists.
+        // The `paidDays` returned here seems to track "Credits". 
+        // Let's stick to: paidDays = (Present + Weekend + Holiday + PaidLeave).
+        // lopDays = (Absent + UnpaidLeave + Sandwich).
+
+        // Wait! previous logic:
+        // if (isDayPresent) paidDays++;
+        // else if (isDayPaidLeave) paidDays++;
+        // else if (isDayUnpaidLeave) lopDays++;
+        // else if (Sunday || Holiday) paidDays++;
+        // else lopDays++;
+
+        // Yes, my switch case matches this logic.
+
+        daysPresent: paidDays, // This variable name in return object is slightly misleading if it includes weekends, but standard in this codebase seems to be "Days Payable"
         daysAbsent: lopDays,
         unpaidLeaves: unpaidLeavesCount,
-        paidLeaves: paidLeavesCount, // ✅ NEW
-        overtimeHours: parseFloat(overtimeHours.toFixed(2)),
+        paidLeaves: paidLeavesCount,
+        overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
         late: lateCount,
         lateTier1,
         lateTier2,
