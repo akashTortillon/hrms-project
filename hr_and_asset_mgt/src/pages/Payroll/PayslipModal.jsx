@@ -3,6 +3,8 @@ import CustomModal from "../../components/reusable/CustomModal.jsx";
 import "../../style/Payroll.css";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { PDFDocument } from 'pdf-lib';
+import logoLeptis from "../../assets/images/logo-leptis.png";
 
 export default function PayslipModal({ show, onClose, record }) {
     const payslipRef = useRef();
@@ -19,143 +21,178 @@ export default function PayslipModal({ show, onClose, record }) {
     const grossEarnings = basicSalary + totalAllowances;
 
     // --- PDF GENERATION ---
-    const handleDownloadPDF = () => {
-        const doc = new jsPDF();
+    const handleDownloadPDF = async () => {
+        try {
+            // 1. Create the content PDF using jsPDF
+            const contentDoc = new jsPDF();
+            const pageWidth = contentDoc.internal.pageSize.getWidth();
+            // const pageHeight = contentDoc.internal.pageSize.getHeight();
 
-        // 1. Header
-        doc.setFontSize(22);
-        doc.setTextColor(40);
-        doc.text("LEPTIS", 105, 20, { align: 'center' }); // Replace with Company Name
+            // Note: We leave space for the letterhead header/footer
+            // Let's assume content starts at 50mm and ends before 260mm
 
-        doc.setFontSize(16);
-        doc.text("PAYSLIP", 105, 30, { align: 'center' });
+            // Title
+            contentDoc.setFontSize(16);
+            contentDoc.setTextColor(40);
+            contentDoc.text("PAYSLIP", pageWidth / 2, 55, { align: 'center' });
 
-        doc.setFontSize(12);
-        doc.setTextColor(100);
-        doc.text(`Period: ${periodStr}`, 105, 38, { align: 'center' });
+            contentDoc.setFontSize(12);
+            contentDoc.setTextColor(100);
+            contentDoc.text(`Period: ${periodStr}`, pageWidth / 2, 61, { align: 'center' });
 
-        doc.line(14, 45, 196, 45); // Horizontal line
+            // 2. Employee Details
+            contentDoc.setFontSize(10);
+            contentDoc.setTextColor(0);
 
-        // 2. Employee Details (Grid Layout manually)
-        doc.setFontSize(11);
-        doc.setTextColor(0);
+            const startY = 70;
+            // Details Box
+            contentDoc.setDrawColor(240);
+            contentDoc.setFillColor(250, 250, 250);
+            contentDoc.rect(14, startY - 5, pageWidth - 28, 25, 'F');
 
-        const startY = 55;
-        // Left Column
-        doc.text("Employee Name:", 14, startY);
-        doc.setFont("helvetica", "bold");
-        doc.text(employee?.name || "Unknown", 50, startY);
-        doc.setFont("helvetica", "normal");
+            // Left Column
+            contentDoc.setFont("helvetica", "normal");
+            contentDoc.text("Employee Name:", 20, startY + 2);
+            contentDoc.setFont("helvetica", "bold");
+            contentDoc.text(employee?.name || "Unknown", 55, startY + 2);
 
-        doc.text("Designation:", 14, startY + 8);
-        doc.setFont("helvetica", "bold");
-        doc.text(employee?.designation || "N/A", 50, startY + 8);
-        doc.setFont("helvetica", "normal");
+            contentDoc.setFont("helvetica", "normal");
+            contentDoc.text("Designation:", 20, startY + 10);
+            contentDoc.setFont("helvetica", "bold");
+            contentDoc.text(employee?.designation || "N/A", 55, startY + 10);
 
-        // Right Column
-        doc.text("Employee ID:", 120, startY);
-        doc.setFont("helvetica", "bold");
-        doc.text(employee?.code || "N/A", 155, startY);
-        doc.setFont("helvetica", "normal");
+            // Right Column
+            contentDoc.setFont("helvetica", "normal");
+            contentDoc.text("Employee ID:", pageWidth / 2 + 10, startY + 2);
+            contentDoc.setFont("helvetica", "bold");
+            contentDoc.text(employee?.code || "N/A", pageWidth / 2 + 50, startY + 2);
 
-        doc.text("Department:", 120, startY + 8);
-        doc.setFont("helvetica", "bold");
-        doc.text(employee?.department || "N/A", 155, startY + 8);
-        doc.setFont("helvetica", "normal");
+            contentDoc.setFont("helvetica", "normal");
+            contentDoc.text("Department:", pageWidth / 2 + 10, startY + 10);
+            contentDoc.setFont("helvetica", "bold");
+            contentDoc.text(employee?.department || "N/A", pageWidth / 2 + 50, startY + 10);
 
-        // 3. Attendance Summary (Optional)
-        autoTable(doc, {
-            startY: startY + 20,
-            head: [['Total Days', 'Present', 'Absent', 'Late', 'Overtime (Hrs)']],
-            body: [[
-                attendanceSummary?.totalDays || 30,
-                attendanceSummary?.daysPresent || 0,
-                attendanceSummary?.daysAbsent || 0,
-                attendanceSummary?.late || 0,
-                attendanceSummary?.overtimeHours || 0
-            ]],
-            theme: 'plain',
-            styles: { fontSize: 10, cellPadding: 2, halign: 'center' },
-            headStyles: { fillColor: [240, 240, 240], textColor: 50 }
-        });
+            // 3. Attendance Summary
+            autoTable(contentDoc, {
+                startY: startY + 25,
+                head: [['Total Days', 'Present', 'Absent', 'Late', 'Overtime (Hrs)']],
+                body: [[
+                    attendanceSummary?.totalDays || 30,
+                    attendanceSummary?.daysPresent || 0,
+                    attendanceSummary?.daysAbsent || 0,
+                    attendanceSummary?.late || 0,
+                    attendanceSummary?.overtimeHours || 0
+                ]],
+                theme: 'plain',
+                styles: { fontSize: 9, cellPadding: 2, halign: 'center' },
+                headStyles: { fillColor: [240, 240, 240], textColor: 50, fontStyle: 'bold' }
+            });
 
-        // 4. Earnings & Deductions Table
-        // We'll prepare rows combining both or side-by-side. 
-        // Standard format often has Earnings Col | Amount | Deductions Col | Amount
+            // 4. Earnings & Deductions Table
+            const earningsRows = [
+                ['Basic Salary', basicSalary.toLocaleString()],
+                ...(allowances || []).map(a => [a.name, a.amount.toLocaleString()])
+            ];
 
-        const earningsRows = [
-            ['Basic Salary', basicSalary.toLocaleString()],
-            ...(allowances || []).map(a => [a.name, a.amount.toLocaleString()])
-        ];
+            const deductionRows = [
+                ...(deductions || []).map(d => [d.name, d.amount.toLocaleString()])
+            ];
 
-        const deductionRows = [
-            ...(deductions || []).map(d => [d.name, d.amount.toLocaleString()])
-        ];
+            const maxLength = Math.max(earningsRows.length, deductionRows.length);
+            const tableBody = [];
 
-        // Pad rows to match length
-        const maxLength = Math.max(earningsRows.length, deductionRows.length);
-        const tableBody = [];
-
-        for (let i = 0; i < maxLength; i++) {
-            const earn = earningsRows[i] || ['', ''];
-            const deduct = deductionRows[i] || ['', ''];
-            tableBody.push([earn[0], earn[1], deduct[0], deduct[1]]);
-        }
-
-        // Add Totals Row
-        tableBody.push([
-            { content: 'Total Earnings', styles: { fontStyle: 'bold' } },
-            { content: grossEarnings.toLocaleString(), styles: { fontStyle: 'bold' } },
-            { content: 'Total Deductions', styles: { fontStyle: 'bold' } },
-            { content: totalDeductions.toLocaleString(), styles: { fontStyle: 'bold' } }
-        ]);
-
-        autoTable(doc, {
-            startY: doc.lastAutoTable.finalY + 15,
-            head: [['Earnings', 'Amount (AED)', 'Deductions', 'Amount (AED)']],
-            body: tableBody,
-            theme: 'grid',
-            headStyles: { fillColor: [55, 65, 81] }, // Dark gray
-            styles: { fontSize: 10 },
-            columnStyles: {
-                0: { cellWidth: 60 },
-                1: { cellWidth: 35, halign: 'right' },
-                2: { cellWidth: 60 },
-                3: { cellWidth: 35, halign: 'right' }
+            for (let i = 0; i < maxLength; i++) {
+                const earn = earningsRows[i] || ['', ''];
+                const deduct = deductionRows[i] || ['', ''];
+                tableBody.push([earn[0], earn[1], deduct[0], deduct[1]]);
             }
-        });
 
-        // 5. Net Salary
-        const finalY = doc.lastAutoTable.finalY + 10;
+            tableBody.push([
+                { content: 'Total Earnings', styles: { fontStyle: 'bold', fillColor: [249, 250, 251] } },
+                { content: grossEarnings.toLocaleString(), styles: { fontStyle: 'bold', halign: 'right', fillColor: [249, 250, 251] } },
+                { content: 'Total Deductions', styles: { fontStyle: 'bold', fillColor: [249, 250, 251] } },
+                { content: totalDeductions.toLocaleString(), styles: { fontStyle: 'bold', halign: 'right', fillColor: [249, 250, 251] } }
+            ]);
 
-        doc.setFillColor(240, 253, 244); // Light green bg
-        doc.rect(14, finalY, 182, 12, 'F');
-        doc.setDrawColor(22, 163, 74); // Green border
-        doc.rect(14, finalY, 182, 12, 'S');
+            autoTable(contentDoc, {
+                startY: contentDoc.lastAutoTable.finalY + 10,
+                head: [['Earnings', 'Amount (AED)', 'Deductions', 'Amount (AED)']],
+                body: tableBody,
+                theme: 'grid',
+                headStyles: { fillColor: [24, 45, 84], textColor: 255 },
+                styles: { fontSize: 9 },
+                columnStyles: {
+                    0: { cellWidth: 55 },
+                    1: { cellWidth: 35, halign: 'right' },
+                    2: { cellWidth: 55 },
+                    3: { cellWidth: 35, halign: 'right' }
+                }
+            });
 
-        doc.setFontSize(12);
-        doc.setTextColor(21, 128, 61); // Green text
-        doc.setFont("helvetica", "bold");
-        doc.text("NET SALARY PAYABLE", 20, finalY + 8);
-        doc.text(`${netSalary.toLocaleString()} AED`, 190, finalY + 8, { align: 'right' });
+            // 5. Net Salary
+            const finalY = contentDoc.lastAutoTable.finalY + 8;
 
-        // 6. Footer (Signatures)
-        const footerY = finalY + 40;
-        doc.setTextColor(0);
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
+            contentDoc.setFillColor(240, 253, 244);
+            contentDoc.rect(14, finalY, pageWidth - 28, 12, 'F');
+            contentDoc.setDrawColor(22, 163, 74);
+            contentDoc.rect(14, finalY, pageWidth - 28, 12, 'S');
 
-        doc.line(20, footerY, 70, footerY);
-        doc.text("Employee Signature", 45, footerY + 5, { align: 'center' });
+            contentDoc.setFontSize(11);
+            contentDoc.setTextColor(21, 128, 61);
+            contentDoc.setFont("helvetica", "bold");
+            contentDoc.text("NET SALARY PAYABLE", 20, finalY + 8);
+            contentDoc.text(`${netSalary.toLocaleString()} AED`, pageWidth - 20, finalY + 8, { align: 'right' });
 
-        doc.line(140, footerY, 190, footerY);
-        doc.text("Employer Signature", 165, footerY + 5, { align: 'center' });
+            // 6. Footer (Signatures)
+            const signatureY = finalY + 30; // Closer to content now
+            contentDoc.setTextColor(0);
+            contentDoc.setFontSize(9);
+            contentDoc.setFont("helvetica", "normal");
 
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text("This is a computer-generated document.", 105, 280, { align: 'center' });
+            contentDoc.line(20, signatureY, 70, signatureY);
+            contentDoc.text("Employee Signature", 45, signatureY + 5, { align: 'center' });
 
-        doc.save(`Payslip_${employee?.name || 'Employee'}_${monthName}_${record.year}.pdf`);
+            contentDoc.line(pageWidth - 70, signatureY, pageWidth - 20, signatureY);
+            contentDoc.text("Employer Signature", pageWidth - 45, signatureY + 5, { align: 'center' });
+
+
+            // --- MERGE WITH TEMPLATE ---
+
+            // Load the template from the public folder
+            const templateUrl = "/Letter_Head_-_Group_2023.pdf";
+            const templateBytes = await fetch(templateUrl).then(res => res.arrayBuffer());
+            const templatePdf = await PDFDocument.load(templateBytes);
+
+            // Load the generated content PDF
+            const contentBytes = contentDoc.output('arraybuffer');
+            const contentPdf = await PDFDocument.load(contentBytes);
+
+            // Embed the first page of content PDF onto the template PDF
+            const [contentPage] = await templatePdf.embedPdf(contentPdf, [0]);
+            const firstPage = templatePdf.getPages()[0];
+
+            // Draw the content on top of the template page
+            // Dimensions should match (A4 is standard)
+            const { width, height } = firstPage.getSize();
+            firstPage.drawPage(contentPage, {
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
+            });
+
+            // Save and download
+            const mergedPdfBytes = await templatePdf.save();
+            const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `Payslip_${employee?.name || 'Employee'}_${monthName}_${record.year}.pdf`;
+            link.click();
+
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            alert("Failed to generate PDF. Please try again.");
+        }
     };
 
     return (
@@ -169,10 +206,18 @@ export default function PayslipModal({ show, onClose, record }) {
                 <div className="payslip-paper" ref={payslipRef}>
 
                     {/* Header */}
-                    <div className="payslip-header">
-                        <h1 className="payslip-title">SALARY SLIP</h1>
-                        <h2 className="payslip-company">LEPTIS</h2>
-                        <p className="payslip-period">Period: {periodStr}</p>
+                    <div className="payslip-header" style={{ borderBottom: '2px solid #182d54', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <img src={logoLeptis} alt="Logo" style={{ height: '40px' }} />
+                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#182d54' }}>leptis</span>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                            <h1 className="payslip-title" style={{ fontSize: '18px', margin: 0 }}>SALARY SLIP</h1>
+                            <p className="payslip-period" style={{ margin: 0 }}>Period: {periodStr}</p>
+                        </div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#182d54' }}>
+                            لبتس
+                        </div>
                     </div>
 
                     {/* Employee Info Grid */}
@@ -214,13 +259,13 @@ export default function PayslipModal({ show, onClose, record }) {
                     </div>
 
                     {/* Salary Table */}
-                    <table className="payslip-salary-table">
+                    <table className="payslip-salary-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
                         <thead>
                             <tr>
-                                <th style={{ width: '35%' }}>Earnings</th>
-                                <th style={{ width: '15%', textAlign: 'right' }}>Amount</th>
-                                <th style={{ width: '35%', paddingLeft: '24px' }}>Deductions</th>
-                                <th style={{ width: '15%', textAlign: 'right' }}>Amount</th>
+                                <th style={{ textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>Earnings</th>
+                                <th style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
+                                <th style={{ textAlign: 'left', padding: '10px 16px', paddingLeft: '30px', borderBottom: '1px solid #e5e7eb' }}>Deductions</th>
+                                <th style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -232,39 +277,39 @@ export default function PayslipModal({ show, onClose, record }) {
 
                                 if (isBasic) {
                                     earnName = 'Basic Salary';
-                                    earnAmt = basicSalary.toLocaleString();
+                                    earnAmt = (Number(basicSalary) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                 } else {
                                     const allow = allowances?.[i - 1]; // -1 because index 0 is Basic
                                     if (allow) {
                                         earnName = allow.name;
-                                        earnAmt = allow.amount.toLocaleString();
+                                        earnAmt = (Number(allow.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                     }
                                 }
 
                                 const deduct = deductions?.[i];
                                 if (deduct) {
                                     dedName = deduct.name;
-                                    dedAmt = deduct.amount.toLocaleString();
+                                    dedAmt = (Number(deduct.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                 }
 
                                 if (!earnName && !dedName) return null;
 
                                 return (
                                     <tr key={i}>
-                                        <td>{earnName}</td>
-                                        <td className="payslip-amount">{earnAmt}</td>
-                                        <td style={{ paddingLeft: '24px' }}>{dedName}</td>
-                                        <td className="payslip-amount">{dedAmt}</td>
+                                        <td style={{ padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>{earnName}</td>
+                                        <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>{earnAmt}</td>
+                                        <td style={{ paddingLeft: '30px', padding: '10px 16px', paddingLeft: '30px', borderBottom: '1px solid #e5e7eb' }}>{dedName}</td>
+                                        <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>{dedAmt}</td>
                                     </tr>
                                 );
                             })}
 
                             {/* Totals Row */}
                             <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
-                                <td>Total Earnings</td>
-                                <td className="payslip-amount">{grossEarnings.toLocaleString()}</td>
-                                <td style={{ paddingLeft: '24px' }}>Total Deductions</td>
-                                <td className="payslip-amount">{totalDeductions > 0 ? totalDeductions.toLocaleString() : '0'}</td>
+                                <td style={{ padding: '10px 16px', borderBottom: '2px solid #374151' }}>Total Earnings</td>
+                                <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '2px solid #374151' }}>{(Number(grossEarnings) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td style={{ paddingLeft: '30px', padding: '10px 16px', borderBottom: '2px solid #374151' }}>Total Deductions</td>
+                                <td style={{ textAlign: 'right', padding: '10px 16px', borderBottom: '2px solid #374151' }}>{totalDeductions > 0 ? (Number(totalDeductions) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -272,7 +317,7 @@ export default function PayslipModal({ show, onClose, record }) {
                     {/* Net Pay */}
                     <div className="payslip-net-box">
                         <span className="payslip-net-label">Net Salary Payable</span>
-                        <span className="payslip-net-amount">{netSalary.toLocaleString()} AED</span>
+                        <span className="payslip-net-amount">{netSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED</span>
                     </div>
 
                     {/* Footer / Signatures */}
