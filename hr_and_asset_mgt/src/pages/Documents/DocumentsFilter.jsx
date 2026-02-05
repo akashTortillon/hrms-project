@@ -1,6 +1,7 @@
 import React from "react";
 import "../../style/Document.css";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 const DocumentsFilter = ({
   search = "",
@@ -31,18 +32,22 @@ const DocumentsFilter = ({
         </div>
 
         {/* Type Filter */}
-        <select value={type} onChange={(e) => onTypeChange(e.target.value)}>
-          {typeOptions.map((opt, idx) => (
-            <option key={idx} value={opt}>{opt}</option>
-          ))}
-        </select>
+        <div style={{ width: '100%', maxWidth: '100%' }}>
+          <CustomSelect
+            value={type}
+            onChange={onTypeChange}
+            options={typeOptions.map(opt => ({ value: opt, label: opt }))}
+          />
+        </div>
 
         {/* Status Filter */}
-        <select value={status} onChange={(e) => onStatusChange(e.target.value)}>
-          {statusOptions.map((opt, idx) => (
-            <option key={idx} value={opt}>{opt}</option>
-          ))}
-        </select>
+        <div style={{ width: '100%', maxWidth: '100%' }}>
+          <CustomSelect
+            value={status}
+            onChange={onStatusChange}
+            options={statusOptions.map(opt => ({ value: opt, label: opt }))}
+          />
+        </div>
       </div>
 
       {/* Bottom Info */}

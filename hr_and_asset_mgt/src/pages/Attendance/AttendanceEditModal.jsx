@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
 import { shiftService } from "../../services/masterService";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 /* =========================
    Helpers
@@ -189,12 +190,15 @@ const AttendanceEditModal = ({
 
           <div>
             <label>Shift</label>
-            <select value={shift} onChange={(e) => setShift(e.target.value)}>
-              <option value="">Select Shift</option>
-              {shifts.map((s) => (
-                <option key={s._id} value={s.name}>{s.name}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={shift}
+              onChange={(val) => setShift(val)}
+              options={[
+                { value: "", label: "Select Shift" },
+                ...shifts.map((s) => ({ value: s.name, label: s.name }))
+              ]}
+              placeholder="Select Shift"
+            />
           </div>
 
           <div>
@@ -203,6 +207,7 @@ const AttendanceEditModal = ({
               type="time"
               value={checkIn}
               onChange={(e) => setCheckIn(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box' }}
             />
           </div>
 
@@ -212,23 +217,24 @@ const AttendanceEditModal = ({
               type="time"
               value={checkOut}
               onChange={(e) => setCheckOut(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box' }}
             />
           </div>
 
           <div>
             <label>Status</label>
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                // Optional: You might want to set a flag here to disable auto-calc if needed
-              }}
-            >
-              <option value="Present">Present</option>
-              <option value="Absent">Absent</option>
-              <option value="Late">Late</option>
-              <option value="On Leave">On Leave</option>
-            </select>
+            <div style={{ width: '100%' }}>
+              <CustomSelect
+                value={status}
+                onChange={(val) => setStatus(val)}
+                options={[
+                  { value: "Present", label: "Present" },
+                  { value: "Absent", label: "Absent" },
+                  { value: "Late", label: "Late" },
+                  { value: "On Leave", label: "On Leave" }
+                ]}
+              />
+            </div>
           </div>
 
           <div>

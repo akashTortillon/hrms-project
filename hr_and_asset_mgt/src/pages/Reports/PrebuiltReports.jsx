@@ -8,6 +8,7 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
 import ScheduledReports from "./ScheduledReports";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 import "../../style/Reports.css";
 
@@ -287,59 +288,59 @@ export default function PrebuiltReports() {
               <button className={mode === "monthly" ? "active" : ""} onClick={() => setMode("monthly")}>Monthly</button>
             </div> */}
 
-            
-            <div
-  className="report-mode-toggle"
-  style={{
-    display: "inline-flex",
-    gap: "4px",
-    padding: "4px",
-    border: "1px solid var(--border)",
-    borderRadius: "10px",
-    background: "var(--color-bg-card)",
-    marginTop: "15px"
-  }}
->
-  <button
-    onClick={() => setMode("daily")}
-    style={{
-      padding: "8px 16px",
-      borderRadius: "8px",
-      border: "none",
-      cursor: "pointer",
-      fontSize: "13px",
-      fontWeight: 500,
-      background: mode === "daily" ? "#ffffff" : "transparent",
-      color: mode === "daily" ? "var(--text)" : "var(--muted)",
-      boxShadow: mode === "daily"
-        ? "0 2px 6px rgba(0,0,0,0.08)"
-        : "none",
-      transition: "all 0.2s ease"
-    }}
-  >
-    Daily
-  </button>
 
-  <button
-    onClick={() => setMode("monthly")}
-    style={{
-      padding: "8px 16px",
-      borderRadius: "8px",
-      border: "none",
-      cursor: "pointer",
-      fontSize: "13px",
-      fontWeight: 500,
-      background: mode === "monthly" ? "#ffffff" : "transparent",
-      color: mode === "monthly" ? "var(--text)" : "var(--muted)",
-      boxShadow: mode === "monthly"
-        ? "0 2px 6px rgba(0,0,0,0.08)"
-        : "none",
-      transition: "all 0.2s ease"
-    }}
-  >
-    Monthly
-  </button>
-</div>
+            <div
+              className="report-mode-toggle"
+              style={{
+                display: "inline-flex",
+                gap: "4px",
+                padding: "4px",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                background: "var(--color-bg-card)",
+                marginTop: "15px"
+              }}
+            >
+              <button
+                onClick={() => setMode("daily")}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  background: mode === "daily" ? "#ffffff" : "transparent",
+                  color: mode === "daily" ? "var(--text)" : "var(--muted)",
+                  boxShadow: mode === "daily"
+                    ? "0 2px 6px rgba(0,0,0,0.08)"
+                    : "none",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                Daily
+              </button>
+
+              <button
+                onClick={() => setMode("monthly")}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  background: mode === "monthly" ? "#ffffff" : "transparent",
+                  color: mode === "monthly" ? "var(--text)" : "var(--muted)",
+                  boxShadow: mode === "monthly"
+                    ? "0 2px 6px rgba(0,0,0,0.08)"
+                    : "none",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                Monthly
+              </button>
+            </div>
 
 
 
@@ -352,12 +353,22 @@ export default function PrebuiltReports() {
                 <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
               ) : (
                 <>
-                  <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-                    {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
-                  <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                    {[0, 1, 2, 3, 4].map(i => <option key={i} value={currentDate.getFullYear() - i}>{currentDate.getFullYear() - i}</option>)}
-                  </select>
+                  <>
+                    <div style={{ width: '140px' }}>
+                      <CustomSelect
+                        value={month}
+                        onChange={(val) => setMonth(Number(val))}
+                        options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+                      />
+                    </div>
+                    <div style={{ width: '100px' }}>
+                      <CustomSelect
+                        value={year}
+                        onChange={(val) => setYear(Number(val))}
+                        options={[0, 1, 2, 3, 4].map(i => ({ value: currentDate.getFullYear() - i, label: String(currentDate.getFullYear() - i) }))}
+                      />
+                    </div>
+                  </>
                 </>
               )}
             </div>
@@ -377,11 +388,17 @@ export default function PrebuiltReports() {
             <h4 className="report-title">Document Expiry Forecast</h4>
             <p className="report-desc">Preview company and employee documents set to expire soon.</p>
             <div className="report-filters">
-              <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
-                <option value={30}>Next 30 Days</option>
-                <option value={60}>Next 60 Days</option>
-                <option value={90}>Next 90 Days</option>
-              </select>
+              <div style={{ width: '200px' }}>
+                <CustomSelect
+                  value={days}
+                  onChange={(val) => setDays(Number(val))}
+                  options={[
+                    { value: 30, label: "Next 30 Days" },
+                    { value: 60, label: "Next 60 Days" },
+                    { value: 90, label: "Next 90 Days" }
+                  ]}
+                />
+              </div>
             </div>
             <div className="report-actions">
               <Button className="generate-btn" onClick={() => handleGenerate("expiry")} disabled={loading}>Generate</Button>
@@ -480,114 +497,116 @@ export default function PrebuiltReports() {
             {reportType === "wps" && `WPS Salary File Preview – ${MONTHS.find(m => m.value === month)?.label} ${year}`}
           </h3>
 
-          <table className="report-table">
-            <thead>
-              {reportType === "attendance" && (
-                <tr>
-                  <th>Department</th>
-                  <th>Employees</th>
-                  <th>Present</th>
-                  <th>Absent</th>
-                  <th>Late</th>
-                  <th>On Leave</th>
-                </tr>
-              )}
-              {reportType === "expiry" && (
-                <tr>
-                  <th>Type</th>
-                  <th>Owner</th>
-                  <th>Document</th>
-                  <th>Expiry Date</th>
-                  <th>Remaining</th>
-                </tr>
-              )}
-              {reportType === "depreciation" && (
-                <tr>
-                  <th>Code</th>
-                  <th>Asset Name</th>
-                  <th>Purchase Cost</th>
-                  <th>Annual Dep.</th>
-                  <th>Accumulated</th>
-                  <th>Net Book Value</th>
-                </tr>
-              )}
-              {reportType === "payroll" && (
-                <tr>
-                  <th>Department</th>
-                  <th>Emps</th>
-                  <th>Basic</th>
-                  <th>Allowances</th>
-                  <th>Deductions</th>
-                  <th>Net Paid</th>
-                </tr>
-              )}
-              {reportType === "wps" && (
-                <tr>
-                  <th>Employee</th>
-                  <th>Code</th>
-                  <th>IBAN/Account</th>
-                  <th>Basic</th>
-                  <th>Allowances</th>
-                  <th>Net Payable</th>
-                </tr>
-              )}
-            </thead>
-            <tbody>
-              {reportData.map((row, index) => (
-                <tr key={index}>
-                  {reportType === "attendance" && (
-                    <>
-                      <td>{row.department}</td>
-                      <td>{row.totalEmployees}</td>
-                      <td>{row.present}</td>
-                      <td>{row.absent}</td>
-                      <td>{row.late}</td>
-                      <td>{row.onLeave}</td>
-                    </>
-                  )}
-                  {reportType === "expiry" && (
-                    <>
-                      <td><span className={`status-badge ${row.type.toLowerCase()}`}>{row.type}</span></td>
-                      <td>{row.owner}</td>
-                      <td>{row.docType}</td>
-                      <td>{new Date(row.expiryDate).toLocaleDateString()}</td>
-                      <td><span style={{ color: row.daysRemaining < 10 ? 'red' : 'orange' }}>{row.daysRemaining} days</span></td>
-                    </>
-                  )}
-                  {reportType === "depreciation" && (
-                    <>
-                      <td>{row.assetCode}</td>
-                      <td>{row.name}</td>
-                      <td>AED {row.purchaseCost}</td>
-                      <td>AED {row.annualDepreciation}</td>
-                      <td>AED {row.accumulatedDepreciation}</td>
-                      <td><strong>AED {row.netBookValue}</strong></td>
-                    </>
-                  )}
-                  {reportType === "payroll" && (
-                    <>
-                      <td>{row.department}</td>
-                      <td>{row.employeeCount}</td>
-                      <td>AED {row.totalBasic}</td>
-                      <td>AED {row.totalAllowances}</td>
-                      <td>AED {row.totalDeductions}</td>
-                      <td><strong>AED {row.totalNet}</strong></td>
-                    </>
-                  )}
-                  {reportType === "wps" && (
-                    <>
-                      <td>{row["Employee"]}</td>
-                      <td>{row["Code"]}</td>
-                      <td>{row["IBAN/Account"]}</td>
-                      <td>AED {row["Basic"]}</td>
-                      <td>AED {row["Allowances"]}</td>
-                      <td><strong>AED {row["Total Net"]}</strong></td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="report-table-wrapper">
+            <table className="report-table">
+              <thead>
+                {reportType === "attendance" && (
+                  <tr>
+                    <th>Department</th>
+                    <th>Employees</th>
+                    <th>Present</th>
+                    <th>Absent</th>
+                    <th>Late</th>
+                    <th>On Leave</th>
+                  </tr>
+                )}
+                {reportType === "expiry" && (
+                  <tr>
+                    <th>Type</th>
+                    <th>Owner</th>
+                    <th>Document</th>
+                    <th>Expiry Date</th>
+                    <th>Remaining</th>
+                  </tr>
+                )}
+                {reportType === "depreciation" && (
+                  <tr>
+                    <th>Code</th>
+                    <th>Asset Name</th>
+                    <th>Purchase Cost</th>
+                    <th>Annual Dep.</th>
+                    <th>Accumulated</th>
+                    <th>Net Book Value</th>
+                  </tr>
+                )}
+                {reportType === "payroll" && (
+                  <tr>
+                    <th>Department</th>
+                    <th>Emps</th>
+                    <th>Basic</th>
+                    <th>Allowances</th>
+                    <th>Deductions</th>
+                    <th>Net Paid</th>
+                  </tr>
+                )}
+                {reportType === "wps" && (
+                  <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>IBAN/Account</th>
+                    <th>Basic</th>
+                    <th>Allowances</th>
+                    <th>Net Payable</th>
+                  </tr>
+                )}
+              </thead>
+              <tbody>
+                {reportData.map((row, index) => (
+                  <tr key={index}>
+                    {reportType === "attendance" && (
+                      <>
+                        <td>{row.department}</td>
+                        <td>{row.totalEmployees}</td>
+                        <td>{row.present}</td>
+                        <td>{row.absent}</td>
+                        <td>{row.late}</td>
+                        <td>{row.onLeave}</td>
+                      </>
+                    )}
+                    {reportType === "expiry" && (
+                      <>
+                        <td><span className={`status-badge ${row.type.toLowerCase()}`}>{row.type}</span></td>
+                        <td>{row.owner}</td>
+                        <td>{row.docType}</td>
+                        <td>{new Date(row.expiryDate).toLocaleDateString()}</td>
+                        <td><span style={{ color: row.daysRemaining < 10 ? 'red' : 'orange' }}>{row.daysRemaining} days</span></td>
+                      </>
+                    )}
+                    {reportType === "depreciation" && (
+                      <>
+                        <td>{row.assetCode}</td>
+                        <td>{row.name}</td>
+                        <td>AED {row.purchaseCost}</td>
+                        <td>AED {row.annualDepreciation}</td>
+                        <td>AED {row.accumulatedDepreciation}</td>
+                        <td><strong>AED {row.netBookValue}</strong></td>
+                      </>
+                    )}
+                    {reportType === "payroll" && (
+                      <>
+                        <td>{row.department}</td>
+                        <td>{row.employeeCount}</td>
+                        <td>AED {row.totalBasic}</td>
+                        <td>AED {row.totalAllowances}</td>
+                        <td>AED {row.totalDeductions}</td>
+                        <td><strong>AED {row.totalNet}</strong></td>
+                      </>
+                    )}
+                    {reportType === "wps" && (
+                      <>
+                        <td>{row["Employee"]}</td>
+                        <td>{row["Code"]}</td>
+                        <td>{row["IBAN/Account"]}</td>
+                        <td>AED {row["Basic"]}</td>
+                        <td>AED {row["Allowances"]}</td>
+                        <td><strong>AED {row["Total Net"]}</strong></td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
             <Button variant="outline" onClick={() => handleExport("excel")}>Export as Excel</Button>
             <Button variant="outline" onClick={() => handleExport("pdf")}>Export as PDF</Button>

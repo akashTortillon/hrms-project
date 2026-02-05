@@ -6,6 +6,7 @@ import { assetTypeService, assetCategoryService }
   from "../../services/masterService";
 
 import "../../style/AddEmployeeModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 export default function AddAssetModal({
   onClose,
@@ -154,33 +155,52 @@ export default function AddAssetModal({
             <input name="serialNumber" placeholder="Serial Number" value={form.serialNumber} onChange={handleChange} />
 
             {/* Asset Type (MASTER) */}
-            <select name="type" value={form.type} onChange={handleChange}>
-              <option value="">Select Asset Type *</option>
-              {assetTypes.map((t) => (
-                <option key={t._id} value={t.name}>{t.name}</option>
-              ))}
-            </select>
+            <div style={{ gridColumn: 'span 1' }}>
+              <CustomSelect
+                name="type"
+                value={form.type}
+                onChange={(val) => handleChange({ target: { name: 'type', value: val } })}
+                options={[
+                  { value: "", label: "Select Asset Type *" },
+                  ...assetTypes.map(t => ({ value: t.name, label: t.name }))
+                ]}
+                placeholder="Select Asset Type *"
+              />
+            </div>
 
             {/* Category (MASTER) */}
-            <select name="category" value={form.category} onChange={handleChange}>
-              <option value="">Select Category *</option>
-              {categories.map((c) => (
-                <option key={c._id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
+            <div style={{ gridColumn: 'span 1' }}>
+              <CustomSelect
+                name="category"
+                value={form.category}
+                onChange={(val) => handleChange({ target: { name: 'category', value: val } })}
+                options={[
+                  { value: "", label: "Select Category *" },
+                  ...categories.map(c => ({ value: c.name, label: c.name }))
+                ]}
+                placeholder="Select Category *"
+              />
+            </div>
 
             <input name="location" placeholder="Location *" value={form.location} onChange={handleChange} />
             <input name="subLocation" placeholder="Sub Location" value={form.subLocation} onChange={handleChange} />
 
             {/* Custodian */}
-            <select name="custodian" value={form.custodian} onChange={handleChange}>
-              <option value="">-- Select Custodian (Optional) --</option>
-              {employees.map((emp) => (
-                <option key={emp._id} value={emp._id}>
-                  {emp.name} ({emp.code}) - {emp.department}
-                </option>
-              ))}
-            </select>
+            <div style={{ gridColumn: 'span 1' }}>
+              <CustomSelect
+                name="custodian"
+                value={form.custodian}
+                onChange={(val) => handleChange({ target: { name: 'custodian', value: val } })}
+                options={[
+                  { value: "", label: "-- Select Custodian (Optional) --" },
+                  ...employees.map(emp => ({
+                    value: emp._id,
+                    label: `${emp.name} (${emp.code}) - ${emp.department}`
+                  }))
+                ]}
+                placeholder="-- Select Custodian (Optional) --"
+              />
+            </div>
 
             <input name="department" placeholder="Department" value={form.department} onChange={handleChange} />
             <input name="purchaseCost" type="number" placeholder="Purchase Cost (AED) *" value={form.purchaseCost} onChange={handleChange} />
@@ -189,12 +209,19 @@ export default function AddAssetModal({
             <input name="serviceDueDate" type="date" value={form.serviceDueDate} onChange={handleChange} />
 
             {isEditMode && (
-              <select name="status" value={form.status} onChange={handleChange}>
-                <option value="Available">Available</option>
-                <option value="In Use">In Use</option>
-                <option value="Under Maintenance">Under Maintenance</option>
-                <option value="Disposed">Disposed</option>
-              </select>
+              <div style={{ gridColumn: 'span 1' }}>
+                <CustomSelect
+                  name="status"
+                  value={form.status}
+                  onChange={(val) => handleChange({ target: { name: 'status', value: val } })}
+                  options={[
+                    { value: "Available", label: "Available" },
+                    { value: "In Use", label: "In Use" },
+                    { value: "Under Maintenance", label: "Under Maintenance" },
+                    { value: "Disposed", label: "Disposed" }
+                  ]}
+                />
+              </div>
             )}
           </div>
         </div>

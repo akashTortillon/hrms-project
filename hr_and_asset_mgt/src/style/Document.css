@@ -35,14 +35,43 @@
   height: 40px;
   border-radius: 10px;
   font-weight: 600;
+  white-space: nowrap;
+  min-width: fit-content;
+  flex-shrink: 0;
+}
+
+/* Mobile: Stack vertically */
+@media (max-width: 768px) {
+  .document-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .upload-btn {
+    align-self: flex-start;
+  }
 }
 
 /* ===== STATS GRID ===== */
 
 .document-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
+}
+
+/* Tablet: 2 columns */
+@media (max-width: 1024px) {
+  .document-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Mobile: 1 column */
+@media (max-width: 600px) {
+  .document-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== STAT CARD ===== */
@@ -304,7 +333,7 @@
   display: flex;
   flex-direction: column;
 
-  transition: 
+  transition:
     transform 0.25s ease,
     box-shadow 0.25s ease,
     border-color 0.25s ease;
@@ -464,6 +493,20 @@
   gap: 20px;
 }
 
+/* Tablet: 2 columns */
+@media (max-width: 1024px) {
+  .expiry-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Mobile: 1 column */
+@media (max-width: 600px) {
+  .expiry-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Individual Reminder Card */
 .expiry-item {
   border: 1px solid #e5e7eb;
@@ -474,7 +517,7 @@
   flex-direction: column;
   gap: 10px;
 
-  transition: 
+  transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
     box-shadow 0.2s ease;
@@ -482,8 +525,10 @@
 
 /* Dashboard-like hover */
 .expiry-item:hover {
-  background: #eff6ff;              /* light blue */
-  border-color: #2563eb;            /* blue border */
+  background: #eff6ff;
+  /* light blue */
+  border-color: #2563eb;
+  /* blue border */
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
   cursor: pointer;
 }

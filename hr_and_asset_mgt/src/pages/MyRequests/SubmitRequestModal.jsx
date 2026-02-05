@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import "../../style/SubmitRequestModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
 import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
@@ -201,10 +202,11 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div className="form-row">
               <div>
                 <label>Leave Type</label>
-                <select
+                <CustomSelect
+                  name="leaveTypeId"
                   value={leaveForm.leaveTypeId}
-                  onChange={(e) => {
-                    const selected = leaveTypes.find(t => t._id === e.target.value);
+                  onChange={(val) => {
+                    const selected = leaveTypes.find(t => t._id === val);
                     if (selected) {
                       setLeaveForm({
                         ...leaveForm,
@@ -214,13 +216,12 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                       });
                     }
                   }}
-                >
-                  {leaveTypes.map(type => (
-                    <option key={type._id} value={type._id}>
-                      {type.name} {type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}
-                    </option>
-                  ))}
-                </select>
+                  options={leaveTypes.map(type => ({
+                    value: type._id,
+                    label: `${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`
+                  }))}
+                  placeholder="Select Leave Type"
+                />
               </div>
 
               <div>
@@ -317,19 +318,21 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
             <div>
               <label>Repayment Period (Months)</label>
-              <select
+              <CustomSelect
                 value={salaryForm.repaymentPeriod}
-                onChange={(e) =>
+                onChange={(val) =>
                   setSalaryForm({
                     ...salaryForm,
-                    repaymentPeriod: e.target.value
+                    repaymentPeriod: val
                   })
                 }
-              >
-                <option>3 Months</option>
-                <option>6 Months</option>
-                <option>9 Months</option>
-              </select>
+                options={[
+                  { value: "3 Months", label: "3 Months" },
+                  { value: "6 Months", label: "6 Months" },
+                  { value: "9 Months", label: "9 Months" }
+                ]}
+                placeholder="Select Period"
+              />
             </div>
 
             <div>
@@ -350,20 +353,22 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           <div className="leave-form">
             <div>
               <label>Document Type</label>
-              <select
+              <CustomSelect
                 value={documentForm.documentType}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDocumentForm({
                     ...documentForm,
-                    documentType: e.target.value
+                    documentType: val
                   })
                 }
-              >
-                <option>Salary Certificate</option>
-                <option>Experience Letter</option>
-                <option>Employment Letter</option>
-                <option>NOC (No Objection Certificate)</option>
-              </select>
+                options={[
+                  { value: "Salary Certificate", label: "Salary Certificate" },
+                  { value: "Experience Letter", label: "Experience Letter" },
+                  { value: "Employment Letter", label: "Employment Letter" },
+                  { value: "NOC (No Objection Certificate)", label: "NOC (No Objection Certificate)" }
+                ]}
+                placeholder="Select Document Type"
+              />
             </div>
 
             <div>

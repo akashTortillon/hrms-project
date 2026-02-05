@@ -1,6 +1,7 @@
 import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 
 export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
@@ -44,27 +45,27 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
 
         <div className="payroll-header-actions">
           {/* Month Selector */}
-          <select
-            className="payroll-month-select"
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-          >
-            {months.map((m, idx) => (
-              <option key={idx} value={idx + 1}>{m}</option>
-            ))}
-          </select>
+          {/* Month Selector */}
+          <div style={{ width: '100%', maxWidth: '200px' }}>
+            <CustomSelect
+              className="payroll-month-select"
+              value={month}
+              onChange={(val) => setMonth(Number(val))}
+              options={months.map((m, idx) => ({ value: idx + 1, label: m }))}
+              placeholder="Select Month"
+            />
+          </div>
 
           {/* Year Selector */}
-          <select
-            className="payroll-month-select"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            style={{ marginLeft: '10px' }}
-          >
-            <option value={2024}>2024</option>
-            <option value={2025}>2025</option>
-            <option value={2026}>2026</option>
-          </select>
+          <div style={{ width: '100%', maxWidth: '120px', marginLeft: '10px' }}>
+            <CustomSelect
+              className="payroll-month-select"
+              value={year}
+              onChange={(val) => setYear(Number(val))}
+              options={[2024, 2025, 2026].map(y => ({ value: y, label: String(y) }))}
+              placeholder="Select Year"
+            />
+          </div>
 
           <button className="payroll-export-btn" onClick={onExportWPS}>
             <SvgIcon name="download" size={16} />

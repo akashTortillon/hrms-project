@@ -1,6 +1,7 @@
 import React from "react";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Employees.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 
 export default function EmployeesHeader({
@@ -49,28 +50,36 @@ export default function EmployeesHeader({
           </div>
 
           {/* Department */}
-          <select
-            className="employees-select"
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-          >
-            <option value="All Departments">All Departments</option>
-            {deptOptions.map((dept, idx) => (
-              <option key={idx} value={dept}>{dept}</option>
-            ))}
-          </select>
+          {/* Department */}
+          <div style={{ width: '100%' }}>
+            <CustomSelect
+              className="employees-select"
+              value={department}
+              onChange={setDepartment}
+              options={[
+                { value: "All Departments", label: "All Departments" },
+                ...deptOptions.map(dept => ({ value: dept, label: dept }))
+              ]}
+              placeholder="All Departments"
+            />
+          </div>
 
           {/* Status */}
-          <select
-            className="employees-select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option>All Status</option>
-            <option>Active</option>
-            <option>Inactive</option>
-            <option>On Leave</option>
-          </select>
+          {/* Status */}
+          <div style={{ width: '100%' }}>
+            <CustomSelect
+              className="employees-select"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "All Status", label: "All Status" },
+                { value: "Active", label: "Active" },
+                { value: "Inactive", label: "Inactive" },
+                { value: "On Leave", label: "On Leave" }
+              ]}
+              placeholder="All Status"
+            />
+          </div>
 
           {/* Export */}
           {onExport && (
