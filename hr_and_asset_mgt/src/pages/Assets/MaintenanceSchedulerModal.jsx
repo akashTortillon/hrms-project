@@ -4,6 +4,8 @@ import {
   serviceTypeService,
   maintenanceShopService,
 } from "../../services/masterService";
+import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 
 export default function MaintenanceSchedulerModal({ onClose, onSchedule, asset }) {
@@ -99,47 +101,42 @@ export default function MaintenanceSchedulerModal({ onClose, onSchedule, asset }
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Scheduled Date *
               </label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="scheduledDate"
                 value={form.scheduledDate}
                 onChange={handleChange}
-                min={new Date().toISOString().split('T')[0]}
+                minDate={new Date().toISOString().split('T')[0]}
               />
             </div>
 
             {/* Service Type (MASTER) */}
             <div>
               <label className="modal-label">Service Type *</label>
-              <select
+              <CustomSelect
                 name="serviceType"
                 value={form.serviceType}
-                onChange={handleChange}
-              >
-                <option value="">Select Service Type</option>
-                {serviceTypes.map((type) => (
-                  <option key={type._id} value={type._id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => handleChange({ target: { name: 'serviceType', value: val } })}
+                options={[
+                  { value: "", label: "Select Service Type" },
+                  ...serviceTypes.map(type => ({ value: type._id, label: type.name }))
+                ]}
+                placeholder="Select Service Type"
+              />
             </div>
 
             {/* Service Provider (MASTER) */}
             <div>
               <label className="modal-label">Service Provider *</label>
-              <select
+              <CustomSelect
                 name="provider"
                 value={form.provider}
-                onChange={handleChange}
-              >
-                <option value="">Select Service Provider</option>
-                {providers.map((shop) => (
-                  <option key={shop._id} value={shop._id}>
-                    {shop.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => handleChange({ target: { name: 'provider', value: val } })}
+                options={[
+                  { value: "", label: "Select Service Provider" },
+                  ...providers.map(shop => ({ value: shop._id, label: shop.name }))
+                ]}
+                placeholder="Select Service Provider"
+              />
             </div>
             {/* Cost */}
             <div>

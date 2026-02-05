@@ -2,21 +2,24 @@ import Notification from "../models/notificationModel.js";
 import CompanyDocument from "../models/companyDocModel.js";
 import Request from "../models/requestModel.js";
 import Payroll from "../models/payrollModel.js";
+import User from "../models/userModel.js";
 
 /**
  * Get notifications for the logged-in user
  */
 export const getNotifications = async (req, res) => {
     try {
-        let notifications = await Notification.find({ recipient: req.user._id })
-            .sort({ createdAt: -1 })
-            .limit(30);
+        // Use .id (string) or ._id (ObjectId). User.findById handles either.
+        const user = await User.findById(req.user.id).select("dismissedNotifications").lean();
+        const dismissedIds = user?.dismissedNotifications || [];
 
-        // Convert to plain objects to allow insertion of virtual notifications
-        notifications = notifications.map(n => n.toObject());
+        let notifications = await Notification.find({ recipient: req.user.id })
+            .sort({ createdAt: -1 })
+            .limit(30)
+            .lean();
 
         // 🔹 DYNAMIC LOGIC FOR ADMINS / HR
-        const isAdmin = ["Admin", "HR Admin", "HR Manager", "Super Admin"].includes(req.user.role);
+        const isAdmin = ["Admin", "HR Admin", "HR Manager", "Super Admin"].includes(req.user.role) || req.user.permissions?.includes("APPROVE_REQUESTS");
 
         if (isAdmin) {
             const summaryNotifications = [];
@@ -70,10 +73,15 @@ export const getNotifications = async (req, res) => {
                 });
             }
 
+            // Filter out already dismissed virtual notifications
+            const activeSummaryNotifications = summaryNotifications.filter(
+                (n) => !dismissedIds.includes(n._id)
+            );
+
             // Remove individual REQUEST notifications for Admin to avoid duplicate noise/double-counting
             const nonRequestDBNotifications = notifications.filter(n => n.type !== "REQUEST");
 
-            return res.json([...summaryNotifications, ...nonRequestDBNotifications]);
+            return res.json([...activeSummaryNotifications, ...nonRequestDBNotifications]);
         }
 
         // For Employees: Only show individual notifications if they are not system-level virtuals
@@ -100,13 +108,17 @@ export const getUnreadCount = async (req, res) => {
             const currentYear = new Date().getFullYear();
             const draftPayroll = await Payroll.exists({ month: currentMonth, year: currentYear, status: "DRAFT" });
 
-            if (expiringDocs > 0) virtualCount++;
-            if (pendingReqs > 0) virtualCount++;
-            if (draftPayroll) virtualCount++;
+            // Check for dismissal
+            const user = await User.findById(req.user.id).select("dismissedNotifications").lean();
+            const dismissedIds = user?.dismissedNotifications || [];
+
+            if (expiringDocs > 0 && !dismissedIds.includes("virtual-docs-expiry")) virtualCount++;
+            if (pendingReqs > 0 && !dismissedIds.includes("virtual-pending-requests")) virtualCount++;
+            if (draftPayroll && !dismissedIds.includes("virtual-payroll-due")) virtualCount++;
 
             // DB unread count (excluding requests which are handled via summary)
             const dbUnread = await Notification.countDocuments({
-                recipient: req.user._id,
+                recipient: req.user.id,
                 isRead: false,
                 type: { $ne: "REQUEST" }
             });
@@ -173,6 +185,26 @@ export const deleteNotification = async (req, res) => {
         res.json({ message: "Notification deleted" });
     } catch (error) {
         res.status(500).json({ message: "Failed to delete notification" });
+    }
+};
+
+/**
+ * Dismiss a virtual notification (Persist for Admin/HR)
+ */
+export const dismissVirtualNotification = async (req, res) => {
+    try {
+        const { virtualId } = req.params;
+
+        await User.findByIdAndUpdate(req.user.id, {
+            $addToSet: { dismissedNotifications: virtualId }
+        });
+
+        console.log(`[DEBUG] Dismissed Virtual Notification: ${virtualId} for user ${req.user.id}`);
+
+        res.json({ success: true, message: "Virtual notification dismissed" });
+    } catch (error) {
+        console.error("Dismiss Virtual Notification Error:", error);
+        res.status(500).json({ message: "Failed to dismiss notification" });
     }
 };
 

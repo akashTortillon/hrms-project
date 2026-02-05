@@ -2,10 +2,13 @@ import Sidebar from "./navigation/Sidebar.jsx";
 import NavigationBar from "./navigation/Navbar.jsx";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { RoleProvider } from "../contexts/RoleContext.jsx";
+import { useState } from "react";
 
 import Dashboard from "../pages/Dashboard/DashboardView.jsx";
 import Employees from "../pages/Employees/EmployeesView.jsx";
 import EmployeeDetail from "../pages/Employees/EmployeeDetail.jsx";
+import Onboarding from "../pages/Onboarding/OnboardingView.jsx";
+import Offboarding from "../pages/Offboarding/OffboardingView.jsx";
 import Payroll from "../pages/Payroll/PayrollView.jsx";
 import Attendance from "../pages/Attendance/AttendanceView.jsx";
 import Documents from "../pages/Documents/DocumentView.jsx";
@@ -14,17 +17,34 @@ import MyRequests from "../pages/MyRequests/MyRequests.jsx";
 import Reports from "../pages/Reports/ReportsView.jsx";
 import CustomReportBuilder from "../pages/Reports/pages/CustomReportBuilder.jsx";
 import Masters from "../pages/Masters/MastersView.jsx";
-import Onboarding from "../pages/Onboarding/OnboardingView.jsx";
-import Offboarding from "../pages/Offboarding/OffboardingView.jsx";
 
 export default function Layout() {
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const toggleMobileSidebar = () => {
+    setIsMobileSidebarOpen(!isMobileSidebarOpen);
+  };
+
+  const closeMobileSidebar = () => {
+    setIsMobileSidebarOpen(false);
+  };
+
   return (
     <RoleProvider>
-      <div className="app-shell">
-        <Sidebar />
+      <div className={`app-shell ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""}`}>
+        {/* Sidebar Backdrop for Mobile */}
+        <div
+          className={`sidebar-backdrop ${isMobileSidebarOpen ? "visible" : ""}`}
+          onClick={closeMobileSidebar}
+        ></div>
+
+        <Sidebar
+          isMobileOpen={isMobileSidebarOpen}
+          setMobileOpen={setIsMobileSidebarOpen}
+        />
 
         <div className="app-main">
-          <NavigationBar />
+          <NavigationBar toggleSidebar={toggleMobileSidebar} isSidebarOpen={isMobileSidebarOpen} />
 
           <div className="app-content">
             <Routes>

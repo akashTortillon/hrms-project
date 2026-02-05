@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
 import { useState, useMemo } from "react";
 import { useRole } from "../../contexts/RoleContext.jsx";
-import leptisLogo from "../../assets/images/logo-leptis.png"
 
 // All navigation items with their access roles
 const allNavItems = [
@@ -20,7 +19,7 @@ const allNavItems = [
   { path: "/app/masters", icon: "settings", label: "Masters", permission: "MANAGE_MASTERS" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isMobileOpen, setMobileOpen }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,8 +34,15 @@ export default function Sidebar() {
     setIsCollapsed(!isCollapsed);
   };
 
+  const handleNavClick = (path) => {
+    navigate(path);
+    if (window.innerWidth < 768) {
+      setMobileOpen(false);
+    }
+  };
+
   return (
-    <div className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
+    <div className={`sidebar ${isCollapsed ? "collapsed" : ""} ${isMobileOpen ? "mobile-open" : ""}`}>
       {/* Brand Header */}
       <div className="sidebar-brand">
         {isCollapsed ? (
@@ -49,17 +55,23 @@ export default function Sidebar() {
           </Button>
         ) : (
           <>
-            <div className="brand-icon"><img src={leptisLogo} alt="Leptis Logo" /></div>
-            <div className="brand-text-wrapper">
-              <div className="brand-title" style={{ color: "white" }}>LEPTIS</div>
-              <div className="brand-subtitle" style={{ color: "red" }}>ENTERPRISE</div>
-            </div>
+
+            <SvgView name="leptis_logo" size={60} className="sidebar-brand-logo" />
+
             <Button
               variant="light"
-              className="icon-btn back-btn"
+              className="icon-btn back-btn d-none d-md-flex"
               onClick={toggleCollapse}
             >
               <SvgView name="arrow-left" size={15} />
+            </Button>
+            {/* Mobile-only close button */}
+            <Button
+              variant="light"
+              className="icon-btn back-btn d-flex d-md-none"
+              onClick={() => setMobileOpen(false)}
+            >
+              <SvgView name="close" size={15} />
             </Button>
           </>
         )}
@@ -70,7 +82,7 @@ export default function Sidebar() {
         {navItems.map((item) => (
           <Nav.Link
             key={item.path}
-            onClick={() => navigate(item.path)}
+            onClick={() => handleNavClick(item.path)}
             active={location.pathname === item.path}
             className={`sidebar-link ${location.pathname === item.path ? "active" : ""
               }`}

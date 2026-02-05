@@ -27,6 +27,19 @@
   color: var(--muted);
 }
 
+/* Mobile/Tablet: Stack vertically */
+@media (max-width: 1024px) {
+  .attendance-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .attendance-header-left {
+    width: 100%;
+  }
+}
+
 /* ===== TABS (Daily / Monthly) ===== */
 
 .attendance-tabs {
@@ -44,6 +57,7 @@
   background: #ffffff;
   cursor: pointer;
   color: #111827;
+  white-space: nowrap;
 }
 
 .attendance-tab.active {
@@ -52,12 +66,52 @@
   color: #2563eb;
 }
 
+/* Mobile: Equal width segmented control */
+@media (max-width: 768px) {
+  .attendance-tabs {
+    width: 100%;
+    max-width: 400px;
+    gap: 0;
+  }
+
+  .attendance-tab {
+    flex: 1;
+    text-align: center;
+    border-radius: 0;
+  }
+
+  .attendance-tab:first-child {
+    border-top-left-radius: 10px;
+    border-bottom-left-radius: 10px;
+  }
+
+  .attendance-tab:last-child {
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+    border-left: none;
+  }
+
+  .attendance-tab.active {
+    background: #2563eb;
+    color: #ffffff;
+    z-index: 1;
+  }
+}
+
 /* ===== ACTION BUTTONS ===== */
 
 .attendance-header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Mobile/Tablet: Full width buttons */
+@media (max-width: 1024px) {
+  .attendance-header-actions {
+    width: 100%;
+  }
 }
 
 /* Base button */
@@ -110,6 +164,24 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
   margin-top: 15px;
+}
+
+@media (max-width: 1200px) {
+  .attendance-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .attendance-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .attendance-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Card base */
@@ -183,6 +255,12 @@
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
+}
+
+@media (max-width: 900px) {
+  .attendance-filters {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== INDIVIDUAL FILTER ===== */

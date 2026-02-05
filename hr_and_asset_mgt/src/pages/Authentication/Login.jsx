@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
 import { Link, useNavigate } from "react-router-dom";
-import employeeImage from "../../assets/images/login_page_image.png";
+import employeeImage from "../../assets/images/logo_login_image.png";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
 

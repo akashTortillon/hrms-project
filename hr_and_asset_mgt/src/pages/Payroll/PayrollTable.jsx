@@ -54,74 +54,76 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
         </div>
 
         {/* Table */}
-        <table className="payroll-table">
-          <thead>
-            <tr>
-              <th>EMPLOYEE</th>
-              <th>BASIC SALARY</th>
-              <th>ALLOWANCES</th>
-              <th>DEDUCTIONS</th>
-              <th>NET SALARY</th>
-              <th className="actions-col">ACTIONS</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {employees.length === 0 ? (
-              <tr><td colSpan="6" className="text-center py-6 text-gray-500">No payroll records found. Click to generate.</td></tr>
-            ) : employees.map((record) => (
-              <tr key={record._id}>
-                {/* Employee */}
-                <td>
-                  <div className="payroll-employee-cell">
-                    <div className="employee-name">{record.employee?.name || "Unknown"}</div>
-                    <div className="employee-meta">
-                      {record.employee?.code} • {record.employee?.department || record.employee?.designation}
-                    </div>
-                  </div>
-                </td>
-
-                <td>{record.basicSalary?.toLocaleString()} AED</td>
-
-                <td className="amount-positive" style={{ color: "green" }}>
-                  +{record.totalAllowances?.toLocaleString()} AED
-                </td>
-
-                <td className="amount-negative" style={{ color: "red" }}>
-                  -{record.totalDeductions?.toLocaleString()} AED
-                </td>
-
-                <td className="amount-net">
-                  {record.netSalary?.toLocaleString()} AED
-                </td>
-
-                <td className="actions-col">
-                  <div className="action-menu-container">
-                    <button className="action-toggle-btn" onClick={(e) => toggleMenu(e, record._id)}>
-                      &#8942;
-                    </button>
-                    {activeMenu === record._id && (
-                      <div className="action-dropdown-menu">
-                        <button className="action-menu-item" onClick={() => handleView(record)}>
-                          View Details
-                        </button>
-                        {isFinalized ? (
-                          <button className="action-menu-item" onClick={() => handleAdjust(record)}>
-                            View Adjustments
-                          </button>
-                        ) : (
-                          <button className="action-menu-item" onClick={() => handleAdjust(record)}>
-                            Add Adjustment
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </td>
+        <div className="table-wrapper">
+          <table className="payroll-table">
+            <thead>
+              <tr>
+                <th>EMPLOYEE</th>
+                <th>BASIC SALARY</th>
+                <th>ALLOWANCES</th>
+                <th>DEDUCTIONS</th>
+                <th>NET SALARY</th>
+                <th className="actions-col">ACTIONS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody>
+              {employees.length === 0 ? (
+                <tr><td colSpan="6" className="text-center py-6 text-gray-500">No payroll records found. Click to generate.</td></tr>
+              ) : employees.map((record) => (
+                <tr key={record._id}>
+                  {/* Employee */}
+                  <td>
+                    <div className="payroll-employee-cell">
+                      <div className="employee-name">{record.employee?.name || "Unknown"}</div>
+                      <div className="employee-meta">
+                        {record.employee?.code} • {record.employee?.department || record.employee?.designation}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td>{record.basicSalary?.toLocaleString()} AED</td>
+
+                  <td className="amount-positive" style={{ color: "green" }}>
+                    +{record.totalAllowances?.toLocaleString()} AED
+                  </td>
+
+                  <td className="amount-negative" style={{ color: "red" }}>
+                    -{record.totalDeductions?.toLocaleString()} AED
+                  </td>
+
+                  <td className="amount-net">
+                    {record.netSalary?.toLocaleString()} AED
+                  </td>
+
+                  <td className="actions-col">
+                    <div className="action-menu-container">
+                      <button className="action-toggle-btn" onClick={(e) => toggleMenu(e, record._id)}>
+                        &#8942;
+                      </button>
+                      {activeMenu === record._id && (
+                        <div className="action-dropdown-menu">
+                          <button className="action-menu-item" onClick={() => handleView(record)}>
+                            View Details
+                          </button>
+                          {isFinalized ? (
+                            <button className="action-menu-item" onClick={() => handleAdjust(record)}>
+                              View Adjustments
+                            </button>
+                          ) : (
+                            <button className="action-menu-item" onClick={() => handleAdjust(record)}>
+                              Add Adjustment
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Detail Modal */}

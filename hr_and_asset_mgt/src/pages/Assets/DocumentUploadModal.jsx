@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/AddEmployeeModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDownload, asset }) {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -35,7 +36,7 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
   const handleDrop = (e) => {
     e.preventDefault();
     setDragActive(false);
-    
+
     const file = e.dataTransfer.files[0];
     if (file) {
       const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
@@ -63,7 +64,7 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
       const formData = new FormData();
       formData.append('document', selectedFile);
       formData.append('type', documentType);
-      
+
       await onUpload(asset._id || asset.id, formData);
       setSelectedFile(null);
       setDocumentType("Invoice");
@@ -106,9 +107,9 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div 
-        className="modal-container" 
-        style={{ maxWidth: "700px" }} 
+      <div
+        className="modal-container"
+        style={{ maxWidth: "700px" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
@@ -122,28 +123,24 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
             <h4 style={{ marginBottom: "12px", fontSize: "14px", fontWeight: "600" }}>
               Upload New Document
             </h4>
-            
+
             {/* Document Type Selector */}
             <div style={{ marginBottom: "12px" }}>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "13px" }}>
                 Document Type
               </label>
-              <select
+              <CustomSelect
                 value={documentType}
-                onChange={(e) => setDocumentType(e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "8px 12px", 
-                  borderRadius: "6px", 
-                  border: "1px solid #d1d5db" 
-                }}
-              >
-                <option value="Invoice">Invoice</option>
-                <option value="LPO">LPO</option>
-                <option value="Warranty Certificate">Warranty Certificate</option>
-                <option value="AMC Contract">AMC Contract</option>
-                <option value="Other">Other</option>
-              </select>
+                onChange={(val) => setDocumentType(val)}
+                options={[
+                  { value: "Invoice", label: "Invoice" },
+                  { value: "LPO", label: "LPO" },
+                  { value: "Warranty Certificate", label: "Warranty Certificate" },
+                  { value: "AMC Contract", label: "AMC Contract" },
+                  { value: "Other", label: "Other" }
+                ]}
+                placeholder="Select Document Type"
+              />
             </div>
 
             {/* File Drop Zone */}
@@ -188,8 +185,8 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
               />
             </div>
 
-            <button 
-              className="btn-primary" 
+            <button
+              className="btn-primary"
               onClick={handleUpload}
               disabled={!selectedFile || uploading}
               style={{ marginTop: "12px", width: "100%" }}
@@ -205,10 +202,10 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
             </h4>
 
             {documents.length === 0 ? (
-              <div style={{ 
-                textAlign: "center", 
-                padding: "32px", 
-                background: "#f8fafc", 
+              <div style={{
+                textAlign: "center",
+                padding: "32px",
+                background: "#f8fafc",
                 borderRadius: "8px",
                 color: "#64748b"
               }}>
@@ -218,14 +215,14 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {documents.map((doc) => (
-                  <div 
-                    key={doc._id} 
-                    style={{ 
-                      display: "flex", 
-                      alignItems: "center", 
+                  <div
+                    key={doc._id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
                       justifyContent: "space-between",
-                      padding: "12px", 
-                      background: "#f8fafc", 
+                      padding: "12px",
+                      background: "#f8fafc",
                       borderRadius: "8px",
                       border: "1px solid #e2e8f0"
                     }}

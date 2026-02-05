@@ -6,6 +6,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     const [interestRate, setInterestRate] = useState(0);
     const [tenure, setTenure] = useState(1);
     const [amount, setAmount] = useState(0);
+    const [approving, setApproving] = useState(false);
 
     useEffect(() => {
         if (request && request.details) {
@@ -17,11 +18,18 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
         }
     }, [request]);
 
-    const handleSubmit = () => {
-        onApprove(request._id, {
-            interestRate: parseFloat(interestRate),
-            repaymentPeriod: parseInt(tenure)
-        });
+    const handleSubmit = async () => {
+        try {
+            setApproving(true);
+            await onApprove(request._id, {
+                interestRate: parseFloat(interestRate),
+                repaymentPeriod: parseInt(tenure)
+            });
+        } catch (error) {
+            console.error("Approval failed:", error);
+        } finally {
+            setApproving(false);
+        }
     };
 
     const calculateTotal = () => {
@@ -48,8 +56,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
             <AppButton variant="secondary" onClick={onClose}>
                 Cancel
             </AppButton>
-            <AppButton variant="success" onClick={handleSubmit}>
-                Confirm Approval
+            <AppButton variant="success" onClick={handleSubmit} disabled={approving}>
+                {approving ? "Processing..." : "Confirm Approval"}
             </AppButton>
         </div>
     );

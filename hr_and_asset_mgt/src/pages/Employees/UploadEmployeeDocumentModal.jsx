@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { documentTypeService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css"; // Reuse existing styles
+import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 export default function UploadEmployeeDocumentModal({ onClose, onUpload, employeeId }) {
     const [form, setForm] = useState({
@@ -62,15 +64,16 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
                     <div className="modal-grid">
                         <div className="form-group">
                             <label>Document Type</label>
-                            <select name="documentType" onChange={handleChange} value={form.documentType}>
-                                <option value="">Select Type</option>
-                                {docTypes.map((dt) => (
-                                    <option key={dt._id} value={dt.name}>{dt.name}</option>
-                                ))}
-                                {/* Fallback common types if list is empty or strictly use master? 
-                    Let's strictly use master but maybe add common ones if empty?
-                    Actually user said "link them" which implies existing types. */}
-                            </select>
+                            <CustomSelect
+                                name="documentType"
+                                value={form.documentType}
+                                onChange={(val) => handleChange({ target: { name: 'documentType', value: val } })}
+                                options={[
+                                    { value: "", label: "Select Type" },
+                                    ...docTypes.map(dt => ({ value: dt.name, label: dt.name }))
+                                ]}
+                                placeholder="Select Type"
+                            />
                         </div>
 
                         <div className="form-group">
@@ -80,7 +83,7 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
 
                         <div className="form-group">
                             <label>Expiry Date (Optional)</label>
-                            <input type="date" name="expiryDate" onChange={handleChange} />
+                            <CustomDatePicker name="expiryDate" value={form.expiryDate} onChange={handleChange} placeholder="Select Date" />
                         </div>
 
                         <div className="form-group">

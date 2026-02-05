@@ -54,8 +54,29 @@ body {
   transition: grid-template-columns 0.25s ease;
 }
 
-.app-shell:has(.sidebar.collapsed) {
-  grid-template-columns: 72px 1fr;
+/* Tablet & Desktop: Sidebar Visible */
+@media (min-width: 1025px) {
+  .app-shell {
+    grid-template-columns: 240px 1fr;
+  }
+
+  .app-shell:has(.sidebar.collapsed) {
+    grid-template-columns: 72px 1fr;
+  }
+}
+
+/* Mobile & Tablet: Sidebar Hidden/Overlay */
+@media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-content {
+    height: auto;
+    min-height: calc(100vh - 72px);
+    overflow-y: auto;
+    padding: 16px 12px 32px;
+  }
 }
 
 .app-main {
@@ -63,19 +84,17 @@ body {
   flex-direction: column;
   background: var(--bg);
   overflow-x: hidden;
+  min-width: 0;
+  /* Critical for grid children */
 }
 
 .app-content {
-  padding: 20px 24px 32px;
+  padding: 20px var(--container-padding) 32px;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+  /* Allow internal scrolling for tables */
   height: calc(100vh - 72px);
 }
-
-
-
-
-
 
 /* ------------------------------
    SIDEBAR WRAPPER
@@ -88,8 +107,46 @@ body {
   top: 0;
   height: 100vh;
   width: 240px;
-  transition: width 0.25s ease;
+  transition: transform 0.3s ease, width 0.25s ease;
   overflow: hidden;
+  z-index: 1001;
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
+    width: 260px;
+    height: 100vh;
+    box-shadow: none;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 20px 0 50px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Sidebar Backdrop */
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-backdrop.visible {
+  opacity: 1;
+  visibility: visible;
 }
 
 .sidebar.collapsed {
@@ -192,6 +249,14 @@ body {
 .sidebar-nav {
   gap: 4px;
   padding: 0 4px;
+}
+
+.sidebar-brand-logo {
+  width: 120px;
+  height: auto;
+  margin-top: 8px;
+  margin-left: 8px;
+  display: block;
 }
 
 .sidebar.collapsed .sidebar-nav {
@@ -377,18 +442,74 @@ body {
 
 
 
-/* Topbar */
+/* Purged duplicate/conflicting sidebar media query */
+
+/* ------------------------------
+   TOPBAR
+--------------------------------*/
 .topbar {
   border-bottom: 1px solid var(--border);
-  padding: 12px 24px;
+  padding: 12px var(--container-padding);
   min-height: 72px;
+  background: var(--card-bg);
 }
 
 .topbar-container {
   display: grid;
-  grid-template-columns: 320px 1fr 360px;
+  grid-template-columns: 240px 1fr auto;
   align-items: center;
   gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .topbar-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px;
+  }
+
+  .hamburger-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+  }
+
+  .search-form {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    order: 2;
+    /* Place below the top row on mobile */
+  }
+
+  .topbar-container {
+    flex-wrap: wrap;
+    height: auto;
+  }
+}
+
+/* ------------------------------
+   TABLE WRAPPERS (Global Fix)
+--------------------------------*/
+.table-wrapper {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-bottom: 24px;
+  -webkit-overflow-scrolling: touch;
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.table-wrapper table {
+  min-width: 800px;
+  margin-bottom: 0 !important;
+  /* Remove spacing inside wrapper */
 }
 
 .topbar .brand {
@@ -691,33 +812,22 @@ body {
   font-size: 12px;
 }
 
-@media (max-width: 1100px) {
-  .topbar-container {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
+/* Purged duplicate/conflicting app-shell media query */
 
-  .app-shell {
-    grid-template-columns: 200px 1fr;
-  }
-}
-
-@media (max-width: 900px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: relative;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
+/* Purged duplicate/conflicting sidebar/app-shell media query */
 
 
 
-
+/* .l-icon {
+  background-color: #E84435;
+  color: white;
+  font-weight: 900;
+  font-style: italic;
+  font-family: 'Arial Black', sans-serif;
+  padding: 8px 12px;
+  font-size: 32px;
+  border-radius: 2px;
+} */
 
 
 
@@ -766,6 +876,7 @@ body {
   top: calc(100% + 8px) !important;
   right: 0 !important;
   min-width: 180px;
+  max-width: calc(100vw - 32px) !important;
   border-radius: 12px;
   padding: 6px 0;
   background: var(--color-bg-card);
@@ -826,6 +937,19 @@ body {
   z-index: 1050 !important;
   margin: 0 !important;
   overflow: hidden !important;
+}
+
+@media (max-width: 1024px) {
+  .notification-dropdown-menu {
+    position: fixed !important;
+    top: 72px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: calc(100vw - 16px) !important;
+    margin: 0 auto !important;
+    transform: none !important;
+  }
 }
 
 .notification-empty {
@@ -952,16 +1076,17 @@ body {
   background: transparent !important;
   border: none !important;
   color: #9ca3af !important;
-  font-size: 18px !important;
+  font-size: 20px !important;
   line-height: 1 !important;
   cursor: pointer !important;
-  padding: 4px !important;
+  padding: 8px !important;
   border-radius: 50% !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  opacity: 0;
+  opacity: 0.6;
   transition: all 0.2s ease !important;
+  z-index: 2 !important;
 }
 
 .notification-item:hover .delete-item-btn {
@@ -971,6 +1096,7 @@ body {
 .delete-item-btn:hover {
   background: #fee2e2 !important;
   color: #ef4444 !important;
+  transform: scale(1.1);
 }
 
 .notification-footer {
@@ -1003,4 +1129,203 @@ body {
 
 .svg-icon-white {
   filter: brightness(0) invert(1);
+}
+
+/* ===================================================================
+   GLOBAL DROPDOWN VIEWPORT CONSTRAINTS
+   Prevents all dropdowns from overflowing viewport boundaries
+   ================================================================ */
+
+/* Native select elements - constrain to viewport */
+select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* All dropdown menus - viewport boundary detection */
+.dropdown-menu,
+.action-dropdown-menu,
+.notification-dropdown-menu,
+.profile-dropdown,
+.search-dropdown-menu {
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+
+/* Ensure dropdown items don't cause overflow */
+.dropdown-item,
+.notification-item,
+.profile-dropdown__item,
+.search-result-item {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Mobile-specific dropdown constraints */
+@media (max-width: 768px) {
+
+  /* Tighter constraints on mobile */
+  select {
+    max-width: calc(100vw - 32px);
+  }
+
+  /* Custom dropdowns on mobile */
+  .dropdown-menu,
+  .action-dropdown-menu {
+    max-width: calc(100vw - 32px);
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Profile dropdown - align to right edge on mobile */
+  .profile-dropdown {
+    right: 8px;
+    left: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Notification dropdown - align to right edge on mobile */
+  .notification-dropdown-menu {
+    right: 8px;
+    left: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Search dropdown - full width on mobile */
+  .search-dropdown-menu {
+    left: 0;
+    right: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  /* Dropdown items - allow wrapping on mobile if needed */
+  .dropdown-item,
+  .profile-dropdown__item {
+    white-space: normal;
+    word-wrap: break-word;
+  }
+}
+
+/* Tablet-specific adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  select {
+    max-width: calc(100vw - 280px);
+    /* Account for sidebar */
+  }
+
+  .dropdown-menu,
+  .action-dropdown-menu {
+    max-width: calc(100vw - 280px);
+  }
+}
+
+/* Ensure dropdowns don't cause horizontal scroll */
+@media (max-width: 1024px) {
+
+  /* Prevent dropdown overflow from causing page scroll */
+  .app-content:has(.dropdown-menu[style*="display: block"]),
+  .app-content:has(.profile-dropdown),
+  .app-content:has(.notification-dropdown-menu) {
+    overflow-x: hidden;
+  }
+}
+
+/* Auto-flip dropdown direction if near bottom of viewport */
+.dropdown-menu.flip-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* Auto-flip dropdown direction if near right edge */
+.dropdown-menu.flip-left {
+  right: auto;
+  left: 0;
+}
+
+/* ===================================================================
+   UNIVERSAL FILTER RESPONSIVE RULES
+   ================================================================ */
+
+@media (max-width: 1024px) {
+
+  /* Stack ALL filter containers vertically */
+  .filters,
+  .page-filters,
+  .header-filters,
+  .employees-filters,
+  .payroll-header-controls,
+  .attendance-header-controls,
+  .assets-filters,
+  .documents-filters,
+  .reports-filters,
+  .requests-filters,
+  .dashboard-filters {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  /* Make ALL filter children full-width */
+  .filters>*,
+  .page-filters>*,
+  .header-filters>*,
+  .employees-filters>*,
+  .payroll-header-controls>*,
+  .attendance-header-controls>*,
+  .assets-filters>*,
+  .documents-filters>*,
+  .reports-filters>*,
+  .requests-filters>*,
+  .dashboard-filters>* {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Search inputs full-width */
+  input[type="search"],
+  input[type="text"].search-input,
+  .search-input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Select elements full-width */
+  select,
+  .custom-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Modal responsive rules */
+@media (max-width: 768px) {
+  .modal-content {
+    width: calc(100vw - 32px) !important;
+    max-width: 100% !important;
+  }
+
+  .modal-row,
+  .modal-form-row {
+    flex-direction: column !important;
+  }
+
+  .modal-row>*,
+  .modal-form-row>* {
+    width: 100% !important;
+  }
+}
+
+/* Additional Search Input Constraints */
+@media (max-width: 1024px) {
+
+  .list-search-input,
+  .search-box input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }

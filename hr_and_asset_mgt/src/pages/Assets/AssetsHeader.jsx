@@ -20,17 +20,19 @@ export default function AssetsHeader({ stats = [], onAddAsset, onImport }) {
           </p>
         </div>
 
-        <button
-          className="asset-import-btn"
-          onClick={handleImportClick}
-        >
-          <span>Import Assets</span>
-        </button>
+        <div className="asset-header-actions">
+          <button
+            className="asset-import-btn"
+            onClick={handleImportClick}
+          >
+            <span>Import Assets</span>
+          </button>
 
-        <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>
-          <SvgIcon name="plus" size={18} />
-          <span>Add Asset</span>
-        </AppButton>
+          <AppButton variant="primary" className="upload-btn" onClick={onAddAsset}>
+            <SvgIcon name="plus" size={18} />
+            <span>Add Asset</span>
+          </AppButton>
+        </div>
       </div>
 
       {/* Stats */}

@@ -813,6 +813,10 @@ export const updateRequestStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Request not found" });
     }
 
+    if (request.status !== "PENDING") {
+      return res.status(400).json({ success: false, message: "Request already processed" });
+    }
+
     let newStatus = "REJECTED";
 
     if (action === "APPROVE") {
@@ -920,7 +924,7 @@ export const approveDocumentRequest = async (req, res) => {
     if (request.status !== "PENDING") {
       return res.status(400).json({
         success: false,
-        message: "Only pending requests can be approved"
+        message: "Request already processed"
       });
     }
 
@@ -994,7 +998,7 @@ export const rejectDocumentRequest = async (req, res) => {
     if (request.status !== "PENDING") {
       return res.status(400).json({
         success: false,
-        message: "Only pending requests can be rejected"
+        message: "Request already processed"
       });
     }
 

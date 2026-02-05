@@ -456,7 +456,7 @@ function Assets() {
       )}
 
       {/* Widgets Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "20px" }}>
+      <div className="asset-widgets-grid">
         <WarrantyAmcTrackerCard
           assets={assets}
           onViewAll={() => console.log("View all warranty details")}
