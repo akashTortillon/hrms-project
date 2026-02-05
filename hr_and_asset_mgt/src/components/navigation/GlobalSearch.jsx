@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { performGlobalSearch } from "../../services/searchService";
 import { useNavigate } from "react-router-dom";
 import SvgIcon from "../svgIcon/svgView";
-import { InputGroup, Form } from "react-bootstrap";
+import { Form } from "react-bootstrap";
 import "./GlobalSearch.css"; // We will create this
 
 export default function GlobalSearch() {
@@ -75,10 +75,10 @@ export default function GlobalSearch() {
     return (
         <div className="global-search-container" ref={searchRef}>
             <Form style={{ width: "100%" }}>
-                <InputGroup>
-                    <InputGroup.Text className="search-icon">
+                <div className="search-wrapper">
+                    <div className="search-icon-inside">
                         <SvgIcon name="search" size={15} />
-                    </InputGroup.Text>
+                    </div>
                     <Form.Control
                         type="search"
                         placeholder="Search employees, documents, assets..."
@@ -88,7 +88,7 @@ export default function GlobalSearch() {
                         className="search-input"
                     />
                     {loading && <div className="spinner-border spinner-border-sm text-secondary search-spinner" role="status"></div>}
-                </InputGroup>
+                </div>
             </Form>
 
             {showResults && results && (

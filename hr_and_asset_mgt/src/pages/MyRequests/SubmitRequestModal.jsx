@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import "../../style/SubmitRequestModal.css";
 import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
 import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
@@ -240,23 +241,23 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div className="form-row">
               <div>
                 <label>From Date</label>
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={leaveForm.fromDate}
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, fromDate: e.target.value })
                   }
+                  placeholder="Select Date"
                 />
               </div>
 
               <div>
                 <label>To Date</label>
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={leaveForm.toDate}
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, toDate: e.target.value })
                   }
+                  placeholder="Select Date"
                 />
               </div>
             </div>

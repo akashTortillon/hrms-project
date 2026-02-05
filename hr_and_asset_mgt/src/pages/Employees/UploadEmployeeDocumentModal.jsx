@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { documentTypeService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css"; // Reuse existing styles
 import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 export default function UploadEmployeeDocumentModal({ onClose, onUpload, employeeId }) {
     const [form, setForm] = useState({
@@ -82,7 +83,7 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
 
                         <div className="form-group">
                             <label>Expiry Date (Optional)</label>
-                            <input type="date" name="expiryDate" onChange={handleChange} />
+                            <CustomDatePicker name="expiryDate" value={form.expiryDate} onChange={handleChange} placeholder="Select Date" />
                         </div>
 
                         <div className="form-group">

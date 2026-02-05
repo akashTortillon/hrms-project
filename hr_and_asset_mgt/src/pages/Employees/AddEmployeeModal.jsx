@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
   const [form, setForm] = useState({
@@ -192,7 +193,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Joining Date</label>
-              <input name="joinDate" type="date" onChange={handleChange} />
+              <CustomDatePicker name="joinDate" value={form.joinDate} onChange={handleChange} placeholder="Select Date" />
             </div>
 
             <div className="form-group">
@@ -240,7 +241,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Visa Expiry</label>
-              <input name="visaExpiry" type="date" onChange={handleChange} />
+              <CustomDatePicker name="visaExpiry" value={form.visaExpiry} onChange={handleChange} placeholder="Select Date" />
             </div>
 
             {/* Personal Info */}
@@ -250,7 +251,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Date of Birth</label>
-              <input name="dob" type="date" onChange={handleChange} />
+              <CustomDatePicker name="dob" value={form.dob} onChange={handleChange} placeholder="Select Date" />
             </div>
 
             <div className="form-group">
@@ -270,12 +271,12 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Passport Expiry</label>
-              <input name="passportExpiry" type="date" onChange={handleChange} />
+              <CustomDatePicker name="passportExpiry" value={form.passportExpiry} onChange={handleChange} placeholder="Select Date" />
             </div>
 
             <div className="form-group">
               <label>Emirates ID Expiry</label>
-              <input name="emiratesIdExpiry" type="date" onChange={handleChange} />
+              <CustomDatePicker name="emiratesIdExpiry" value={form.emiratesIdExpiry} onChange={handleChange} placeholder="Select Date" />
             </div>
 
             {/* Bank Details */}

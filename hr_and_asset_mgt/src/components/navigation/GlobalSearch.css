@@ -4,9 +4,35 @@
     /* Matches original .search-form width from layout.css */
 }
 
+.search-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon-inside {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+}
+
+.search-input {
+    padding-left: 36px !important;
+    /* Space for the icon */
+    border-radius: 12px !important;
+    border: 1px solid #e5e7eb !important;
+    height: 42px;
+}
+
 .search-spinner {
     position: absolute;
-    right: 10px;
+    right: 12px;
     top: 50%;
     transform: translateY(-50%);
     z-index: 10;

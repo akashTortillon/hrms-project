@@ -3,6 +3,7 @@ import "../../style/AddEmployeeModal.css";
 import "../../style/AddEmployeeModal.css";
 import { getEmployees } from "../../services/employeeService.js";
 import { getDepartments } from "../../services/masterService.js";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 export default function AssignAssetModal({ onClose, onAssign, asset }) {
   const [employees, setEmployees] = useState([]);
@@ -105,36 +106,36 @@ export default function AssignAssetModal({ onClose, onAssign, asset }) {
                   <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                     Select Employee *
                   </label>
-                  <select
+                  <CustomSelect
                     value={selectedEmployee}
-                    onChange={(e) => setSelectedEmployee(e.target.value)}
-                    style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #d1d5db" }}
-                  >
-                    <option value="">Choose an employee...</option>
-                    {employees.map((emp) => (
-                      <option key={emp._id} value={emp._id}>
-                        {emp.name} ({emp.code}) - {emp.department}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedEmployee(val)}
+                    options={[
+                      { value: "", label: "Choose an employee..." },
+                      ...employees.map(emp => ({
+                        value: emp._id,
+                        label: `${emp.name} (${emp.code}) - ${emp.department}`
+                      }))
+                    ]}
+                    placeholder="Choose an employee..."
+                  />
                 </>
               ) : (
                 <>
                   <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                     Select Department *
                   </label>
-                  <select
+                  <CustomSelect
                     value={selectedDepartment}
-                    onChange={(e) => setSelectedDepartment(e.target.value)}
-                    style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #d1d5db" }}
-                  >
-                    <option value="">Choose a department...</option>
-                    {departments.map((dept) => (
-                      <option key={dept._id} value={dept.name}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedDepartment(val)}
+                    options={[
+                      { value: "", label: "Choose a department..." },
+                      ...departments.map(dept => ({
+                        value: dept.name,
+                        label: dept.name
+                      }))
+                    ]}
+                    placeholder="Choose a department..."
+                  />
                 </>
               )}
             </div>

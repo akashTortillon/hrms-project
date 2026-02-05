@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import DataTable from "../../components/reusable/DataTable";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelete }) {
   const [editingLog, setEditingLog] = useState(null);
@@ -34,8 +35,8 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
   const handleEditClick = (log) => {
     setEditingLog(log);
     setForm({
-      completedDate: log.completedDate 
-        ? new Date(log.completedDate).toISOString().split('T')[0] 
+      completedDate: log.completedDate
+        ? new Date(log.completedDate).toISOString().split('T')[0]
         : "",
       status: log.status || "",
       cost: log.cost || "",
@@ -90,10 +91,10 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
       header: "STATUS",
       width: "13%",
       render: (row) => (
-        <span 
-          style={{ 
-            padding: "4px 12px", 
-            borderRadius: "12px", 
+        <span
+          style={{
+            padding: "4px 12px",
+            borderRadius: "12px",
             fontSize: "12px",
             fontWeight: "500",
             backgroundColor: getStatusColor(row.status) + "20",
@@ -133,9 +134,9 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div 
-        className="modal-container" 
-        style={{ maxWidth: "1000px", width: "95%" }} 
+      <div
+        className="modal-container"
+        style={{ maxWidth: "1000px", width: "95%" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
@@ -145,10 +146,10 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
 
         <div className="modal-body">
           {/* Asset Info */}
-          <div style={{ 
-            background: "#f8fafc", 
-            padding: "16px", 
-            borderRadius: "8px", 
+          <div style={{
+            background: "#f8fafc",
+            padding: "16px",
+            borderRadius: "8px",
             marginBottom: "20px",
             border: "1px solid #e2e8f0"
           }}>
@@ -182,10 +183,10 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
 
           {/* Edit Form */}
           {editingLog && (
-            <div style={{ 
-              background: "#f0f9ff", 
-              padding: "16px", 
-              borderRadius: "8px", 
+            <div style={{
+              background: "#f0f9ff",
+              padding: "16px",
+              borderRadius: "8px",
               marginBottom: "20px",
               border: "1px solid #bae6fd"
             }}>
@@ -197,11 +198,10 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
                   <label style={{ display: "block", fontSize: "13px", marginBottom: "6px" }}>
                     Completed Date
                   </label>
-                  <input
-                    type="date"
+                  <CustomDatePicker
                     value={form.completedDate}
                     onChange={(e) => setForm({ ...form, completedDate: e.target.value })}
-                    style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #d1d5db" }}
+                    placeholder="Select Date"
                   />
                 </div>
                 <div>
@@ -248,15 +248,15 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
                 </div>
               </div>
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-                <button 
-                  className="btn-primary" 
+                <button
+                  className="btn-primary"
                   onClick={handleUpdateSubmit}
                   style={{ fontSize: "13px", padding: "6px 12px" }}
                 >
                   Update Log
                 </button>
-                <button 
-                  className="btn-secondary" 
+                <button
+                  className="btn-secondary"
                   onClick={() => setEditingLog(null)}
                   style={{ fontSize: "13px", padding: "6px 12px" }}
                 >

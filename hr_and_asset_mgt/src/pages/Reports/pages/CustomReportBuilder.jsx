@@ -6,6 +6,7 @@ import Card from "../../../components/reusable/Card";
 import Button from "../../../components/reusable/Button";
 import SvgIcon from "../../../components/svgIcon/svgView";
 import "../../../style/CustomReportBuilder.css"; // ✅ Import new CSS
+import CustomSelect from "../../../components/reusable/CustomSelect";
 
 const DATASETS = {
     Employees: ["name", "code", "department", "designation", "status", "joinDate", "basicSalary", "email"],
@@ -164,7 +165,7 @@ export default function CustomReportBuilder() {
                 {/* Left: Configuration */}
                 <div className="report-config-panel">
                     <Card className="report-config-card">
-                        <h3 className="report-section-title">1. Report Title</h3>
+                        <h3 className="report-section-title">Report Title</h3>
                         <input
                             type="text"
                             placeholder="Enter report title (e.g., Sales 2024)"
@@ -173,20 +174,19 @@ export default function CustomReportBuilder() {
                             onChange={(e) => setReportTitle(e.target.value)}
                         />
 
-                        <h3 className="report-section-title">2. Select Dataset</h3>
-                        <select
-                            className="report-select"
+                        <h3 className="report-section-title">Select Dataset</h3>
+                        <CustomSelect
                             value={selectedDataset}
-                            onChange={(e) => {
-                                setSelectedDataset(e.target.value);
+                            onChange={(val) => {
+                                setSelectedDataset(val);
                                 setSelectedColumns([]);
                                 setReportData([]);
                             }}
-                        >
-                            {Object.keys(DATASETS).map(ds => <option key={ds} value={ds}>{ds}</option>)}
-                        </select>
+                            options={Object.keys(DATASETS).map(ds => ({ value: ds, label: ds }))}
+                            placeholder="Select Dataset"
+                        />
 
-                        <h3 className="report-section-title">3. Select Columns</h3>
+                        <h3 className="report-section-title">Select Columns</h3>
                         <div className="report-columns-grid">
                             {DATASETS[selectedDataset].map(col => (
                                 <label key={col} className="checkbox-label">

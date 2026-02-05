@@ -251,6 +251,14 @@ body {
   padding: 0 4px;
 }
 
+.sidebar-brand-logo {
+  width: 120px;
+  height: auto;
+  margin-top: 8px;
+  margin-left: 8px;
+  display: block;
+}
+
 .sidebar.collapsed .sidebar-nav {
   padding: 0;
 }
@@ -472,7 +480,16 @@ body {
   }
 
   .search-form {
-    display: none;
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    order: 2;
+    /* Place below the top row on mobile */
+  }
+
+  .topbar-container {
+    flex-wrap: wrap;
+    height: auto;
   }
 }
 
@@ -801,7 +818,16 @@ body {
 
 
 
-
+/* .l-icon {
+  background-color: #E84435;
+  color: white;
+  font-weight: 900;
+  font-style: italic;
+  font-family: 'Arial Black', sans-serif;
+  padding: 8px 12px;
+  font-size: 32px;
+  border-radius: 2px;
+} */
 
 
 
@@ -1139,6 +1165,7 @@ select {
 
 /* Mobile-specific dropdown constraints */
 @media (max-width: 768px) {
+
   /* Tighter constraints on mobile */
   select {
     max-width: calc(100vw - 32px);
@@ -1186,7 +1213,8 @@ select {
 /* Tablet-specific adjustments */
 @media (min-width: 769px) and (max-width: 1024px) {
   select {
-    max-width: calc(100vw - 280px); /* Account for sidebar */
+    max-width: calc(100vw - 280px);
+    /* Account for sidebar */
   }
 
   .dropdown-menu,
@@ -1197,6 +1225,7 @@ select {
 
 /* Ensure dropdowns don't cause horizontal scroll */
 @media (max-width: 1024px) {
+
   /* Prevent dropdown overflow from causing page scroll */
   .app-content:has(.dropdown-menu[style*="display: block"]),
   .app-content:has(.profile-dropdown),
@@ -1216,11 +1245,13 @@ select {
   right: auto;
   left: 0;
 }
+
 /* ===================================================================
    UNIVERSAL FILTER RESPONSIVE RULES
    ================================================================ */
 
 @media (max-width: 1024px) {
+
   /* Stack ALL filter containers vertically */
   .filters,
   .page-filters,
@@ -1240,17 +1271,17 @@ select {
   }
 
   /* Make ALL filter children full-width */
-  .filters > *,
-  .page-filters > *,
-  .header-filters > *,
-  .employees-filters > *,
-  .payroll-header-controls > *,
-  .attendance-header-controls > *,
-  .assets-filters > *,
-  .documents-filters > *,
-  .reports-filters > *,
-  .requests-filters > *,
-  .dashboard-filters > * {
+  .filters>*,
+  .page-filters>*,
+  .header-filters>*,
+  .employees-filters>*,
+  .payroll-header-controls>*,
+  .attendance-header-controls>*,
+  .assets-filters>*,
+  .documents-filters>*,
+  .reports-filters>*,
+  .requests-filters>*,
+  .dashboard-filters>* {
     width: 100% !important;
     max-width: 100% !important;
   }
@@ -1283,13 +1314,15 @@ select {
     flex-direction: column !important;
   }
 
-  .modal-row > *,
-  .modal-form-row > * {
+  .modal-row>*,
+  .modal-form-row>* {
     width: 100% !important;
   }
 }
+
 /* Additional Search Input Constraints */
 @media (max-width: 1024px) {
+
   .list-search-input,
   .search-box input {
     width: 100% !important;
