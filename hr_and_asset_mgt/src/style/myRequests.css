@@ -186,3 +186,45 @@
 
 
 
+
+/* ===== RESPONSIVE LAYOUT (MOBILE/TABLET) ===== */
+
+/* Tablet and Mobile: Vertical stacking */
+@media (max-width: 1024px) {
+  .request-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .request-info {
+    width: 100%;
+    flex: none;
+  }
+
+  .request-actions {
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .request-actions .btn {
+    width: 100%;
+    min-width: none;
+  }
+
+  /* Status display and withdraw message alignment */
+  .request-status-display,
+  .request-withdraw-message {
+    text-align: left;
+    width: 100%;
+  }
+}
+
+/* Mobile: Reduced padding */
+@media (max-width: 768px) {
+  .request-item {
+    padding: 14px 16px;
+  }
+}

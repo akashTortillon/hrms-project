@@ -16,10 +16,10 @@
 //         search: search || undefined
 //       }).filter(([_, value]) => value) // Remove empty values
 //     );
-    
+
 //     // Export assets
 //     const blob = await exportAssets(filters);
-    
+
 //     // Download file
 //     const downloadLink = document.createElement('a');
 //     downloadLink.href = window.URL.createObjectURL(blob);
@@ -28,7 +28,7 @@
 //     downloadLink.click();
 //     document.body.removeChild(downloadLink);
 //     window.URL.revokeObjectURL(downloadLink.href);
-    
+
 //     toast.success("Assets exported successfully!");
 //   } catch (error) {
 //     console.error("Export error:", error);
@@ -111,6 +111,7 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
 import { exportAssets } from "../../services/assetService.js";
 import { toast } from "react-toastify";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 const AssetsFilters = ({
   search,
@@ -167,32 +168,31 @@ const AssetsFilters = ({
         </div>
 
         {/* Asset Type */}
-        <select
-          className="assets-select"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="ALL">All Types</option>
-          {assetTypes.map((t) => (
-            <option key={t._id} value={t.name}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+        {/* Asset Type */}
+        <div style={{ width: '100%' }}>
+          <CustomSelect
+            className="assets-select"
+            value={type}
+            onChange={setType}
+            options={[
+              { value: "ALL", label: "All Types" },
+              ...assetTypes.map(t => ({ value: t.name, label: t.name }))
+            ]}
+          />
+        </div>
 
         {/* Asset Status */}
-        <select
-          className="assets-select"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="ALL">All Status</option>
-          {assetStatuses.map((s) => (
-            <option key={s._id} value={s.name}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        <div style={{ width: '100%' }}>
+          <CustomSelect
+            className="assets-select"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "ALL", label: "All Status" },
+              ...assetStatuses.map(s => ({ value: s.name, label: s.name }))
+            ]}
+          />
+        </div>
 
         {/* Export */}
         <button className="assets-export-btn" onClick={handleExportAssets}>

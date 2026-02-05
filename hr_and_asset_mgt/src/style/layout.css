@@ -1104,3 +1104,195 @@ body {
 .svg-icon-white {
   filter: brightness(0) invert(1);
 }
+
+/* ===================================================================
+   GLOBAL DROPDOWN VIEWPORT CONSTRAINTS
+   Prevents all dropdowns from overflowing viewport boundaries
+   ================================================================ */
+
+/* Native select elements - constrain to viewport */
+select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* All dropdown menus - viewport boundary detection */
+.dropdown-menu,
+.action-dropdown-menu,
+.notification-dropdown-menu,
+.profile-dropdown,
+.search-dropdown-menu {
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+
+/* Ensure dropdown items don't cause overflow */
+.dropdown-item,
+.notification-item,
+.profile-dropdown__item,
+.search-result-item {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Mobile-specific dropdown constraints */
+@media (max-width: 768px) {
+  /* Tighter constraints on mobile */
+  select {
+    max-width: calc(100vw - 32px);
+  }
+
+  /* Custom dropdowns on mobile */
+  .dropdown-menu,
+  .action-dropdown-menu {
+    max-width: calc(100vw - 32px);
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Profile dropdown - align to right edge on mobile */
+  .profile-dropdown {
+    right: 8px;
+    left: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Notification dropdown - align to right edge on mobile */
+  .notification-dropdown-menu {
+    right: 8px;
+    left: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Search dropdown - full width on mobile */
+  .search-dropdown-menu {
+    left: 0;
+    right: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  /* Dropdown items - allow wrapping on mobile if needed */
+  .dropdown-item,
+  .profile-dropdown__item {
+    white-space: normal;
+    word-wrap: break-word;
+  }
+}
+
+/* Tablet-specific adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  select {
+    max-width: calc(100vw - 280px); /* Account for sidebar */
+  }
+
+  .dropdown-menu,
+  .action-dropdown-menu {
+    max-width: calc(100vw - 280px);
+  }
+}
+
+/* Ensure dropdowns don't cause horizontal scroll */
+@media (max-width: 1024px) {
+  /* Prevent dropdown overflow from causing page scroll */
+  .app-content:has(.dropdown-menu[style*="display: block"]),
+  .app-content:has(.profile-dropdown),
+  .app-content:has(.notification-dropdown-menu) {
+    overflow-x: hidden;
+  }
+}
+
+/* Auto-flip dropdown direction if near bottom of viewport */
+.dropdown-menu.flip-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* Auto-flip dropdown direction if near right edge */
+.dropdown-menu.flip-left {
+  right: auto;
+  left: 0;
+}
+/* ===================================================================
+   UNIVERSAL FILTER RESPONSIVE RULES
+   ================================================================ */
+
+@media (max-width: 1024px) {
+  /* Stack ALL filter containers vertically */
+  .filters,
+  .page-filters,
+  .header-filters,
+  .employees-filters,
+  .payroll-header-controls,
+  .attendance-header-controls,
+  .assets-filters,
+  .documents-filters,
+  .reports-filters,
+  .requests-filters,
+  .dashboard-filters {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  /* Make ALL filter children full-width */
+  .filters > *,
+  .page-filters > *,
+  .header-filters > *,
+  .employees-filters > *,
+  .payroll-header-controls > *,
+  .attendance-header-controls > *,
+  .assets-filters > *,
+  .documents-filters > *,
+  .reports-filters > *,
+  .requests-filters > *,
+  .dashboard-filters > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Search inputs full-width */
+  input[type="search"],
+  input[type="text"].search-input,
+  .search-input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Select elements full-width */
+  select,
+  .custom-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Modal responsive rules */
+@media (max-width: 768px) {
+  .modal-content {
+    width: calc(100vw - 32px) !important;
+    max-width: 100% !important;
+  }
+
+  .modal-row,
+  .modal-form-row {
+    flex-direction: column !important;
+  }
+
+  .modal-row > *,
+  .modal-form-row > * {
+    width: 100% !important;
+  }
+}
+/* Additional Search Input Constraints */
+@media (max-width: 1024px) {
+  .list-search-input,
+  .search-box input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}

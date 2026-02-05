@@ -96,10 +96,27 @@
   padding: 10px 16px;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
+  min-width: fit-content;
+  flex-shrink: 0;
 }
 
 .payroll-export-btn svg {
   color: #fff;
+}
+
+/* Mobile: Stack vertically */
+@media (max-width: 1024px) {
+  .payroll-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .payroll-header-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
 }
 
 
@@ -514,12 +531,14 @@
   right: 0;
   top: 100%;
   width: 160px;
+  max-width: calc(100vw - 40px);
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 50;
   padding: 4px 0;
+  box-sizing: border-box;
 }
 
 .action-menu-item {

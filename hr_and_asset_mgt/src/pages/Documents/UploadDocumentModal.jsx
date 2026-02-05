@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "../../style/UploadDocumentModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
 import { getBranches, companyDocumentTypeService } from "../../services/masterService";
 import { toast } from "react-toastify";
 
@@ -81,30 +82,30 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
 
                         <div className="input-wrapper">
                             <label className="input-label">Company Document Type</label>
-                            <select
+                            <CustomSelect
                                 name="type"
                                 value={form.type}
-                                onChange={handleChange}
-                            >
-                                <option value="">Select Type</option>
-                                {docTypes.map(type => (
-                                    <option key={type._id} value={type.name}>{type.name}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => handleChange({ target: { name: 'type', value: val } })}
+                                options={[
+                                    { value: "", label: "Select Type" },
+                                    ...docTypes.map(type => ({ value: type.name, label: type.name }))
+                                ]}
+                                placeholder="Select Type"
+                            />
                         </div>
 
                         <div className="input-wrapper">
                             <label className="input-label">Location / Branch</label>
-                            <select
+                            <CustomSelect
                                 name="location"
                                 value={form.location}
-                                onChange={handleChange}
-                            >
-                                <option value="">Select Location</option>
-                                {branches.map(b => (
-                                    <option key={b._id} value={b.name}>{b.name}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => handleChange({ target: { name: 'location', value: val } })}
+                                options={[
+                                    { value: "", label: "Select Location" },
+                                    ...branches.map(b => ({ value: b.name, label: b.name }))
+                                ]}
+                                placeholder="Select Location"
+                            />
                         </div>
 
                         <div className="input-wrapper">

@@ -3,6 +3,7 @@ import AppCard from "../../components/reusable/Card.jsx";
 import AppButton from "../../components/reusable/Button.jsx";
 import { useEffect, useState, useMemo } from "react";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 import {
   getPendingRequests,
@@ -389,28 +390,34 @@ export default function AdminRequests() {
                         />
                       </div>
 
-                      <select
-                        value={requestTypeFilter}
-                        onChange={(e) => setRequestTypeFilter(e.target.value)}
-                        className="requests-select"
-                      >
-                        <option value="All">All Types</option>
-                        <option value="LEAVE">Leave</option>
-                        <option value="SALARY">Salary</option>
-                        <option value="DOCUMENT">Document</option>
-                      </select>
+                      <div style={{ width: '100%' }}>
+                        <CustomSelect
+                          value={requestTypeFilter}
+                          onChange={setRequestTypeFilter}
+                          className="requests-select"
+                          options={[
+                            { value: "All", label: "All Types" },
+                            { value: "LEAVE", label: "Leave" },
+                            { value: "SALARY", label: "Salary" },
+                            { value: "DOCUMENT", label: "Document" }
+                          ]}
+                        />
+                      </div>
 
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="requests-select"
-                      >
-                        <option value="All">All Status</option>
-                        <option value="APPROVED">Approved</option>
-                        <option value="REJECTED">Rejected</option>
-                        <option value="COMPLETED">Completed</option>
-                        <option value="WITHDRAWN">Withdrawn</option>
-                      </select>
+                      <div style={{ width: '100%' }}>
+                        <CustomSelect
+                          value={statusFilter}
+                          onChange={setStatusFilter}
+                          className="requests-select"
+                          options={[
+                            { value: "All", label: "All Status" },
+                            { value: "APPROVED", label: "Approved" },
+                            { value: "REJECTED", label: "Rejected" },
+                            { value: "COMPLETED", label: "Completed" },
+                            { value: "WITHDRAWN", label: "Withdrawn" }
+                          ]}
+                        />
+                      </div>
                     </div>
 
                     <div className="requests-count">
