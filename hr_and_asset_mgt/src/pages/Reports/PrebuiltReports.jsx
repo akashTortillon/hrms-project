@@ -9,6 +9,7 @@ import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
 import ScheduledReports from "./ScheduledReports";
 import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 import "../../style/Reports.css";
 
@@ -350,7 +351,12 @@ export default function PrebuiltReports() {
 
             <div className="report-filters">
               {mode === "daily" ? (
-                <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
+                <CustomDatePicker
+                  value={date}
+                  maxDate={today}
+                  onChange={(e) => setDate(e.target.value)}
+                  placeholder="Select Date"
+                />
               ) : (
                 <>
                   <>
@@ -431,12 +437,22 @@ export default function PrebuiltReports() {
             <h4 className="report-title">Payroll Monthly Summary</h4>
             <p className="report-desc">Total cost breakdown per department for the selected month.</p>
             <div className="report-filters">
-              <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-                {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-              <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {[0, 1, 2, 3, 4].map(i => <option key={i} value={currentDate.getFullYear() - i}>{currentDate.getFullYear() - i}</option>)}
-              </select>
+              <div style={{ width: '140px' }}>
+                <CustomSelect
+                  value={month}
+                  onChange={(val) => setMonth(Number(val))}
+                  options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+                  placeholder="Select Month"
+                />
+              </div>
+              <div style={{ width: '100px' }}>
+                <CustomSelect
+                  value={year}
+                  onChange={(val) => setYear(Number(val))}
+                  options={[0, 1, 2, 3, 4].map(i => ({ value: currentDate.getFullYear() - i, label: String(currentDate.getFullYear() - i) }))}
+                  placeholder="Year"
+                />
+              </div>
             </div>
             <div className="report-actions">
               <Button className="generate-btn" onClick={() => handleGenerate("payroll")} disabled={loading}>Generate</Button>
@@ -456,12 +472,22 @@ export default function PrebuiltReports() {
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Last: {new Date().toISOString().split('T')[0]} • Monthly</div>
 
             <div className="report-filters">
-              <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-                {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-              <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {[0, 1, 2, 3, 4].map(i => <option key={i} value={currentDate.getFullYear() - i}>{currentDate.getFullYear() - i}</option>)}
-              </select>
+              <div style={{ width: '140px' }}>
+                <CustomSelect
+                  value={month}
+                  onChange={(val) => setMonth(Number(val))}
+                  options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+                  placeholder="Select Month"
+                />
+              </div>
+              <div style={{ width: '100px' }}>
+                <CustomSelect
+                  value={year}
+                  onChange={(val) => setYear(Number(val))}
+                  options={[0, 1, 2, 3, 4].map(i => ({ value: currentDate.getFullYear() - i, label: String(currentDate.getFullYear() - i) }))}
+                  placeholder="Year"
+                />
+              </div>
             </div>
 
             <div className="report-actions" style={{ display: 'flex', gap: '8px' }}>

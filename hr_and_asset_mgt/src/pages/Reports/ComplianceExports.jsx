@@ -2,6 +2,7 @@ import { useState } from "react";
 import api from "../../api/apiClient";
 import { toast } from "react-toastify"; // Added toast import if not present, though assuming toast might be needed for errors.
 import Card from "../../components/reusable/Card";
+import CustomSelect from "../../components/reusable/CustomSelect";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Reports.css";
 
@@ -62,12 +63,22 @@ export default function ComplianceExports() {
         </div>
 
         <div className="report-filters" style={{ marginBottom: 0 }}>
-          <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-            {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {[0, 1, 2, 3, 4].map(i => <option key={i} value={currentDate.getFullYear() - i}>{currentDate.getFullYear() - i}</option>)}
-          </select>
+          <div style={{ width: '140px' }}>
+            <CustomSelect
+              value={month}
+              onChange={(val) => setMonth(Number(val))}
+              options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+              placeholder="Select Month"
+            />
+          </div>
+          <div style={{ width: '100px' }}>
+            <CustomSelect
+              value={year}
+              onChange={(val) => setYear(Number(val))}
+              options={[0, 1, 2, 3, 4].map(i => ({ value: currentDate.getFullYear() - i, label: String(currentDate.getFullYear() - i) }))}
+              placeholder="Year"
+            />
+          </div>
         </div>
       </div>
 

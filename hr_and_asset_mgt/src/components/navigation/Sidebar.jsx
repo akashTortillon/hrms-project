@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
 import { useState, useMemo } from "react";
 import { useRole } from "../../contexts/RoleContext.jsx";
-import leptisLogo from "../../assets/images/logo-leptis.png"
 
 // All navigation items with their access roles
 const allNavItems = [
@@ -56,12 +55,9 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
           </Button>
         ) : (
           <>
-            <div className="brand-icon"><img src={leptisLogo} alt="Leptis Logo" /></div>
-            <div className="brand-text-wrapper">
-              <div className="brand-title" style={{ color: "white" }}>LEPTIS</div>
-              <div className="brand-subtitle" style={{ color: "red" }}>ENTERPRISE</div>
-            </div>
-            {/* Desktop-only collapse button */}
+
+            <SvgView name="leptis_logo" size={60} className="sidebar-brand-logo" />
+
             <Button
               variant="light"
               className="icon-btn back-btn d-none d-md-flex"

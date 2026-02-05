@@ -1,6 +1,7 @@
 
 import "../../style/Attendance.css";
 import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 export default function AttendanceFilters({
   viewMode,
@@ -26,11 +27,11 @@ export default function AttendanceFilters({
         <div className="filter-group">
           <label className="filter-label">Date</label>
           <div className="filter-input-wrapper">
-            <input
-              type="date"
+            <CustomDatePicker
               className="filter-input"
               value={selectedDate}
               onChange={(e) => onDateChange(e.target.value)}
+              placeholder="Select Date"
             />
           </div>
         </div>

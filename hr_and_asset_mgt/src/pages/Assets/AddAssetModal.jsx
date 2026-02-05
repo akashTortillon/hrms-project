@@ -7,6 +7,7 @@ import { assetTypeService, assetCategoryService }
 
 import "../../style/AddEmployeeModal.css";
 import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 export default function AddAssetModal({
   onClose,
@@ -204,9 +205,16 @@ export default function AddAssetModal({
 
             <input name="department" placeholder="Department" value={form.department} onChange={handleChange} />
             <input name="purchaseCost" type="number" placeholder="Purchase Cost (AED) *" value={form.purchaseCost} onChange={handleChange} />
-            <input name="purchaseDate" type="date" value={form.purchaseDate} onChange={handleChange} />
+
+            <div style={{ gridColumn: 'span 1' }}>
+              <CustomDatePicker name="purchaseDate" value={form.purchaseDate} onChange={handleChange} placeholder="Purchase Date *" />
+            </div>
+
             <input name="warrantyPeriod" type="number" placeholder="Warranty Period (Years)" value={form.warrantyPeriod} onChange={handleChange} />
-            <input name="serviceDueDate" type="date" value={form.serviceDueDate} onChange={handleChange} />
+
+            <div style={{ gridColumn: 'span 1' }}>
+              <CustomDatePicker name="serviceDueDate" value={form.serviceDueDate} onChange={handleChange} placeholder="Service Due Date" />
+            </div>
 
             {isEditMode && (
               <div style={{ gridColumn: 'span 1' }}>

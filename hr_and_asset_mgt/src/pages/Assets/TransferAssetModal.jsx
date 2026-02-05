@@ -518,6 +518,7 @@ import "../../style/AddEmployeeModal.css";
 import { getEmployees } from "../../services/employeeService.js";
 import { maintenanceShopService, getDepartments } from "../../services/masterService.js";
 import { getCurrentAssignment } from "../../services/assignmentService.js";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 export default function TransferAssetModal({ onClose, onTransfer, asset }) {
   const [employees, setEmployees] = useState([]);
@@ -641,53 +642,77 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
             <input value={currentEmployee || "Not assigned"} disabled />
 
             <label>Transfer To *</label>
-            <select
+            <CustomSelect
               value={toEntityType}
-              onChange={(e) => {
-                setToEntityType(e.target.value);
+              onChange={(val) => {
+                setToEntityType(val);
                 setSelectedEmployee("");
                 setSelectedShop("");
                 setSelectedDepartment("");
                 setToStore("");
               }}
-            >
-              <option value="MAINTENANCE_SHOP">Maintenance Shop</option>
-              <option value="EMPLOYEE">Employee</option>
-              <option value="DEPARTMENT">Department</option>
-              <option value="STORE">Store</option>
-            </select>
+              options={[
+                { value: "MAINTENANCE_SHOP", label: "Maintenance Shop" },
+                { value: "EMPLOYEE", label: "Employee" },
+                { value: "DEPARTMENT", label: "Department" },
+                { value: "STORE", label: "Store" }
+              ]}
+              placeholder="Select Transfer Type"
+              className="mb-3"
+            />
 
             {toEntityType === "MAINTENANCE_SHOP" && (
-              <select value={selectedShop} onChange={(e) => setSelectedShop(e.target.value)}>
-                <option value="">Choose a maintenance shop...</option>
-                {maintenanceShops.map((shop) => (
-                  <option key={shop._id} value={shop._id}>
-                    {shop.name} {shop.code ? `(${shop.code})` : ""}
-                  </option>
-                ))}
-              </select>
+              <>
+                <label className="d-block mt-3">Select Maintenance Shop *</label>
+                <CustomSelect
+                  value={selectedShop}
+                  onChange={(val) => setSelectedShop(val)}
+                  options={[
+                    { value: "", label: "Choose a maintenance shop..." },
+                    ...maintenanceShops.map(shop => ({
+                      value: shop._id,
+                      label: `${shop.name} ${shop.code ? `(${shop.code})` : ""}`
+                    }))
+                  ]}
+                  placeholder="Choose a maintenance shop..."
+                />
+              </>
             )}
 
             {toEntityType === "EMPLOYEE" && (
-              <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)}>
-                <option value="">Choose an employee...</option>
-                {employees.map((emp) => (
-                  <option key={emp._id} value={emp._id}>
-                    {emp.name} ({emp.code})
-                  </option>
-                ))}
-              </select>
+              <>
+                <label className="d-block mt-3">Select Employee *</label>
+                <CustomSelect
+                  value={selectedEmployee}
+                  onChange={(val) => setSelectedEmployee(val)}
+                  options={[
+                    { value: "", label: "Choose an employee..." },
+                    ...employees.map(emp => ({
+                      value: emp._id,
+                      label: `${emp.name} (${emp.code})`
+                    }))
+                  ]}
+                  placeholder="Choose an employee..."
+                />
+              </>
             )}
 
             {toEntityType === "DEPARTMENT" && (
-              <select value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)}>
-                <option value="">Choose a department...</option>
-                {departments.map((dept) => (
-                  <option key={dept._id} value={dept.name}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
+              <>
+                <label className="d-block mt-3">Select Department *</label>
+                <CustomSelect
+                  value={selectedDepartment}
+                  onChange={(val) => setSelectedDepartment(val)}
+                  options={[
+                    { value: "", label: "Choose a department..." },
+                    ...departments.map(dept => ({
+                      value: dept.name,
+                      label: dept.name
+                    }))
+                  ]}
+                  placeholder="Choose a department..."
+                />
+              </>
             )}
 
             {toEntityType === "STORE" && (
