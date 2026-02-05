@@ -3,6 +3,7 @@ import CustomModal from "../../components/reusable/CustomModal.jsx";
 import "../../style/Payroll.css";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { PDFDocument } from 'pdf-lib';
 import logoLeptis from "../../assets/images/logo-leptis.png";
 
 export default function PayslipModal({ show, onClose, record }) {
@@ -155,35 +156,38 @@ export default function PayslipModal({ show, onClose, record }) {
             contentDoc.text("Employer Signature", pageWidth - 45, signatureY + 5, { align: 'center' });
 
 
-            // --- ADD BRANDING ---
-            // Logo
-            try {
-                contentDoc.addImage(logoLeptis, 'PNG', 14, 10, 25, 8);
-            } catch (e) {
-                console.warn("Logo failed to load for PDF:", e);
-                contentDoc.setFontSize(14);
-                contentDoc.setFont("helvetica", "bold");
-                contentDoc.text("LEPTIS", 14, 18);
-            }
+            // --- MERGE WITH TEMPLATE ---
 
-            // Arabic Logo/Text on right
-            contentDoc.setFontSize(14);
-            contentDoc.setTextColor(24, 45, 84); // #182d54
-            contentDoc.text("لبتس", pageWidth - 14, 18, { align: 'right' });
+            // Load the template from the public folder
+            const templateUrl = "/Letter_Head_-_Group_2023.pdf";
+            const templateBytes = await fetch(templateUrl).then(res => res.arrayBuffer());
+            const templatePdf = await PDFDocument.load(templateBytes);
 
-            // Brand Text/Context
-            contentDoc.setFontSize(10);
-            contentDoc.setTextColor(100);
-            contentDoc.setFont("helvetica", "normal");
-            contentDoc.text("HR Services", 14, 23);
+            // Load the generated content PDF
+            const contentBytes = contentDoc.output('arraybuffer');
+            const contentPdf = await PDFDocument.load(contentBytes);
 
-            // Header line
-            contentDoc.setDrawColor(24, 45, 84);
-            contentDoc.setLineWidth(0.5);
-            contentDoc.line(14, 30, pageWidth - 14, 30);
+            // Embed the first page of content PDF onto the template PDF
+            const [contentPage] = await templatePdf.embedPdf(contentPdf, [0]);
+            const firstPage = templatePdf.getPages()[0];
+
+            // Draw the content on top of the template page
+            // Dimensions should match (A4 is standard)
+            const { width, height } = firstPage.getSize();
+            firstPage.drawPage(contentPage, {
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
+            });
 
             // Save and download
-            contentDoc.save(`Payslip_${employee?.name || 'Employee'}_${monthName}_${record.year}.pdf`);
+            const mergedPdfBytes = await templatePdf.save();
+            const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `Payslip_${employee?.name || 'Employee'}_${monthName}_${record.year}.pdf`;
+            link.click();
 
         } catch (error) {
             console.error("Error generating PDF:", error);
