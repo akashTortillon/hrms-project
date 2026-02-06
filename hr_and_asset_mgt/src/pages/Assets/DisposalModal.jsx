@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import "../../style/AddEmployeeModal.css";
-import CustomSelect from "../../components/reusable/CustomSelect";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 
 export default function DisposalModal({ onClose, onDispose, asset }) {
   const [form, setForm] = useState({
@@ -102,11 +101,20 @@ export default function DisposalModal({ onClose, onDispose, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Disposal Date *
               </label>
-              <CustomDatePicker
+              <input
+                type="date"
                 name="disposalDate"
                 value={form.disposalDate}
                 onChange={handleChange}
-                maxDate={new Date().toISOString().split('T')[0]}
+                max={new Date().toISOString().split('T')[0]}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
               />
             </div>
 
@@ -115,20 +123,27 @@ export default function DisposalModal({ onClose, onDispose, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Disposal Method *
               </label>
-              <CustomSelect
+              <select
                 name="disposalMethod"
                 value={form.disposalMethod}
-                onChange={(val) => handleChange({ target: { name: 'disposalMethod', value: val } })}
-                options={[
-                  { value: "", label: "-- Select Method --" },
-                  { value: "Sold", label: "Sold" },
-                  { value: "Donated", label: "Donated" },
-                  { value: "Scrapped", label: "Scrapped" },
-                  { value: "Recycled", label: "Recycled" },
-                  { value: "Other", label: "Other" }
-                ]}
-                placeholder="-- Select Method --"
-              />
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="">-- Select Method --</option>
+                <option value="Sold">Sold</option>
+                <option value="Donated">Donated</option>
+                <option value="Scrapped">Scrapped</option>
+                <option value="Recycled">Recycled</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
 
             {/* Disposal Value */}

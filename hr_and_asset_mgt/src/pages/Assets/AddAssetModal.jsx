@@ -6,8 +6,7 @@ import { assetTypeService, assetCategoryService }
   from "../../services/masterService";
 
 import "../../style/AddEmployeeModal.css";
-import CustomSelect from "../../components/reusable/CustomSelect";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 
 export default function AddAssetModal({
   onClose,
@@ -156,31 +155,50 @@ export default function AddAssetModal({
             <input name="serialNumber" placeholder="Serial Number" value={form.serialNumber} onChange={handleChange} />
 
             {/* Asset Type (MASTER) */}
+            {/* Asset Type (MASTER) */}
             <div style={{ gridColumn: 'span 1' }}>
-              <CustomSelect
+              <select
                 name="type"
                 value={form.type}
-                onChange={(val) => handleChange({ target: { name: 'type', value: val } })}
-                options={[
-                  { value: "", label: "Select Asset Type *" },
-                  ...assetTypes.map(t => ({ value: t.name, label: t.name }))
-                ]}
-                placeholder="Select Asset Type *"
-              />
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              >
+                <option value="">Select Asset Type *</option>
+                {assetTypes.map(t => (
+                  <option key={t._id || t.name} value={t.name}>{t.name}</option>
+                ))}
+              </select>
             </div>
 
             {/* Category (MASTER) */}
             <div style={{ gridColumn: 'span 1' }}>
-              <CustomSelect
+              <select
                 name="category"
                 value={form.category}
-                onChange={(val) => handleChange({ target: { name: 'category', value: val } })}
-                options={[
-                  { value: "", label: "Select Category *" },
-                  ...categories.map(c => ({ value: c.name, label: c.name }))
-                ]}
-                placeholder="Select Category *"
-              />
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              >
+                <option value="">Select Category *</option>
+                {categories.map(c => (
+                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
             </div>
 
             <input name="location" placeholder="Location *" value={form.location} onChange={handleChange} />
@@ -188,47 +206,91 @@ export default function AddAssetModal({
 
             {/* Custodian */}
             <div style={{ gridColumn: 'span 1' }}>
-              <CustomSelect
+              <select
                 name="custodian"
                 value={form.custodian}
-                onChange={(val) => handleChange({ target: { name: 'custodian', value: val } })}
-                options={[
-                  { value: "", label: "-- Select Custodian (Optional) --" },
-                  ...employees.map(emp => ({
-                    value: emp._id,
-                    label: `${emp.name} (${emp.code}) - ${emp.department}`
-                  }))
-                ]}
-                placeholder="-- Select Custodian (Optional) --"
-              />
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              >
+                <option value="">-- Select Custodian (Optional) --</option>
+                {employees.map(emp => (
+                  <option key={emp._id} value={emp._id}>
+                    {`${emp.name} (${emp.code}) - ${emp.department}`}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <input name="department" placeholder="Department" value={form.department} onChange={handleChange} />
             <input name="purchaseCost" type="number" placeholder="Purchase Cost (AED) *" value={form.purchaseCost} onChange={handleChange} />
 
             <div style={{ gridColumn: 'span 1' }}>
-              <CustomDatePicker name="purchaseDate" value={form.purchaseDate} onChange={handleChange} placeholder="Purchase Date *" />
+              <input
+                type="date"
+                name="purchaseDate"
+                value={form.purchaseDate}
+                onChange={handleChange}
+                placeholder="Purchase Date *"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              />
             </div>
 
             <input name="warrantyPeriod" type="number" placeholder="Warranty Period (Years)" value={form.warrantyPeriod} onChange={handleChange} />
 
             <div style={{ gridColumn: 'span 1' }}>
-              <CustomDatePicker name="serviceDueDate" value={form.serviceDueDate} onChange={handleChange} placeholder="Service Due Date" />
+              <input
+                type="date"
+                name="serviceDueDate"
+                value={form.serviceDueDate}
+                onChange={handleChange}
+                placeholder="Service Due Date"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              />
             </div>
 
             {isEditMode && (
               <div style={{ gridColumn: 'span 1' }}>
-                <CustomSelect
+                <select
                   name="status"
                   value={form.status}
-                  onChange={(val) => handleChange({ target: { name: 'status', value: val } })}
-                  options={[
-                    { value: "Available", label: "Available" },
-                    { value: "In Use", label: "In Use" },
-                    { value: "Under Maintenance", label: "Under Maintenance" },
-                    { value: "Disposed", label: "Disposed" }
-                  ]}
-                />
+                  onChange={handleChange}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    backgroundColor: 'white',
+                    fontSize: '14px',
+                    height: '42px'
+                  }}
+                >
+                  <option value="Available">Available</option>
+                  <option value="In Use">In Use</option>
+                  <option value="Under Maintenance">Under Maintenance</option>
+                  <option value="Disposed">Disposed</option>
+                </select>
               </div>
             )}
           </div>

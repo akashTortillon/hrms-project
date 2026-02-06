@@ -111,7 +111,7 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
 import { exportAssets } from "../../services/assetService.js";
 import { toast } from "react-toastify";
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 const AssetsFilters = ({
   search,
@@ -170,28 +170,33 @@ const AssetsFilters = ({
         {/* Asset Type */}
         {/* Asset Type */}
         <div style={{ width: '100%' }}>
-          <CustomSelect
-            className="assets-select"
-            value={type}
-            onChange={setType}
-            options={[
-              { value: "ALL", label: "All Types" },
-              ...assetTypes.map(t => ({ value: t.name, label: t.name }))
-            ]}
-          />
-        </div>
+          {/* Asset Type */}
+          <div style={{ width: '100%' }}>
+            <select
+              className="assets-select"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+            >
+              <option value="ALL">All Types</option>
+              {assetTypes.map(t => (
+                <option key={t._id || t.name} value={t.name}>{t.name}</option>
+              ))}
+            </select>
+          </div>
 
-        {/* Asset Status */}
-        <div style={{ width: '100%' }}>
-          <CustomSelect
-            className="assets-select"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "ALL", label: "All Status" },
-              ...assetStatuses.map(s => ({ value: s.name, label: s.name }))
-            ]}
-          />
+          {/* Asset Status */}
+          <div style={{ width: '100%' }}>
+            <select
+              className="assets-select"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="ALL">All Status</option>
+              {assetStatuses.map(s => (
+                <option key={s._id || s.name} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Export */}

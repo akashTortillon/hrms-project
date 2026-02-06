@@ -1,7 +1,7 @@
 import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 
 export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
@@ -46,25 +46,50 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
         <div className="payroll-header-actions">
           {/* Month Selector */}
           {/* Month Selector */}
+          {/* Month Selector */}
           <div style={{ width: '100%', maxWidth: '200px' }}>
-            <CustomSelect
+            <select
               className="payroll-month-select"
               value={month}
-              onChange={(val) => setMonth(Number(val))}
-              options={months.map((m, idx) => ({ value: idx + 1, label: m }))}
-              placeholder="Select Month"
-            />
+              onChange={(e) => setMonth(Number(e.target.value))}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                backgroundColor: "white",
+                fontSize: "14px",
+                height: "40px"
+              }}
+            >
+              <option value="" disabled>Select Month</option>
+              {months.map((m, idx) => (
+                <option key={idx} value={idx + 1}>{m}</option>
+              ))}
+            </select>
           </div>
 
           {/* Year Selector */}
           <div style={{ width: '100%', maxWidth: '120px', marginLeft: '10px' }}>
-            <CustomSelect
+            <select
               className="payroll-month-select"
               value={year}
-              onChange={(val) => setYear(Number(val))}
-              options={[2024, 2025, 2026].map(y => ({ value: y, label: String(y) }))}
-              placeholder="Select Year"
-            />
+              onChange={(e) => setYear(Number(e.target.value))}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                backgroundColor: "white",
+                fontSize: "14px",
+                height: "40px"
+              }}
+            >
+              <option value="" disabled>Select Year</option>
+              {[2024, 2025, 2026].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
           </div>
 
           <button className="payroll-export-btn" onClick={onExportWPS}>

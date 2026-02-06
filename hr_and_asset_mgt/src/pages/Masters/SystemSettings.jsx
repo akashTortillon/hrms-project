@@ -3,7 +3,7 @@ import { RenderList } from "./components/RenderList.jsx";
 import CustomButton from "../../components/reusable/Button";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal.jsx";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 import useSystemSettings from "./SystemSettings/useSystemSettings.js";
 import "../../style/Masters.css";
 
@@ -192,11 +192,11 @@ export default function SystemSettings() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <CustomDatePicker
+                <input
+                  type="date"
                   value={holidayDate}
                   onChange={(e) => setHolidayDate(e.target.value)}
-                  placeholder="Select Date"
-                  className="w-full"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </>

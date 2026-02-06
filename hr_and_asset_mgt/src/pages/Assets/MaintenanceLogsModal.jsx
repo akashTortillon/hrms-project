@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import DataTable from "../../components/reusable/DataTable";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Assets.css";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 
 export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelete }) {
   const [editingLog, setEditingLog] = useState(null);
@@ -198,10 +198,18 @@ export default function MaintenanceLogsModal({ onClose, asset, onUpdate, onDelet
                   <label style={{ display: "block", fontSize: "13px", marginBottom: "6px" }}>
                     Completed Date
                   </label>
-                  <CustomDatePicker
+                  <input
+                    type="date"
                     value={form.completedDate}
                     onChange={(e) => setForm({ ...form, completedDate: e.target.value })}
-                    placeholder="Select Date"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "6px",
+                      border: "1px solid #d1d5db",
+                      fontSize: "14px",
+                      fontFamily: "inherit"
+                    }}
                   />
                 </div>
                 <div>

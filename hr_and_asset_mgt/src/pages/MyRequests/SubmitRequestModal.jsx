@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import "../../style/SubmitRequestModal.css";
-import CustomSelect from "../../components/reusable/CustomSelect";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
 import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
@@ -203,10 +202,11 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div className="form-row">
               <div>
                 <label>Leave Type</label>
-                <CustomSelect
+                <select
                   name="leaveTypeId"
                   value={leaveForm.leaveTypeId}
-                  onChange={(val) => {
+                  onChange={(e) => {
+                    const val = e.target.value;
                     const selected = leaveTypes.find(t => t._id === val);
                     if (selected) {
                       setLeaveForm({
@@ -217,12 +217,23 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                       });
                     }
                   }}
-                  options={leaveTypes.map(type => ({
-                    value: type._id,
-                    label: `${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`
-                  }))}
-                  placeholder="Select Leave Type"
-                />
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "white",
+                    fontSize: "14px",
+                    height: "42px"
+                  }}
+                >
+                  <option value="" disabled>Select Leave Type</option>
+                  {leaveTypes.map(type => (
+                    <option key={type._id} value={type._id}>
+                      {`${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -241,23 +252,39 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div className="form-row">
               <div>
                 <label>From Date</label>
-                <CustomDatePicker
+                <input
+                  type="date"
                   value={leaveForm.fromDate}
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, fromDate: e.target.value })
                   }
-                  placeholder="Select Date"
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                    height: "42px"
+                  }}
                 />
               </div>
 
               <div>
                 <label>To Date</label>
-                <CustomDatePicker
+                <input
+                  type="date"
                   value={leaveForm.toDate}
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, toDate: e.target.value })
                   }
-                  placeholder="Select Date"
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                    height: "42px"
+                  }}
                 />
               </div>
             </div>
@@ -319,21 +346,29 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
             <div>
               <label>Repayment Period (Months)</label>
-              <CustomSelect
+              <select
                 value={salaryForm.repaymentPeriod}
-                onChange={(val) =>
+                onChange={(e) =>
                   setSalaryForm({
                     ...salaryForm,
-                    repaymentPeriod: val
+                    repaymentPeriod: e.target.value
                   })
                 }
-                options={[
-                  { value: "3 Months", label: "3 Months" },
-                  { value: "6 Months", label: "6 Months" },
-                  { value: "9 Months", label: "9 Months" }
-                ]}
-                placeholder="Select Period"
-              />
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="" disabled>Select Period</option>
+                <option value="3 Months">3 Months</option>
+                <option value="6 Months">6 Months</option>
+                <option value="9 Months">9 Months</option>
+              </select>
             </div>
 
             <div>
@@ -354,22 +389,31 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           <div className="leave-form">
             <div>
               <label>Document Type</label>
-              <CustomSelect
+              <label>Document Type</label>
+              <select
                 value={documentForm.documentType}
-                onChange={(val) =>
+                onChange={(e) =>
                   setDocumentForm({
                     ...documentForm,
-                    documentType: val
+                    documentType: e.target.value
                   })
                 }
-                options={[
-                  { value: "Salary Certificate", label: "Salary Certificate" },
-                  { value: "Experience Letter", label: "Experience Letter" },
-                  { value: "Employment Letter", label: "Employment Letter" },
-                  { value: "NOC (No Objection Certificate)", label: "NOC (No Objection Certificate)" }
-                ]}
-                placeholder="Select Document Type"
-              />
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="" disabled>Select Document Type</option>
+                <option value="Salary Certificate">Salary Certificate</option>
+                <option value="Experience Letter">Experience Letter</option>
+                <option value="Employment Letter">Employment Letter</option>
+                <option value="NOC (No Objection Certificate)">NOC (No Objection Certificate)</option>
+              </select>
             </div>
 
             <div>

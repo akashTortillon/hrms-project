@@ -2,7 +2,6 @@ import { useState } from "react";
 import api from "../../api/apiClient";
 import { toast } from "react-toastify"; // Added toast import if not present, though assuming toast might be needed for errors.
 import Card from "../../components/reusable/Card";
-import CustomSelect from "../../components/reusable/CustomSelect";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/Reports.css";
 
@@ -64,20 +63,43 @@ export default function ComplianceExports() {
 
         <div className="report-filters" style={{ marginBottom: 0 }}>
           <div style={{ width: '140px' }}>
-            <CustomSelect
+            <select
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
               value={month}
-              onChange={(val) => setMonth(Number(val))}
-              options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
-              placeholder="Select Month"
-            />
+              onChange={(e) => setMonth(Number(e.target.value))}
+            >
+              <option value="" disabled>Select Month</option>
+              {MONTHS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
           </div>
           <div style={{ width: '100px' }}>
-            <CustomSelect
+            <select
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
               value={year}
-              onChange={(val) => setYear(Number(val))}
-              options={[0, 1, 2, 3, 4].map(i => ({ value: currentDate.getFullYear() - i, label: String(currentDate.getFullYear() - i) }))}
-              placeholder="Year"
-            />
+              onChange={(e) => setYear(Number(e.target.value))}
+            >
+              <option value="" disabled>Year</option>
+              {[0, 1, 2, 3, 4].map(i => {
+                const y = currentDate.getFullYear() - i;
+                return <option key={y} value={y}>{y}</option>;
+              })}
+            </select>
           </div>
         </div>
       </div>

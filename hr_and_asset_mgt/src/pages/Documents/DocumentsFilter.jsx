@@ -1,7 +1,7 @@
 import React from "react";
 import "../../style/Document.css";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 const DocumentsFilter = ({
   search = "",
@@ -33,20 +33,44 @@ const DocumentsFilter = ({
 
         {/* Type Filter */}
         <div style={{ width: '100%', maxWidth: '100%' }}>
-          <CustomSelect
+          <select
             value={type}
-            onChange={onTypeChange}
-            options={typeOptions.map(opt => ({ value: opt, label: opt }))}
-          />
+            onChange={(e) => onTypeChange(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              backgroundColor: "white",
+              fontSize: "14px",
+              height: "40px"
+            }}
+          >
+            {typeOptions.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
         </div>
 
         {/* Status Filter */}
         <div style={{ width: '100%', maxWidth: '100%' }}>
-          <CustomSelect
+          <select
             value={status}
-            onChange={onStatusChange}
-            options={statusOptions.map(opt => ({ value: opt, label: opt }))}
-          />
+            onChange={(e) => onStatusChange(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              backgroundColor: "white",
+              fontSize: "14px",
+              height: "40px"
+            }}
+          >
+            {statusOptions.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
         </div>
       </div>
 

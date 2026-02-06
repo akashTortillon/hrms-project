@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
 import { vendorService } from "../../services/masterService.js";
-import CustomSelect from "../../components/reusable/CustomSelect";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 
 export default function AMCDetailsModal({ onClose, onSave, asset }) {
   const [form, setForm] = useState({
@@ -143,16 +142,25 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Service Provider *
               </label>
-              <CustomSelect
+              <select
                 name="provider"
                 value={form.provider}
-                onChange={(val) => handleChange({ target: { name: 'provider', value: val } })}
-                options={[
-                  { value: "", label: "Choose a service provider..." },
-                  ...vendors.map(vendor => ({ value: vendor.name, label: vendor.name }))
-                ]}
-                placeholder="Choose a service provider..."
-              />
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="">Choose a service provider...</option>
+                {vendors.map(vendor => (
+                  <option key={vendor._id || vendor.name} value={vendor.name}>{vendor.name}</option>
+                ))}
+              </select>
             </div>
 
             {/* Contract Number */}
@@ -174,11 +182,20 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Start Date *
               </label>
-              <CustomDatePicker
+              <input
+                type="date"
                 name="startDate"
                 value={form.startDate}
                 onChange={handleChange}
                 placeholder="Select Start Date"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
               />
             </div>
 
@@ -187,12 +204,20 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 End Date *
               </label>
-              <CustomDatePicker
+              <input
+                type="date"
                 name="endDate"
                 value={form.endDate}
                 onChange={handleChange}
-                placeholder="Select End Date"
-                minDate={form.startDate}
+                min={form.startDate}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
               />
             </div>
 
@@ -217,17 +242,24 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Status
               </label>
-              <CustomSelect
+              <select
                 name="status"
                 value={form.status}
-                onChange={(val) => handleChange({ target: { name: 'status', value: val } })}
-                options={[
-                  { value: "Active", label: "Active" },
-                  { value: "Expired", label: "Expired" },
-                  { value: "Cancelled", label: "Cancelled" }
-                ]}
-                placeholder="Select Status"
-              />
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="Active">Active</option>
+                <option value="Expired">Expired</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
             </div>
 
             {/* Coverage Details */}

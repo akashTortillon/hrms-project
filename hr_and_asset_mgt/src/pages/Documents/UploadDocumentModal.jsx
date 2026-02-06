@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "../../style/UploadDocumentModal.css";
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 import { getBranches, companyDocumentTypeService } from "../../services/masterService";
 import { toast } from "react-toastify";
 
@@ -82,30 +82,48 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
 
                         <div className="input-wrapper">
                             <label className="input-label">Company Document Type</label>
-                            <CustomSelect
+                            <select
                                 name="type"
                                 value={form.type}
-                                onChange={(val) => handleChange({ target: { name: 'type', value: val } })}
-                                options={[
-                                    { value: "", label: "Select Type" },
-                                    ...docTypes.map(type => ({ value: type.name, label: type.name }))
-                                ]}
-                                placeholder="Select Type"
-                            />
+                                onChange={handleChange}
+                                style={{
+                                    width: "100%",
+                                    padding: "10px",
+                                    borderRadius: "8px",
+                                    border: "1px solid #d1d5db",
+                                    backgroundColor: "white",
+                                    fontSize: "14px",
+                                    height: "42px"
+                                }}
+                            >
+                                <option value="">Select Type</option>
+                                {docTypes.map(type => (
+                                    <option key={type.name} value={type.name}>{type.name}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="input-wrapper">
                             <label className="input-label">Location / Branch</label>
-                            <CustomSelect
+                            <select
                                 name="location"
                                 value={form.location}
-                                onChange={(val) => handleChange({ target: { name: 'location', value: val } })}
-                                options={[
-                                    { value: "", label: "Select Location" },
-                                    ...branches.map(b => ({ value: b.name, label: b.name }))
-                                ]}
-                                placeholder="Select Location"
-                            />
+                                onChange={handleChange}
+                                style={{
+                                    width: "100%",
+                                    padding: "10px",
+                                    borderRadius: "8px",
+                                    border: "1px solid #d1d5db",
+                                    backgroundColor: "white",
+                                    fontSize: "14px",
+                                    height: "42px"
+                                }}
+                            >
+                                <option value="">Select Location</option>
+                                {branches.map(b => (
+                                    <option key={b.name} value={b.name}>{b.name}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="input-wrapper">
