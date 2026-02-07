@@ -111,6 +111,7 @@ import { useSearchParams } from "react-router-dom";
 import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
+import ImportEmployeeModal from "../../components/Employees/ImportEmployeeModal.jsx";
 
 import {
   getEmployees,
@@ -140,6 +141,7 @@ export default function Employees() {
   const [deptOptions, setDeptOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // 🔹 Sync Local Search with URL (e.g. back button)
   useEffect(() => {
@@ -321,6 +323,14 @@ export default function Employees() {
         setSearch={setSearchInput}
         deptOptions={deptOptions}
         onExport={hasPermission("MANAGE_EMPLOYEES") ? handleExport : null}
+        onImport={
+          hasPermission("MANAGE_EMPLOYEES")
+            ? () => {
+              console.log("Import clicked in View");
+              setShowImportModal(true);
+            }
+            : () => console.log("Import permission denied or missing")
+        }
         count={employees.length}
       />
 
@@ -338,6 +348,17 @@ export default function Employees() {
           onAddEmployee={handleAddEmployee}
         />
       )}
+
+      {/* IMPORT MODAL */}
+      <ImportEmployeeModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          fetchEmployees();
+          // Optional: keep modal open to show results, or close it?
+          // The modal handles displaying results, so let's just refresh data
+        }}
+      />
     </div>
   );
 }

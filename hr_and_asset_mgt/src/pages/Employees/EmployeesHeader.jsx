@@ -14,6 +14,7 @@ export default function EmployeesHeader({
   setSearch,
   deptOptions = [],
   onExport,
+  onImport,
   count = 0
 }) {
   return (
@@ -96,6 +97,18 @@ export default function EmployeesHeader({
               <option value="On Leave">On Leave</option>
             </select>
           </div>
+
+
+          {onImport && (
+            <button
+              className="employees-export-btn"
+              onClick={onImport}
+              style={{ marginRight: "10px" }}
+            >
+              <SvgIcon name="upload" size={16} />
+              Import
+            </button>
+          )}
 
           {/* Export */}
           {onExport && (

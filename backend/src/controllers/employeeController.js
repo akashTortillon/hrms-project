@@ -343,3 +343,135 @@ export const deleteEmployee = async (req, res) => {
   }
 };
 
+
+export const importEmployees = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(sheet);
+
+    let successCount = 0;
+    let errors = [];
+
+    // Pre-fetch all existing emails and phones to minimize DB calls in loop
+    const existingEmployees = await Employee.find({}, { email: 1, phone: 1, code: 1 });
+    const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
+    const existingPhones = new Set(existingEmployees.map(e => e.phone));
+
+    // Get last employee code
+    const lastEmployee = await Employee.findOne().sort({ code: -1 });
+    let lastCodeNum = 0;
+    if (lastEmployee && lastEmployee.code) {
+      lastCodeNum = parseInt(lastEmployee.code.replace("EMP", ""), 10) || 0;
+    }
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowNum = i + 2; // Excel row number (1-based, +1 for header)
+      let errorMsg = null;
+
+      // 1. Basic Validation
+      if (!row["Full Name"] || !row["Email"] || !row["Role"] || !row["Department"]) {
+        errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Role, Department)" });
+        continue;
+      }
+
+      const email = row["Email"].trim();
+      const phone = row["Phone"] ? String(row["Phone"]).trim() : "";
+
+      // Email Validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        errors.push({ row: rowNum, email, message: "Invalid Email format" });
+        continue;
+      }
+
+      // 2. Duplicate Check
+      if (existingEmails.has(email.toLowerCase())) {
+        errors.push({ row: rowNum, email, message: "Email already exists" });
+        continue;
+      }
+      if (phone && existingPhones.has(phone)) {
+        errors.push({ row: rowNum, email, message: "Phone number already exists" });
+        continue;
+      }
+
+      // 3. User Account Creation
+      let userPhone = phone.replace(/\s+/g, "");
+      // Simple normalization for UAE if needed, or just keep as is
+
+      const hashedPassword = await bcrypt.hash("Password@123", 10);
+      try {
+        // Check if user exists (could be a user without employee record)
+        const userExists = await User.findOne({ email });
+        if (!userExists) {
+          await User.create({
+            name: row["Full Name"],
+            email: email,
+            phone: userPhone,
+            password: hashedPassword,
+            role: row["Role"]
+          });
+        }
+      } catch (uErr) {
+        errors.push({ row: rowNum, email, message: "Failed to create User account: " + uErr.message });
+        continue;
+      }
+
+      // 4. Employee Creation
+      try {
+        lastCodeNum++;
+        const nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+
+        // Parse Date - Excel dates can be tricky. 
+        // If it's a number (Excel serial date), convert. If string, try parsing.
+        let joinDate = new Date();
+        if (row["Joining Date"]) {
+          if (typeof row["Joining Date"] === 'number') {
+            joinDate = new Date(Math.round((row["Joining Date"] - 25569) * 86400 * 1000));
+          } else {
+            joinDate = new Date(row["Joining Date"]);
+          }
+        }
+
+        await Employee.create({
+          name: row["Full Name"],
+          code: nextCode,
+          role: row["Role"],
+          department: row["Department"],
+          email: email,
+          phone: phone,
+          joinDate: joinDate,
+          status: row["Status"] || "Onboarding",
+          designation: row["Designation"] || row["Role"],
+          shift: "Day Shift" // Default
+        });
+
+        // Add to local sets to prevent duplicates within the same file
+        existingEmails.add(email.toLowerCase());
+        if (phone) existingPhones.add(phone);
+
+        successCount++;
+
+      } catch (dbErr) {
+        errors.push({ row: rowNum, email, message: "Database Error: " + dbErr.message });
+      }
+    }
+
+    res.json({
+      message: "Import processing processed",
+      successCount,
+      failureCount: errors.length,
+      errors
+    });
+
+  } catch (error) {
+    // console.error("Import Error:", error);
+    res.status(500).json({ message: "Server error during import" });
+  }
+};
