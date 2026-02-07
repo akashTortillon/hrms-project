@@ -40,6 +40,14 @@ export const exportEmployees = async (params = {}) => {
   return res.data;
 };
 
+// IMPORT employees (Excel/CSV)
+export const importEmployees = async (formData) => {
+  const res = await api.post(EMPLOYEE_API + "/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
 const DOC_API = "/api/employee-docs";
 
 export const getEmployeeDocuments = async (employeeId) => {
