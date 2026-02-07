@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getAssets } from "../../services/assetService";
 import "../../style/AddEmployeeModal.css"; // Reusing existing modal styles
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 export default function AssignAssetToEmployeeModal({ onClose, onAssign, employeeId }) {
     const [availableAssets, setAvailableAssets] = useState([]);
@@ -68,21 +68,27 @@ export default function AssignAssetToEmployeeModal({ onClose, onAssign, employee
                     <div className="modal-grid">
                         <div className="form-group full-width">
                             <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Select Asset</label>
-                            <CustomSelect
+                            <select
                                 value={selectedAssetId}
-                                onChange={(val) => {
-                                    handleAssetChange({ target: { value: val } });
-                                }}
+                                onChange={handleAssetChange}
                                 disabled={loading}
-                                options={[
-                                    { value: "", label: "-- Select Available Asset --" },
-                                    ...availableAssets.map(asset => ({
-                                        value: asset._id,
-                                        label: `${asset.name} (${asset.assetCode})`
-                                    }))
-                                ]}
-                                placeholder="-- Select Available Asset --"
-                            />
+                                style={{
+                                    width: "100%",
+                                    padding: "10px 12px",
+                                    borderRadius: "8px",
+                                    border: "1px solid #d1d5db",
+                                    backgroundColor: "white",
+                                    fontSize: "14px",
+                                    height: "42px"
+                                }}
+                            >
+                                <option value="">-- Select Available Asset --</option>
+                                {availableAssets.map(asset => (
+                                    <option key={asset._id} value={asset._id}>
+                                        {`${asset.name} (${asset.assetCode})`}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         {selectedAsset && (

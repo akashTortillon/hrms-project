@@ -6,7 +6,7 @@ import Card from "../../../components/reusable/Card";
 import Button from "../../../components/reusable/Button";
 import SvgIcon from "../../../components/svgIcon/svgView";
 import "../../../style/CustomReportBuilder.css"; // ✅ Import new CSS
-import CustomSelect from "../../../components/reusable/CustomSelect";
+
 
 const DATASETS = {
     Employees: ["name", "code", "department", "designation", "status", "joinDate", "basicSalary", "email"],
@@ -175,16 +175,29 @@ export default function CustomReportBuilder() {
                         />
 
                         <h3 className="report-section-title">Select Dataset</h3>
-                        <CustomSelect
+                        <select
+                            style={{
+                                width: '100%',
+                                padding: '10px 14px',
+                                borderRadius: '10px',
+                                border: '1px solid #d1d5db',
+                                backgroundColor: 'white',
+                                fontSize: '14px',
+                                height: '42px'
+                            }}
                             value={selectedDataset}
-                            onChange={(val) => {
+                            onChange={(e) => {
+                                const val = e.target.value;
                                 setSelectedDataset(val);
                                 setSelectedColumns([]);
                                 setReportData([]);
                             }}
-                            options={Object.keys(DATASETS).map(ds => ({ value: ds, label: ds }))}
-                            placeholder="Select Dataset"
-                        />
+                        >
+                            <option value="" disabled>Select Dataset</option>
+                            {Object.keys(DATASETS).map(ds => (
+                                <option key={ds} value={ds}>{ds}</option>
+                            ))}
+                        </select>
 
                         <h3 className="report-section-title">Select Columns</h3>
                         <div className="report-columns-grid">

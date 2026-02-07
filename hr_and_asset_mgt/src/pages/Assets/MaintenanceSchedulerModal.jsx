@@ -4,8 +4,7 @@ import {
   serviceTypeService,
   maintenanceShopService,
 } from "../../services/masterService";
-import CustomSelect from "../../components/reusable/CustomSelect";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 
 
 export default function MaintenanceSchedulerModal({ onClose, onSchedule, asset }) {
@@ -101,42 +100,69 @@ export default function MaintenanceSchedulerModal({ onClose, onSchedule, asset }
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Scheduled Date *
               </label>
-              <CustomDatePicker
+              <input
+                type="date"
                 name="scheduledDate"
                 value={form.scheduledDate}
                 onChange={handleChange}
-                minDate={new Date().toISOString().split('T')[0]}
+                min={new Date().toISOString().split('T')[0]}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
               />
             </div>
 
             {/* Service Type (MASTER) */}
             <div>
               <label className="modal-label">Service Type *</label>
-              <CustomSelect
+              <select
                 name="serviceType"
                 value={form.serviceType}
-                onChange={(val) => handleChange({ target: { name: 'serviceType', value: val } })}
-                options={[
-                  { value: "", label: "Select Service Type" },
-                  ...serviceTypes.map(type => ({ value: type._id, label: type.name }))
-                ]}
-                placeholder="Select Service Type"
-              />
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="">Select Service Type</option>
+                {serviceTypes.map(type => (
+                  <option key={type._id} value={type._id}>{type.name}</option>
+                ))}
+              </select>
             </div>
 
             {/* Service Provider (MASTER) */}
             <div>
               <label className="modal-label">Service Provider *</label>
-              <CustomSelect
+              <select
                 name="provider"
                 value={form.provider}
-                onChange={(val) => handleChange({ target: { name: 'provider', value: val } })}
-                options={[
-                  { value: "", label: "Select Service Provider" },
-                  ...providers.map(shop => ({ value: shop._id, label: shop.name }))
-                ]}
-                placeholder="Select Service Provider"
-              />
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="">Select Service Provider</option>
+                {providers.map(shop => (
+                  <option key={shop._id} value={shop._id}>{shop.name}</option>
+                ))}
+              </select>
             </div>
             {/* Cost */}
             <div>

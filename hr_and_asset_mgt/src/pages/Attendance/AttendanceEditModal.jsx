@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import "../../style/AttendanceEditModal.css";
 import { shiftService } from "../../services/masterService";
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 /* =========================
    Helpers
@@ -190,15 +190,23 @@ const AttendanceEditModal = ({
 
           <div>
             <label>Shift</label>
-            <CustomSelect
+            <select
               value={shift}
-              onChange={(val) => setShift(val)}
-              options={[
-                { value: "", label: "Select Shift" },
-                ...shifts.map((s) => ({ value: s.name, label: s.name }))
-              ]}
-              placeholder="Select Shift"
-            />
+              onChange={(e) => setShift(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ddd",
+                backgroundColor: "white",
+                fontSize: "14px"
+              }}
+            >
+              <option value="">Select Shift</option>
+              {shifts.map((s) => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -224,16 +232,23 @@ const AttendanceEditModal = ({
           <div>
             <label>Status</label>
             <div style={{ width: '100%' }}>
-              <CustomSelect
+              <select
                 value={status}
-                onChange={(val) => setStatus(val)}
-                options={[
-                  { value: "Present", label: "Present" },
-                  { value: "Absent", label: "Absent" },
-                  { value: "Late", label: "Late" },
-                  { value: "On Leave", label: "On Leave" }
-                ]}
-              />
+                onChange={(e) => setStatus(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid #ddd",
+                  backgroundColor: "white",
+                  fontSize: "14px"
+                }}
+              >
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+                <option value="Late">Late</option>
+                <option value="On Leave">On Leave</option>
+              </select>
             </div>
           </div>
 

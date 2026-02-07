@@ -1,7 +1,7 @@
 import React from "react";
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Employees.css";
-import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 
 export default function EmployeesHeader({
@@ -52,33 +52,49 @@ export default function EmployeesHeader({
           {/* Department */}
           {/* Department */}
           <div style={{ width: '100%' }}>
-            <CustomSelect
+            <select
               className="employees-select"
               value={department}
-              onChange={setDepartment}
-              options={[
-                { value: "All Departments", label: "All Departments" },
-                ...deptOptions.map(dept => ({ value: dept, label: dept }))
-              ]}
-              placeholder="All Departments"
-            />
+              onChange={(e) => setDepartment(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                backgroundColor: "white",
+                fontSize: "14px",
+                height: "42px"
+              }}
+            >
+              <option value="All Departments">All Departments</option>
+              {deptOptions.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
           </div>
 
           {/* Status */}
           {/* Status */}
           <div style={{ width: '100%' }}>
-            <CustomSelect
+            <select
               className="employees-select"
               value={status}
-              onChange={setStatus}
-              options={[
-                { value: "All Status", label: "All Status" },
-                { value: "Active", label: "Active" },
-                { value: "Inactive", label: "Inactive" },
-                { value: "On Leave", label: "On Leave" }
-              ]}
-              placeholder="All Status"
-            />
+              onChange={(e) => setStatus(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                backgroundColor: "white",
+                fontSize: "14px",
+                height: "42px"
+              }}
+            >
+              <option value="All Status">All Status</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="On Leave">On Leave</option>
+            </select>
           </div>
 
           {/* Export */}

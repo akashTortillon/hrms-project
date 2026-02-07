@@ -177,8 +177,7 @@ import "../../style/AddEmployeeModal.css";
 import { getEmployees } from "../../services/employeeService.js";
 import { maintenanceShopService } from "../../services/masterService.js";
 import { getCurrentAssignment } from "../../services/assignmentService.js";
-import CustomSelect from "../../components/reusable/CustomSelect";
-import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+
 
 export default function ReturnAssetModal({ onClose, onReturn, asset }) {
   const [employees, setEmployees] = useState([]);
@@ -322,15 +321,22 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
                 Return To *
               </label>
               <div style={{ marginBottom: "10px" }}>
-                <CustomSelect
+                <select
                   value={returnToType}
-                  onChange={(val) => setReturnToType(val)}
-                  options={[
-                    { value: "EMPLOYEE", label: "Employee" },
-                    { value: "STORE", label: "Store" }
-                  ]}
-                  placeholder="Select Destination"
-                />
+                  onChange={(e) => setReturnToType(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "white",
+                    fontSize: "14px",
+                    height: "42px"
+                  }}
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="STORE">Store</option>
+                </select>
               </div>
             </div>
 
@@ -339,18 +345,26 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
                 <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                   Select Employee *
                 </label>
-                <CustomSelect
+                <select
                   value={selectedEmployee}
-                  onChange={(val) => setSelectedEmployee(val)}
-                  options={[
-                    { value: "", label: "Choose an employee..." },
-                    ...employees.map(emp => ({
-                      value: emp._id,
-                      label: `${emp.name} (${emp.code}) - ${emp.department}`
-                    }))
-                  ]}
-                  placeholder="Choose an employee..."
-                />
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "white",
+                    fontSize: "14px",
+                    height: "42px"
+                  }}
+                >
+                  <option value="">Choose an employee...</option>
+                  {employees.map(emp => (
+                    <option key={emp._id} value={emp._id}>
+                      {`${emp.name} (${emp.code}) - ${emp.department}`}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 
@@ -358,11 +372,19 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Return Date *
               </label>
-              <CustomDatePicker
+              <input
+                type="date"
                 value={returnDate}
                 onChange={(e) => setReturnDate(e.target.value)}
-                placeholder="Select Return Date"
-                maxDate={new Date().toISOString().split('T')[0]}
+                max={new Date().toISOString().split('T')[0]}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
               />
             </div>
 
