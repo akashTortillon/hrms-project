@@ -133,6 +133,12 @@
   cursor: pointer;
 }
 
+.employees-export-btn .svg-icon {
+  filter: invert(30%) sepia(83%) saturate(2326%) hue-rotate(204deg) brightness(96%) contrast(92%) !important;
+  /* Force Blue */
+  opacity: 1;
+}
+
 /* ---------- Count ---------- */
 
 .employees-count {
