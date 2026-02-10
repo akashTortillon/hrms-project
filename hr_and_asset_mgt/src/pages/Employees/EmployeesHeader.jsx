@@ -50,10 +50,8 @@ export default function EmployeesHeader({
           </div>
 
           {/* Department */}
-          {/* Department */}
-          <div style={{ width: '100%' }}>
+          <div className="filter-item">
             <CustomSelect
-              className="employees-select"
               value={department}
               onChange={setDepartment}
               options={[
@@ -65,10 +63,8 @@ export default function EmployeesHeader({
           </div>
 
           {/* Status */}
-          {/* Status */}
-          <div style={{ width: '100%' }}>
+          <div className="filter-item">
             <CustomSelect
-              className="employees-select"
               value={status}
               onChange={setStatus}
               options={[

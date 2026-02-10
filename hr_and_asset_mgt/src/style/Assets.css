@@ -310,18 +310,18 @@
 }
 
 .status-in-use {
-  background: #ecfdf3;
-  color: #16a34a;
+  background: #ecfdf3!important;
+  color: #16a34a!important;
 }
 
 .status-available {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #eff6ff!important;
+  color: #2563eb!important;
 }
 
 .status-maintenance {
-  background: #fffbeb;
-  color: #d97706;
+  background: #fffbeb!important;
+  color: #d97706!important;
 }
 
 /* ---------- Actions ---------- */
@@ -512,9 +512,12 @@
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 9999;
-  min-width: 180px;`r`n  max-width: calc(100vw - 40px);
-  padding: 6px 0;`r`n  box-sizing: border-box;
+  min-width: 180px;
+  max-width: calc(100vw - 40px);
+  padding: 6px 0;
+  box-sizing: border-box;
 }
+
 
 .dropdown-item {
   width: 100%;

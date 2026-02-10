@@ -206,14 +206,27 @@ export default function EmployeeRequests() {
     return "";
   };
 
-  // ✅ UPDATED: Use service function for download
-  const handleDownloadDocument = async (requestId) => {
+  // ✅ UPDATED: Robust download with error decoding and dynamic extension
+  const handleDownloadDocument = async (request) => {
     try {
-      const blob = await downloadDocument(requestId);
+      const blob = await downloadDocument(request._id);
+
+      // If server returns JSON error as blob, catch it
+      if (blob.type === 'application/json') {
+        const text = await blob.text();
+        const errorData = JSON.parse(text);
+        throw new Error(errorData.message || "Failed to download");
+      }
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+
+      // Extract extension from stored path or default to .pdf
+      const fileExt = request.uploadedDocument?.split('.').pop() || 'pdf';
+      const fileName = `${request.requestId}.${fileExt}`;
+
       a.href = url;
-      a.download = `document-${requestId}.pdf`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -221,11 +234,22 @@ export default function EmployeeRequests() {
       toast.success("Document downloaded successfully");
     } catch (error) {
       console.error('Download error:', error);
-      toast.error(
-        error.response?.data?.message ||
-        error.message ||
-        'Failed to download document'
-      );
+
+      // Attempt to decode blob error if present
+      let errorMessage = error.message;
+      if (error.response?.data instanceof Blob && error.response.data.type === 'application/json') {
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message;
+        } catch (e) {
+          console.error("Failed to parse error blob:", e);
+        }
+      } else {
+        errorMessage = error.response?.data?.message || error.message;
+      }
+
+      toast.error(errorMessage || 'Failed to download document');
     }
   };
 
@@ -437,7 +461,7 @@ export default function EmployeeRequests() {
                       request.uploadedDocument && (
                         <button
                           className="download-btn"
-                          onClick={() => handleDownloadDocument(request._id)}
+                          onClick={() => handleDownloadDocument(request)}
                         >
                           Download Document
                         </button>
