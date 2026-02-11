@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import "../../style/AddEmployeeModal.css";
 import { vendorService } from "../../services/masterService.js";
+import CustomSelect from "../../components/reusable/CustomSelect.jsx";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker.jsx";
 
 
 export default function AMCDetailsModal({ onClose, onSave, asset }) {
@@ -142,25 +144,16 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Service Provider *
               </label>
-              <select
-                name="provider"
-                value={form.provider}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Choose a service provider...</option>
-                {vendors.map(vendor => (
-                  <option key={vendor._id || vendor.name} value={vendor.name}>{vendor.name}</option>
-                ))}
-              </select>
+              <CustomSelect
+            name="provider"
+            placeholder="Choose a service provider..."
+            value={form.provider}
+            onChange={(value) => setForm(prev => ({ ...prev, provider: value }))}
+            options={vendors.map(vendor => ({
+              value: vendor.name,
+              label: vendor.name
+            }))}
+          />
             </div>
 
             {/* Contract Number */}
@@ -182,21 +175,12 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Start Date *
               </label>
-              <input
-                type="date"
-                name="startDate"
-                value={form.startDate}
-                onChange={handleChange}
-                placeholder="Select Start Date"
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              />
+             <CustomDatePicker
+            name="startDate"
+            value={form.startDate}
+            placeholder="Select Start Date"
+            onChange={handleChange}
+          />
             </div>
 
             {/* End Date */}
@@ -204,21 +188,13 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 End Date *
               </label>
-              <input
-                type="date"
-                name="endDate"
-                value={form.endDate}
-                onChange={handleChange}
-                min={form.startDate}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              />
+              <CustomDatePicker
+            name="endDate"
+            value={form.endDate}
+            placeholder="Select End Date"
+            onChange={handleChange}
+            min={form.startDate}
+          />
             </div>
 
             {/* Cost */}
@@ -242,24 +218,17 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Status
               </label>
-              <select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="Active">Active</option>
-                <option value="Expired">Expired</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
+              <CustomSelect
+            name="status"
+            placeholder="Select Status"
+            value={form.status}
+            onChange={(value) => setForm(prev => ({ ...prev, status: value }))}
+            options={[
+              { value: "Active", label: "Active" },
+              { value: "Expired", label: "Expired" },
+              { value: "Cancelled", label: "Cancelled" }
+            ]}
+          />
             </div>
 
             {/* Coverage Details */}

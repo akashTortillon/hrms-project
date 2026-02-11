@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import SvgIcon from "../../components/svgIcon/svgView";
 import "../../style/AddEmployeeModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 
 export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDownload, asset }) {
@@ -129,25 +130,19 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
               <label style={{ display: "block", marginBottom: "6px", fontSize: "13px" }}>
                 Document Type
               </label>
-              <select
+              <CustomSelect
+                name="documentType"
+                placeholder="Select Document Type"
                 value={documentType}
-                onChange={(e) => setDocumentType(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="Invoice">Invoice</option>
-                <option value="LPO">LPO</option>
-                <option value="Warranty Certificate">Warranty Certificate</option>
-                <option value="AMC Contract">AMC Contract</option>
-                <option value="Other">Other</option>
-              </select>
+                onChange={(value) => setDocumentType(value)}
+                options={[
+                  { value: "Invoice", label: "Invoice" },
+                  { value: "LPO", label: "LPO" },
+                  { value: "Warranty Certificate", label: "Warranty Certificate" },
+                  { value: "AMC Contract", label: "AMC Contract" },
+                  { value: "Other", label: "Other" }
+                ]}
+              />
             </div>
 
             {/* File Drop Zone */}

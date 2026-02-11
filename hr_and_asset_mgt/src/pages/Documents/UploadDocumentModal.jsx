@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "../../style/UploadDocumentModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 import { getBranches, companyDocumentTypeService } from "../../services/masterService";
 import { toast } from "react-toastify";
@@ -82,67 +84,55 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
 
                         <div className="input-wrapper">
                             <label className="input-label">Company Document Type</label>
-                            <select
+                            <CustomSelect
                                 name="type"
+                                placeholder="Select Type"
                                 value={form.type}
-                                onChange={handleChange}
-                                style={{
-                                    width: "100%",
-                                    padding: "10px",
-                                    borderRadius: "8px",
-                                    border: "1px solid #d1d5db",
-                                    backgroundColor: "white",
-                                    fontSize: "14px",
-                                    height: "42px"
-                                }}
-                            >
-                                <option value="">Select Type</option>
-                                {docTypes.map(type => (
-                                    <option key={type.name} value={type.name}>{type.name}</option>
-                                ))}
-                            </select>
+                                onChange={(value) =>
+                                setForm(prev => ({ ...prev, type: value }))
+                                }
+                                options={docTypes.map(type => ({
+                                value: type.name,
+                                label: type.name
+                                }))}
+                            />
                         </div>
 
                         <div className="input-wrapper">
                             <label className="input-label">Location / Branch</label>
-                            <select
+                            <CustomSelect
                                 name="location"
+                                placeholder="Select Location"
                                 value={form.location}
-                                onChange={handleChange}
-                                style={{
-                                    width: "100%",
-                                    padding: "10px",
-                                    borderRadius: "8px",
-                                    border: "1px solid #d1d5db",
-                                    backgroundColor: "white",
-                                    fontSize: "14px",
-                                    height: "42px"
-                                }}
-                            >
-                                <option value="">Select Location</option>
-                                {branches.map(b => (
-                                    <option key={b.name} value={b.name}>{b.name}</option>
-                                ))}
-                            </select>
+                                onChange={(value) =>
+                                setForm(prev => ({ ...prev, location: value }))
+                                }
+                                options={branches.map(b => ({
+                                value: b.name,
+                                label: b.name
+                                }))}
+                            />
                         </div>
 
                         <div className="input-wrapper">
                             <label className="input-label">Issue Date (Optional)</label>
-                            <input
-                                name="issueDate"
-                                type="date"
+                            <CustomDatePicker
                                 value={form.issueDate}
-                                onChange={handleChange}
+                                placeholder="Select Issue Date"
+                                onChange={(date) =>
+                                setForm(prev => ({ ...prev, issueDate: date }))
+                                }
                             />
                         </div>
 
                         <div className="input-wrapper">
                             <label className="input-label">Expiry Date</label>
-                            <input
-                                name="expiryDate"
-                                type="date"
+                            <CustomDatePicker
                                 value={form.expiryDate}
-                                onChange={handleChange}
+                                placeholder="Select Expiry Date"
+                                onChange={(date) =>
+                                setForm(prev => ({ ...prev, expiryDate: date }))
+                                }
                             />
                         </div>
 

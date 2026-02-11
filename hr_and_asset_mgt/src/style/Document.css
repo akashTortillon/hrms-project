@@ -221,7 +221,8 @@
 
 /* Top Row */
 .filter-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 14px;
   align-items: center;
 }
@@ -250,7 +251,7 @@
 }
 
 /* Dropdowns */
-.filter-controls select {
+/* .filter-controls select {
   min-width: 160px;
   padding: 12px 14px;
   border-radius: 10px;
@@ -258,7 +259,7 @@
   background: #fff;
   font-size: 14px;
   cursor: pointer;
-}
+} */
 
 .filter-controls select:focus {
   outline: none;
@@ -302,6 +303,28 @@
   color: #2563eb;
   font-weight: 500;
 }
+
+
+@media (max-width: 768px) {
+  .filter-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  .filter-footer {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .view-toggle {
+    align-self: flex-end;
+  }
+}
+
 
 
 

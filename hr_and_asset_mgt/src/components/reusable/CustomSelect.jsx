@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import './CustomSelect.css';
 
 export default function CustomSelect({
-    options,
+    options = [],
     value,
     onChange,
     placeholder = 'Select...',

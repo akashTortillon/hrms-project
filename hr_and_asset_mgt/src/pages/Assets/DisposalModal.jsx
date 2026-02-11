@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import "../../style/AddEmployeeModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 
 export default function DisposalModal({ onClose, onDispose, asset }) {
@@ -101,20 +103,12 @@ export default function DisposalModal({ onClose, onDispose, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Disposal Date *
               </label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="disposalDate"
                 value={form.disposalDate}
+                placeholder="Select Disposal Date"
                 onChange={handleChange}
                 max={new Date().toISOString().split('T')[0]}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
               />
             </div>
 
@@ -123,27 +117,19 @@ export default function DisposalModal({ onClose, onDispose, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Disposal Method *
               </label>
-              <select
-                name="disposalMethod"
-                value={form.disposalMethod}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">-- Select Method --</option>
-                <option value="Sold">Sold</option>
-                <option value="Donated">Donated</option>
-                <option value="Scrapped">Scrapped</option>
-                <option value="Recycled">Recycled</option>
-                <option value="Other">Other</option>
-              </select>
+            <CustomSelect
+            name="disposalMethod"
+            placeholder=" Select Method "
+            value={form.disposalMethod}
+            onChange={(value) => setForm(prev => ({ ...prev, disposalMethod: value }))}
+            options={[
+              { value: "Sold", label: "Sold" },
+              { value: "Donated", label: "Donated" },
+              { value: "Scrapped", label: "Scrapped" },
+              { value: "Recycled", label: "Recycled" },
+              { value: "Other", label: "Other" }
+            ]}
+          />
             </div>
 
             {/* Disposal Value */}

@@ -177,7 +177,8 @@ import "../../style/AddEmployeeModal.css";
 import { getEmployees } from "../../services/employeeService.js";
 import { maintenanceShopService } from "../../services/masterService.js";
 import { getCurrentAssignment } from "../../services/assignmentService.js";
-
+import CustomSelect from "../../components/reusable/CustomSelect.jsx";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker.jsx";
 
 export default function ReturnAssetModal({ onClose, onReturn, asset }) {
   const [employees, setEmployees] = useState([]);
@@ -321,22 +322,15 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
                 Return To *
               </label>
               <div style={{ marginBottom: "10px" }}>
-                <select
-                  value={returnToType}
-                  onChange={(e) => setReturnToType(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                    backgroundColor: "white",
-                    fontSize: "14px",
-                    height: "42px"
-                  }}
-                >
-                  <option value="EMPLOYEE">Employee</option>
-                  <option value="STORE">Store</option>
-                </select>
+                <CustomSelect
+  value={returnToType}
+  placeholder="Select return type"
+  options={[
+    { value: "EMPLOYEE", label: "Employee" },
+    { value: "STORE", label: "Store" }
+  ]}
+  onChange={(value) => setReturnToType(value)}
+/>
               </div>
             </div>
 
@@ -345,26 +339,15 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
                 <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                   Select Employee *
                 </label>
-                <select
-                  value={selectedEmployee}
-                  onChange={(e) => setSelectedEmployee(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                    backgroundColor: "white",
-                    fontSize: "14px",
-                    height: "42px"
-                  }}
-                >
-                  <option value="">Choose an employee...</option>
-                  {employees.map(emp => (
-                    <option key={emp._id} value={emp._id}>
-                      {`${emp.name} (${emp.code}) - ${emp.department}`}
-                    </option>
-                  ))}
-                </select>
+                <CustomSelect
+      value={selectedEmployee}
+      placeholder="Choose an employee..."
+      options={employees.map(emp => ({
+        value: emp._id,
+        label: `${emp.name} (${emp.code}) - ${emp.department}`
+      }))}
+      onChange={(value) => setSelectedEmployee(value)}
+    />
               </div>
             )}
 
@@ -372,20 +355,12 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500" }}>
                 Return Date *
               </label>
-              <input
-                type="date"
-                value={returnDate}
-                onChange={(e) => setReturnDate(e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              />
+              <CustomDatePicker
+  value={returnDate}
+  onChange={(value) => setReturnDate(value)}
+  maxDate={new Date()}
+  placeholder="Select return date"
+/>
             </div>
 
             <div>
