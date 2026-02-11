@@ -55,10 +55,10 @@ const DocumentsGrid = ({ documents = [] }) => {
     </span>
   </div>
 
-  <div className="meta-row">
+  {/* <div className="meta-row">
     <span className="meta-label">Size</span>
     <span className="meta-value">{doc.size}</span>
-  </div>
+  </div> */}
 </div>
 
 {/* Divider */}

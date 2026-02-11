@@ -8,6 +8,7 @@ import { getMyRequests, withdrawRequest, downloadDocument } from "../../services
 import { toast } from "react-toastify";
 import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
+import CustomSelect from "../../components/reusable/CustomSelect.jsx";
 
 /* ----------------------------------
    ✅ STATUS TEXT HELPER (DYNAMIC)
@@ -337,29 +338,32 @@ export default function EmployeeRequests() {
           </div>
 
           {/* Request Type */}
-          <select
-            className="requests-select"
-            value={requestType}
-            onChange={(e) => setRequestType(e.target.value)}
-          >
-            <option value="All">All Request Types</option>
-            <option value="LEAVE">Leave</option>
-            <option value="SALARY">Salary</option>
-            <option value="DOCUMENT">Document</option>
-          </select>
-
+          <CustomSelect
+  className="requests-select"
+  value={requestType}
+  placeholder="All Request Types"
+  options={[
+    { value: "All", label: "All Request Types" },
+    { value: "LEAVE", label: "Leave" },
+    { value: "SALARY", label: "Salary" },
+    { value: "DOCUMENT", label: "Document" }
+  ]}
+  onChange={(value) => setRequestType(value)}
+/>
           {/* Status */}
-          <select
-            className="requests-select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="All">All Status</option>
-            <option value="PENDING">Pending</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-            <option value="COMPLETED">Completed</option>
-          </select>
+          <CustomSelect
+  className="requests-select"
+  value={status}
+  placeholder="All Status"
+  options={[
+    { value: "All", label: "All Status" },
+    { value: "PENDING", label: "Pending" },
+    { value: "APPROVED", label: "Approved" },
+    { value: "REJECTED", label: "Rejected" },
+    { value: "COMPLETED", label: "Completed" }
+  ]}
+  onChange={(value) => setStatus(value)}
+/>
 
 
         </div>
