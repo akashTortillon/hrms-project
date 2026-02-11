@@ -64,16 +64,47 @@ export default function CustomDatePicker({
         };
     }, [isOpen]);
 
+    // const updatePosition = () => {
+    //     if (buttonRef.current && isOpen) {
+    //         const rect = buttonRef.current.getBoundingClientRect();
+    //         setCoords({
+    //             top: rect.bottom + window.scrollY,
+    //             left: rect.left + window.scrollX,
+    //             width: rect.width,
+    //         });
+    //     }
+    // };
+
+
+
     const updatePosition = () => {
-        if (buttonRef.current && isOpen) {
-            const rect = buttonRef.current.getBoundingClientRect();
-            setCoords({
-                top: rect.bottom + window.scrollY,
-                left: rect.left + window.scrollX,
-                width: rect.width,
-            });
-        }
-    };
+    if (!buttonRef.current) return;
+
+    const rect = buttonRef.current.getBoundingClientRect();
+    const calendarHeight = 340; // estimated
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top;
+
+    // Decide direction
+    if (spaceBelow < calendarHeight && spaceAbove > calendarHeight) {
+        // Open ABOVE
+        top = rect.top - calendarHeight - 8;
+    } else {
+        // Open BELOW
+        top = rect.bottom + 8;
+    }
+
+    setCoords({
+        top: Math.max(8, Math.min(top, window.innerHeight - calendarHeight - 8)),
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+        width: rect.width,
+    });
+};
+
+
+
 
     const toggleOpen = () => {
         if (disabled) return;
@@ -156,13 +187,25 @@ export default function CustomDatePicker({
             </div>
 
             {isOpen && ReactDOM.createPortal(
+                // <div
+                //     className="custom-datepicker-portal"
+                //     ref={dropdownRef}
+                //     style={{
+                //         top: coords.top + 5,
+                //         left: coords.left,
+                //         minWidth: '300px' // Ensure minimum width for calendar
+                //     }}
+                // >
+
                 <div
                     className="custom-datepicker-portal"
                     ref={dropdownRef}
                     style={{
+                        position: "absolute",
                         top: coords.top + 5,
                         left: coords.left,
-                        minWidth: '300px' // Ensure minimum width for calendar
+                        width: Math.max(coords.width, 300),
+                        zIndex: 9999
                     }}
                 >
                     <div className="datepicker-header">

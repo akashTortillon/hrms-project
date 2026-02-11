@@ -27,9 +27,20 @@ export default function CustomSelect({
             }
         };
 
-        const handleScroll = () => {
-            if (isOpen) setIsOpen(false);
-        };
+        // const handleScroll = () => {
+        //     if (isOpen) setIsOpen(false);
+        // };
+
+        const handleScroll = (e) => {
+    if (
+        dropdownRef.current &&
+        dropdownRef.current.contains(e.target)
+    ) {
+        return; // Allow scrolling inside dropdown
+    }
+
+    if (isOpen) setIsOpen(false);
+};
 
         document.addEventListener('mousedown', handleClickOutside);
         window.addEventListener('scroll', handleScroll, true); // Capture scroll to close on scroll
@@ -62,15 +73,26 @@ export default function CustomSelect({
     const selectedOption = options.find(opt => opt.value === value);
 
     const dropdown = (
+        // <div
+        //     className="custom-select-dropdown-portal"
+        //     ref={dropdownRef}
+        //     style={{
+        //         top: coords.top,
+        //         left: coords.left,
+        //         width: coords.width,
+        //     }}
+        // >
         <div
-            className="custom-select-dropdown-portal"
-            ref={dropdownRef}
-            style={{
-                top: coords.top,
-                left: coords.left,
-                width: coords.width,
-            }}
-        >
+    className="custom-select-dropdown-portal"
+    ref={dropdownRef}
+    onWheel={(e) => e.stopPropagation()}
+    onTouchMove={(e) => e.stopPropagation()}
+    style={{
+        top: coords.top,
+        left: coords.left,
+        width: coords.width,
+    }}
+>
             {options.map((option) => (
                 <div
                     key={option.value}

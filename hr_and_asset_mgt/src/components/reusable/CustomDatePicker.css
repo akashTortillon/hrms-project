@@ -40,7 +40,7 @@
 
 /* Portal Overlay */
 .custom-datepicker-portal {
-    position: absolute;
+    position: fixed;
     background: white;
     border: 1px solid #e5e7eb;
     border-radius: 12px;

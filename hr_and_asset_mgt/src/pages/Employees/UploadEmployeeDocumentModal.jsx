@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { documentTypeService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css"; // Reuse existing styles
+import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 
 export default function UploadEmployeeDocumentModal({ onClose, onUpload, employeeId }) {
@@ -63,25 +65,16 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
                     <div className="modal-grid">
                         <div className="form-group">
                             <label>Document Type</label>
-                            <select
-                                name="documentType"
-                                value={form.documentType}
-                                onChange={handleChange}
-                                style={{
-                                    width: "100%",
-                                    padding: "10px",
-                                    borderRadius: "8px",
-                                    border: "1px solid #d1d5db",
-                                    backgroundColor: "white",
-                                    fontSize: "14px",
-                                    height: "42px"
-                                }}
-                            >
-                                <option value="">Select Type</option>
-                                {docTypes.map(dt => (
-                                    <option key={dt.name} value={dt.name}>{dt.name}</option>
-                                ))}
-                            </select>
+                            <CustomSelect
+                                    name="documentType"
+                                    value={form.documentType}
+                                    placeholder="Select Type"
+                                    onChange={(val) => setForm({ ...form, documentType: val })}
+                                    options={[
+                                        { value: "", label: "Select Type" },
+                                        ...docTypes.map(dt => ({ value: dt.name, label: dt.name }))
+                                    ]}
+                                    />
                         </div>
 
                         <div className="form-group">
@@ -91,20 +84,12 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
 
                         <div className="form-group">
                             <label>Expiry Date (Optional)</label>
-                            <input
-                                type="date"
+                            <CustomDatePicker
                                 name="expiryDate"
                                 value={form.expiryDate}
                                 onChange={handleChange}
-                                style={{
-                                    width: "100%",
-                                    padding: "10px",
-                                    borderRadius: "8px",
-                                    border: "1px solid #d1d5db",
-                                    fontSize: "14px",
-                                    height: "42px"
-                                }}
-                            />
+                                className="employees-datepicker"
+                                />
                         </div>
 
                         <div className="form-group">

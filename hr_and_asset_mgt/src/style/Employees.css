@@ -157,6 +157,95 @@
 
 
 
+/*------ tab view-----*/
+
+
+@media (max-width: 1024px) {
+
+  /* Stack filters vertically */
+  .employees-filters {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  /* Ensure all filter items stretch fully */
+  .employees-filters > * {
+    width: 100%;
+  }
+
+  /* Select fields full width */
+  .employees-select {
+    width: 100%;
+  }
+
+  /* Search full width */
+  .employees-search {
+    width: 100%;
+  }
+
+}
+
+
+/*------ tab view-----*/
+
+/*-----mobile view-----*/
+
+@media (max-width: 768px) {
+
+  /* Reduce padding for small screens */
+  .employees-filters-card {
+    padding: 12px;
+  }
+
+  /* Reduce gaps to avoid overflow */
+  .employees-filters {
+    gap: 12px;
+  }
+
+  /* Prevent viewport overflow */
+  .employees-header,
+  .employees-filters-card {
+    overflow-x: hidden;
+  }
+
+  /* Native select stability */
+  .employees-select {
+    max-width: 100%;
+  }
+
+}
+
+
+/*-----mobile view-----*/
+
+/*---- small mobile ----*/
+
+
+@media (max-width: 480px) {
+
+  .employees-title {
+    font-size: 18px;
+  }
+
+  .employees-subtitle {
+    font-size: 13px;
+  }
+
+  .employees-select,
+  .employees-search input {
+    font-size: 13px;
+  }
+
+}
+
+
+
+
+/*---- small mobile ----*/
+
+
+
+
 
 /* =========================
    EMPLOYEES TABLE CARD

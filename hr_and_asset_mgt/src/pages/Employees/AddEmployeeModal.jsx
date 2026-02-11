@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
+import CustomSelect from "../../components/reusable/CustomSelect";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
 
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
@@ -62,6 +64,13 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+
+  const handleSelectChange = (name, value) => {
+  handleChange({
+    target: { name, value }
+  });
+};
+
   const handleSubmit = () => {
     const { name, role, department, designation, contractType, email, phone, joinDate } = form;
 
@@ -93,73 +102,52 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
               <input name="name" placeholder="Enter Full Name" onChange={handleChange} />
             </div>
 
-            <div className="form-group">
+           <div className="form-group">
               <label>Role</label>
-              <select
-                name="role"
+              <CustomSelect
                 value={form.role}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Select Role</option>
-                {roles.map(r => (
-                  <option key={r.name} value={r.name}>{r.name}</option>
-                ))}
-              </select>
+                placeholder="Select Role"
+                onChange={(val) => handleSelectChange("role", val)}
+                options={[
+                  { value: "", label: "Select Role" },
+                  ...roles.map(r => ({
+                    value: r.name,
+                    label: r.name
+                  }))
+                ]}
+              />
             </div>
 
-            <div className="form-group">
-              <label>Department</label>
-              <select
-                name="department"
-                value={form.department}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Select Department</option>
-                {deptOptions.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
+              <div className="form-group">
+                <label>Department</label>
+                <CustomSelect
+                  value={form.department}
+                  placeholder="Select Department"
+                  onChange={(val) => handleSelectChange("department", val)}
+                  options={[
+                    { value: "", label: "Select Department" },
+                    ...deptOptions.map(dept => ({
+                      value: dept,
+                      label: dept
+                    }))
+                  ]}
+                />
+              </div>
 
             <div className="form-group">
               <label>Designation</label>
-              <select
-                name="designation"
+              <CustomSelect
                 value={form.designation}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Select Designation</option>
-                {designations.map(d => (
-                  <option key={d.name} value={d.name}>{d.name}</option>
-                ))}
-              </select>
+                placeholder="Select Designation"
+                onChange={(val) => handleSelectChange("designation", val)}
+                options={[
+                  { value: "", label: "Select Designation" },
+                  ...designations.map(d => ({
+                    value: d.name,
+                    label: d.name
+                  }))
+                ]}
+              />
             </div>
 
             <div className="form-group">
@@ -185,48 +173,32 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Status</label>
-              <select
-                name="status"
+              <CustomSelect
                 value={form.status || "Onboarding"}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="Onboarding">Onboarding</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="On Leave">On Leave</option>
-              </select>
+                onChange={(val) => handleSelectChange("status", val)}
+                options={[
+                  { value: "Onboarding", label: "Onboarding" },
+                  { value: "Active", label: "Active" },
+                  { value: "Inactive", label: "Inactive" },
+                  { value: "On Leave", label: "On Leave" }
+                ]}
+              />
             </div>
 
             <div className="form-group">
               <label>Shift</label>
-              <select
-                name="shift"
+              <CustomSelect
                 value={form.shift}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Select Shift</option>
-                {shifts.map(s => (
-                  <option key={s.name} value={s.name}>{s.name}</option>
-                ))}
-              </select>
+                placeholder="Select Shift"
+                onChange={(val) => handleSelectChange("shift", val)}
+                options={[
+                  { value: "", label: "Select Shift" },
+                  ...shifts.map(s => ({
+                    value: s.name,
+                    label: s.name
+                  }))
+                ]}
+              />
             </div>
 
             {/* Employment Details */}
@@ -236,43 +208,28 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Joining Date</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="joinDate"
                 value={form.joinDate}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                className="employees-datepicker"
               />
             </div>
 
             <div className="form-group">
               <label>Employee Type</label>
-              <select
-                name="contractType"
+              <CustomSelect
                 value={form.contractType}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Select Employee Type</option>
-                {contractTypes.map(t => (
-                  <option key={t.name} value={t.name}>{t.name}</option>
-                ))}
-              </select>
+                placeholder="Select Employee Type"
+                onChange={(val) => handleSelectChange("contractType", val)}
+                options={[
+                  { value: "", label: "Select Employee Type" },
+                  ...contractTypes.map(t => ({
+                    value: t.name,
+                    label: t.name
+                  }))
+                ]}
+              />
             </div>
 
             <div className="form-group">
@@ -292,41 +249,25 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Accommodation</label>
-              <select
-                name="accommodation"
+              <CustomSelect
                 value={form.accommodation}
-                onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="">Select Option</option>
-                <option value="Company Provided">Company Provided</option>
-                <option value="Not Provided">Not Provided</option>
-              </select>
+                placeholder="Select Option"
+                onChange={(val) => handleSelectChange("accommodation", val)}
+                options={[
+                  { value: "", label: "Select Option" },
+                  { value: "Company Provided", label: "Company Provided" },
+                  { value: "Not Provided", label: "Not Provided" }
+                ]}
+              />
             </div>
 
             <div className="form-group">
               <label>Visa Expiry</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="visaExpiry"
                 value={form.visaExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                className="employees-datepicker"
               />
             </div>
 
@@ -337,19 +278,11 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Date of Birth</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="dob"
                 value={form.dob}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                className="employees-datepicker"
               />
             </div>
 
@@ -370,37 +303,21 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
             <div className="form-group">
               <label>Passport Expiry</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="passportExpiry"
                 value={form.passportExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                className="employees-datepicker"
               />
             </div>
 
             <div className="form-group">
               <label>Emirates ID Expiry</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="emiratesIdExpiry"
                 value={form.emiratesIdExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                className="employees-datepicker"
               />
             </div>
 
