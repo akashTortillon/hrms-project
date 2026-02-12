@@ -5,6 +5,9 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
 import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
 import { toast } from "react-toastify";
+import CustomSelect from "../../components/reusable/CustomSelect.jsx";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker.jsx";
+
 
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
@@ -202,38 +205,27 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div className="form-row">
               <div>
                 <label>Leave Type</label>
-                <select
-                  name="leaveTypeId"
-                  value={leaveForm.leaveTypeId}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const selected = leaveTypes.find(t => t._id === val);
-                    if (selected) {
-                      setLeaveForm({
-                        ...leaveForm,
-                        leaveTypeId: selected._id,
-                        leaveType: selected.name,
-                        isPaid: selected.metadata?.isPaid !== false
-                      });
-                    }
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                    backgroundColor: "white",
-                    fontSize: "14px",
-                    height: "42px"
-                  }}
-                >
-                  <option value="" disabled>Select Leave Type</option>
-                  {leaveTypes.map(type => (
-                    <option key={type._id} value={type._id}>
-                      {`${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`}
-                    </option>
-                  ))}
-                </select>
+                <CustomSelect
+                    name="leaveTypeId"
+                    placeholder="Select Leave Type"
+                    value={leaveForm.leaveTypeId}
+                    options={leaveTypes.map(type => ({
+                      value: type._id,
+                      label: `${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`
+                    }))}
+                    onChange={(val) => {
+                      const selected = leaveTypes.find(t => t._id === val);
+                      if (selected) {
+                        setLeaveForm({
+                          ...leaveForm,
+                          leaveTypeId: selected._id,
+                          leaveType: selected.name,
+                          isPaid: selected.metadata?.isPaid !== false
+                        });
+                      }
+                    }}
+                  />
+
               </div>
 
               <div>
@@ -252,39 +244,25 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
             <div className="form-row">
               <div>
                 <label>From Date</label>
-                <input
-                  type="date"
+                <CustomDatePicker
+                  name="fromDate"
                   value={leaveForm.fromDate}
+                  placeholder="From Date"
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, fromDate: e.target.value })
                   }
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                    fontSize: "14px",
-                    height: "42px"
-                  }}
                 />
               </div>
 
               <div>
                 <label>To Date</label>
-                <input
-                  type="date"
+                <CustomDatePicker
+                  name="toDate"
                   value={leaveForm.toDate}
+                  placeholder="To Date"
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, toDate: e.target.value })
                   }
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                    fontSize: "14px",
-                    height: "42px"
-                  }}
                 />
               </div>
             </div>
@@ -346,29 +324,21 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
             <div>
               <label>Repayment Period (Months)</label>
-              <select
+              <CustomSelect
+                placeholder="Select Period"
                 value={salaryForm.repaymentPeriod}
-                onChange={(e) =>
+                options={[
+                  { value: "3 Months", label: "3 Months" },
+                  { value: "6 Months", label: "6 Months" },
+                  { value: "9 Months", label: "9 Months" }
+                ]}
+                onChange={(val) =>
                   setSalaryForm({
                     ...salaryForm,
-                    repaymentPeriod: e.target.value
+                    repaymentPeriod: val
                   })
                 }
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="" disabled>Select Period</option>
-                <option value="3 Months">3 Months</option>
-                <option value="6 Months">6 Months</option>
-                <option value="9 Months">9 Months</option>
-              </select>
+              />
             </div>
 
             <div>
@@ -388,32 +358,27 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {activeType === "document" && (
           <div className="leave-form">
             <div>
+              
               <label>Document Type</label>
-              <label>Document Type</label>
-              <select
-                value={documentForm.documentType}
-                onChange={(e) =>
-                  setDocumentForm({
-                    ...documentForm,
-                    documentType: e.target.value
-                  })
-                }
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="" disabled>Select Document Type</option>
-                <option value="Salary Certificate">Salary Certificate</option>
-                <option value="Experience Letter">Experience Letter</option>
-                <option value="Employment Letter">Employment Letter</option>
-                <option value="NOC (No Objection Certificate)">NOC (No Objection Certificate)</option>
-              </select>
+              <CustomSelect
+                  placeholder="Select Document Type"
+                  value={documentForm.documentType}
+                  options={[
+                    { value: "Salary Certificate", label: "Salary Certificate" },
+                    { value: "Experience Letter", label: "Experience Letter" },
+                    { value: "Employment Letter", label: "Employment Letter" },
+                    {
+                      value: "NOC (No Objection Certificate)",
+                      label: "NOC (No Objection Certificate)"
+                    }
+                  ]}
+                  onChange={(val) =>
+                    setDocumentForm({
+                      ...documentForm,
+                      documentType: val
+                    })
+                  }
+                />
             </div>
 
             <div>

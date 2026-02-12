@@ -70,8 +70,20 @@
 
 .payroll-header-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+
+/* Mobile */
+@media (max-width: 640px) {
+  .payroll-header-actions {
+    flex-direction: column;
+  }
+
+  .payroll-header-actions > div {
+    max-width: 100% !important;
+  }
 }
 
 /* Month dropdown */

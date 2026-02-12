@@ -334,7 +334,7 @@ export default function EmployeeRequests() {
 
           {/* Request Type */}
           <CustomSelect
-            className="requests-select"
+            // className="requests-select"
             value={requestType}
             placeholder="All Request Types"
             options={[
@@ -347,7 +347,7 @@ export default function EmployeeRequests() {
           />
           {/* Status */}
           <CustomSelect
-            className="requests-select"
+            // className="requests-select"
             value={status}
             placeholder="All Status"
             options={[

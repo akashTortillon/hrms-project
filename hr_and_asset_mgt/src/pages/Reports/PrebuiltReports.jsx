@@ -9,6 +9,9 @@ import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
 import ScheduledReports from "./ScheduledReports";
 import "../../style/Reports.css";
+import CustomDatePicker from "../../components/reusable/CustomDatePicker";
+import CustomSelect from "../../components/reusable/CustomSelect";
+
 
 const TABS = ["All", "HR", "Payroll", "Assets", "Documents", "Compliance"];
 
@@ -281,11 +284,7 @@ export default function PrebuiltReports() {
             <h4 className="report-title">Departmental Attendance</h4>
             <p className="report-desc">Summary of present, absent, and leave counts by department.</p>
 
-            {/* <div className="report-mode-toggle" style={{ marginTop: '15px' }}>
-              <button className={mode === "daily" ? "active" : ""} onClick={() => setMode("daily")}>Daily</button>
-              <button className={mode === "monthly" ? "active" : ""} onClick={() => setMode("monthly")}>Monthly</button>
-            </div> */}
-
+            
 
             <div
               className="report-mode-toggle"
@@ -349,19 +348,9 @@ export default function PrebuiltReports() {
             <div className="report-filters">
               {mode === "daily" ? (
                 <div style={{ width: '100%' }}>
-                  <input
-                    type="date"
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #d1d5db',
-                      backgroundColor: 'white',
-                      fontSize: '14px',
-                      boxSizing: 'border-box'
-                    }}
+                  <CustomDatePicker
                     value={date}
-                    max={today}
+                    maxDate={today}
                     onChange={(e) => setDate(e.target.value)}
                   />
                 </div>
@@ -369,41 +358,23 @@ export default function PrebuiltReports() {
                 <>
                   <>
                     <div style={{ width: '140px' }}>
-                      <select
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #d1d5db',
-                          backgroundColor: 'white',
-                          fontSize: '14px'
-                        }}
+                      <CustomSelect
                         value={month}
-                        onChange={(e) => setMonth(Number(e.target.value))}
-                      >
-                        {MONTHS.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => setMonth(val)}
+                        options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+                        placeholder="Month"
+                      />
                     </div>
                     <div style={{ width: '100px' }}>
-                      <select
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #d1d5db',
-                          backgroundColor: 'white',
-                          fontSize: '14px'
-                        }}
+                      <CustomSelect
                         value={year}
-                        onChange={(e) => setYear(Number(e.target.value))}
-                      >
-                        {[0, 1, 2, 3, 4].map(i => {
+                        onChange={(val) => setYear(val)}
+                        options={[0,1,2,3,4].map(i => {
                           const y = currentDate.getFullYear() - i;
-                          return <option key={y} value={y}>{y}</option>;
+                          return { value: y, label: y };
                         })}
-                      </select>
+                        placeholder="Year"
+                      />
                     </div>
                   </>
                 </>
@@ -426,22 +397,15 @@ export default function PrebuiltReports() {
             <p className="report-desc">Preview company and employee documents set to expire soon.</p>
             <div className="report-filters">
               <div style={{ width: '200px' }}>
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: 'white',
-                    fontSize: '14px'
-                  }}
+                <CustomSelect
                   value={days}
-                  onChange={(e) => setDays(Number(e.target.value))}
-                >
-                  <option value={30}>Next 30 Days</option>
-                  <option value={60}>Next 60 Days</option>
-                  <option value={90}>Next 90 Days</option>
-                </select>
+                  onChange={(val) => setDays(val)}
+                  options={[
+                    { value: 30, label: "Next 30 Days" },
+                    { value: 60, label: "Next 60 Days" },
+                    { value: 90, label: "Next 90 Days" }
+                  ]}
+                />
               </div>
             </div>
             <div className="report-actions">
@@ -459,7 +423,7 @@ export default function PrebuiltReports() {
             </div>
             <h4 className="report-title">Asset Depreciation Schedule</h4>
             <p className="report-desc">Valuation of company assets based on age and category rates.</p>
-            <div className="report-actions" style={{ marginTop: 'auto' }}>
+            <div className="report-actions" >
               <Button className="generate-btn" onClick={() => handleGenerate("depreciation")} disabled={loading}>Generate</Button>
             </div>
           </Card>
@@ -476,43 +440,23 @@ export default function PrebuiltReports() {
             <p className="report-desc">Total cost breakdown per department for the selected month.</p>
             <div className="report-filters">
               <div style={{ width: '140px' }}>
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: 'white',
-                    fontSize: '14px'
-                  }}
+                <CustomSelect
                   value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                >
-                  <option value="" disabled>Select Month</option>
-                  {MONTHS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
+                  onChange={(val) => setMonth(val)}
+                  options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+                  placeholder="Month"
+                />
               </div>
               <div style={{ width: '100px' }}>
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: 'white',
-                    fontSize: '14px'
-                  }}
+                <CustomSelect
                   value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                >
-                  <option value="" disabled>Year</option>
-                  {[0, 1, 2, 3, 4].map(i => {
+                  onChange={(val) => setYear(val)}
+                  options={[0,1,2,3,4].map(i => {
                     const y = currentDate.getFullYear() - i;
-                    return <option key={y} value={y}>{y}</option>;
+                    return { value: y, label: y };
                   })}
-                </select>
+                  placeholder="Year"
+                />
               </div>
             </div>
             <div className="report-actions">
@@ -534,43 +478,23 @@ export default function PrebuiltReports() {
 
             <div className="report-filters">
               <div style={{ width: '140px' }}>
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: 'white',
-                    fontSize: '14px'
-                  }}
+                <CustomSelect
                   value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                >
-                  <option value="" disabled>Select Month</option>
-                  {MONTHS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
+                  onChange={(val) => setMonth(val)}
+                  options={MONTHS.map(m => ({ value: m.value, label: m.label }))}
+                  placeholder="Month"
+                />
               </div>
               <div style={{ width: '100px' }}>
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: 'white',
-                    fontSize: '14px'
-                  }}
+                <CustomSelect
                   value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                >
-                  <option value="" disabled>Year</option>
-                  {[0, 1, 2, 3, 4].map(i => {
+                  onChange={(val) => setYear(val)}
+                  options={[0,1,2,3,4].map(i => {
                     const y = currentDate.getFullYear() - i;
-                    return <option key={y} value={y}>{y}</option>;
+                    return { value: y, label: y };
                   })}
-                </select>
+                  placeholder="Year"
+                />
               </div>
             </div>
 

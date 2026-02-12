@@ -159,10 +159,14 @@ prebuilt reports section*/
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 24px;
+  align-items: stretch;
 }
 
 /* Card */
 .report-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%; 
   padding: 18px;
   border-radius: 16px;
   transition: all 0.25s ease;
@@ -230,9 +234,11 @@ prebuilt reports section*/
 
 /* Actions */
 .report-actions {
+  margin-top: auto;
   display: flex;
   gap: 12px;
-  align-items: center;
+  
+  
 }
 
 .generate-btn {

@@ -56,7 +56,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
         ) : (
           <>
 
-            <SvgView name="leptis_logo" size={60} className="sidebar-brand-logo" />
+            <SvgView name="leptis_logo" size={30} className="sidebar-brand-logo" />
 
             <Button
               variant="light"

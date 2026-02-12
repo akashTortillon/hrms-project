@@ -1,10 +1,30 @@
 import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
-
+import CustomSelect from "../../components/reusable/CustomSelect";
 
 
 export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
+
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  
+  const monthOptions = months.map((m, idx) => ({
+  value: idx + 1,
+  label: m
+}));
+
+const yearOptions = [2024, 2025, 2026].map(y => ({
+  value: y,
+  label: y.toString()
+}));
+
+
+
   const cards = [
     {
       title: "Total Basic Salary",
@@ -28,10 +48,7 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
     },
   ];
 
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
+  
 
   return (
     <>
@@ -48,48 +65,22 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
           {/* Month Selector */}
           {/* Month Selector */}
           <div style={{ width: '100%', maxWidth: '200px' }}>
-            <select
-              className="payroll-month-select"
+           <CustomSelect
               value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                backgroundColor: "white",
-                fontSize: "14px",
-                height: "40px"
-              }}
-            >
-              <option value="" disabled>Select Month</option>
-              {months.map((m, idx) => (
-                <option key={idx} value={idx + 1}>{m}</option>
-              ))}
-            </select>
+              options={monthOptions}
+              placeholder="Select Month"
+              onChange={(val) => setMonth(Number(val))}
+            />
           </div>
 
           {/* Year Selector */}
           <div style={{ width: '100%', maxWidth: '120px', marginLeft: '10px' }}>
-            <select
-              className="payroll-month-select"
+            <CustomSelect
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                backgroundColor: "white",
-                fontSize: "14px",
-                height: "40px"
-              }}
-            >
-              <option value="" disabled>Select Year</option>
-              {[2024, 2025, 2026].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+              options={yearOptions}
+              placeholder="Select Year"
+              onChange={(val) => setYear(Number(val))}
+            />
           </div>
 
           <button className="payroll-export-btn" onClick={onExportWPS}>
