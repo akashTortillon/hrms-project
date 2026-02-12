@@ -175,11 +175,117 @@
 
 /* Dropdown focus */
 .requests-select:focus {
-  outline: none;
+  outline: none!important;
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
+
+
+/* ===== FILTERS SECTION ===== */
+.requests-filters-card {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.requests-filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Search box */
+.requests-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #fff;
+  height: 42px;
+}
+
+.requests-search input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 14px;
+  height: 100%;
+}
+
+.requests-search:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+/* ===== FIX DOUBLE OUTLINE ===== */
+
+/* Remove all outlines from CustomSelect wrapper and children */
+.requests-select,
+.requests-select *,
+.requests-select select,
+.requests-select button,
+.requests-select div {
+  outline: none !important;
+}
+
+/* Remove focus outline specifically */
+.requests-select *:focus,
+.requests-select *:focus-visible {
+  outline: none !important;
+}
+
+/* Remove any box-shadow that might look like an outline */
+.requests-select:focus {
+  box-shadow: none !important;
+}
+
+/* Apply focus styles only to the container when inner element is focused */
+.requests-select:focus-within {
+  outline: none !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) !important;
+}
+
+/* ===== RESPONSIVE - TABLET & MOBILE ===== */
+@media (max-width: 1024px) {
+  .requests-filters-card {
+    padding: 16px; /* Reduced padding on mobile */
+  }
+
+  .requests-filters {
+    grid-template-columns: 1fr; /* Stack vertically */
+    gap: 12px;
+  }
+
+  /* Ensure all filter items have same width */
+  .requests-search,
+  .requests-filters > div {
+    width: 100%;
+    max-width: 100%; /* Prevent overflow */
+  }
+
+  /* Ensure search input doesn't overflow */
+  .requests-search {
+    box-sizing: border-box;
+  }
+}
+
+/* Mobile specific */
+@media (max-width: 768px) {
+  .requests-filters-card {
+    padding: 12px;
+  }
+
+  .requests-filters {
+    gap: 10px;
+  }
+}
 
 
 

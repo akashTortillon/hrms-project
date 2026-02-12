@@ -1059,8 +1059,9 @@ export const downloadDocument = async (req, res) => {
       });
     }
 
-    // Check if file exists
-    if (!fs.existsSync(request.uploadedDocument)) {
+    // Check if file exists - use absolute path for reliability
+    const absolutePath = path.resolve(request.uploadedDocument);
+    if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({
         success: false,
         message: "Document file not found on server"

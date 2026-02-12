@@ -67,7 +67,9 @@ app.use("/api/employee-docs", employeeDocumentRoutes);
 // console.log("✅ Employee Document routes registered at /api/employee-docs");
 
 // Serve uploaded files statically
-app.use("/uploads", express.static("uploads"));
+import path from "path";
+const __dirname = path.resolve();
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // 🔹 Asset APIs
 app.use("/api/assets", assetRoutes);

@@ -207,11 +207,10 @@ export default function EmployeeRequests() {
     return "";
   };
 
-  // ✅ UPDATED: Use service function for download
   const handleDownloadDocument = async (requestId) => {
     try {
       const blob = await downloadDocument(requestId);
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(new Blob([blob]));
       const a = document.createElement('a');
       a.href = url;
       a.download = `document-${requestId}.pdf`;
@@ -222,11 +221,7 @@ export default function EmployeeRequests() {
       toast.success("Document downloaded successfully");
     } catch (error) {
       console.error('Download error:', error);
-      toast.error(
-        error.response?.data?.message ||
-        error.message ||
-        'Failed to download document'
-      );
+      toast.error('Failed to download document');
     }
   };
 
@@ -339,31 +334,31 @@ export default function EmployeeRequests() {
 
           {/* Request Type */}
           <CustomSelect
-  className="requests-select"
-  value={requestType}
-  placeholder="All Request Types"
-  options={[
-    { value: "All", label: "All Request Types" },
-    { value: "LEAVE", label: "Leave" },
-    { value: "SALARY", label: "Salary" },
-    { value: "DOCUMENT", label: "Document" }
-  ]}
-  onChange={(value) => setRequestType(value)}
-/>
+            className="requests-select"
+            value={requestType}
+            placeholder="All Request Types"
+            options={[
+              { value: "All", label: "All Request Types" },
+              { value: "LEAVE", label: "Leave" },
+              { value: "SALARY", label: "Salary" },
+              { value: "DOCUMENT", label: "Document" }
+            ]}
+            onChange={(value) => setRequestType(value)}
+          />
           {/* Status */}
           <CustomSelect
-  className="requests-select"
-  value={status}
-  placeholder="All Status"
-  options={[
-    { value: "All", label: "All Status" },
-    { value: "PENDING", label: "Pending" },
-    { value: "APPROVED", label: "Approved" },
-    { value: "REJECTED", label: "Rejected" },
-    { value: "COMPLETED", label: "Completed" }
-  ]}
-  onChange={(value) => setStatus(value)}
-/>
+            className="requests-select"
+            value={status}
+            placeholder="All Status"
+            options={[
+              { value: "All", label: "All Status" },
+              { value: "PENDING", label: "Pending" },
+              { value: "APPROVED", label: "Approved" },
+              { value: "REJECTED", label: "Rejected" },
+              { value: "COMPLETED", label: "Completed" }
+            ]}
+            onChange={(value) => setStatus(value)}
+          />
 
 
         </div>

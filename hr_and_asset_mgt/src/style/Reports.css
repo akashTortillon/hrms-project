@@ -169,6 +169,16 @@ prebuilt reports section*/
   cursor: pointer;
 }
 
+/*----*/
+
+.report-card-body {
+  flex: 1;
+}
+
+.report-card-footer {
+  margin-top: auto;
+}
+/*---*/
 .report-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
