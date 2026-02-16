@@ -252,11 +252,12 @@ body {
 }
 
 .sidebar-brand-logo {
-  width: 120px;
+  width: 44px;
   height: auto;
-  margin-top: 8px;
+  margin-top: 5px;
   margin-left: 8px;
   display: block;
+  /* border-radius: 5px; */
 }
 
 .sidebar.collapsed .sidebar-nav {

@@ -1,6 +1,6 @@
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Attendance.css";
-
+import CircleLoader from "../../components/reusable/CircleLoader.jsx";
 
 
 /* =========================
@@ -86,7 +86,10 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={daysInMonth + 2} className="text-center p-4">Loading...</td></tr>
+                <tr><td colSpan={daysInMonth + 2} className="text-center p-4">
+<div style={{ minHeight: "100vh", display: "flex" }}>
+      <CircleLoader size="medium" />
+    </div>                  </td></tr>
               ) : records.length === 0 ? (
                 <tr><td colSpan={daysInMonth + 2} className="text-center p-4">No records found</td></tr>
               ) : (
