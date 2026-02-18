@@ -1,0 +1,471 @@
+{
+    "info": {
+        "_postman_id": "mob-ile-only-api-col-lect-ion123",
+        "name": "HRMS Mobile API",
+        "description": "Dedicated API Collection for Mobile Application",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"admin@example.com\",\n    \"password\": \"password123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Refresh Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/refresh",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "refresh"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/logout",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "logout"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Admin View",
+            "item": [
+                {
+                    "name": "Mobile Dashboard Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/dashboard/mobile-stats",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "mobile-stats"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Pending Approvals (Dashboard)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/dashboard/pending-approvals",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "pending-approvals"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Requests",
+                    "item": [
+                        {
+                            "name": "Get My Requests (Employee Mobile)",
+                            "request": {
+                                "description": "Get logged-in user's requests. Supports filtering & pagination:\n- status: PENDING, APPROVED, REJECTED, WITHDRAWN\n- type: LEAVE, SALARY, DOCUMENT\n- page: 1\n- limit: 10\n\nResponse format: { success, count, limit, page, totalPages, totalDocs, data: [] }",
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/my?page=1&limit=20",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "my"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "20"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Pending Leaves (Mobile)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/admin/pending?type=LEAVE&status=PENDING&page=1&limit=20",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "admin",
+                                        "pending"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "type",
+                                            "value": "LEAVE"
+                                        },
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "20"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Pending Salary Advances (Mobile)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/admin/pending?type=SALARY&subType=salary_advance&status=PENDING&page=1&limit=20",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "admin",
+                                        "pending"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "type",
+                                            "value": "SALARY"
+                                        },
+                                        {
+                                            "key": "subType",
+                                            "value": "salary_advance"
+                                        },
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "20"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Pending Loans (Mobile)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/admin/pending?type=SALARY&subType=loan&status=PENDING&page=1&limit=20",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "admin",
+                                        "pending"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "type",
+                                            "value": "SALARY"
+                                        },
+                                        {
+                                            "key": "subType",
+                                            "value": "loan"
+                                        },
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "20"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Approve Request (Admin Mobile)",
+                            "request": {
+                                "description": "Approve a LEAVE or SALARY request. For SALARY (loans/advance), interestRate and repaymentPeriod can be optionally overridden.",
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"action\": \"APPROVE\",\n    \"interestRate\": 0,\n    \"repaymentPeriod\": 6\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/:requestId/action",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        ":requestId",
+                                        "action"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "requestId",
+                                            "value": "REQ123"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Reject Request (Admin Mobile)",
+                            "request": {
+                                "description": "Reject a LEAVE or SALARY request. Rejection reason is required.",
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"action\": \"REJECT\",\n    \"rejectionReason\": \"Policy violation\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/:requestId/action",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        ":requestId",
+                                        "action"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "requestId",
+                                            "value": "REQ123"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                },
+                {
+                    "name": "Attendance",
+                    "item": [
+                        {
+                            "name": "Get Daily Attendance (Mobile)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/attendance?date=2024-02-18&page=1&limit=10&status=&search=&department=&shift=",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "attendance"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "date",
+                                            "value": "2024-02-18"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "10"
+                                        },
+                                        {
+                                            "key": "status",
+                                            "value": ""
+                                        },
+                                        {
+                                            "key": "search",
+                                            "value": ""
+                                        },
+                                        {
+                                            "key": "department",
+                                            "value": ""
+                                        },
+                                        {
+                                            "key": "shift",
+                                            "value": ""
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:5000",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

@@ -783,7 +783,7 @@
                     "response": []
                 },
                 {
-                    "name": "Get Daily Attendance",
+                    "name": "Get Daily Attendance (Mobile)",
                     "request": {
                         "method": "GET",
                         "header": [
