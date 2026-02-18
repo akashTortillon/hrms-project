@@ -726,7 +726,7 @@ export const generatePayroll = async (req, res) => {
 
                     if (remaining <= 0) continue; // Should be handled by isFullyPaid, but safety check
 
-                    if (req.subType === "salary_advance") {
+                    if (req.details?.subType === "salary_advance") {
                         // Assumption: One-time deduction unless period > 1 specified
                         if (period > 1) {
                             const installment = totalPayable / period;
@@ -734,7 +734,7 @@ export const generatePayroll = async (req, res) => {
                         } else {
                             deductionAmount = remaining; // Full deduction
                         }
-                    } else if (req.subType === "loan") {
+                    } else if (req.details?.subType === "loan") {
                         const installment = totalPayable / period;
                         deductionAmount = Math.min(installment, remaining);
                     }
@@ -746,7 +746,7 @@ export const generatePayroll = async (req, res) => {
 
                     if (deductionAmount > 0) {
                         deductionList.push({
-                            name: req.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
+                            name: req.details?.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
                             amount: parseFloat(deductionAmount.toFixed(2)),
                             type: "AUTO",
                             meta: `Req ID: ${req.requestId} | Remaining: ${parseFloat((remaining - deductionAmount).toFixed(2))}`

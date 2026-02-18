@@ -563,7 +563,7 @@ const isLeave = (empId, dateStr, map) => {
  */
 export const getDailyAttendance = async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, page = 1, limit = 10, status, search } = req.query;
 
     if (!date) {
       return res.status(400).json({ message: "Date is required" });
@@ -580,14 +580,15 @@ export const getDailyAttendance = async (req, res) => {
       employeeQuery._id = req.user.employeeId;
     }
 
-    const employees = await Employee.find(employeeQuery).sort({ code: 1 }); // Only Active employees
+    // Fetch ALL relevant employees to calculate global stats correctly
+    const employees = await Employee.find(employeeQuery).sort({ code: 1 });
 
     // Get attendance for the date
     const attendanceRecords = await Attendance.find({ date })
       .populate("employee")
-      .populate("editedBy", "name"); // ✅ Populate Editor Name
+      .populate("editedBy", "name");
 
-    // Get Approved Leaves for this date (Consistent with Monthly View)
+    // Get Approved Leaves for this date
     const leaveMap = await getApprovedLeavesMap(employees);
 
     // Merge
@@ -596,15 +597,16 @@ export const getDailyAttendance = async (req, res) => {
       if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
     });
 
-    // 4️⃣ Merge employees + attendance + leave
-    const result = employees.map((emp) => {
+    // 4️⃣ Process Merge to get Full List with Status
+    let fullList = employees.map((emp) => {
       const record = attendanceMap[emp._id.toString()];
-      // Check if employee is strictly On Leave in their profile OR has an approved leave request
       const isProfileOnLeave = emp.status === "On Leave";
       const isRequestOnLeave = isLeave(emp._id, date, leaveMap);
 
+      const calculatedStatus = record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent");
+
       return {
-        _id: record?._id || null, // If null, no record yet
+        _id: record?._id || null,
         employeeId: emp._id,
         name: emp.name,
         code: emp.code,
@@ -613,13 +615,8 @@ export const getDailyAttendance = async (req, res) => {
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
         workHours: record?.workHours || "-",
-        // If record exists AND it's not Absent (or if record says On Leave), use its status.
-        // If record doesn't exist, calculate implied status.
-        // If profile says On Leave or Request Approved -> "On Leave"
-        // Else "Absent"
-        status: record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent"),
-        avatar: emp.avatar, // if available
-        // ✅ Return Edit Info
+        status: calculatedStatus,
+        avatar: emp.avatar,
         isManuallyEdited: record?.isManuallyEdited || false,
         editedBy: record?.editedBy || null,
         editedAt: record?.editedAt || null,
@@ -627,9 +624,67 @@ export const getDailyAttendance = async (req, res) => {
       };
     });
 
-    res.json(result);
+    // 5️⃣ Calculate Summary Stats (BEFORE filtering)
+    const summary = {
+      total: fullList.length,
+      Present: 0,
+      Absent: 0,
+      Late: 0,
+      "On Leave": 0
+    };
+
+    fullList.forEach(item => {
+      if (summary[item.status] !== undefined) {
+        summary[item.status]++;
+      } else {
+        // Fallback for any other status, though essentially it should be one of the above
+        summary[item.status] = (summary[item.status] || 0) + 1;
+      }
+    });
+
+    // 6️⃣ Apply Filters (Search, Status, Department, Shift)
+    if (search) {
+      const q = search.toLowerCase();
+      fullList = fullList.filter(item =>
+        item.name.toLowerCase().includes(q) ||
+        item.code.toLowerCase().includes(q) ||
+        item.department.toLowerCase().includes(q)
+      );
+    }
+
+    if (status) {
+      fullList = fullList.filter(item => item.status === status);
+    }
+
+    const { department, shift } = req.query;
+    if (department) {
+      fullList = fullList.filter(item => item.department === department);
+    }
+    if (shift) {
+      fullList = fullList.filter(item => item.shift === shift);
+    }
+
+    // 7️⃣ Pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
+    const paginatedData = fullList.slice(startIndex, endIndex);
+
+    // 8️⃣ Final Response
+    res.json({
+      summary,
+      pagination: {
+        current: pageNum,
+        limit: limitNum,
+        totalRecords: fullList.length,
+        totalPages: Math.ceil(fullList.length / limitNum)
+      },
+      data: paginatedData
+    });
+
   } catch (error) {
-    // console.error("Get daily attendance error:", error);
+    console.error("Get daily attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
