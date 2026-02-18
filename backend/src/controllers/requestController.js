@@ -899,7 +899,10 @@ export const updateRequestStatus = async (req, res) => {
     request.approvedBy = req.user.id;
     request.approvedAt = new Date();
 
-    if (action === "REJECT" && rejectionReason) {
+    if (action === "REJECT") {
+      if (!rejectionReason || !rejectionReason.trim()) {
+        return res.status(400).json({ success: false, message: "Rejection reason is required" });
+      }
       request.rejectionReason = rejectionReason;
     }
 
