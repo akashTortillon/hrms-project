@@ -590,6 +590,96 @@
                         }
                     },
                     "response": []
+                },
+                {
+                    "name": "Approve Request (Admin Mobile)",
+                    "request": {
+                        "description": "Approve a LEAVE or SALARY request. For SALARY (loans/advance), interestRate and repaymentPeriod can be optionally overridden.",
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"action\": \"APPROVE\",\n    \"interestRate\": 0,\n    \"repaymentPeriod\": 6\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/requests/:requestId/action",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "requests",
+                                ":requestId",
+                                "action"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "requestId",
+                                    "value": "REQ123"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Reject Request (Admin Mobile)",
+                    "request": {
+                        "description": "Reject a LEAVE or SALARY request. Rejection reason is required.",
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"action\": \"REJECT\",\n    \"rejectionReason\": \"Policy violation\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/requests/:requestId/action",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "requests",
+                                ":requestId",
+                                "action"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "requestId",
+                                    "value": "REQ123"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
                 }
             ]
         },
