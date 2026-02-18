@@ -780,27 +780,61 @@ export const withdrawRequest = async (req, res) => {
   }
 };
 
-// Fetch ALL requests for admin
+// Get all pending requests (ADMIN)
+// Get all pending requests (ADMIN)
 export const getPendingRequestsForAdmin = async (req, res) => {
   try {
-    const requests = await Request.find({})
-      .populate("userId", "name")
-      .populate("withdrawnBy", "name")
-      .populate("approvedBy", "name role")
-      .sort({ submittedAt: -1 });
+    const { type, subType, status, page = 1, limit = 10 } = req.query;
+
+    let query = {};
+
+    // Filter by Status (Default: ALL if not specified, to match legacy behavior)
+    if (status) {
+      query.status = status;
+    }
+
+    // Filter by Request Type (LEAVE, SALARY, DOCUMENT)
+    if (type) {
+      query.requestType = type.toUpperCase();
+    }
+
+    // Filter by Sub Type (salary_advance, loan)
+    if (subType) {
+      query.subType = subType;
+    }
+
+    // Pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const totalRequests = await Request.countDocuments(query);
+
+    const requests = await Request.find(query)
+      .populate("userId", "name email department avatar role") // Added more user details
+      .sort({ submittedAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
 
     res.status(200).json({
       success: true,
+      count: requests.length,
+      limit: limitNum,
+      page: pageNum,
+      totalPages: Math.ceil(totalRequests / limitNum),
+      totalDocs: totalRequests,
       data: requests
     });
   } catch (error) {
     // console.error("Admin pending requests error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch pending requests"
+      message: "Failed to fetch pending requests",
+      error: error.message
     });
   }
 };
+
 
 // Update request status (Approve/Reject) - For LEAVE and SALARY requests
 export const updateRequestStatus = async (req, res) => {

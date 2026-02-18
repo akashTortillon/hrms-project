@@ -46,9 +46,10 @@ export const withdrawRequest = async (requestId) => {
 };
 
 // Admin – get pending requests
-export const getPendingRequests = async () => {
+export const getPendingRequests = async (params = {}) => {
   const response = await api.get(
-    `${REQUEST_API}/admin/pending`
+    `${REQUEST_API}/admin/pending`,
+    { params }
   );
   return response.data;
 };

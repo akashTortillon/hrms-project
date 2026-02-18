@@ -90,12 +90,21 @@ export const getEmployeeVisaExpiries = async (req, res) => {
  */
 export const getPendingApprovals = async (req, res) => {
   try {
-    const totalPending = await Request.countDocuments({ status: "PENDING" });
-    const pending = await Request.find({ status: "PENDING" })
-      .populate("userId", "name")
-      .sort({ submittedAt: 1 })
-      .limit(5);
-    res.json({
+    const { type } = req.query;
+    let query = { status: "PENDING" };
+
+    if (type) {
+      // Allow flexible type matching (case-insensitive for convenience)
+      query.requestType = type.toUpperCase();
+    }
+
+    const totalPending = await Request.countDocuments(query);
+    const pending = await Request.find(query)
+      .populate("userId", "name avatar role") // Added avatar/role for better UI
+      .sort({ submittedAt: -1 }) // Show NEWEST first (usually better for "Pending")
+      .limit(3);
+
+    res.status(200).json({
       count: totalPending,
       data: pending
     });
@@ -287,7 +296,7 @@ export const getMobileDashboardStats = async (req, res) => {
     // 2. Get Pending Requests Count
     const pendingRequests = await Request.countDocuments({ status: "PENDING" });
 
-    res.json({
+    res.status(200).json({
       present: stats.present,
       late: stats.late,
       absent: stats.absent,

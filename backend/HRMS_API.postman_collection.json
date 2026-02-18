@@ -419,7 +419,43 @@
                     "response": []
                 },
                 {
-                    "name": "Get All Requests (Admin)",
+                    "name": "Get All Pending Requests (Admin)",
+                    "request": {
+                        "description": "Get all pending requests. Supports filtering and pagination:\n- type: LEAVE, SALARY, DOCUMENT\n- subType: salary_advance, loan\n- status: PENDING, APPROVED, REJECTED\n- page: Page number (default 1)\n- limit: Items per page (default 10)\n\nResponse format: { success, count, limit, page, totalPages, totalDocs, data: [] }",
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/requests/admin/pending?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "requests",
+                                "admin",
+                                "pending"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Pending Leaves (Mobile)",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -429,7 +465,7 @@
                             }
                         ],
                         "url": {
-                            "raw": "{{baseUrl}}/api/requests/admin/pending",
+                            "raw": "{{baseUrl}}/api/requests/admin/pending?type=LEAVE&status=PENDING&page=1&limit=20",
                             "host": [
                                 "{{baseUrl}}"
                             ],
@@ -438,6 +474,118 @@
                                 "requests",
                                 "admin",
                                 "pending"
+                            ],
+                            "query": [
+                                {
+                                    "key": "type",
+                                    "value": "LEAVE"
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "PENDING"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Pending Salary Advances (Mobile)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/requests/admin/pending?type=SALARY&subType=salary_advance&status=PENDING&page=1&limit=20",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "requests",
+                                "admin",
+                                "pending"
+                            ],
+                            "query": [
+                                {
+                                    "key": "type",
+                                    "value": "SALARY"
+                                },
+                                {
+                                    "key": "subType",
+                                    "value": "salary_advance"
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "PENDING"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Pending Loans (Mobile)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/requests/admin/pending?type=SALARY&subType=loan&status=PENDING&page=1&limit=20",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "requests",
+                                "admin",
+                                "pending"
+                            ],
+                            "query": [
+                                {
+                                    "key": "type",
+                                    "value": "SALARY"
+                                },
+                                {
+                                    "key": "subType",
+                                    "value": "loan"
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "PENDING"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
                             ]
                         }
                     },
@@ -700,7 +848,7 @@
                 {
                     "name": "Get Pending Approvals",
                     "request": {
-                        "description": "Returns pending requests with a count. Response: { count: number, data: [] }",
+                        "description": "Returns pending requests. Returns 'count' (total filtered) and 'data' (top 3 latest). Use query param 'type' to filter (LEAVE, SALARY, DOCUMENT).",
                         "method": "GET",
                         "header": [
                             {
@@ -709,7 +857,7 @@
                             }
                         ],
                         "url": {
-                            "raw": "{{baseUrl}}/api/dashboard/pending-approvals",
+                            "raw": "{{baseUrl}}/api/dashboard/pending-approvals?type=",
                             "host": [
                                 "{{baseUrl}}"
                             ],
@@ -717,6 +865,13 @@
                                 "api",
                                 "dashboard",
                                 "pending-approvals"
+                            ],
+                            "query": [
+                                {
+                                    "key": "type",
+                                    "value": "",
+                                    "description": "Optional: LEAVE, SALARY, DOCUMENT"
+                                }
                             ]
                         }
                     },
