@@ -642,7 +642,7 @@ export const getDailyAttendance = async (req, res) => {
       }
     });
 
-    // 6️⃣ Apply Filters (Search & Status)
+    // 6️⃣ Apply Filters (Search, Status, Department, Shift)
     if (search) {
       const q = search.toLowerCase();
       fullList = fullList.filter(item =>
@@ -654,6 +654,14 @@ export const getDailyAttendance = async (req, res) => {
 
     if (status) {
       fullList = fullList.filter(item => item.status === status);
+    }
+
+    const { department, shift } = req.query;
+    if (department) {
+      fullList = fullList.filter(item => item.department === department);
+    }
+    if (shift) {
+      fullList = fullList.filter(item => item.shift === shift);
     }
 
     // 7️⃣ Pagination

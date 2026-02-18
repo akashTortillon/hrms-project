@@ -6,6 +6,7 @@ import AttendanceStats from "./AttendanceStats";
 import AttendanceFilters from "./AttendanceFilters";
 import AttendanceTable from "./AttendanceTable";
 import ShiftManagement from "./AttendanceShift";
+import Pagination from "../../components/reusable/Pagination"; // ✅ New
 
 import AttendanceEditModal from "./AttendanceEditModal";
 import {
@@ -50,11 +51,18 @@ function Attendance() {
   const selectedDepartment = searchParams.get("department") || "";
   const selectedShift = searchParams.get("shift") || "";
 
+  // ✅ New Params
+  const page = parseInt(searchParams.get("page") || "1");
+  const limit = parseInt(searchParams.get("limit") || "10");
+  const selectedStatus = searchParams.get("status") || "";
+  const searchQuery = searchParams.get("search") || "";
+
   // Data State
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [monthlyRecords, setMonthlyRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ present: 0, late: 0, absent: 0, leave: 0, total: 0 });
+  const [paginationInfo, setPaginationInfo] = useState({ totalPages: 1, totalRecords: 0 }); // ✅ New
 
   // Filter Options State
   const [departments, setDepartments] = useState([]);
@@ -106,7 +114,42 @@ function Attendance() {
   const fetchAttendanceData = async () => {
     setLoading(true);
     try {
-      const data = await getDailyAttendance(selectedDate);
+      // ✅ Pass pagination and filters
+      const response = await getDailyAttendance({
+        date: selectedDate,
+        page,
+        limit,
+        status: selectedStatus,
+        search: searchQuery,
+        department: selectedDepartment,
+        shift: selectedShift
+      });
+
+      // Handle new response structure OR legacy structure
+      let data = [];
+      if (response.data) {
+        data = response.data;
+        // ✅ Update Stats from Backend Summary
+        if (response.summary) {
+          setStats({
+            present: response.summary.Present || 0,
+            late: response.summary.Late || 0,
+            absent: response.summary.Absent || 0,
+            leave: response.summary["On Leave"] || 0,
+            total: response.summary.total || 0
+          });
+        }
+        // ✅ Update Pagination Info
+        if (response.pagination) {
+          setPaginationInfo({
+            totalPages: response.pagination.totalPages,
+            totalRecords: response.pagination.totalRecords
+          });
+        }
+      } else if (Array.isArray(response)) {
+        // Fallback for legacy array response
+        data = response;
+      }
 
       const formattedRecords = data.map((record) => ({
         id: record._id || record.employeeId,
@@ -123,7 +166,6 @@ function Attendance() {
         statusClass: getStatusClass(record.status || "Present"),
         icon: "user",
         iconColor: "#6b7280",
-        // ✅ Include Edit Metadata
         isManuallyEdited: record.isManuallyEdited,
         editedBy: record.editedBy,
         editedAt: record.editedAt,
@@ -132,15 +174,17 @@ function Attendance() {
 
       setAttendanceRecords(formattedRecords);
 
-      // Calculate Stats
-      const newStats = { present: 0, late: 0, absent: 0, leave: 0, total: formattedRecords.length };
-      formattedRecords.forEach(r => {
-        if (r.status === 'Present') newStats.present++;
-        else if (r.status === 'Late') newStats.late++;
-        else if (r.status === 'Absent') newStats.absent++;
-        else if (r.status === 'On Leave') newStats.leave++;
-      });
-      setStats(newStats);
+      // Legacy Stat Calculation (Only if backend didn't provide summary)
+      if (!response.summary && Array.isArray(response)) {
+        const newStats = { present: 0, late: 0, absent: 0, leave: 0, total: formattedRecords.length };
+        formattedRecords.forEach(r => {
+          if (r.status === 'Present') newStats.present++;
+          else if (r.status === 'Late') newStats.late++;
+          else if (r.status === 'Absent') newStats.absent++;
+          else if (r.status === 'On Leave') newStats.leave++;
+        });
+        setStats(newStats);
+      }
 
     } catch (error) {
       console.error("Failed to fetch attendance data", error);
@@ -252,7 +296,7 @@ function Attendance() {
       <AttendanceFilters
         viewMode={viewMode}
         selectedDate={selectedDate}
-        onDateChange={(d) => updateParams({ date: d })}
+        onDateChange={(d) => updateParams({ date: d, page: 1 })}
         selectedMonth={selectedMonth}
         setSelectedMonth={(m) => updateParams({ month: m })}
         selectedYear={selectedYear}
@@ -260,16 +304,22 @@ function Attendance() {
         departments={isEmployee ? [] : departments}
         shifts={isEmployee ? [] : shifts}
         selectedDepartment={isEmployee ? "" : selectedDepartment}
-        setSelectedDepartment={(d) => updateParams({ department: d })}
+        setSelectedDepartment={(d) => updateParams({ department: d, page: 1 })}
         selectedShift={isEmployee ? "" : selectedShift}
-        setSelectedShift={(s) => updateParams({ shift: s })}
+        setSelectedShift={(s) => updateParams({ shift: s, page: 1 })}
         showDepartmentFilter={!isEmployee}
         showShiftFilter={!isEmployee}
+        // ✅ New Filter Props
+        searchQuery={searchQuery}
+        setSearchQuery={(q) => updateParams({ search: q, page: 1 })}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={(s) => updateParams({ status: s, page: 1 })}
       />
 
       <AttendanceTable
         date={selectedDate}
-        records={(viewMode === "day" ? attendanceRecords : monthlyRecords).filter(record => {
+        // ✅ Remove Client-Side Filter for Daily View, but Keep for Monthly
+        records={viewMode === "day" ? attendanceRecords : monthlyRecords.filter(record => {
           const deptMatch = !selectedDepartment || record.department === selectedDepartment;
           const shiftMatch = !selectedShift || record.shift === selectedShift;
           return deptMatch && shiftMatch;
@@ -281,6 +331,18 @@ function Attendance() {
         year={selectedYear}
         month={selectedMonth}
       />
+
+      {/* ✅ Pagination Controls (Only for Daily View) */}
+      {viewMode === "day" && (
+        <Pagination
+          currentPage={page}
+          totalPages={paginationInfo.totalPages}
+          onPageChange={(p) => updateParams({ page: p })}
+          totalRecords={paginationInfo.totalRecords}
+          limit={limit}
+          onLimitChange={(l) => updateParams({ limit: l, page: 1 })}
+        />
+      )}
 
       {/* <ShiftManagement /> */}
 
