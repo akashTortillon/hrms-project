@@ -1384,3 +1384,33 @@ export const getPaymentHistory = async (req, res) => {
         res.status(500).json({ message: "History Export failed" });
     }
 };
+
+/**
+ * GET MY PAYSLIPS (Logged-in Employee)
+ */
+export const getMyPayslips = async (req, res) => {
+    try {
+        const employeeId = req.user.employeeId;
+        if (!employeeId) {
+            return res.status(400).json({ message: "Employee ID not found for user" });
+        }
+
+        const { year, month } = req.query;
+        const query = { employee: employeeId, status: "PROCESSED" };
+
+        if (year) query.year = parseInt(year);
+        if (month) query.month = parseInt(month);
+
+        const payslips = await Payroll.find(query)
+            .sort({ year: -1, month: -1 })
+            .select("-attendanceSummary"); // Exclude heavy nested object if not needed for list, but maybe needed for detail view? 
+        // Better to keep it light for list, and maybe full detail for individual fetch? 
+        // For now, let's return everything as the user might want to see the details in the expanded view.
+        // .select(""); 
+
+        res.json(payslips);
+    } catch (error) {
+        // console.error(error);
+        res.status(500).json({ message: "Failed to fetch payslips" });
+    }
+};

@@ -454,18 +454,158 @@
                     ]
                 }
             ]
-        }
-    ],
-    "variable": [
-        {
-            "key": "baseUrl",
-            "value": "http://localhost:5000",
-            "type": "string"
         },
         {
-            "key": "token",
-            "value": "",
-            "type": "string"
-        }
-    ]
+            "name": "Employee View",
+            "item": [
+                {
+                    "name": "Employee Dashboard",
+                    "item": [
+                        {
+                            "name": "Check-in Status (Today)",
+                            "request": {
+                                "description": "Fetches today's attendance status for the logged-in employee. Used for the Check-in Status tile (On-Duty, Late, etc).",
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/attendance?date=2026-02-18",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "attendance"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "date",
+                                            "value": "2026-02-18",
+                                            "description": "YYYY-MM-DD (Today's Date)"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "My Monthly Score (History)",
+                            "request": {
+                                "description": "Fetches monthly attendance history for the logged-in employee to calculate stats like Present/Absent days.",
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/attendance/monthly?month=2&year=2026",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "attendance",
+                                        "monthly"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "month",
+                                            "value": "2"
+                                        },
+                                        {
+                                            "key": "year",
+                                            "value": "2026"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Payroll",
+                "item": [
+                    {
+                        "name": "Current Month Payslip",
+                        "request": {
+                            "method": "GET",
+                            "header": [
+                                {
+                                    "key": "Authorization",
+                                    "value": "Bearer {{token}}"
+                                }
+                            ],
+                            "url": {
+                                "raw": "{{baseUrl}}/api/payroll/my-payslips?month=2&year=2026",
+                                "host": [
+                                    "{{baseUrl}}"
+                                ],
+                                "path": [
+                                    "api",
+                                    "payroll",
+                                    "my-payslips"
+                                ],
+                                "query": [
+                                    {
+                                        "key": "month",
+                                        "value": "2"
+                                    },
+                                    {
+                                        "key": "year",
+                                        "value": "2026"
+                                    }
+                                ]
+                            }
+                        },
+                        "response": []
+                    },
+                    {
+                        "name": "All Payslips (History)",
+                        "request": {
+                            "method": "GET",
+                            "header": [
+                                {
+                                    "key": "Authorization",
+                                    "value": "Bearer {{token}}"
+                                }
+                            ],
+                            "url": {
+                                "raw": "{{baseUrl}}/api/payroll/my-payslips",
+                                "host": [
+                                    "{{baseUrl}}"
+                                ],
+                                "path": [
+                                    "api",
+                                    "payroll",
+                                    "my-payslips"
+                                ]
+                            }
+                        },
+                        "response": []
+                    }
+                ]
+            }
+        ]
+    }
+],
+"variable": [
+    {
+        "key": "baseUrl",
+        "value": "https://hrms-project-mob-test.onrender.com",
+        "type": "string"
+    },
+    {
+        "key": "token",
+        "value": "",
+        "type": "string"
+    }
+]
 }
