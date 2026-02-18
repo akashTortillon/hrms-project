@@ -17,12 +17,7 @@ const requestSchema = new mongoose.Schema(
       enum: ["LEAVE", "SALARY", "DOCUMENT"],
       required: true
     },
-    // ✅ NEW: SubType field for Salary Advance vs Loan
-    subType: {
-      type: String,
-      enum: ["salary_advance", "loan", null],
-      default: null
-    },
+
     status: {
       type: String,
       enum: ["PENDING", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],

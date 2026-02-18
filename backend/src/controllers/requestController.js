@@ -500,7 +500,9 @@ const generateRequestId = async () => {
 // ✅ UPDATED: Get request type label for emails
 const getRequestTypeLabel = (request) => {
   if (request.requestType === "SALARY") {
-    return request.subType === "loan" ? "Loan Application" : "Salary Advance";
+    // Check details.subType (fallback to root subType for legacy)
+    const type = request.details?.subType || request.subType;
+    return type === "loan" ? "Loan Application" : "Salary Advance";
   }
   return request.requestType;
 };
@@ -536,7 +538,8 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
     }
 
     // ✅ Dynamic subject based on subType
-    const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
+    const type = request.details?.subType || request.subType;
+    const requestLabel = type === "loan" ? "Loan Request" : "Salary Advance Request";
     const subject = `${requestLabel} Submitted – ${employeeUser.name}`;
 
     const html = `
@@ -573,7 +576,8 @@ const sendSalaryAdvanceApprovalEmail = async (request, employeeUser) => {
     }
 
     // ✅ Dynamic subject based on subType
-    const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
+    const type = request.details?.subType || request.subType;
+    const requestLabel = type === "loan" ? "Loan Request" : "Salary Advance Request";
     const subject = `${requestLabel} Approved`;
 
     const html = `
@@ -606,7 +610,8 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
     }
 
     // ✅ Dynamic subject based on subType
-    const requestLabel = request.subType === "loan" ? "Loan Request" : "Salary Advance Request";
+    const type = request.details?.subType || request.subType;
+    const requestLabel = type === "loan" ? "Loan Request" : "Salary Advance Request";
     const subject = `${requestLabel} Rejected`;
 
     const html = `
@@ -649,12 +654,22 @@ export const createRequest = async (req, res) => {
       });
     }
 
-    // ✅ Validate subType for SALARY requests
-    if (requestType === "SALARY" && subType && !["salary_advance", "loan"].includes(subType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid sub type for salary request"
-      });
+    // ✅ Standardized subType handling
+    if (requestType === "SALARY") {
+      // Logic: Prefer details.subType
+      const type = (details && details.subType) || subType || null;
+
+      if (!type || !["salary_advance", "loan"].includes(type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid sub type for salary request (must be 'salary_advance' or 'loan')"
+        });
+      }
+
+      // Ensure details has subType set (if it came from root body)
+      if (details && !details.subType) {
+        details.subType = type;
+      }
     }
 
     const requestId = await generateRequestId();
@@ -663,7 +678,7 @@ export const createRequest = async (req, res) => {
       userId,
       requestId,
       requestType,
-      subType: requestType === "SALARY" ? subType : null,
+      // Removed root subType
       details,
       status: "PENDING",
       submittedAt: new Date()
@@ -799,8 +814,12 @@ export const getPendingRequestsForAdmin = async (req, res) => {
     }
 
     // Filter by Sub Type (salary_advance, loan)
+    // Filter by Sub Type (salary_advance, loan)
     if (subType) {
-      query.subType = subType;
+      query.$or = [
+        { subType: subType },
+        { "details.subType": subType }
+      ];
     }
 
     // Pagination

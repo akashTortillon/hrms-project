@@ -47,7 +47,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
 
     if (!request) return null;
 
-    const isLoan = request.subType === 'loan';
+    const isLoan = request.details?.subType === 'loan';
     const typeLabel = isLoan ? "Loan" : "Salary Advance";
 
     // Footer Actions
