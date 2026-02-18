@@ -721,6 +721,31 @@
                         }
                     },
                     "response": []
+                },
+                {
+                    "name": "Get Mobile Stats",
+                    "request": {
+                        "description": "Returns stats for mobile app: present, late, absent, pendingRequests",
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/dashboard/mobile-stats",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "mobile-stats"
+                            ]
+                        }
+                    },
+                    "response": []
                 }
             ]
         },
