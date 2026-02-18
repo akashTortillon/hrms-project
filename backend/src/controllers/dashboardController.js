@@ -90,11 +90,15 @@ export const getEmployeeVisaExpiries = async (req, res) => {
  */
 export const getPendingApprovals = async (req, res) => {
   try {
+    const totalPending = await Request.countDocuments({ status: "PENDING" });
     const pending = await Request.find({ status: "PENDING" })
       .populate("userId", "name")
       .sort({ submittedAt: 1 })
       .limit(5);
-    res.json(pending);
+    res.json({
+      count: totalPending,
+      data: pending
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

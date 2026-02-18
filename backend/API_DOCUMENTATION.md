@@ -49,7 +49,7 @@ All protected routes require a Bearer Token in the `Authorization` header:
 | Method | Endpoint | Description | Payload / Params |
 | :--- | :--- | :--- | :--- |
 | **GET** | `/monthly` | Monthly Attendance | Query: `?month=1&year=2024` |
-| **GET** | `/` | Daily Attendance | `?date=YYYY-MM-DD` <br> `&page=1&limit=10` <br> `&status=Present` <br> `&search=Name` |
+| **GET** | `/` | Daily Attendance | `?date=YYYY-MM-DD` <br> `&page=1&limit=10` <br> `&status=Present` <br> `&search=Name` <br> `&department=IT` <br> `&shift=Morning` |
 | **POST** | `/mark` | Mark Attendance (Admin) | `{ "employeeId": "...", "date": "...", "status": "Present", "checkIn": "09:00", "checkOut": "18:00" }` |
 
 ## 6. Payroll (`/api/payroll`)
@@ -71,6 +71,7 @@ All protected routes require a Bearer Token in the `Authorization` header:
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | **GET** | `/summary` | Get admin dashboard summary statistics |
+| **GET** | `/pending-approvals` | Get Pending Approvals | Returns `{ count, data: [...] }` |
 
 ## 9. System Settings (`/api/system-settings`)
 

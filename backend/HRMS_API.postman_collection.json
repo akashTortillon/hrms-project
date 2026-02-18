@@ -555,7 +555,7 @@
                             }
                         ],
                         "url": {
-                            "raw": "{{baseUrl}}/api/attendance?date=2024-02-18&page=1&limit=10&status=&search=",
+                            "raw": "{{baseUrl}}/api/attendance?date=2024-02-18&page=1&limit=10&status=&search=&department=&shift=",
                             "host": [
                                 "{{baseUrl}}"
                             ],
@@ -582,6 +582,14 @@
                                 },
                                 {
                                     "key": "search",
+                                    "value": ""
+                                },
+                                {
+                                    "key": "department",
+                                    "value": ""
+                                },
+                                {
+                                    "key": "shift",
                                     "value": ""
                                 }
                             ]
@@ -684,6 +692,31 @@
                                 "api",
                                 "dashboard",
                                 "summary"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Pending Approvals",
+                    "request": {
+                        "description": "Returns pending requests with a count. Response: { count: number, data: [] }",
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/dashboard/pending-approvals",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "pending-approvals"
                             ]
                         }
                     },
