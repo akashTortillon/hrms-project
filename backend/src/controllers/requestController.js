@@ -717,10 +717,21 @@ export const createRequest = async (req, res) => {
 export const getMyRequests = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { type, status } = req.query;
+    const { type, status, subType } = req.query;
+
+    console.log("getMyRequests hit:", { userId, query: req.query }); // DEBUG LOG
 
     const query = { userId: userId };
     if (type) query.requestType = type;
+
+    if (status) query.status = status;
+    if (subType) {
+      if (type === 'SALARY') query["details.subType"] = subType;
+      // Also check root subType just in case of inconsistent data? 
+      // But query["$or"] = [{subType: subType}, {"details.subType": subType}] might be safer?
+      // For now, let's just target details.subType as per our finding.
+      else query["details.subType"] = subType;
+    }
 
     // ✅ If type is SALARY (Loans), filter by status if provided or default to meaningful ones?
     // User asked to hide rejected/pending. So strict filter? 
@@ -730,16 +741,30 @@ export const getMyRequests = async (req, res) => {
     // We can rely on frontend sending ?status=APPROVED or we can filtering here.
     // Let's support the `status` query param first, then check frontend.
 
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const total = await Request.countDocuments(query);
+
     const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .sort({ submittedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .select("-__v");
 
     return res.status(200).json({
       success: true,
       message: "Requests fetched successfully",
-      data: requests
+      data: requests,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     // console.error("Get my requests error:", error);

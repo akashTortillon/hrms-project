@@ -82,8 +82,8 @@ const router = express.Router();
 router.post("/", protect, createRequest);
 
 // Get logged-in user's requests
-// GET /api/requests/my
-router.get("/my", protect, getMyRequests);
+// GET /api/requests/my-requests
+router.get("/my-requests", protect, getMyRequests);
 
 // Withdraw a pending request
 // PATCH /api/requests/:id/withdraw
