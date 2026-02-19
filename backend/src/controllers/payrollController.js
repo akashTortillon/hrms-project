@@ -8,6 +8,14 @@ import mongoose from "mongoose";
 import SystemSettings from "../models/systemSettingsModel.js";
 import * as XLSX from "xlsx";
 import PayrollAudit from "../models/payrollAuditModel.js";
+import PDFDocument from "pdfkit";
+import { PDFDocument as PDFLibDocument } from "pdf-lib";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- HELPER: Calculate Attendance Stats ---
 // --- HELPER: Parse "8h 45m" to decimal hours ---
@@ -1412,5 +1420,223 @@ export const getMyPayslips = async (req, res) => {
     } catch (error) {
         // console.error(error);
         res.status(500).json({ message: "Failed to fetch payslips" });
+    }
+};
+
+// --- API: Download Payslip PDF (Mobile) ---
+export const downloadPayslip = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const payroll = await Payroll.findById(id).populate("employee", "name code designation department");
+
+        if (!payroll) {
+            return res.status(404).json({ message: "Payslip not found" });
+        }
+
+        // Verify Ownership (unless Admin)
+        // Assuming req.user is populated by protect middleware
+        if (req.user.role !== "Admin" && req.user.employeeId) {
+            if (payroll.employee._id.toString() !== req.user.employeeId.toString()) {
+                return res.status(403).json({ message: "Unauthorized access to this payslip" });
+            }
+        }
+
+        const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year } = payroll;
+        const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+        const periodStr = `${monthName} ${year}`;
+        const totalAllowances = payroll.totalAllowances || 0;
+        const totalDeductions = payroll.totalDeductions || 0;
+        const grossEarnings = basicSalary + totalAllowances;
+
+        // 1. Generate Content PDF using PDFKit
+        const doc = new PDFDocument({ size: "A4", margin: 50 });
+        const buffers = [];
+        doc.on("data", buffers.push.bind(buffers));
+
+        // Wait for doc to end
+        const docEndPromise = new Promise((resolve) => {
+            doc.on("end", () => {
+                const pdfData = Buffer.concat(buffers);
+                resolve(pdfData);
+            });
+        });
+
+        // --- PDF Generated Content ---
+        const pageWidth = 595.28; // A4 width in points
+        const centerX = pageWidth / 2;
+
+        // Title
+        doc.fontSize(16).fillColor("#404040").text("PAYSLIP", centerX - 50, 155, { align: "center", width: 100 }); // Moved down to Y=155pt (approx 55mm)
+        // doc.text(text, x, y, options)
+
+        doc.fontSize(12).fillColor("#646464").text(`Period: ${periodStr}`, centerX - 100, 175, { align: "center", width: 200 }); // Y=175pt (approx 61mm)
+        // doc.moveDown(2); // Since we set exact Y, we don't need this moveDown
+
+        // Employee Details Box, use Y to continue flow but reset after explicit positioning
+        doc.y = 200; // Reset Y to 200pt (approx 70mm)
+        const startY = doc.y;
+        doc.rect(40, startY, pageWidth - 80, 70).fill("#FAFAFA");
+        doc.fillColor("#000000");
+
+        // Left Column
+        doc.fontSize(10).font("Helvetica");
+        doc.text("Employee Name:", 50, startY + 10);
+        doc.font("Helvetica-Bold").text(employee?.name || "Unknown", 140, startY + 10);
+
+        doc.font("Helvetica").text("Designation:", 50, startY + 30);
+        doc.font("Helvetica-Bold").text(employee?.designation || "N/A", 140, startY + 30);
+
+        // Right Column
+        const rightColX = centerX + 10;
+        doc.font("Helvetica").text("Employee ID:", rightColX, startY + 10);
+        doc.font("Helvetica-Bold").text(employee?.code || "N/A", rightColX + 80, startY + 10);
+
+        doc.font("Helvetica").text("Department:", rightColX, startY + 30);
+        doc.font("Helvetica-Bold").text(employee?.department || "N/A", rightColX + 80, startY + 30);
+
+        doc.moveDown(4);
+
+        // Attendance Summary Table
+        const attendanceY = doc.y + 20;
+        doc.font("Helvetica-Bold").fontSize(11).text("Attendance Summary", 40, attendanceY);
+        doc.moveDown(0.5);
+
+        // Simple Table Header
+        const tableTop = doc.y;
+        doc.rect(40, tableTop, pageWidth - 80, 20).fill("#F0F0F0");
+        doc.fillColor("#323232").fontSize(9);
+        doc.text("Total Days", 50, tableTop + 6);
+        doc.text("Present", 150, tableTop + 6);
+        doc.text("Absent", 250, tableTop + 6);
+        doc.text("Late", 350, tableTop + 6); // Late days count
+        doc.text("Overtime (Hrs)", 450, tableTop + 6);
+
+        // Table Body
+        doc.rect(40, tableTop + 20, pageWidth - 80, 20).stroke();
+        doc.fillColor("#000000").font("Helvetica");
+        doc.text(String(attendanceSummary?.totalDays || 30), 50, tableTop + 26);
+        doc.text(String(attendanceSummary?.daysPresent || 0), 150, tableTop + 26);
+        doc.text(String(attendanceSummary?.daysAbsent || 0), 250, tableTop + 26);
+        doc.text(String(attendanceSummary?.late || 0), 350, tableTop + 26);
+        doc.text(String(attendanceSummary?.overtimeHours || 0), 450, tableTop + 26);
+
+        doc.moveDown(3);
+
+        // Earnings & Deductions
+        const salaryY = doc.y + 20;
+
+        // Headers
+        doc.rect(40, salaryY, (pageWidth - 80) / 2, 20).fill("#182d54");
+        doc.rect(centerX, salaryY, (pageWidth - 80) / 2, 20).fill("#182d54");
+
+        doc.fillColor("#FFFFFF").font("Helvetica-Bold");
+        doc.text("Earnings", 50, salaryY + 6);
+        doc.text("Amount (AED)", centerX - 10, salaryY + 6, { align: "right", width: centerX - 60 });
+
+        doc.text("Deductions", centerX + 10, salaryY + 6);
+        doc.text("Amount (AED)", pageWidth - 50, salaryY + 6, { align: "right", width: centerX - 60 });
+
+        // Rows
+        let currentY = salaryY + 20;
+        doc.fillColor("#000000").font("Helvetica");
+
+        const earnings = [
+            { name: "Basic Salary", amount: basicSalary },
+            ...(allowances || []).map(a => ({ name: a.name, amount: a.amount }))
+        ];
+        const deductionList = deductions || [];
+        const maxRows = Math.max(earnings.length, deductionList.length);
+
+        for (let i = 0; i < maxRows; i++) {
+            const earn = earnings[i];
+            const ded = deductionList[i];
+
+            if (earn) {
+                doc.text(earn.name, 50, currentY + 6);
+                doc.text(earn.amount.toFixed(2), centerX - 10, currentY + 6, { align: "right", width: centerX - 60 });
+            }
+            if (ded) {
+                doc.text(ded.name, centerX + 10, currentY + 6);
+                doc.text(ded.amount.toFixed(2), pageWidth - 50, currentY + 6, { align: "right", width: centerX - 60 });
+            }
+
+            // Draw line
+            doc.moveTo(40, currentY + 20).lineTo(pageWidth - 40, currentY + 20).strokeColor("#E5E7EB").stroke();
+            currentY += 20;
+        }
+
+        // Totals Row
+        doc.rect(40, currentY, (pageWidth - 80), 25).fill("#F3F4F6");
+        doc.fillColor("#000000").font("Helvetica-Bold");
+
+        doc.text("Total Earnings", 50, currentY + 8);
+        doc.text(grossEarnings.toFixed(2), centerX - 10, currentY + 8, { align: "right", width: centerX - 60 });
+
+        doc.text("Total Deductions", centerX + 10, currentY + 8);
+        doc.text(totalDeductions.toFixed(2), pageWidth - 50, currentY + 8, { align: "right", width: centerX - 60 });
+
+        currentY += 35;
+
+        // Net Pay
+        doc.rect(40, currentY, pageWidth - 80, 30).fill("#F0FDF4"); // Light Green
+        doc.rect(40, currentY, pageWidth - 80, 30).strokeColor("#16A34A").lineWidth(2).stroke();
+
+        doc.fillColor("#15803D").font("Helvetica-Bold").fontSize(14);
+        doc.text("NET SALARY PAYABLE", 60, currentY + 8);
+        doc.text(`${netSalary.toFixed(2)} AED`, pageWidth - 200, currentY + 8, { align: "right", width: 150 });
+
+        // Footer / Signatures
+        const footerY = currentY + 60;
+        doc.lineWidth(1).strokeColor("#374151");
+
+        doc.moveTo(60, footerY).lineTo(200, footerY).stroke();
+        doc.fontSize(10).fillColor("#6B7280").text("Employee Signature", 60, footerY + 5, { width: 140, align: "center" });
+
+        doc.moveTo(pageWidth - 200, footerY).lineTo(pageWidth - 60, footerY).stroke();
+        doc.text("Employer Signature", pageWidth - 200, footerY + 5, { width: 140, align: "center" });
+
+        doc.end();
+
+        const contentPdfBuffer = await docEndPromise;
+
+        // 2. Setup Template & Merge using pdf-lib
+        const templatePath = path.join(__dirname, "../assets/templates/Letter_Head_-_Group_2023.pdf");
+
+        // Check if template exists
+        if (!fs.existsSync(templatePath)) {
+            // Fallback: Return raw content PDF if template missing
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
+            return res.send(contentPdfBuffer);
+        }
+
+        const templateBytes = fs.readFileSync(templatePath);
+        const templatePdf = await PDFLibDocument.load(templateBytes);
+        const contentPdf = await PDFLibDocument.load(contentPdfBuffer);
+
+        // Embed content page
+        const [contentPage] = await templatePdf.embedPdf(contentPdf, [0]);
+        const firstPage = templatePdf.getPages()[0];
+        const { width, height } = firstPage.getSize();
+
+        // Overlay
+        firstPage.drawPage(contentPage, {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        });
+
+        // Serialize
+        const pdfBytes = await templatePdf.save();
+        const finalBuffer = Buffer.from(pdfBytes);
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
+        res.send(finalBuffer);
+
+    } catch (error) {
+        // console.error(error);
+        res.status(500).json({ message: "PDF Generation Failed: " + error.message });
     }
 };

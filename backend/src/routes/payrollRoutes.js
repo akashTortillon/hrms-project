@@ -1,6 +1,6 @@
 
 import express from "express";
-import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, getPayrollAuditLogs, getMyPayslips } from "../controllers/payrollController.js";
+import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, getPayrollAuditLogs, getMyPayslips, downloadPayslip } from "../controllers/payrollController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -9,6 +9,7 @@ router.use(protect);
 
 // ✅ Employee Self-Service Route (Accessible to all authenticated users)
 router.get("/my-payslips", getMyPayslips);
+router.get("/download/:id", downloadPayslip); // ✅ NEW: Download Payslip PDF
 
 // 🔒 Admin Routes (Require MANAGE_PAYROLL)
 router.use(hasPermission("MANAGE_PAYROLL"));

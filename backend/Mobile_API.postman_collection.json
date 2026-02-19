@@ -589,6 +589,38 @@
                                 }
                             },
                             "response": []
+                        },
+                        {
+                            "name": "Download Payslip PDF",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/payroll/download/:id",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "payroll",
+                                        "download",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "PAYROLL_ID_HERE"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
                         }
                     ]
                 },
