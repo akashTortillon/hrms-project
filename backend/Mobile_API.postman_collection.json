@@ -527,85 +527,229 @@
                             },
                             "response": []
                         }
-                    }
-                ]
-            },
-            {
-                "name": "Payroll",
-                "item": [
-                    {
-                        "name": "Current Month Payslip",
-                        "request": {
-                            "method": "GET",
-                            "header": [
-                                {
-                                    "key": "Authorization",
-                                    "value": "Bearer {{token}}"
-                                }
-                            ],
-                            "url": {
-                                "raw": "{{baseUrl}}/api/payroll/my-payslips?month=2&year=2026",
-                                "host": [
-                                    "{{baseUrl}}"
-                                ],
-                                "path": [
-                                    "api",
-                                    "payroll",
-                                    "my-payslips"
-                                ],
-                                "query": [
+                    ]
+                },
+                {
+                    "name": "Payroll",
+                    "item": [
+                        {
+                            "name": "Current Month Payslip",
+                            "request": {
+                                "method": "GET",
+                                "header": [
                                     {
-                                        "key": "month",
-                                        "value": "2"
-                                    },
-                                    {
-                                        "key": "year",
-                                        "value": "2026"
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
                                     }
-                                ]
-                            }
-                        },
-                        "response": []
-                    },
-                    {
-                        "name": "All Payslips (History)",
-                        "request": {
-                            "method": "GET",
-                            "header": [
-                                {
-                                    "key": "Authorization",
-                                    "value": "Bearer {{token}}"
-                                }
-                            ],
-                            "url": {
-                                "raw": "{{baseUrl}}/api/payroll/my-payslips",
-                                "host": [
-                                    "{{baseUrl}}"
                                 ],
-                                "path": [
-                                    "api",
-                                    "payroll",
-                                    "my-payslips"
-                                ]
-                            }
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/payroll/my-payslips?month=2&year=2026",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "payroll",
+                                        "my-payslips"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "month",
+                                            "value": "2"
+                                        },
+                                        {
+                                            "key": "year",
+                                            "value": "2026"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
                         },
-                        "response": []
-                    }
-                ]
-            }
-        ]
-    }
-],
-"variable": [
-    {
-        "key": "baseUrl",
-        "value": "https://hrms-project-mob-test.onrender.com",
-        "type": "string"
-    },
-    {
-        "key": "token",
-        "value": "",
-        "type": "string"
-    }
-]
+                        {
+                            "name": "All Payslips (History)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/payroll/my-payslips",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "payroll",
+                                        "my-payslips"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                },
+                {
+                    "name": "Requests",
+                    "item": [
+                        {
+                            "name": "My Pending Requests (Dashboard)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/my-requests?status=PENDING",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "my-requests"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "My Leave Requests",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/my-requests?status=PENDING&type=LEAVE",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "my-requests"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "type",
+                                            "value": "LEAVE"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "My Salary Advance Requests",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/my-requests?status=PENDING&type=SALARY&subType=salary_advance",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "my-requests"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "type",
+                                            "value": "SALARY"
+                                        },
+                                        {
+                                            "key": "subType",
+                                            "value": "salary_advance"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "My Loan Requests",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests/my-requests?status=PENDING&type=SALARY&subType=loan",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests",
+                                        "my-requests"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "type",
+                                            "value": "SALARY"
+                                        },
+                                        {
+                                            "key": "subType",
+                                            "value": "loan"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:5000",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        }
+    ]
 }

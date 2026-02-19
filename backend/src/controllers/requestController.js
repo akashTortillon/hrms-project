@@ -717,10 +717,21 @@ export const createRequest = async (req, res) => {
 export const getMyRequests = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { type, status } = req.query;
+    const { type, status, subType } = req.query;
+
+    console.log("getMyRequests hit:", { userId, query: req.query }); // DEBUG LOG
 
     const query = { userId: userId };
     if (type) query.requestType = type;
+
+    if (status) query.status = status;
+    if (subType) {
+      if (type === 'SALARY') query["details.subType"] = subType;
+      // Also check root subType just in case of inconsistent data? 
+      // But query["$or"] = [{subType: subType}, {"details.subType": subType}] might be safer?
+      // For now, let's just target details.subType as per our finding.
+      else query["details.subType"] = subType;
+    }
 
     // ✅ If type is SALARY (Loans), filter by status if provided or default to meaningful ones?
     // User asked to hide rejected/pending. So strict filter? 
