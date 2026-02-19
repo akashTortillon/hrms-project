@@ -741,16 +741,30 @@ export const getMyRequests = async (req, res) => {
     // We can rely on frontend sending ?status=APPROVED or we can filtering here.
     // Let's support the `status` query param first, then check frontend.
 
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const total = await Request.countDocuments(query);
+
     const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .sort({ submittedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .select("-__v");
 
     return res.status(200).json({
       success: true,
       message: "Requests fetched successfully",
-      data: requests
+      data: requests,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     // console.error("Get my requests error:", error);

@@ -638,7 +638,7 @@
                                     }
                                 ],
                                 "url": {
-                                    "raw": "{{baseUrl}}/api/requests/my-requests?status=PENDING",
+                                    "raw": "{{baseUrl}}/api/requests/my-requests?status=PENDING&page=1&limit=10",
                                     "host": [
                                         "{{baseUrl}}"
                                     ],
@@ -651,6 +651,14 @@
                                         {
                                             "key": "status",
                                             "value": "PENDING"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "10"
                                         }
                                     ]
                                 }
@@ -685,6 +693,14 @@
                                         {
                                             "key": "type",
                                             "value": "LEAVE"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "10"
                                         }
                                     ]
                                 }
@@ -723,6 +739,14 @@
                                         {
                                             "key": "subType",
                                             "value": "salary_advance"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "10"
                                         }
                                     ]
                                 }
@@ -761,6 +785,14 @@
                                         {
                                             "key": "subType",
                                             "value": "loan"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "limit",
+                                            "value": "10"
                                         }
                                     ]
                                 }
