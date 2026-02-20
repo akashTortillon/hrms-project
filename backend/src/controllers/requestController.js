@@ -688,15 +688,15 @@ export const createRequest = async (req, res) => {
     const employeeUser = await User.findById(userId);
     if (employeeUser) {
       if (requestType === "SALARY") {
-        await sendSalaryAdvanceSubmissionEmail(request, employeeUser);
+        sendSalaryAdvanceSubmissionEmail(request, employeeUser).catch(e => console.error("Email error:", e));
       }
 
       // Notify Admins
-      await notifyAdmins(
+      notifyAdmins(
         `New ${requestType} Request`,
         `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
         `/app/requests`
-      );
+      ).catch(e => console.error("Notify error:", e));
     }
 
     return res.status(201).json({
@@ -941,22 +941,22 @@ export const updateRequestStatus = async (req, res) => {
     await request.save();
 
     // Notify Employee
-    await createNotification({
+    createNotification({
       recipient: request.userId,
       title: `Request ${newStatus}`,
       message: `Your ${request.requestType.toLowerCase()} request (${request.requestId}) has been ${newStatus.toLowerCase()}.`,
       type: "REQUEST",
       link: "/app/requests"
-    });
+    }).catch(e => console.error("Notification error:", e));
 
     // Send email notifications for Salary Advance/Loan requests
     if (request.requestType === "SALARY") {
       const employeeUser = await User.findById(request.userId);
       if (employeeUser) {
         if (action === "APPROVE") {
-          await sendSalaryAdvanceApprovalEmail(request, employeeUser);
+          sendSalaryAdvanceApprovalEmail(request, employeeUser).catch(e => console.error("Email error:", e));
         } else if (action === "REJECT") {
-          await sendSalaryAdvanceRejectionEmail(request, employeeUser);
+          sendSalaryAdvanceRejectionEmail(request, employeeUser).catch(e => console.error("Email error:", e));
         }
       }
     }
@@ -1021,13 +1021,13 @@ export const approveDocumentRequest = async (req, res) => {
     await request.save();
 
     // Notify Employee
-    await createNotification({
+    createNotification({
       recipient: request.userId,
       title: `Request Completed`,
       message: `Your document request (${request.requestId}) has been completed and the document is ready.`,
       type: "REQUEST",
       link: "/app/requests"
-    });
+    }).catch(e => console.error("Notification error:", e));
 
     const populatedRequest = await Request.findById(request._id)
       .populate("userId", "name")
@@ -1093,13 +1093,13 @@ export const rejectDocumentRequest = async (req, res) => {
     await request.save();
 
     // Notify Employee
-    await createNotification({
+    createNotification({
       recipient: request.userId,
       title: `Request Rejected`,
       message: `Your document request (${request.requestId}) has been rejected.`,
       type: "REQUEST",
       link: "/app/requests"
-    });
+    }).catch(e => console.error("Notification error:", e));
 
     const populatedRequest = await Request.findById(request._id)
       .populate("userId", "name")
