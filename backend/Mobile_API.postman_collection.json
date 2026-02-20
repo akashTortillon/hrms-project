@@ -628,6 +628,145 @@
                     "name": "Requests",
                     "item": [
                         {
+                            "name": "Get Leave Types (Masters)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/masters/leave-types",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "masters",
+                                        "leave-types"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Leave Request",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"requestType\": \"LEAVE\",\n    \"details\": {\n        \"leaveType\": \"Annual Leave\",\n        \"leaveTypeId\": \"6965c67439d52ebfc73ff795\",\n        \"isPaid\": true,\n        \"numberOfDays\": \"1\",\n        \"fromDate\": \"2026-02-28\",\n        \"toDate\": \"2026-02-28\",\n        \"reason\": \"Personal Leave\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Salary Advance Request",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"requestType\": \"SALARY\",\n    \"details\": {\n        \"subType\": \"salary_advance\",\n        \"amount\": 500,\n        \"reason\": \"Urgent Bill\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Loan Request",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"requestType\": \"SALARY\",\n    \"details\": {\n        \"subType\": \"loan\",\n        \"amount\": 5000,\n        \"repaymentPeriod\": 12,\n        \"reason\": \"Home Upgrade\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
                             "name": "My Pending Requests (Dashboard)",
                             "request": {
                                 "method": "GET",
@@ -807,7 +946,7 @@
     "variable": [
         {
             "key": "baseUrl",
-            "value": "http://localhost:5000",
+            "value": "https://hrms-project-mob-test.onrender.com",
             "type": "string"
         },
         {
