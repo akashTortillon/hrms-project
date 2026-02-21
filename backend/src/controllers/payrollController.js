@@ -1445,7 +1445,21 @@ export const downloadPayslip = async (req, res) => {
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         const periodStr = `${monthName} ${year}`;
         const totalAllowances = payroll.totalAllowances || 0;
-        const totalDeductions = payroll.totalDeductions || 0;
+
+        // Hide "Salary Advance" from the itemized list, but keep its value subtracted from Net Salary.
+        // For the visual "Total Deductions", we will subtract the advance so the math looks correct.
+        let displayDeductions = [];
+        let hiddenAdvanceAmount = 0;
+
+        (payroll.deductions || []).forEach(d => {
+            if (d.name && d.name.toLowerCase().includes("salary advance")) {
+                hiddenAdvanceAmount += d.amount;
+            } else {
+                displayDeductions.push(d);
+            }
+        });
+
+        const totalDeductions = (payroll.totalDeductions || 0) - hiddenAdvanceAmount;
         const grossEarnings = basicSalary + totalAllowances;
 
         // 1. Generate Content PDF using PDFKit
@@ -1544,7 +1558,7 @@ export const downloadPayslip = async (req, res) => {
             { name: "Basic Salary", amount: basicSalary },
             ...(allowances || []).map(a => ({ name: a.name, amount: a.amount }))
         ];
-        const deductionList = deductions || [];
+        const deductionList = displayDeductions;
         const maxRows = Math.max(earnings.length, deductionList.length);
 
         for (let i = 0; i < maxRows; i++) {

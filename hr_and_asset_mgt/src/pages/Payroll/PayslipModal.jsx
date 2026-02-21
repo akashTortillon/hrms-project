@@ -15,9 +15,21 @@ export default function PayslipModal({ show, onClose, record }) {
     const monthName = record.month ? new Date(2000, record.month - 1).toLocaleString('default', { month: 'long' }) : '';
     const periodStr = `${monthName} ${record.year}`;
 
-    // Calculate Totals
+    // Calculate Totals visually modifying hidden advances
     const totalAllowances = record.totalAllowances || 0;
-    const totalDeductions = record.totalDeductions || 0;
+
+    // Hide Salary Advance visually
+    let displayDeductions = [];
+    let hiddenAdvanceAmount = 0;
+    (record.deductions || []).forEach(d => {
+        if (d.name && d.name.toLowerCase().includes("salary advance")) {
+            hiddenAdvanceAmount += d.amount;
+        } else {
+            displayDeductions.push(d);
+        }
+    });
+
+    const totalDeductions = (record.totalDeductions || 0) - hiddenAdvanceAmount;
     const grossEarnings = basicSalary + totalAllowances;
 
     // --- PDF GENERATION ---
@@ -95,7 +107,7 @@ export default function PayslipModal({ show, onClose, record }) {
             ];
 
             const deductionRows = [
-                ...(deductions || []).map(d => [d.name, d.amount.toLocaleString()])
+                ...displayDeductions.map(d => [d.name, d.amount.toLocaleString()])
             ];
 
             const maxLength = Math.max(earningsRows.length, deductionRows.length);
@@ -288,8 +300,8 @@ export default function PayslipModal({ show, onClose, record }) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {(deductions || []).length > 0 ? (
-                                        (deductions || []).map((d, idx) => (
+                                    {displayDeductions.length > 0 ? (
+                                        displayDeductions.map((d, idx) => (
                                             <tr key={idx}>
                                                 <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>{d.name}</td>
                                                 <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(d.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>

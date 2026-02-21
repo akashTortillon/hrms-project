@@ -22,8 +22,9 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
         try {
             setApproving(true);
             await onApprove(request._id, {
-                interestRate: parseFloat(interestRate),
-                repaymentPeriod: parseInt(tenure)
+                amount: parseFloat(amount),
+                interestRate: isLoan ? parseFloat(interestRate) : 0,
+                repaymentPeriod: isLoan ? parseInt(tenure) : 1
             });
         } catch (error) {
             console.error("Approval failed:", error);
@@ -47,7 +48,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
 
     if (!request) return null;
 
-    const isLoan = request.details?.subType === 'loan';
+    const isLoan = request.details?.subType === 'loan' || request.subType === 'loan';
     const typeLabel = isLoan ? "Loan" : "Salary Advance";
 
     // Footer Actions
@@ -85,38 +86,14 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                 {/* Form Content */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                    {/* Tenure */}
+                    {/* Approved Amount (Editable Override) */}
                     <div>
                         <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                            Approved Tenure (Months)
-                        </label>
-                        <input
-                            type="number"
-                            min="1"
-                            className="form-control"
-                            style={{
-                                width: '100%',
-                                padding: '8px 12px',
-                                border: '1px solid #ced4da',
-                                borderRadius: '4px'
-                            }}
-                            value={tenure}
-                            onChange={(e) => setTenure(e.target.value)}
-                        />
-                        <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
-                            Requested: {request.details.repaymentPeriod} months
-                        </small>
-                    </div>
-
-                    {/* Interest Rate */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                            Interest Rate (%)
+                            Approved Amount (AED)
                         </label>
                         <input
                             type="number"
                             min="0"
-                            step="0.1"
                             className="form-control"
                             style={{
                                 width: '100%',
@@ -124,13 +101,64 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                                 border: '1px solid #ced4da',
                                 borderRadius: '4px'
                             }}
-                            value={interestRate}
-                            onChange={(e) => setInterestRate(e.target.value)}
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
                         />
                         <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
-                            Enter 0 for no interest.
+                            Requested Amount: {request.details.amount} AED. You may modify this value as needed.
                         </small>
                     </div>
+
+                    {/* Tenure (Loans Only) */}
+                    {isLoan && (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                                Approved Tenure (Months)
+                            </label>
+                            <input
+                                type="number"
+                                min="1"
+                                className="form-control"
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    border: '1px solid #ced4da',
+                                    borderRadius: '4px'
+                                }}
+                                value={tenure}
+                                onChange={(e) => setTenure(e.target.value)}
+                            />
+                            <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
+                                Requested: {request.details.repaymentPeriod || 'N/A'}
+                            </small>
+                        </div>
+                    )}
+
+                    {/* Interest Rate (Loans Only) */}
+                    {isLoan && (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                                Interest Rate (%)
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                className="form-control"
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    border: '1px solid #ced4da',
+                                    borderRadius: '4px'
+                                }}
+                                value={interestRate}
+                                onChange={(e) => setInterestRate(e.target.value)}
+                            />
+                            <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
+                                Enter 0 for no interest.
+                            </small>
+                        </div>
+                    )}
 
                     {/* Calculations Summary */}
                     <div style={{
@@ -141,22 +169,38 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                             <span>Principal Amount:</span>
-                            <strong>{amount.toFixed(2)}</strong>
+                            <strong>{parseFloat(amount || 0).toFixed(2)}</strong>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span>Total Repayment (inc. Interest):</span>
-                            <strong>{calculateTotal()}</strong>
-                        </div>
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            borderTop: '1px solid #dee2e6',
-                            paddingTop: '8px',
-                            marginTop: '8px'
-                        }}>
-                            <span>Monthly Deduction:</span>
-                            <strong style={{ color: '#0d6efd' }}>{calculateMonthly()} / month</strong>
-                        </div>
+                        {isLoan && (
+                            <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <span>Total Repayment (inc. Interest):</span>
+                                    <strong>{calculateTotal()}</strong>
+                                </div>
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    borderTop: '1px solid #dee2e6',
+                                    paddingTop: '8px',
+                                    marginTop: '8px'
+                                }}>
+                                    <span>Monthly Deduction:</span>
+                                    <strong style={{ color: '#0d6efd' }}>{calculateMonthly()} / month</strong>
+                                </div>
+                            </>
+                        )}
+                        {!isLoan && (
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                borderTop: '1px solid #dee2e6',
+                                paddingTop: '8px',
+                                marginTop: '8px'
+                            }}>
+                                <span>Advance Deduction:</span>
+                                <strong style={{ color: '#dc3545' }}>{parseFloat(amount || 0).toFixed(2)} / next payslip</strong>
+                            </div>
+                        )}
                     </div>
 
                 </div>

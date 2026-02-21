@@ -1,0 +1,34 @@
+# Salary Advance Module Update - Client Notes
+
+This document provides a summary of the customized updates made to the "Salary Advance" feature in the HRMS application, tailored specifically to meet your organization's business requirements.
+
+## Overview
+The goal of this update was to treat Salary Advances as separate, straight-forward deductions rather than complex loans with EMIs and interest rates. Additionally, adjustments were made to ensure alignment with standard company practices regarding payslip visibility and admin controls.
+
+## Key Changes Implemented
+
+1. **Simplified Employee Request Process**
+   - When an employee requests a "Salary Advance" through their portal, they are no longer asked to select a "Repayment Period."
+   - The system automatically treats the advance as a single-month repayment.
+   - This prevents confusion and simplifies the user experience for standard advance requests.
+
+2. **Enhanced HR Admin Controls for Approvals**
+   - When HR Admins review a requested Salary Advance, they now have the ability to override the requested amount.
+   - For example, if an employee requests 1000 AED but company policy only allows a percentage to be advanced, the Admin can manually change the "Approved Amount" to 500 AED before approving.
+   - Irrelevant loan fields (such as Interest Rate, Approved Tenure, and Monthly Repayment calculations) have been completely hidden for Salary Advance approvals to streamline the workflow.
+
+3. **Custom Payslip Visibility (Non-Standard Hide)**
+   - As per your specific requirement, the "Salary Advance" deduction is **completely hidden** from both the printed PDF Payslip and the digital Payslip view for the employee.
+   - **How the math works:** If an employee's Gross Pay is 3000 AED and they took a 500 AED advance, the Net Salary Payable will correctly show 2500 AED. However, the 500 AED deduction itself will not be explicitly listed under the "Deductions" table. The total deductions number on the payslip is dynamically adjusted so the math appears consistent.
+   - This ensures the employee receives the correct net amount without seeing the advance listed as a penalty on their standard payslip document.
+
+4. **Finance Team Reporting Integrity**
+   - While the deduction is hidden on the employee's personal payslip, it remains fully tracked in the backend.
+   - When generating the master Payroll Export Excel files and SIF/WPS files, the Salary Advance is accurately included as a standard deduction. 
+   - This ensures your Finance and Accounting departments maintain 100% accurate ledgers without any missing funds.
+
+5. **Automated Email Clean-up**
+   - All automated email notifications (Submission, Approval, Rejection) for Salary Advances have been updated to remove any mention of a "Repayment Period," ensuring clear and relevant communication.
+
+## Summary
+The Salary Advance module is now fully decoupled from the Loan module, providing a streamlined experience for employees requesting advances, flexible override controls for HR approvers, and customized masking for payslips, while maintaining perfect accounting integrity for the Finance team.

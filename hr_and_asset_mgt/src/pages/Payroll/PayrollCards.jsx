@@ -45,13 +45,19 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
 
         <div className="payroll-header-actions">
           {/* Month Selector */}
-          {/* Month Selector */}
-          {/* Month Selector */}
           <div style={{ width: '100%', maxWidth: '200px' }}>
-            <select
+            <input
+              type="month"
               className="payroll-month-select"
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
+              value={`${year}-${String(month).padStart(2, '0')}`}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  const [y, m] = val.split('-');
+                  setYear(Number(y));
+                  setMonth(Number(m));
+                }
+              }}
               style={{
                 width: "100%",
                 padding: "8px 12px",
@@ -59,37 +65,10 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
                 border: "1px solid #d1d5db",
                 backgroundColor: "white",
                 fontSize: "14px",
-                height: "40px"
+                height: "40px",
+                fontFamily: "inherit"
               }}
-            >
-              <option value="" disabled>Select Month</option>
-              {months.map((m, idx) => (
-                <option key={idx} value={idx + 1}>{m}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Year Selector */}
-          <div style={{ width: '100%', maxWidth: '120px', marginLeft: '10px' }}>
-            <select
-              className="payroll-month-select"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                backgroundColor: "white",
-                fontSize: "14px",
-                height: "40px"
-              }}
-            >
-              <option value="" disabled>Select Year</option>
-              {[2024, 2025, 2026].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+            />
           </div>
 
           <button className="payroll-export-btn" onClick={onExportWPS}>
