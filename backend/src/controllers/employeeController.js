@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import Employee from "../models/employeeModel.js";
+import Master from "../models/masterModel.js";
 
 export const exportEmployees = async (req, res) => {
   try {
@@ -36,6 +37,7 @@ export const exportEmployees = async (req, res) => {
           "Full Name": "$name",
           "Role": "$role",
           "Department": "$department",
+          "Branch": "$branch",
           "Email": "$email",
           "Contact Number": "$phone",
           "Joining Date": {
@@ -54,6 +56,7 @@ export const exportEmployees = async (req, res) => {
       { wch: 25 }, // Name
       { wch: 20 }, // Role
       { wch: 15 }, // Dept
+      { wch: 15 }, // Branch
       { wch: 30 }, // Email
       { wch: 15 }, // Phone
       { wch: 15 }, // Date
@@ -79,7 +82,7 @@ import bcrypt from "bcryptjs";
 
 export const addEmployee = async (req, res) => {
   try {
-    const { name, code, role, department, email, phone, joinDate, status } = req.body;
+    const { name, code, role, department, branch, email, phone, joinDate, status } = req.body;
 
     // 1. Strict Validation
     if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
@@ -168,6 +171,7 @@ export const addEmployee = async (req, res) => {
       code: nextCode,
       role,
       department,
+      branch,
       email,
       phone,
       joinDate,
@@ -363,6 +367,14 @@ export const importEmployees = async (req, res) => {
     const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
 
+    // Pre-fetch Master Data for Strict Validation
+    const masters = await Master.find({ isActive: true });
+    const validRoles = new Set(masters.filter(m => m.type === 'ROLE').map(m => m.name.toLowerCase()));
+    const validDepartments = new Set(masters.filter(m => m.type === 'DEPARTMENT').map(m => m.name.toLowerCase()));
+    const validBranches = new Set(masters.filter(m => m.type === 'BRANCH').map(m => m.name.toLowerCase()));
+    const validDesignations = new Set(masters.filter(m => m.type === 'DESIGNATION').map(m => m.name.toLowerCase()));
+    const validContractTypes = new Set(masters.filter(m => m.type === 'EMPLOYEE_TYPE').map(m => m.name.toLowerCase()));
+
     // Get last employee code
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
     let lastCodeNum = 0;
@@ -401,7 +413,35 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 3. User Account Creation
+      // 3. Strict Master Validation
+      const role = row["Role"].trim();
+      const department = row["Department"].trim();
+      const branch = row["Branch"] ? row["Branch"].trim() : "";
+      const designation = row["Designation"] ? row["Designation"].trim() : "";
+      const contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+
+      if (!validRoles.has(role.toLowerCase())) {
+        errors.push({ row: rowNum, email, message: `Invalid Role: '${role}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (!validDepartments.has(department.toLowerCase())) {
+        errors.push({ row: rowNum, email, message: `Invalid Department: '${department}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (branch && !validBranches.has(branch.toLowerCase())) {
+        errors.push({ row: rowNum, email, message: `Invalid Branch: '${branch}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (designation && !validDesignations.has(designation.toLowerCase())) {
+        errors.push({ row: rowNum, email, message: `Invalid Designation: '${designation}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (contractType && !validContractTypes.has(contractType.toLowerCase())) {
+        errors.push({ row: rowNum, email, message: `Invalid Employee Type: '${contractType}'. Exact spelling must match Master list.` });
+        continue;
+      }
+
+      // 4. User Account Creation
       let userPhone = phone.replace(/\s+/g, "");
       // Simple normalization for UAE if needed, or just keep as is
 
@@ -428,28 +468,46 @@ export const importEmployees = async (req, res) => {
         lastCodeNum++;
         const nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
 
-        // Parse Date - Excel dates can be tricky. 
-        // If it's a number (Excel serial date), convert. If string, try parsing.
-        let joinDate = new Date();
-        if (row["Joining Date"]) {
-          if (typeof row["Joining Date"] === 'number') {
-            joinDate = new Date(Math.round((row["Joining Date"] - 25569) * 86400 * 1000));
-          } else {
-            joinDate = new Date(row["Joining Date"]);
+        // Date parsing helper
+        const parseExcelDate = (val) => {
+          if (!val) return null;
+          if (typeof val === 'number') {
+            return new Date(Math.round((val - 25569) * 86400 * 1000));
           }
-        }
+          return new Date(val);
+        };
+
+        let joinDate = parseExcelDate(row["Joining Date"]) || new Date();
+        let passportExpiry = parseExcelDate(row["Passport Expiry"]);
+        let emiratesIdExpiry = parseExcelDate(row["Emirates ID Expiry"]);
+        let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
         await Employee.create({
           name: row["Full Name"],
           code: nextCode,
           role: row["Role"],
           department: row["Department"],
+          branch: row["Branch"] || "",
           email: email,
           phone: phone,
           joinDate: joinDate,
           status: row["Status"] || "Onboarding",
           designation: row["Designation"] || row["Role"],
-          shift: "Day Shift" // Default
+          shift: row["Shift"] || "Day Shift", // Default
+          nationality: row["Nationality"] || "",
+          address: row["UAE Address"] || "",
+          contractType: row["Employee Type"] || "",
+          basicSalary: row["Basic Salary"] ? String(row["Basic Salary"]) : "",
+          accommodation: row["Accommodation"] || "",
+          laborCardNumber: row["Labor Card No"] || "",
+          personalId: row["Personal ID (14 Digit)"] || "",
+          bankName: row["Bank Name"] || "",
+          iban: row["IBAN"] || "",
+          bankAccount: row["Account Number"] || "",
+          agentId: row["Agent ID (WPS)"] || "",
+          passportExpiry: passportExpiry,
+          emiratesIdExpiry: emiratesIdExpiry,
+          visaExpiry: visaExpiry
         });
 
         // Add to local sets to prevent duplicates within the same file

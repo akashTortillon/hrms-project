@@ -444,6 +444,10 @@ export default function EmployeeDetail() {
                                 <div>{employee.department || "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Branch</label>
+                                <div>{employee.branch || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
                                 <label>Designation</label>
                                 <div>{employee.designation || "N/A"}</div>
                             </div>

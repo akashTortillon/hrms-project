@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations, shiftService } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -9,6 +9,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [branchesList, setBranchesList] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
 
   useEffect(() => {
@@ -27,14 +28,16 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
   const fetchMasters = async () => {
     try {
-      const [rolesData, typesData, desigData] = await Promise.all([
+      const [rolesData, typesData, desigData, branchesData] = await Promise.all([
         roleService.getAll(),
         employeeTypeService.getAll(),
-        getDesignations()
+        getDesignations(),
+        getBranches()
       ]);
       setRoles(rolesData);
       setContractTypes(typesData);
       setDesignations(desigData);
+      setBranchesList(branchesData);
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
     } catch (error) {
@@ -131,6 +134,29 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     <option value="">Select Department</option>
                     {deptOptions.map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Branch</label>
+                  <select
+                    name="branch"
+                    value={form.branch || ''}
+                    onChange={handleChange}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      backgroundColor: "white",
+                      fontSize: "14px",
+                      height: "42px"
+                    }}
+                  >
+                    <option value="">Select Branch</option>
+                    {branchesList.map(b => (
+                      <option key={b.name} value={b.name}>{b.name}</option>
                     ))}
                   </select>
                 </div>
@@ -356,6 +382,29 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     <option value="">Select Department</option>
                     {deptOptions.map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Branch</label>
+                  <select
+                    name="branch"
+                    value={form.branch || ''}
+                    onChange={handleChange}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      backgroundColor: "white",
+                      fontSize: "14px",
+                      height: "42px"
+                    }}
+                  >
+                    <option value="">Select Branch</option>
+                    {branchesList.map(b => (
+                      <option key={b.name} value={b.name}>{b.name}</option>
                     ))}
                   </select>
                 </div>
