@@ -1423,6 +1423,51 @@ export const getMyPayslips = async (req, res) => {
     }
 };
 
+
+//---API : For filtering the payslips ---
+
+export const filterMyPayslips = async (req, res) => {
+    try {
+        const employeeId = req.user.employeeId;
+
+        if (!employeeId) {
+            return res.status(400).json({
+                message: "Employee ID not found for user",
+            });
+        }
+
+        const { year, month } = req.query;
+
+        const query = {
+            employee: employeeId,
+            status: "PROCESSED",
+        };
+
+        if (year) {
+            query.year = Number(year);
+        }
+
+        if (month) {
+            query.month = Number(month);
+        }
+
+        const payslips = await Payroll.find(query)
+            .sort({ year: -1, month: -1 })
+            .select(
+                "year month netSalary grossSalary deductions createdAt"
+            ); // keep list lightweight for mobile
+
+        res.status(200).json({
+            count: payslips.length,
+            data: payslips,
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Failed to filter payslips",
+        });
+    }
+};
+
 // --- API: Download Payslip PDF (Mobile) ---
 export const downloadPayslip = async (req, res) => {
     try {

@@ -61,8 +61,7 @@ const yearOptions = [2024, 2025, 2026].map(y => ({
         </div>
 
         <div className="payroll-header-actions">
-          {/* Month Selector */}
-          {/* Month Selector */}
+         
           {/* Month Selector */}
           <div style={{ width: '100%', maxWidth: '200px' }}>
            <CustomSelect
