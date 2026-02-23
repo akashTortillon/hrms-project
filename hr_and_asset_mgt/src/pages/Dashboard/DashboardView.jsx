@@ -109,9 +109,13 @@ function Dashboard() {
       .catch(() => setEmployeeVisaExpiries([]));
 
     fetchPendingApprovals()
-      .then((res) =>
-        setPendingApprovals(Array.isArray(res.data) ? res.data : [])
-      )
+      .then((res) => {
+        if (res.data && Array.isArray(res.data.data)) {
+          setPendingApprovals(res.data.data);
+        } else {
+          setPendingApprovals(Array.isArray(res.data) ? res.data : []);
+        }
+      })
       .catch(() => setPendingApprovals([]));
 
     fetchTodaysAttendance()

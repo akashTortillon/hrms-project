@@ -32,8 +32,8 @@ export const createRequest = async (requestData) => {
 };
 
 // Get all requests for current user
-export const getMyRequests = async () => {
-  const response = await api.get(`${REQUEST_API}/my`);
+export const getMyRequests = async (params = {}) => {
+  const response = await api.get(`${REQUEST_API}/my-requests`, { params });
   return response.data;
 };
 
@@ -46,9 +46,10 @@ export const withdrawRequest = async (requestId) => {
 };
 
 // Admin – get pending requests
-export const getPendingRequests = async () => {
+export const getPendingRequests = async (params = {}) => {
   const response = await api.get(
-    `${REQUEST_API}/admin/pending`
+    `${REQUEST_API}/admin/pending`,
+    { params }
   );
   return response.data;
 };

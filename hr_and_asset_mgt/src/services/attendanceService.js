@@ -2,10 +2,13 @@ import api from "../api/apiClient";
 
 const ATTENDANCE_API = "/api/attendance";
 
-// ✅ Fetch daily attendance for a specific date
-export const getDailyAttendance = async (date) => {
+// ✅ Fetch daily attendance for a specific date (with pagination/filters)
+export const getDailyAttendance = async (params) => {
+  // params can be { date, page, limit, status, search } or just date string (backward compatibility check)
+  const queryParams = typeof params === 'object' ? params : { date: params };
+
   const res = await api.get(ATTENDANCE_API, {
-    params: { date },
+    params: queryParams,
   });
   return res.data;
 };

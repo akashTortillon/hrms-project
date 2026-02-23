@@ -4,7 +4,8 @@ import {
   getCompanyDocumentExpiries,
   getEmployeeVisaExpiries,
   getPendingApprovals,
-  getTodaysAttendance
+  getTodaysAttendance,
+  getMobileDashboardStats
 } from "../controllers/dashboardController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
@@ -18,5 +19,7 @@ router.get("/company-documents", getCompanyDocumentExpiries); // Filtered by acc
 router.get("/employee-visas", getEmployeeVisaExpiries); // Filtered in controller
 router.get("/pending-approvals", hasPermission("APPROVE_REQUESTS"), getPendingApprovals);
 router.get("/attendance", hasPermission("VIEW_ADMIN_DASHBOARD"), getTodaysAttendance);
+// Mobile Stats (Public or Permitted?) - Let's assume basic permission or authenticated
+router.get("/mobile-stats", getMobileDashboardStats);
 
 export default router;

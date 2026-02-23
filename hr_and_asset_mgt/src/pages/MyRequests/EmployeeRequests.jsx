@@ -182,7 +182,7 @@ export default function EmployeeRequests() {
     if (request.requestType === "LEAVE") return request.details.leaveType;
 
     if (request.requestType === "SALARY") {
-      return request.subType === "loan"
+      return request.details?.subType === "loan"
         ? "Loan Application"
         : "Salary Advance";
     }

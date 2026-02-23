@@ -18,7 +18,12 @@ export default function AttendanceFilters({
   selectedShift,
   setSelectedShift,
   showDepartmentFilter = true,
-  showShiftFilter = true
+  showShiftFilter = true,
+  // New Props
+  searchQuery,
+  setSearchQuery,
+  selectedStatus,
+  setSelectedStatus
 }) {
   return (
     <div className="attendance-filters">
@@ -98,6 +103,38 @@ export default function AttendanceFilters({
                 label: shift.name
               }))
             ]}
+          />
+        </div>
+      )}
+
+      {/* NEW: Status Filter */}
+      {viewMode === "day" && (
+        <div className="filter-group">
+          <label className="filter-label">Status</label>
+          <select
+            className="filter-input filter-select"
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+          >
+            <option value="">All Statuses</option>
+            <option value="Present">Present</option>
+            <option value="Absent">Absent</option>
+            <option value="Late">Late</option>
+            <option value="On Leave">On Leave</option>
+          </select>
+        </div>
+      )}
+
+      {/* NEW: Search Filter */}
+      {viewMode === "day" && (
+        <div className="filter-group">
+          <label className="filter-label">Search</label>
+          <input
+            type="text"
+            className="filter-input"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search Name/ID..."
           />
         </div>
       )}

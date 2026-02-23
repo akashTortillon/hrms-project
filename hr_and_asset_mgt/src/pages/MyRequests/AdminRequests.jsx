@@ -239,7 +239,7 @@ export default function AdminRequests() {
         return (
           <>
             <div className="request-type">
-              {subType === "loan" ? "Loan Application" : "Salary Advance"}
+              {details.subType === "loan" ? "Loan Application" : "Salary Advance"}
             </div>
             <div className="request-amount">
               Amount: {details.amount || "N/A"}
