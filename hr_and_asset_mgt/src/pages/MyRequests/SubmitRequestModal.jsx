@@ -19,6 +19,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
     leaveType: "", // Changed from "Annual Leave" to ""
     leaveTypeId: "", // ✅ NEW: Track ID
     isPaid: true,    // ✅ NEW: Track Paid status
+    isHalfDay: false, // ✅ NEW: Track half-day
     numberOfDays: "",
     fromDate: "",
     toDate: "",
@@ -77,9 +78,10 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           leaveType: leaveForm.leaveType,
           leaveTypeId: leaveForm.leaveTypeId, // ✅ NEW
           isPaid: leaveForm.isPaid,           // ✅ NEW
-          numberOfDays: leaveForm.numberOfDays,
+          isHalfDay: leaveForm.isHalfDay,     // ✅ NEW
+          numberOfDays: leaveForm.isHalfDay ? 0.5 : leaveForm.numberOfDays,
           fromDate: leaveForm.fromDate,
-          toDate: leaveForm.toDate,
+          toDate: leaveForm.isHalfDay ? leaveForm.fromDate : leaveForm.toDate,
           reason: leaveForm.reason
         };
       } else if (activeType === "salary") {
@@ -116,6 +118,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           leaveType: leaveTypes.length > 0 ? leaveTypes[0].name : "",
           leaveTypeId: leaveTypes.length > 0 ? leaveTypes[0]._id : "",
           isPaid: leaveTypes.length > 0 ? (leaveTypes[0].metadata?.isPaid !== false) : true,
+          isHalfDay: false,
           numberOfDays: "",
           fromDate: "",
           toDate: "",
@@ -241,11 +244,33 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 <input
                   type="number"
                   placeholder="5"
-                  value={leaveForm.numberOfDays}
+                  value={leaveForm.isHalfDay ? "0.5" : leaveForm.numberOfDays}
+                  disabled={leaveForm.isHalfDay}
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, numberOfDays: e.target.value })
                   }
                 />
+              </div>
+            </div>
+
+            <div className="form-row" style={{ alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  id="isHalfDay"
+                  checked={leaveForm.isHalfDay}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setLeaveForm({
+                      ...leaveForm,
+                      isHalfDay: checked,
+                      // If half day enabled and fromDate is set, sync toDate
+                      toDate: (checked && leaveForm.fromDate) ? leaveForm.fromDate : leaveForm.toDate
+                    });
+                  }}
+                  style={{ width: "16px", height: "16px" }}
+                />
+                <label htmlFor="isHalfDay" style={{ margin: 0, cursor: "pointer", fontWeight: "bold" }}>Request Half-Day Only?</label>
               </div>
             </div>
 
@@ -256,7 +281,12 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   type="date"
                   value={leaveForm.fromDate}
                   onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, fromDate: e.target.value })
+                    setLeaveForm({
+                      ...leaveForm,
+                      fromDate: e.target.value,
+                      // Sync toDate automatically if half day
+                      toDate: leaveForm.isHalfDay ? e.target.value : leaveForm.toDate
+                    })
                   }
                   style={{
                     width: "100%",
@@ -273,7 +303,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 <label>To Date</label>
                 <input
                   type="date"
-                  value={leaveForm.toDate}
+                  value={leaveForm.isHalfDay ? leaveForm.fromDate : leaveForm.toDate}
+                  disabled={leaveForm.isHalfDay}
                   onChange={(e) =>
                     setLeaveForm({ ...leaveForm, toDate: e.target.value })
                   }
@@ -283,7 +314,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                     borderRadius: "8px",
                     border: "1px solid #d1d5db",
                     fontSize: "14px",
-                    height: "42px"
+                    height: "42px",
+                    backgroundColor: leaveForm.isHalfDay ? "#f3f4f6" : "white"
                   }}
                 />
               </div>

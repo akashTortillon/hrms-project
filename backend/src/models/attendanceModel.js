@@ -49,6 +49,11 @@ const attendanceSchema = new mongoose.Schema(
       default: null
     },
 
+    leaveDuration: {
+      type: Number,
+      default: 1
+    },
+
     isPaid: {
       type: Boolean,
       default: true

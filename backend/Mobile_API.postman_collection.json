@@ -719,7 +719,7 @@
                                 ],
                                 "body": {
                                     "mode": "raw",
-                                    "raw": "{\n    \"requestType\": \"LEAVE\",\n    \"details\": {\n        \"leaveType\": \"Annual Leave\",\n        \"leaveTypeId\": \"6965c67439d52ebfc73ff795\",\n        \"isPaid\": true,\n        \"numberOfDays\": \"1\",\n        \"fromDate\": \"2026-02-28\",\n        \"toDate\": \"2026-02-28\",\n        \"reason\": \"Personal Leave\"\n    }\n}",
+                                    "raw": "{\n    \"requestType\": \"LEAVE\",\n    \"details\": {\n        \"leaveType\": \"Annual Leave\",\n        \"leaveTypeId\": \"6965c67439d52ebfc73ff795\",\n        \"isPaid\": true,\n        \"isHalfDay\": false,\n        \"numberOfDays\": \"1\",\n        \"fromDate\": \"2026-02-28\",\n        \"toDate\": \"2026-02-28\",\n        \"reason\": \"Personal Leave\"\n    }\n}",
                                     "options": {
                                         "raw": {
                                             "language": "json"
