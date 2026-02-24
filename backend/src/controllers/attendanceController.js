@@ -611,6 +611,7 @@ export const getDailyAttendance = async (req, res) => {
         name: emp.name,
         code: emp.code,
         department: emp.department,
+        branch: emp.branch,
         shift: record?.shift || emp.shift || "Day Shift",
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
@@ -656,12 +657,15 @@ export const getDailyAttendance = async (req, res) => {
       fullList = fullList.filter(item => item.status === status);
     }
 
-    const { department, shift } = req.query;
+    const { department, shift, branch } = req.query;
     if (department) {
       fullList = fullList.filter(item => item.department === department);
     }
     if (shift) {
       fullList = fullList.filter(item => item.shift === shift);
+    }
+    if (branch) {
+      fullList = fullList.filter(item => item.branch === branch);
     }
 
     // 7️⃣ Pagination
@@ -797,6 +801,9 @@ export const getMonthlyAttendance = async (req, res) => {
         _id: emp._id,
         name: emp.name,
         code: emp.code,
+        department: emp.department,
+        branch: emp.branch,
+        shift: emp.shift || "Day Shift",
         stats: { present, late, absent, leave },
         attendance: attendanceData
       };

@@ -16,6 +16,10 @@ export default function AttendanceFilters({
   setSelectedShift,
   showDepartmentFilter = true,
   showShiftFilter = true,
+  showBranchFilter = true,
+  branches = [],
+  selectedBranch,
+  setSelectedBranch,
   // New Props
   searchQuery,
   setSearchQuery,
@@ -69,7 +73,6 @@ export default function AttendanceFilters({
           </div>
         </>
       )}
-
       {showDepartmentFilter && (
         <div className="filter-group">
           <label className="filter-label">Department</label>
@@ -81,6 +84,22 @@ export default function AttendanceFilters({
             <option value="">All Departments</option>
             {departments.map(dept => (
               <option key={dept.name} value={dept.name}>{dept.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {showBranchFilter && (
+        <div className="filter-group">
+          <label className="filter-label">Branch</label>
+          <select
+            className="filter-input filter-select"
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+          >
+            <option value="">All Branches</option>
+            {branches.map(b => (
+              <option key={b.name} value={b.name}>{b.name}</option>
             ))}
           </select>
         </div>
