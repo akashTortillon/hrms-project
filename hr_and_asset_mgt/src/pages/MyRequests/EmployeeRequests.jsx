@@ -191,21 +191,57 @@ export default function EmployeeRequests() {
     return request.requestType;
   };
 
+  // const getRequestDetails = (request) => {
+  //   if (request.requestType === "LEAVE") {
+  //     const days = request.details.numberOfDays
+  //       ? ` (${request.details.numberOfDays} days)`
+  //       : "";
+  //     return `${request.details.fromDate} to ${request.details.toDate}${days}`;
+  //   }
+  //   if (request.requestType === "SALARY") {
+  //     return `Amount: AED ${request.details.amount}`;
+  //   }
+  //   if (request.requestType === "DOCUMENT") {
+  //     return `Document: ${request.details.documentType}`;
+  //   }
+  //   return "";
+  // };
+
+
   const getRequestDetails = (request) => {
-    if (request.requestType === "LEAVE") {
-      const days = request.details.numberOfDays
-        ? ` (${request.details.numberOfDays} days)`
-        : "";
-      return `${request.details.fromDate} to ${request.details.toDate}${days}`;
+  if (request.requestType === "LEAVE") {
+    const { fromDate, toDate, numberOfDays, leaveDuration, halfDaySession } =
+      request.details || {};
+
+    // ✅ Half-day formatting
+    if (leaveDuration === "HALF_DAY") {
+      const sessionLabel =
+        halfDaySession === "FIRST_HALF"
+          ? "Morning"
+          : halfDaySession === "SECOND_HALF"
+          ? "Afternoon"
+          : "";
+
+      return `${fromDate} • Half Day (${sessionLabel})`;
     }
-    if (request.requestType === "SALARY") {
-      return `Amount: AED ${request.details.amount}`;
-    }
-    if (request.requestType === "DOCUMENT") {
-      return `Document: ${request.details.documentType}`;
-    }
-    return "";
-  };
+
+    // ✅ Full-day formatting (existing)
+    const days = numberOfDays ? ` (${numberOfDays} days)` : "";
+    return `${fromDate} to ${toDate}${days}`;
+  }
+
+  if (request.requestType === "SALARY") {
+    return `Amount: AED ${request.details.amount}`;
+  }
+
+  if (request.requestType === "DOCUMENT") {
+    return `Document: ${request.details.documentType}`;
+  }
+
+  return "";
+};
+
+
 
   const handleDownloadDocument = async (requestId) => {
     try {

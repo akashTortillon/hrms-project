@@ -218,22 +218,66 @@ export default function AdminRequests() {
     const { details, requestType, subType } = req;
 
     switch (requestType) {
-      case "LEAVE":
-        return (
-          <>
-            <div className="request-type">{details.leaveType}</div>
-            <div className="request-dates">
-              {details.fromDate} to {details.toDate} (
-              {details.numberOfDays || "N/A"} days)
-            </div>
-            {details.reason && (
-              <div className="request-reason">Reason: {details.reason}</div>
-            )}
-            {details.remarks && (
-              <div className="request-remarks">Remarks: {details.remarks}</div>
-            )}
-          </>
-        );
+      // case "LEAVE":
+      //   return (
+      //     <>
+      //       <div className="request-type">{details.leaveType}</div>
+      //       <div className="request-dates">
+      //         {details.fromDate} to {details.toDate} (
+      //         {details.numberOfDays || "N/A"} days)
+      //       </div>
+      //       {details.reason && (
+      //         <div className="request-reason">Reason: {details.reason}</div>
+      //       )}
+      //       {details.remarks && (
+      //         <div className="request-remarks">Remarks: {details.remarks}</div>
+      //       )}
+      //     </>
+      //   );
+
+      case "LEAVE": {
+          const {
+            leaveType,
+            fromDate,
+            toDate,
+            numberOfDays,
+            leaveDuration,
+            halfDaySession,
+            reason,
+            remarks
+          } = details || {};
+
+          const isHalfDay = leaveDuration === "HALF_DAY";
+
+          const sessionLabel =
+            halfDaySession === "FIRST_HALF"
+              ? "Morning"
+              : halfDaySession === "SECOND_HALF"
+              ? "Afternoon"
+              : null;
+
+          return (
+            <>
+              <div className="request-type">{leaveType}</div>
+
+              <div className="request-dates">
+                {isHalfDay ? (
+                  <>
+                    {fromDate} • Half Day
+                    {sessionLabel && ` (${sessionLabel})`}
+                  </>
+                ) : (
+                  <>
+                    {fromDate} to {toDate} ({numberOfDays || "N/A"} days)
+                  </>
+                )}
+              </div>
+
+              {reason && <div className="request-reason">Reason: {reason}</div>}
+              {remarks && <div className="request-remarks">Remarks: {remarks}</div>}
+            </>
+          );
+        }
 
       case "SALARY":
         return (
