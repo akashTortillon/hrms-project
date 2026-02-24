@@ -12,16 +12,20 @@ import CustomDatePicker from "../../components/reusable/CustomDatePicker.jsx";
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
-  const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
+  const [leaveTypes, setLeaveTypes] = useState([]); // ✅ Leave types state
 
-  // ✅ NEW: SubType state for Salary requests
+  //-----------------------------------------------------------------------------------------------------------------------
+  // ✅ SubType state for Salary requests
   const [salarySubType, setSalarySubType] = useState("salary_advance");
+
+  // ✅ HALF-DAY: Session state (only relevant when isHalfDay is true)
+  const [halfDaySession, setHalfDaySession] = useState("");
 
   // Form states
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "", // Changed from "Annual Leave" to ""
-    leaveTypeId: "", // ✅ NEW: Track ID
-    isPaid: true,    // ✅ NEW: Track Paid status
+    leaveTypeId: "", // ✅ Track ID
+    isPaid: true,    // ✅ Track Paid status
     numberOfDays: "",
     fromDate: "",
     toDate: "",
@@ -39,7 +43,10 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
     purpose: ""
   });
 
-  // ✅ NEW: Fetch Leave Types
+  // ✅ HALF-DAY: Detect if selected leave type is "Half Day"
+  const isHalfDay = leaveForm.leaveType === "Half Day";
+
+  // ✅ Fetch Leave Types
   useEffect(() => {
     const fetchLeaveTypes = async () => {
       try {
@@ -60,6 +67,36 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
     fetchLeaveTypes();
   }, []);
 
+  // ✅ HALF-DAY: When isHalfDay changes, auto-adjust form fields
+  useEffect(() => {
+    if (isHalfDay) {
+      // Auto-sync toDate = fromDate and lock numberOfDays to 0.5
+      setLeaveForm(prev => ({
+        ...prev,
+        toDate: prev.fromDate,
+        numberOfDays: "0.5"
+      }));
+    } else {
+      // Restore editable fields when switching back to full-day
+      setHalfDaySession("");
+      setLeaveForm(prev => ({
+        ...prev,
+        numberOfDays: "",
+        toDate: ""
+      }));
+    }
+  }, [isHalfDay]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ✅ HALF-DAY: Keep toDate in sync with fromDate for half-day leaves
+  const handleFromDateChange = (e) => {
+    const newDate = e.target.value;
+    if (isHalfDay) {
+      setLeaveForm({ ...leaveForm, fromDate: newDate, toDate: newDate });
+    } else {
+      setLeaveForm({ ...leaveForm, fromDate: newDate });
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       setLoading(true);
@@ -76,13 +113,30 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
+
+        // ✅ HALF-DAY: Additional validation
+        if (isHalfDay) {
+          if (!halfDaySession) {
+            toast.error("Please select a half-day session (First Half or Second Half)");
+            setLoading(false);
+            return;
+          }
+          if (leaveForm.fromDate !== leaveForm.toDate) {
+            toast.error("Half-day leave must be on a single day");
+            setLoading(false);
+            return;
+          }
+        }
+
         requestData.details = {
           leaveType: leaveForm.leaveType,
-          leaveTypeId: leaveForm.leaveTypeId, // ✅ NEW
-          isPaid: leaveForm.isPaid,           // ✅ NEW
-          numberOfDays: leaveForm.numberOfDays,
+          leaveTypeId: leaveForm.leaveTypeId,    // ✅
+          isPaid: leaveForm.isPaid,               // ✅
+          leaveDuration: isHalfDay ? "HALF_DAY" : "FULL_DAY",   // ✅ HALF-DAY
+          ...(isHalfDay && { halfDaySession }),                   // ✅ HALF-DAY: only when half-day
+          numberOfDays: isHalfDay ? 0.5 : leaveForm.numberOfDays,
           fromDate: leaveForm.fromDate,
-          toDate: leaveForm.toDate,
+          toDate: isHalfDay ? leaveForm.fromDate : leaveForm.toDate, // ✅ HALF-DAY: toDate = fromDate
           reason: leaveForm.reason
         };
       } else if (activeType === "salary") {
@@ -91,7 +145,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
-        // ✅ NEW: Include subType for salary requests
+        // ✅ Include subType for salary requests
         requestData.subType = salarySubType;
         requestData.details = {
           amount: salaryForm.amount,
@@ -124,6 +178,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           toDate: "",
           reason: ""
         });
+        setHalfDaySession(""); // ✅ HALF-DAY: reset session
         setSalaryForm({
           amount: "",
           repaymentPeriod: "3 Months",
@@ -206,38 +261,51 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
               <div>
                 <label>Leave Type</label>
                 <CustomSelect
-                    name="leaveTypeId"
-                    placeholder="Select Leave Type"
-                    value={leaveForm.leaveTypeId}
-                    options={leaveTypes.map(type => ({
-                      value: type._id,
-                      label: `${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`
-                    }))}
-                    onChange={(val) => {
-                      const selected = leaveTypes.find(t => t._id === val);
-                      if (selected) {
-                        setLeaveForm({
-                          ...leaveForm,
-                          leaveTypeId: selected._id,
-                          leaveType: selected.name,
-                          isPaid: selected.metadata?.isPaid !== false
-                        });
-                      }
-                    }}
-                  />
+                  name="leaveTypeId"
+                  placeholder="Select Leave Type"
+                  value={leaveForm.leaveTypeId}
+                  options={leaveTypes.map(type => ({
+                    value: type._id,
+                    label: `${type.name} ${type.metadata?.isPaid === false ? "(Unpaid)" : "(Paid)"}`
+                  }))}
+                  onChange={(val) => {
+                    const selected = leaveTypes.find(t => t._id === val);
+                    if (selected) {
+                      setLeaveForm({
+                        ...leaveForm,
+                        leaveTypeId: selected._id,
+                        leaveType: selected.name,
+                        isPaid: selected.metadata?.isPaid !== false
+                      });
+                      // ✅ HALF-DAY: clear session when leave type changes
+                      setHalfDaySession("");
+                    }
+                  }}
+                />
 
               </div>
 
               <div>
                 <label>Number of Days</label>
-                <input
-                  type="number"
-                  placeholder="5"
-                  value={leaveForm.numberOfDays}
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, numberOfDays: e.target.value })
-                  }
-                />
+                {/* ✅ HALF-DAY: Show read-only 0.5 when half-day, otherwise normal input */}
+                {isHalfDay ? (
+                  <input
+                    type="number"
+                    value="0.5"
+                    readOnly
+                    style={{ backgroundColor: "#f5f5f5", cursor: "not-allowed" }}
+                    title="Half-day leave is fixed at 0.5 days"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    placeholder="5"
+                    value={leaveForm.numberOfDays}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, numberOfDays: e.target.value })
+                    }
+                  />
+                )}
               </div>
             </div>
 
@@ -248,24 +316,57 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   name="fromDate"
                   value={leaveForm.fromDate}
                   placeholder="From Date"
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, fromDate: e.target.value })
-                  }
+                  onChange={handleFromDateChange}
                 />
               </div>
 
               <div>
                 <label>To Date</label>
-                <CustomDatePicker
-                  name="toDate"
-                  value={leaveForm.toDate}
-                  placeholder="To Date"
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, toDate: e.target.value })
-                  }
-                />
+                {/* ✅ HALF-DAY: Show read-only auto-synced date when half-day */}
+                {isHalfDay ? (
+                  <CustomDatePicker
+                    name="toDate"
+                    value={leaveForm.fromDate}
+                    placeholder="To Date"
+                    disabled={true}
+                    onChange={() => { }} // no-op: locked for half-day
+                  />
+                ) : (
+                  <CustomDatePicker
+                    name="toDate"
+                    value={leaveForm.toDate}
+                    placeholder="To Date"
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, toDate: e.target.value })
+                    }
+                  />
+                )}
               </div>
             </div>
+
+            {/* ✅ HALF-DAY: Session selector — only shown when Half Day is selected */}
+            {isHalfDay && (
+              <div className="form-row">
+                <div style={{ width: "100%" }}>
+                  <label>Half Day Session <span style={{ color: "red" }}>*</span></label>
+                  <CustomSelect
+                    name="halfDaySession"
+                    placeholder="Select Session"
+                    value={halfDaySession}
+                    options={[
+                      { value: "FIRST_HALF", label: "First Half (Morning)" },
+                      { value: "SECOND_HALF", label: "Second Half (Afternoon)" }
+                    ]}
+                    onChange={(val) => setHalfDaySession(val)}
+                  />
+                  {!halfDaySession && (
+                    <small style={{ color: "#e57373", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                      Please select which half of the day you are taking off
+                    </small>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div>
               <label>Reason</label>
@@ -283,7 +384,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {/* SALARY ADVANCE FORM */}
         {activeType === "salary" && (
           <div className="leave-form">
-            {/* ✅ NEW: RADIO BUTTONS FOR SUB-TYPE */}
+            {/* ✅ RADIO BUTTONS FOR SUB-TYPE */}
             <div className="salary-subtype-section">
               <label className="subtype-label">Request Type</label>
               <div className="radio-group">
@@ -358,27 +459,27 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {activeType === "document" && (
           <div className="leave-form">
             <div>
-              
+
               <label>Document Type</label>
               <CustomSelect
-                  placeholder="Select Document Type"
-                  value={documentForm.documentType}
-                  options={[
-                    { value: "Salary Certificate", label: "Salary Certificate" },
-                    { value: "Experience Letter", label: "Experience Letter" },
-                    { value: "Employment Letter", label: "Employment Letter" },
-                    {
-                      value: "NOC (No Objection Certificate)",
-                      label: "NOC (No Objection Certificate)"
-                    }
-                  ]}
-                  onChange={(val) =>
-                    setDocumentForm({
-                      ...documentForm,
-                      documentType: val
-                    })
+                placeholder="Select Document Type"
+                value={documentForm.documentType}
+                options={[
+                  { value: "Salary Certificate", label: "Salary Certificate" },
+                  { value: "Experience Letter", label: "Experience Letter" },
+                  { value: "Employment Letter", label: "Employment Letter" },
+                  {
+                    value: "NOC (No Objection Certificate)",
+                    label: "NOC (No Objection Certificate)"
                   }
-                />
+                ]}
+                onChange={(val) =>
+                  setDocumentForm({
+                    ...documentForm,
+                    documentType: val
+                  })
+                }
+              />
             </div>
 
             <div>

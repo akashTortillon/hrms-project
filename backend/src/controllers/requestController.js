@@ -49,7 +49,15 @@ const notifyAdmins = async (title, message, link) => {
   }
 };
 
-const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true) => {
+const markLeaveAttendance = async (
+  userId,
+  fromDate,
+  toDate,
+  leaveType = null,
+  isPaid = true,
+  leaveDuration = "FULL_DAY",
+  halfDaySession = null
+) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
 
@@ -57,6 +65,9 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
   if (!employee) {
     throw new Error("Employee not found for leave request");
   }
+
+  // ✅ HALF-DAY: attendanceFraction is 0.5 for half-day, 1 for full-day
+  const attendanceFraction = leaveDuration === "HALF_DAY" ? 0.5 : 1;
 
   const start = new Date(fromDate);
   const end = new Date(toDate);
@@ -75,7 +86,11 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
         workHours: null,
         shift: "Day Shift",
         leaveType,
-        isPaid
+        isPaid,
+        // ✅ HALF-DAY fields
+        attendanceFraction,
+        leaveDuration: leaveDuration || "FULL_DAY",
+        halfDaySession: halfDaySession || null
       },
       { upsert: true, new: true }
     );
@@ -236,7 +251,7 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
 export const createRequest = async (req, res) => {
   try {
     const { requestType, subType, details } = req.body;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     if (!requestType || !details) {
       return res.status(400).json({
@@ -267,6 +282,35 @@ export const createRequest = async (req, res) => {
       // Ensure details has subType set (if it came from root body)
       if (details && !details.subType) {
         details.subType = type;
+      }
+    }
+
+    // ✅ HALF-DAY LEAVE: Validate half-day specific rules
+    if (requestType === "LEAVE" && details && details.leaveDuration === "HALF_DAY") {
+      const { fromDate, toDate, numberOfDays, halfDaySession } = details;
+
+      // Must be a single day
+      if (!fromDate || !toDate || fromDate !== toDate) {
+        return res.status(400).json({
+          success: false,
+          message: "Half-day leave must have the same From Date and To Date"
+        });
+      }
+
+      // Must be 0.5 days
+      if (Number(numberOfDays) !== 0.5) {
+        return res.status(400).json({
+          success: false,
+          message: "Half-day leave must have numberOfDays set to 0.5"
+        });
+      }
+
+      // Session is required
+      if (!halfDaySession || !["FIRST_HALF", "SECOND_HALF"].includes(halfDaySession)) {
+        return res.status(400).json({
+          success: false,
+          message: "Half-day leave requires a valid session: FIRST_HALF or SECOND_HALF"
+        });
       }
     }
 
@@ -314,7 +358,8 @@ export const createRequest = async (req, res) => {
 // Get all requests for the current user
 export const getMyRequests = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id;
+    console.log("req.user._id:", userId);
     const { type, status, subType } = req.query;
 
     console.log("getMyRequests hit:", { userId, query: req.query }); // DEBUG LOG
@@ -530,9 +575,18 @@ export const updateRequestStatus = async (req, res) => {
     }
 
     if (request.requestType === "LEAVE" && action === "APPROVE") {
-      const { fromDate, toDate, leaveType, isPaid } = request.details;
+      const { fromDate, toDate, leaveType, isPaid, leaveDuration, halfDaySession } = request.details;
       if (fromDate && toDate) {
-        await markLeaveAttendance(request.userId, fromDate, toDate, leaveType, isPaid);
+        // ✅ Pass leaveDuration and halfDaySession for half-day support
+        await markLeaveAttendance(
+          request.userId,
+          fromDate,
+          toDate,
+          leaveType,
+          isPaid,
+          leaveDuration || "FULL_DAY",
+          halfDaySession || null
+        );
       }
     }
 
