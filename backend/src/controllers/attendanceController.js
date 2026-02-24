@@ -792,7 +792,13 @@ export const getMonthlyAttendance = async (req, res) => {
 
         if (status === "Present") present++;
         else if (status === "Late") late++;
-        else if (status === "On Leave") leave++;
+        else if (status === "On Leave") {
+          const duration = record?.leaveDuration || 1;
+          leave += duration;
+          // Note: The prompt requests half-day only. If someone takes a half-day, what is the other half?
+          // For now, if leaveDuration is fractional, the other half isn't accounted for in Stats,
+          // but the total `leave` will render correctly on the dashboard visually (e.g. 1.5).
+        }
         else if (status === "Absent") absent++;
         // Weekends don't count towards absent
       });
@@ -1152,7 +1158,10 @@ export const exportAttendance = async (req, res) => {
           // Stats
           if (status === "Present") present++;
           else if (status === "Late") late++;
-          else if (status === "On Leave") leave++;
+          else if (status === "On Leave") {
+            const duration = record?.leaveDuration || 1;
+            leave += duration;
+          }
           else if (status === "Absent") absent++;
         });
 

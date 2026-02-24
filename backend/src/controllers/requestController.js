@@ -451,7 +451,7 @@ const notifyAdmins = async (title, message, link) => {
   }
 };
 
-const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true) => {
+const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true, isHalfDay = false) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
 
@@ -474,10 +474,11 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
         status: "On Leave",
         checkIn: null,
         checkOut: null,
-        workHours: null,
+        workHours: isHalfDay ? "0.5 days" : null,
         shift: "Day Shift",
         leaveType,
-        isPaid
+        isPaid,
+        leaveDuration: isHalfDay ? 0.5 : 1
       },
       { upsert: true, new: true }
     );
@@ -938,9 +939,9 @@ export const updateRequestStatus = async (req, res) => {
     }
 
     if (request.requestType === "LEAVE" && action === "APPROVE") {
-      const { fromDate, toDate, leaveType, isPaid } = request.details;
+      const { fromDate, toDate, leaveType, isPaid, isHalfDay } = request.details;
       if (fromDate && toDate) {
-        await markLeaveAttendance(request.userId, fromDate, toDate, leaveType, isPaid);
+        await markLeaveAttendance(request.userId, fromDate, toDate, leaveType, isPaid, isHalfDay);
       }
     }
 

@@ -677,6 +677,31 @@
                     "name": "Requests",
                     "item": [
                         {
+                            "name": "Get Branches (Masters)",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/masters/branches",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "masters",
+                                        "branches"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
                             "name": "Get Leave Types (Masters)",
                             "request": {
                                 "method": "GET",
@@ -719,7 +744,45 @@
                                 ],
                                 "body": {
                                     "mode": "raw",
-                                    "raw": "{\n    \"requestType\": \"LEAVE\",\n    \"details\": {\n        \"leaveType\": \"Annual Leave\",\n        \"leaveTypeId\": \"6965c67439d52ebfc73ff795\",\n        \"isPaid\": true,\n        \"numberOfDays\": \"1\",\n        \"fromDate\": \"2026-02-28\",\n        \"toDate\": \"2026-02-28\",\n        \"reason\": \"Personal Leave\"\n    }\n}",
+                                    "raw": "{\n    \"requestType\": \"LEAVE\",\n    \"details\": {\n        \"leaveType\": \"Annual Leave\",\n        \"leaveTypeId\": \"6965c67439d52ebfc73ff795\",\n        \"isPaid\": true,\n        \"isHalfDay\": false,\n        \"numberOfDays\": \"1\",\n        \"fromDate\": \"2026-02-28\",\n        \"toDate\": \"2026-02-28\",\n        \"reason\": \"Personal Leave\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/requests",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "requests"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Half-Day Leave Request",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"requestType\": \"LEAVE\",\n    \"details\": {\n        \"leaveType\": \"Annual Leave\",\n        \"leaveTypeId\": \"6965c67439d52ebfc73ff795\",\n        \"isPaid\": true,\n        \"isHalfDay\": true,\n        \"numberOfDays\": 0.5,\n        \"fromDate\": \"2026-02-28\",\n        \"toDate\": \"2026-02-28\",\n        \"reason\": \"Half-Day Personal Leave\"\n    }\n}",
                                     "options": {
                                         "raw": {
                                             "language": "json"
