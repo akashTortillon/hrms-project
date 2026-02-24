@@ -92,7 +92,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         requestData.subType = salarySubType;
         requestData.details = {
           amount: salaryForm.amount,
-          repaymentPeriod: salaryForm.repaymentPeriod,
+          repaymentPeriod: salarySubType === "salary_advance" ? "1 Month" : salaryForm.repaymentPeriod,
           reason: salaryForm.reason
         };
       } else if (activeType === "document") {
@@ -344,32 +344,34 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
               />
             </div>
 
-            <div>
-              <label>Repayment Period (Months)</label>
-              <select
-                value={salaryForm.repaymentPeriod}
-                onChange={(e) =>
-                  setSalaryForm({
-                    ...salaryForm,
-                    repaymentPeriod: e.target.value
-                  })
-                }
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: "white",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
-              >
-                <option value="" disabled>Select Period</option>
-                <option value="3 Months">3 Months</option>
-                <option value="6 Months">6 Months</option>
-                <option value="9 Months">9 Months</option>
-              </select>
-            </div>
+            {salarySubType === "loan" && (
+              <div>
+                <label>Repayment Period (Months)</label>
+                <select
+                  value={salaryForm.repaymentPeriod}
+                  onChange={(e) =>
+                    setSalaryForm({
+                      ...salaryForm,
+                      repaymentPeriod: e.target.value
+                    })
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "white",
+                    fontSize: "14px",
+                    height: "42px"
+                  }}
+                >
+                  <option value="" disabled>Select Period</option>
+                  <option value="3 Months">3 Months</option>
+                  <option value="6 Months">6 Months</option>
+                  <option value="9 Months">9 Months</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label>Reason</label>

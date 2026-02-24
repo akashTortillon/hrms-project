@@ -592,9 +592,9 @@
                     "response": []
                 },
                 {
-                    "name": "Approve Request (Admin Mobile)",
+                    "name": "Approve Loan Request (Admin Mobile)",
                     "request": {
-                        "description": "Approve a LEAVE or SALARY request. For SALARY (loans/advance), interestRate and repaymentPeriod can be optionally overridden.",
+                        "description": "Approve a Loan request. interestRate and repaymentPeriod can be optionally overridden.",
                         "method": "PUT",
                         "header": [
                             {
@@ -609,6 +609,51 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"action\": \"APPROVE\",\n    \"interestRate\": 0,\n    \"repaymentPeriod\": 6\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/requests/:requestId/action",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "requests",
+                                ":requestId",
+                                "action"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "requestId",
+                                    "value": "REQ123"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Approve Salary Advance (Admin Mobile)",
+                    "request": {
+                        "description": "Approve a Salary Advance request. Admin can optionally override the amount.",
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"action\": \"APPROVE\",\n    \"amount\": 500\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"

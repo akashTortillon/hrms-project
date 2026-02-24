@@ -550,7 +550,7 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
           <p><strong>Request ID:</strong> ${request.requestId}</p>
           <p><strong>Request Type:</strong> ${requestLabel}</p>
           <p><strong>Requested Amount:</strong> AED ${request.details.amount || 'N/A'}</p>
-          <p><strong>Repayment Period:</strong> ${request.details.repaymentPeriod || 'N/A'}</p>
+          ${type === 'loan' ? `<p><strong>Repayment Period:</strong> ${request.details.repaymentPeriod || 'N/A'}</p>` : ''}
           <p><strong>Reason:</strong> ${request.details.reason || 'N/A'}</p>
           <p><strong>Submitted Date:</strong> ${new Date(request.submittedAt).toLocaleDateString()}</p>
         </div>
@@ -588,7 +588,7 @@ const sendSalaryAdvanceApprovalEmail = async (request, employeeUser) => {
           <p>Your ${requestLabel.toLowerCase()} has been approved.</p>
           <p><strong>Request ID:</strong> ${request.requestId}</p>
           <p><strong>Approved Amount:</strong> AED ${request.details.amount || 'N/A'}</p>
-          <p><strong>Repayment Period:</strong> ${request.details.repaymentPeriod || 'N/A'}</p>
+          ${type === 'loan' ? `<p><strong>Repayment Period:</strong> ${request.details.repaymentPeriod || 'N/A'}</p>` : ''}
           <p><strong>Effective Date:</strong> ${new Date(request.approvedAt).toLocaleDateString()}</p>
         </div>
         <p style="margin-top: 20px; color: #666;">The amount will be processed according to the company's payroll schedule.</p>
@@ -902,6 +902,12 @@ export const updateRequestStatus = async (req, res) => {
 
       // Calculate Interest for Loans AND Salary Advances
       if (request.status === "PENDING" && request.requestType === "SALARY") {
+
+        // Update specific Amount if Admin overrode it
+        if (req.body.amount) {
+          request.details.amount = Number(req.body.amount);
+        }
+
         const rate = interestRate ? Number(interestRate) : 0;
         const principal = Number(request.details.amount) || 0;
         const totalRepayment = principal + (principal * rate / 100);

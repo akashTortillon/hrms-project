@@ -5,6 +5,7 @@ const employeeSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
   role: { type: String, required: true },
   department: { type: String, required: true },
+  branch: { type: String },
   email: { type: String, required: true },
   phone: { type: String, required: true },
   joinDate: { type: Date, required: true },

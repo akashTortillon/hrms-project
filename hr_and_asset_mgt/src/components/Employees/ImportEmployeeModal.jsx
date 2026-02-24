@@ -53,31 +53,27 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                 "Full Name": "Reny",
                 "Email": "reny@tortilon.com",
                 "Phone": "+971501111111",
+                "Personal ID (14 Digit)": "12345678901234",
+                "Nationality": "Indian",
+                "UAE Address": "Dubai Silicon Oasis, UAE",
                 "Role": "Employee",
                 "Department": "IT",
+                "Branch": "HQ Dubai",
                 "Joining Date": "2024-01-10",
+                "Employee Type": "Full-Time",
                 "Designation": "Software Engineer",
-                "Status": "Active"
-            },
-            {
-                "Full Name": "Athira",
-                "Email": "athira@tortilon.com",
-                "Phone": "+971502222222",
-                "Role": "HR",
-                "Department": "HR",
-                "Joining Date": "2024-02-15",
-                "Designation": "HR Executive",
-                "Status": "Active"
-            },
-            {
-                "Full Name": "Sreekutty",
-                "Email": "sreekutty@tortilon.com",
-                "Phone": "+971503333333",
-                "Role": "Employee",
-                "Department": "Finance",
-                "Joining Date": "2024-03-20",
-                "Designation": "Accountant",
-                "Status": "Active"
+                "Shift": "Day Shift",
+                "Status": "Active",
+                "Labor Card No": "LB987654",
+                "Agent ID (WPS)": "AGT123",
+                "Basic Salary": 8000,
+                "Accommodation": "Provided",
+                "Passport Expiry": "2030-05-15",
+                "Emirates ID Expiry": "2026-05-15",
+                "Visa Expiry": "2026-05-15",
+                "Bank Name": "Emirates NBD",
+                "IBAN": "AE12000012341234123412",
+                "Account Number": "1234567890"
             }
         ];
         const worksheet = XLSX.utils.json_to_sheet(templateData);

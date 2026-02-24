@@ -93,6 +93,7 @@ export default function AdminRequests() {
       setProcessing(true);
       await updateRequestStatus(requestId, {
         action: "APPROVE",
+        amount: data.amount,
         interestRate: data.interestRate,
         repaymentPeriod: data.repaymentPeriod
       });
@@ -244,7 +245,7 @@ export default function AdminRequests() {
             <div className="request-amount">
               Amount: {details.amount || "N/A"}
             </div>
-            {details.repaymentPeriod && (
+            {(details.subType === "loan" || subType === "loan") && details.repaymentPeriod && (
               <div className="request-repayment">
                 Repayment Period: {details.repaymentPeriod}
               </div>

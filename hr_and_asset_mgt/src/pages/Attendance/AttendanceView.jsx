@@ -17,7 +17,7 @@ import {
   getMonthlyAttendance,
   exportAttendanceReport
 } from "../../services/attendanceService.js";
-import { getDepartments, shiftService } from "../../services/masterService.js";
+import { getDepartments, shiftService, getBranches } from "../../services/masterService.js";
 import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext.jsx";
 
@@ -50,6 +50,7 @@ function Attendance() {
   const selectedYear = parseInt(searchParams.get("year") || new Date().getFullYear());
   const selectedDepartment = searchParams.get("department") || "";
   const selectedShift = searchParams.get("shift") || "";
+  const selectedBranch = searchParams.get("branch") || "";
 
   // ✅ New Params
   const page = parseInt(searchParams.get("page") || "1");
@@ -67,6 +68,7 @@ function Attendance() {
   // Filter Options State
   const [departments, setDepartments] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [branches, setBranches] = useState([]);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -104,8 +106,10 @@ function Attendance() {
     try {
       const deps = await getDepartments();
       const shfs = await shiftService.getAll();
+      const brchs = await getBranches();
       setDepartments(deps);
       setShifts(shfs);
+      setBranches(brchs);
     } catch (error) {
       console.error("Failed to fetch filter options", error);
     }
@@ -122,7 +126,8 @@ function Attendance() {
         status: selectedStatus,
         search: searchQuery,
         department: selectedDepartment,
-        shift: selectedShift
+        shift: selectedShift,
+        branch: selectedBranch
       });
 
       // Handle new response structure OR legacy structure
@@ -231,7 +236,8 @@ function Attendance() {
         month: selectedMonth,
         year: selectedYear,
         department: selectedDepartment,
-        shift: selectedShift
+        shift: selectedShift,
+        branch: selectedBranch
       };
 
       const blob = await exportAttendanceReport(filters);
@@ -303,12 +309,16 @@ function Attendance() {
         setSelectedYear={(y) => updateParams({ year: y })}
         departments={isEmployee ? [] : departments}
         shifts={isEmployee ? [] : shifts}
+        branches={isEmployee ? [] : branches}
         selectedDepartment={isEmployee ? "" : selectedDepartment}
         setSelectedDepartment={(d) => updateParams({ department: d, page: 1 })}
         selectedShift={isEmployee ? "" : selectedShift}
         setSelectedShift={(s) => updateParams({ shift: s, page: 1 })}
+        selectedBranch={isEmployee ? "" : selectedBranch}
+        setSelectedBranch={(b) => updateParams({ branch: b, page: 1 })}
         showDepartmentFilter={!isEmployee}
         showShiftFilter={!isEmployee}
+        showBranchFilter={!isEmployee}
         // ✅ New Filter Props
         searchQuery={searchQuery}
         setSearchQuery={(q) => updateParams({ search: q, page: 1 })}
@@ -322,7 +332,8 @@ function Attendance() {
         records={viewMode === "day" ? attendanceRecords : monthlyRecords.filter(record => {
           const deptMatch = !selectedDepartment || record.department === selectedDepartment;
           const shiftMatch = !selectedShift || record.shift === selectedShift;
-          return deptMatch && shiftMatch;
+          const branchMatch = !selectedBranch || record.branch === selectedBranch;
+          return deptMatch && shiftMatch && branchMatch;
         })}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
