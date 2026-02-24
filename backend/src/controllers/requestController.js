@@ -251,7 +251,7 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
 export const createRequest = async (req, res) => {
   try {
     const { requestType, subType, details } = req.body;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     if (!requestType || !details) {
       return res.status(400).json({
@@ -358,7 +358,8 @@ export const createRequest = async (req, res) => {
 // Get all requests for the current user
 export const getMyRequests = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id;
+    console.log("req.user._id:", userId);
     const { type, status, subType } = req.query;
 
     console.log("getMyRequests hit:", { userId, query: req.query }); // DEBUG LOG
