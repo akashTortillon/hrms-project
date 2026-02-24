@@ -347,22 +347,31 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                     else if (d.lateTier >= 3) lateTier3++;
                 }
                 break;
-            case 'PAID_LEAVE':
-                paidDays++;
-                paidLeavesCount++;
-                console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+Paid)`);
+            case 'PAID_LEAVE': {
+                // ✅ HALF-DAY: use attendanceFraction (0.5 for half-day, 1 for full-day)
+                const paidFraction = (logMap[d.dateStr] && logMap[d.dateStr].attendanceFraction != null)
+                    ? logMap[d.dateStr].attendanceFraction
+                    : 1;
+                paidDays += paidFraction;
+                paidLeavesCount += paidFraction;
+                console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+${paidFraction})`);
                 break;
+            }
             case 'WEEKEND':
             case 'HOLIDAY':
                 paidDays++;
                 console.log(`[DEBUG] Day ${d.day} is ${d.status} (+Paid)`);
                 break;
-            case 'UNPAID_LEAVE':
-                unpaidLeavesCount++;
-                // lopDays++; // Removed to prevent double counting in generatePayroll (which adds Absent + Unpaid)
+            case 'UNPAID_LEAVE': {
+                // ✅ HALF-DAY: use attendanceFraction (0.5 for half-day, 1 for full-day)
+                const unpaidFraction = (logMap[d.dateStr] && logMap[d.dateStr].attendanceFraction != null)
+                    ? logMap[d.dateStr].attendanceFraction
+                    : 1;
+                unpaidLeavesCount += unpaidFraction;
                 break;
+            }
             case 'SANDWICH_LEAVE': // Treated as Unpaid
-                unpaidLeavesCount++; // Or separate 'sandwichLeavesCount'?
+                unpaidLeavesCount++; // Sandwich is always a full day
                 // lopDays++; // Removed
                 break;
             case 'ABSENT':

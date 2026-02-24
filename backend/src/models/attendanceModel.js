@@ -54,6 +54,26 @@ const attendanceSchema = new mongoose.Schema(
       default: true
     },
 
+    // ✅ HALF-DAY LEAVE: Fraction of day (1 = full, 0.5 = half)
+    attendanceFraction: {
+      type: Number,
+      default: 1
+    },
+
+    // ✅ HALF-DAY LEAVE: Duration type
+    leaveDuration: {
+      type: String,
+      enum: ["FULL_DAY", "HALF_DAY", null],
+      default: null
+    },
+
+    // ✅ HALF-DAY LEAVE: Which half (for audit/UI)
+    halfDaySession: {
+      type: String,
+      enum: ["FIRST_HALF", "SECOND_HALF", null],
+      default: null
+    },
+
     // ✅ Manual Edit Tracking
     isManuallyEdited: {
       type: Boolean,
