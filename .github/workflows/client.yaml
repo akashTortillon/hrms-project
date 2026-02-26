@@ -1,0 +1,36 @@
+name: Client
+
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  build:
+    if: contains(github.event.head_commit.message, '[build-client]') || contains(github.event.head_commit.message, '[build-all]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: ./hr_and_asset_mgt
+        run: npm install
+
+      - name: Build client
+        working-directory: ./hr_and_asset_mgt
+        run: npm run build
+
+      - name: Deploy client
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          ARGS: "-rlgoDzvc --delete"
+          SOURCE: "hr_and_asset_mgt/dist/"
+          REMOTE_HOST: ${{ secrets.HOST }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: "/home/hello_vivilrajs/client"
