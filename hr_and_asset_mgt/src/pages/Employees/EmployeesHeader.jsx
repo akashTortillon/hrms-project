@@ -8,11 +8,14 @@ export default function EmployeesHeader({
   onAddEmployee,
   department,
   setDepartment,
+  branch,
+  setBranch,
   status,
   setStatus,
   search,
   setSearch,
   deptOptions = [],
+  branchOptions = [],
   onExport,
   onImport,
   count = 0
@@ -51,7 +54,6 @@ export default function EmployeesHeader({
           </div>
 
           {/* Department */}
-          {/* Department */}
           <div style={{ width: '100%' }}>
             <select
               className="employees-select"
@@ -70,6 +72,29 @@ export default function EmployeesHeader({
               <option value="All Departments">All Departments</option>
               {deptOptions.map(dept => (
                 <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Branch */}
+          <div style={{ width: '100%' }}>
+            <select
+              className="employees-select"
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                backgroundColor: "white",
+                fontSize: "14px",
+                height: "42px"
+              }}
+            >
+              <option value="All Branches">All Branches</option>
+              {branchOptions.map(b => (
+                <option key={b} value={b}>{b}</option>
               ))}
             </select>
           </div>

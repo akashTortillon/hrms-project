@@ -122,7 +122,7 @@ import {
 } from "../../services/employeeService.js";
 import { toast } from "react-toastify";
 
-import { getDepartments } from "../../services/masterService";
+import { getDepartments, getBranches } from "../../services/masterService";
 import { useRole } from "../../contexts/RoleContext";
 
 export default function Employees() {
@@ -131,6 +131,7 @@ export default function Employees() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const department = searchParams.get("department") || "All Departments";
+  const branch = searchParams.get("branch") || "All Branches";
   const status = searchParams.get("status") || "All Status";
   const urlSearch = searchParams.get("search") || "";
 
@@ -139,6 +140,7 @@ export default function Employees() {
 
   // 🔹 Options & Data
   const [deptOptions, setDeptOptions] = useState([]);
+  const [branchOptions, setBranchOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -162,9 +164,10 @@ export default function Employees() {
     return () => clearTimeout(timer);
   }, [searchInput, setSearchParams, urlSearch]);
 
-  // 🔹 Fetch Departments on Mount
+  // 🔹 Fetch Departments & Branches on Mount
   useEffect(() => {
     loadDepartments();
+    loadBranches();
   }, []);
 
   const loadDepartments = async () => {
@@ -175,6 +178,17 @@ export default function Employees() {
       }
     } catch (err) {
       console.error("Failed to load departments", err);
+    }
+  };
+
+  const loadBranches = async () => {
+    try {
+      const data = await getBranches();
+      if (data) {
+        setBranchOptions(data.map(d => d.name));
+      }
+    } catch (err) {
+      console.error("Failed to load branches", err);
     }
   };
 
@@ -193,6 +207,7 @@ export default function Employees() {
 
       const params = {
         department,
+        branch,
         status,
         search: urlSearch
       };
@@ -229,6 +244,13 @@ export default function Employees() {
       prev.set("department", val);
       // If val is "All Departments", we can keep it or delete it. 
       // Keeping it makes UI state explicit in URL: ?department=All%20Departments
+      return prev;
+    });
+  };
+
+  const handleSetBranch = (val) => {
+    setSearchParams(prev => {
+      prev.set("branch", val);
       return prev;
     });
   };
@@ -290,6 +312,7 @@ export default function Employees() {
     try {
       const params = {
         department,
+        branch,
         status,
         search: searchInput
       };
@@ -317,11 +340,14 @@ export default function Employees() {
         onAddEmployee={hasPermission("MANAGE_EMPLOYEES") ? () => setShowAddModal(true) : null}
         department={department}
         setDepartment={handleSetDepartment}
+        branch={branch}
+        setBranch={handleSetBranch}
         status={status}
         setStatus={handleSetStatus}
         search={searchInput}
         setSearch={setSearchInput}
         deptOptions={deptOptions}
+        branchOptions={branchOptions}
         onExport={hasPermission("MANAGE_EMPLOYEES") ? handleExport : null}
         onImport={
           hasPermission("MANAGE_EMPLOYEES")

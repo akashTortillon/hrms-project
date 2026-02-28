@@ -4,9 +4,14 @@ import Master from "../models/masterModel.js";
 
 export const exportEmployees = async (req, res) => {
   try {
-    const { department, status, search } = req.query;
+    const { department, status, search, branch } = req.query;
 
     let matchStage = {};
+
+    // Filter by Branch
+    if (branch && branch !== "All Branches") {
+      matchStage.branch = branch;
+    }
 
     // Filter by Department
     if (department && department !== "All Departments") {
@@ -201,9 +206,14 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const { department, status, search } = req.query;
+    const { department, status, search, branch } = req.query;
 
     let matchStage = {};
+
+    // Filter by Branch
+    if (branch && branch !== "All Branches") {
+      matchStage.branch = branch;
+    }
 
     // Filter by Department
     if (department && department !== "All Departments") {
