@@ -56,7 +56,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
         ) : (
           <>
 
-            <SvgView name="leptis_logo" size={60} className="sidebar-brand-logo" />
+            <img src="/src/assets/images/ibhrm_logo.png" alt="ibHRM Logo" className="sidebar-brand-logo" style={{ width: '80px', height: 'auto' }} />
 
             <Button
               variant="light"

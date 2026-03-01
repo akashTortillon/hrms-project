@@ -73,11 +73,19 @@ export default function Login() {
 
         <div className="login-image">
           <img src={employeeImage} alt="login Banner" />
+          <div className="login-logo-overlay" style={{
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            width: '150px'
+          }}>
+            <img src="/src/assets/images/ibhrm_logo.png" alt="ibHRM Logo" style={{ width: '100%' }} />
+          </div>
         </div>
 
         <div className="login-form-wrapper">
           <div className="login-card">
-            <h2 style={{color:"white"}}>Login</h2>
+            <h2 style={{ color: "white" }}>Login</h2>
 
             {error && <div className="error">{error}</div>}
 
