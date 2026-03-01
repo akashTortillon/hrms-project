@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
 import { useState, useMemo } from "react";
 import { useRole } from "../../contexts/RoleContext.jsx";
+import employeeImage from "../../assets/images/ibhrm_logo.png";
+
 
 // All navigation items with their access roles
 const allNavItems = [
@@ -56,7 +58,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
         ) : (
           <>
 
-            <img src="/src/assets/images/ibhrm_logo.png" alt="ibHRM Logo" className="sidebar-brand-logo" style={{ width: '80px', height: 'auto' }} />
+            <img src={employeeImage} alt="ibHRM Logo" className="sidebar-brand-logo" style={{ width: '80px', height: 'auto' }} />
 
             <Button
               variant="light"

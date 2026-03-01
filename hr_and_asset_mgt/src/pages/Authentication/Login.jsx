@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
 import { Link, useNavigate } from "react-router-dom";
-import employeeImage from "../../assets/images/logo_login_image.png";
+import employeeImage from "../../assets/images/ibhrm_logo.png";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
 
@@ -73,14 +73,6 @@ export default function Login() {
 
         <div className="login-image">
           <img src={employeeImage} alt="login Banner" />
-          <div className="login-logo-overlay" style={{
-            position: 'absolute',
-            top: '20px',
-            left: '20px',
-            width: '150px'
-          }}>
-            <img src="/src/assets/images/ibhrm_logo.png" alt="ibHRM Logo" style={{ width: '100%' }} />
-          </div>
         </div>
 
         <div className="login-form-wrapper">
