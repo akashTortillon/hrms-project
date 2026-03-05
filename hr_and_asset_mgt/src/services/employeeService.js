@@ -48,6 +48,14 @@ export const importEmployees = async (formData) => {
   return res.data;
 };
 
+// Admin: Reset employee login password
+export const resetEmployeePassword = async (employeeId, newPassword = null) => {
+  const res = await api.post(`${EMPLOYEE_API}/${employeeId}/reset-password`, {
+    ...(newPassword && { newPassword }),
+  });
+  return res.data;
+};
+
 const DOC_API = "/api/employee-docs";
 
 export const getEmployeeDocuments = async (employeeId) => {

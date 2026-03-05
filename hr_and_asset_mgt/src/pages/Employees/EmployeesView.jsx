@@ -112,13 +112,15 @@ import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
 import ImportEmployeeModal from "../../components/Employees/ImportEmployeeModal.jsx";
+import ResetPasswordModal from "../../components/Employees/ResetPasswordModal.jsx";
 
 import {
   getEmployees,
   addEmployee,
   updateEmployee,
   deleteEmployee,
-  exportEmployees
+  exportEmployees,
+  resetEmployeePassword
 } from "../../services/employeeService.js";
 import { toast } from "react-toastify";
 
@@ -144,6 +146,7 @@ export default function Employees() {
   const [employees, setEmployees] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [resetPasswordEmployee, setResetPasswordEmployee] = useState(null);
 
   // 🔹 Sync Local Search with URL (e.g. back button)
   useEffect(() => {
@@ -307,6 +310,23 @@ export default function Employees() {
     }
   };
 
+  // 🔹 Reset employee login password (admin) – opens modal
+  const handleResetPasswordConfirm = async (newPassword) => {
+    if (!resetPasswordEmployee) return;
+    const empId = resetPasswordEmployee._id || resetPasswordEmployee.id;
+    try {
+      await resetEmployeePassword(empId, newPassword);
+      toast.success(
+        newPassword
+          ? "Password reset successfully. Inform the employee of their new password."
+          : "Password reset to default (Password@123). Ask the employee to change it after login."
+      );
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to reset password");
+      throw error;
+    }
+  };
+
   // 🔹 EXPORT to Excel (Backend)
   const handleExport = async () => {
     try {
@@ -364,6 +384,7 @@ export default function Employees() {
       <EmployeesTable
         employees={employees}
         onDelete={handleDeleteEmployee}
+        onResetPassword={hasPermission("MANAGE_EMPLOYEES") ? (emp) => setResetPasswordEmployee(emp) : null}
       />
 
       {/* ADD MODAL */}
@@ -381,9 +402,14 @@ export default function Employees() {
         onClose={() => setShowImportModal(false)}
         onSuccess={() => {
           fetchEmployees();
-          // Optional: keep modal open to show results, or close it?
-          // The modal handles displaying results, so let's just refresh data
         }}
+      />
+
+      <ResetPasswordModal
+        show={!!resetPasswordEmployee}
+        onClose={() => setResetPasswordEmployee(null)}
+        employee={resetPasswordEmployee}
+        onConfirm={handleResetPasswordConfirm}
       />
     </div>
   );

@@ -364,9 +364,23 @@ export const importEmployees = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const isCsv =
+      req.file.mimetype === "text/csv" ||
+      (req.file.originalname && req.file.originalname.toLowerCase().endsWith(".csv"));
+
+    let workbook;
+    if (isCsv) {
+      const csvString = req.file.buffer.toString("utf8");
+      workbook = XLSX.read(csvString, { type: "string", raw: false });
+    } else {
+      workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    }
+
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
+    if (!sheet) {
+      return res.status(400).json({ message: "No sheet found in the uploaded file." });
+    }
     const data = XLSX.utils.sheet_to_json(sheet);
 
     let successCount = 0;
@@ -392,19 +406,21 @@ export const importEmployees = async (req, res) => {
       lastCodeNum = parseInt(lastEmployee.code.replace("EMP", ""), 10) || 0;
     }
 
+    const safeStr = (val) => (val != null && val !== "" ? String(val).trim() : "");
+
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       const rowNum = i + 2; // Excel row number (1-based, +1 for header)
       let errorMsg = null;
 
       // 1. Basic Validation
-      if (!row["Full Name"] || !row["Email"] || !row["Role"] || !row["Department"]) {
+      if (!safeStr(row["Full Name"]) || !safeStr(row["Email"]) || !safeStr(row["Role"]) || !safeStr(row["Department"])) {
         errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Role, Department)" });
         continue;
       }
 
-      const email = row["Email"].trim();
-      const phone = row["Phone"] ? String(row["Phone"]).trim() : "";
+      const email = safeStr(row["Email"]);
+      const phone = safeStr(row["Phone"]);
 
       // Email Validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -423,12 +439,12 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 3. Strict Master Validation
-      const role = row["Role"].trim();
-      const department = row["Department"].trim();
-      const branch = row["Branch"] ? row["Branch"].trim() : "";
-      const designation = row["Designation"] ? row["Designation"].trim() : "";
-      const contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+      // 3. Strict Master Validation (safeStr handles numbers/empty from CSV/Excel)
+      const role = safeStr(row["Role"]);
+      const department = safeStr(row["Department"]);
+      const branch = safeStr(row["Branch"]);
+      const designation = safeStr(row["Designation"]);
+      const contractType = safeStr(row["Employee Type"]);
 
       if (!validRoles.has(role.toLowerCase())) {
         errors.push({ row: rowNum, email, message: `Invalid Role: '${role}'. Exact spelling must match Master list.` });
@@ -461,11 +477,11 @@ export const importEmployees = async (req, res) => {
         const userExists = await User.findOne({ email });
         if (!userExists) {
           await User.create({
-            name: row["Full Name"],
+            name: safeStr(row["Full Name"]) || email,
             email: email,
             phone: userPhone,
             password: hashedPassword,
-            role: row["Role"]
+            role: role
           });
         }
       } catch (uErr) {
@@ -493,28 +509,28 @@ export const importEmployees = async (req, res) => {
         let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
         await Employee.create({
-          name: row["Full Name"],
+          name: safeStr(row["Full Name"]) || email,
           code: nextCode,
-          role: row["Role"],
-          department: row["Department"],
-          branch: row["Branch"] || "",
+          role: role,
+          department: department,
+          branch: branch,
           email: email,
           phone: phone,
           joinDate: joinDate,
-          status: row["Status"] || "Onboarding",
-          designation: row["Designation"] || row["Role"],
-          shift: row["Shift"] || "Day Shift", // Default
-          nationality: row["Nationality"] || "",
-          address: row["UAE Address"] || "",
-          contractType: row["Employee Type"] || "",
-          basicSalary: row["Basic Salary"] ? String(row["Basic Salary"]) : "",
-          accommodation: row["Accommodation"] || "",
-          laborCardNumber: row["Labor Card No"] || "",
-          personalId: row["Personal ID (14 Digit)"] || "",
-          bankName: row["Bank Name"] || "",
-          iban: row["IBAN"] || "",
-          bankAccount: row["Account Number"] || "",
-          agentId: row["Agent ID (WPS)"] || "",
+          status: safeStr(row["Status"]) || "Onboarding",
+          designation: designation || role,
+          shift: safeStr(row["Shift"]) || "Day Shift",
+          nationality: safeStr(row["Nationality"]),
+          address: safeStr(row["UAE Address"]),
+          contractType: contractType,
+          basicSalary: row["Basic Salary"] != null && row["Basic Salary"] !== "" ? String(row["Basic Salary"]) : "",
+          accommodation: safeStr(row["Accommodation"]),
+          laborCardNumber: safeStr(row["Labor Card No"]),
+          personalId: safeStr(row["Personal ID (14 Digit)"]),
+          bankName: safeStr(row["Bank Name"]),
+          iban: safeStr(row["IBAN"]),
+          bankAccount: safeStr(row["Account Number"]),
+          agentId: safeStr(row["Agent ID (WPS)"]),
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
           visaExpiry: visaExpiry
@@ -539,7 +555,11 @@ export const importEmployees = async (req, res) => {
     });
 
   } catch (error) {
-    // console.error("Import Error:", error);
-    res.status(500).json({ message: "Server error during import" });
+    console.error("Import Error:", error);
+    const message =
+      error.message && error.message.includes("buffer")
+        ? "Invalid or unsupported file format. Please use Excel (.xlsx, .xls) or CSV with UTF-8 encoding."
+        : "Server error during import";
+    res.status(500).json({ message });
   }
 };

@@ -83,12 +83,25 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email: loginId, password } = req.body;
+    if (!loginId || !password) {
+      return res.status(400).json({ message: "Email/Employee ID and password are required" });
+    }
 
+    const trimmed = String(loginId).trim();
+    let emailToUse = trimmed;
 
-    // ✅ Make email case-insensitive
+    // If input does not look like email, treat as Employee ID (code e.g. EMP001)
+    if (!trimmed.includes("@")) {
+      const emp = await Employee.findOne({
+        code: { $regex: new RegExp(`^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }
+      });
+      if (!emp) return res.status(401).json({ message: "Invalid credentials" });
+      emailToUse = emp.email;
+    }
+
     const user = await User.findOne({
-      email: { $regex: new RegExp(`^${email}$`, 'i') }
+      email: { $regex: new RegExp(`^${emailToUse.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }
     });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
@@ -244,6 +257,38 @@ export const changePassword = async (req, res) => {
     res.json({ message: "Password updated successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// Admin: Reset employee login password (by employee id)
+export const resetEmployeePassword = async (req, res) => {
+  try {
+    const { id: employeeId } = req.params;
+    const { newPassword } = req.body;
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${employee.email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }
+    });
+    if (!user) {
+      return res.status(404).json({ message: "No login account found for this employee. They may need to be set up for portal access." });
+    }
+
+    const plainPassword = newPassword && String(newPassword).trim() ? String(newPassword).trim() : "Password@123";
+    user.password = await bcrypt.hash(plainPassword, 10);
+    await user.save();
+
+    res.json({
+      message: "Employee password reset successfully",
+      defaultUsed: !newPassword || !String(newPassword).trim()
+    });
+  } catch (error) {
+    console.error("Reset employee password error:", error);
+    res.status(500).json({ message: error.message || "Failed to reset password" });
   }
 };
 

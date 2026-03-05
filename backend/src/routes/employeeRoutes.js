@@ -9,6 +9,7 @@ import {
   getEmployeeById,
   importEmployees
 } from "../controllers/employeeController.js";
+import { resetEmployeePassword } from "../controllers/authController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -28,6 +29,9 @@ router.post("/", protect, hasPermission("MANAGE_EMPLOYEES"), addEmployee);
 
 // GET single employee
 router.get("/:id", protect, getEmployeeById);
+
+// Admin: Reset employee login password
+router.post("/:id/reset-password", protect, hasPermission("MANAGE_EMPLOYEES"), resetEmployeePassword);
 
 // UPDATE employee
 router.put("/:id", protect, hasPermission("MANAGE_EMPLOYEES"), updateEmployee);
