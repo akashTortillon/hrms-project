@@ -6,7 +6,7 @@ export default function MyRequests() {
   const { hasPermission } = useRole();
 
   // If user cannot approve requests, show personal requests view
-  if (!hasPermission("APPROVE_REQUESTS")) {
+  if (!hasPermission("APPROVE_REQUESTS") && !hasPermission("APPROVE_MANAGER_REQUESTS")) {
     return <EmployeeRequests />;
   }
 

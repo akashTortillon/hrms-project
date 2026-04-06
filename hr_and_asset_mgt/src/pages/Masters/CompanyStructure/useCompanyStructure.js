@@ -5,6 +5,10 @@ import {
     addDepartment,
     updateDepartment,
     deleteDepartment,
+    getCompanies,
+    addCompany,
+    updateCompany,
+    deleteCompany,
     getBranches,
     addBranch,
     updateBranch,
@@ -18,6 +22,7 @@ import {
 
 export default function useCompanyStructure() {
     const [departments, setDepartments] = useState([]);
+    const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [designations, setDesignations] = useState([]);
     const [roles, setRoles] = useState([]);
@@ -41,6 +46,13 @@ export default function useCompanyStructure() {
         } catch (error) {
             console.error("❌ Error fetching departments:", error);
             toast.error("Failed to load departments");
+        }
+
+        try {
+            const data = await getCompanies();
+            setCompanies(data);
+        } catch (error) {
+            console.error("❌ Error fetching companies:", error);
         }
 
         try {
@@ -92,6 +104,11 @@ export default function useCompanyStructure() {
                 else await addDepartment(inputValue);
                 const data = await getDepartments();
                 setDepartments(data);
+            } else if (modalType === "Company") {
+                if (editId) await updateCompany(editId, inputValue);
+                else await addCompany(inputValue);
+                const data = await getCompanies();
+                setCompanies(data);
             } else if (modalType === "Branch") {
                 if (editId) await updateBranch(editId, inputValue);
                 else await addBranch(inputValue);
@@ -126,6 +143,7 @@ export default function useCompanyStructure() {
     const handleDelete = (type, id) => {
         let item = null;
         if (type === "Department") item = departments.find(i => i._id === id);
+        else if (type === "Company") item = companies.find(i => i._id === id);
         else if (type === "Branch") item = branches.find(i => i._id === id);
         else if (type === "Designation") item = designations.find(i => i._id === id);
         else if (type === "Role") item = roles.find(i => i._id === id);
@@ -142,6 +160,9 @@ export default function useCompanyStructure() {
             if (type === "Department") {
                 await deleteDepartment(id);
                 setDepartments(departments.filter((d) => d._id !== id));
+            } else if (type === "Company") {
+                await deleteCompany(id);
+                setCompanies(companies.filter((c) => c._id !== id));
             } else if (type === "Branch") {
                 await deleteBranch(id);
                 setBranches(branches.filter((b) => b._id !== id));
@@ -164,6 +185,7 @@ export default function useCompanyStructure() {
 
     return {
         departments,
+        companies,
         branches,
         designations,
         roles,

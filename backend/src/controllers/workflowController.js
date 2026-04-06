@@ -19,10 +19,68 @@ const ONBOARDING_ITEMS = [
 const OFFBOARDING_ITEMS = [
     { name: "Resignation Letter", description: "Upload signed resignation", required: true },
     { name: "Asset Handover", description: "Return all assigned assets", required: true },
+    { name: "Job Handover", description: "Complete job handover checklist", required: true },
     { name: "Exit Interview", description: "Complete exit interview form", required: true },
-    { name: "Visa Cancellation", description: "Visa cancellation paper", required: true },
-    { name: "Final Settlement", description: "Signed final settlement", required: true }
+    { name: "Loan Settlement", description: "Close pending loans and deductions", required: true },
+    { name: "Final Settlement", description: "Signed final settlement", required: true },
+    { name: "Visa Cancellation", description: "Visa cancellation paper", required: true }
 ];
+
+const mergeTemplateSteps = (defaultItems = [], templateItems = []) => {
+    const normalizedDefaults = defaultItems.map((item) => ({ ...item }));
+    const defaultsByName = new Map(normalizedDefaults.map((item) => [item.name, item]));
+    const extras = [];
+
+    templateItems.forEach((item) => {
+        if (!item?.name) return;
+
+        if (defaultsByName.has(item.name)) {
+            const base = defaultsByName.get(item.name);
+            defaultsByName.set(item.name, {
+                ...base,
+                ...item,
+                name: base.name,
+                required: base.required
+            });
+        } else {
+            extras.push({
+                ...item,
+                status: item.status || "Pending"
+            });
+        }
+    });
+
+    return normalizedDefaults.map((item) => defaultsByName.get(item.name) || item).concat(extras);
+};
+
+const normalizeWorkflowItems = (existingItems = [], templateItems = []) => {
+    const existingByName = new Map(existingItems.map((item) => [item.name, item]));
+    const normalized = [];
+
+    templateItems.forEach((templateItem) => {
+        const existing = existingByName.get(templateItem.name);
+        if (existing) {
+            normalized.push({
+                ...existing.toObject?.() || existing,
+                name: templateItem.name,
+                description: templateItem.description,
+                required: templateItem.required
+            });
+            existingByName.delete(templateItem.name);
+        } else {
+            normalized.push({
+                ...templateItem,
+                status: "Pending"
+            });
+        }
+    });
+
+    existingByName.forEach((item) => {
+        normalized.push(item.toObject?.() || item);
+    });
+
+    return normalized;
+};
 
 // Get or Create Workflow
 export const getEmployeeWorkflow = async (req, res) => {
@@ -30,41 +88,40 @@ export const getEmployeeWorkflow = async (req, res) => {
         const { employeeId, type } = req.params;
 
         let workflow = await Workflow.findOne({ employee: employeeId, type });
-
         const defaultItems = type === 'Onboarding' ? ONBOARDING_ITEMS : OFFBOARDING_ITEMS;
+        let template = await Master.findOne({
+            type: "WORKFLOW_TEMPLATE",
+            name: type
+        });
+        let initialItems = [];
 
-        if (!workflow) {
-            // Fetch Template from Masters
-            let template = await Master.findOne({
-                type: "WORKFLOW_TEMPLATE",
-                name: type
-            });
+        if (template?.metadata?.steps?.length) {
+            initialItems = mergeTemplateSteps(defaultItems, template.metadata.steps);
+        } else {
+            initialItems = defaultItems;
 
-            let initialItems = [];
-
-            if (template && template.metadata && template.metadata.steps) {
-                initialItems = template.metadata.steps;
-            } else {
-                // Fallback to hardcoded if Master not found
-                initialItems = type === 'Onboarding' ? ONBOARDING_ITEMS : (type === 'Offboarding' ? OFFBOARDING_ITEMS : []);
-
-                // Auto-create Master for future editing
-                if (initialItems.length > 0) {
-                    try {
-                        const newTemplate = await Master.create({
-                            type: "WORKFLOW_TEMPLATE",
-                            name: type,
-                            metadata: { steps: initialItems },
-                            isActive: true
-                        });
-                        console.log(`Auto-created Master Template for ${type}`);
-                        template = newTemplate;
-                    } catch (err) {
-                        console.warn("Auto-create master template failed (likely race condition):", err.message);
-                    }
+            if (initialItems.length > 0) {
+                try {
+                    const newTemplate = await Master.create({
+                        type: "WORKFLOW_TEMPLATE",
+                        name: type,
+                        metadata: { steps: initialItems },
+                        isActive: true
+                    });
+                    console.log(`Auto-created Master Template for ${type}`);
+                    template = newTemplate;
+                } catch (err) {
+                    console.warn("Auto-create master template failed (likely race condition):", err.message);
                 }
             }
+        }
 
+        if (template && JSON.stringify(template.metadata?.steps || []) !== JSON.stringify(initialItems)) {
+            template.metadata = { ...(template.metadata || {}), steps: initialItems };
+            await template.save();
+        }
+
+        if (!workflow) {
             // Auto-create Workflow Instance
             workflow = await Workflow.create({
                 employee: employeeId,
@@ -72,19 +129,22 @@ export const getEmployeeWorkflow = async (req, res) => {
                 items: initialItems,
                 createdBy: req.user._id
             });
-        } else if (!workflow.items || workflow.items.length === 0) {
-            // Self-healing / Populating empty
-            const template = await Master.findOne({
-                type: "WORKFLOW_TEMPLATE",
-                name: type
-            });
+        } else {
+            const reconciledItems = normalizeWorkflowItems(workflow.items, initialItems);
+            const hasChanged =
+                reconciledItems.length !== workflow.items.length ||
+                reconciledItems.some((item, index) => {
+                    const current = workflow.items[index];
+                    return !current
+                        || current.name !== item.name
+                        || current.description !== item.description
+                        || Boolean(current.required) !== Boolean(item.required);
+                });
 
-            if (template && template.metadata && template.metadata.steps) {
-                workflow.items = template.metadata.steps;
-            } else {
-                workflow.items = type === 'Onboarding' ? ONBOARDING_ITEMS : OFFBOARDING_ITEMS;
+            if (hasChanged) {
+                workflow.items = reconciledItems;
+                await workflow.save();
             }
-            await workflow.save();
         }
 
         res.json({ success: true, data: workflow });
@@ -130,6 +190,17 @@ export const updateWorkflowItem = async (req, res) => {
 
         const item = workflow.items.id(itemId);
         if (!item) return res.status(404).json({ message: "Item not found" });
+
+        if (workflow.type === "Offboarding") {
+            const currentIndex = workflow.items.findIndex(i => i._id.toString() === itemId);
+            const previousRequiredPending = workflow.items
+                .slice(0, currentIndex)
+                .some(i => i.required && i.status !== "Completed");
+
+            if (previousRequiredPending) {
+                return res.status(400).json({ message: "Complete previous offboarding steps first" });
+            }
+        }
 
         // Handle File Upload
         if (file) {

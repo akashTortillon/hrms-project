@@ -20,14 +20,19 @@ const PERMISSIONS_LIST = [
   "MANAGE_MASTERS",
   "MANAGE_SETTINGS",
   "APPROVE_REQUESTS",
+  "APPROVE_MANAGER_REQUESTS",
   "VIEW_REPORTS",
   "MANAGE_ONBOARDING",
-  "MANAGE_OFFBOARDING"
+  "MANAGE_OFFBOARDING",
+  "MANAGE_APPRAISALS",
+  "MANAGE_POLICIES",
+  "MANAGE_ANNOUNCEMENTS"
 ];
 
 export default function CompanyStructure() {
   const {
     departments,
+    companies,
     branches,
     designations,
     roles,
@@ -69,6 +74,13 @@ export default function CompanyStructure() {
         </MastersCard>
 
         {/* Branches */}
+        <MastersCard
+          title="Companies"
+          onAdd={() => handleOpenAdd("Company")}
+        >
+          <RenderList items={companies} type="Company" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+        </MastersCard>
+
         <MastersCard
           title="Branches"
           onAdd={() => handleOpenAdd("Branch")}

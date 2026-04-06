@@ -13,9 +13,77 @@ import { PDFDocument as PDFLibDocument } from "pdf-lib";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { buildZipArchive } from "../utils/zip.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
+
+const resolveEffectiveSalary = (employee, month, year) => {
+    const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
+    const history = [...(employee.salaryHistory || [])]
+        .filter(entry => entry.effectiveDate && new Date(entry.effectiveDate) <= periodEnd)
+        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
+
+    const latest = history[0];
+    if (latest) {
+        return {
+            basicSalary: toNumber(latest.basicSalary),
+            visaBase: toNumber(latest.visaBase || latest.basicSalary),
+            workBase: toNumber(latest.workBase || latest.basicSalary),
+            ctc: toNumber(latest.ctc || latest.workBase || latest.basicSalary)
+        };
+    }
+
+    return {
+        basicSalary: toNumber(employee.basicSalary),
+        visaBase: toNumber(employee.visaBase || employee.basicSalary),
+        workBase: toNumber(employee.workBase || employee.basicSalary),
+        ctc: toNumber(employee.ctc || employee.workBase || employee.basicSalary)
+    };
+};
+
+const isEmployeeOnProbation = (employee, dateStr) => {
+    if (!employee?.probationEndDate) return false;
+    if (employee.probationStatus === "CONFIRMED") return false;
+    const checkDate = new Date(dateStr);
+    return checkDate <= new Date(employee.probationEndDate);
+};
+
+const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}) => {
+    if (!leaveInfo) return null;
+
+    if (isEmployeeOnProbation(employee, dateStr)) {
+        return "UNPAID_LEAVE";
+    }
+
+    const typeName = leaveInfo.leaveType;
+    const normalizedType = String(typeName || "").toLowerCase();
+    const currentDate = new Date(dateStr);
+
+    if (normalizedType.includes("sick")) {
+        const dayIndex = Math.floor((currentDate - new Date(leaveInfo.start)) / (1000 * 60 * 60 * 24)) + 1;
+        const totalDays = Number(leaveInfo.numberOfDays || dayIndex || 1);
+
+        if (!leaveInfo.hasMedicalDocument && totalDays > 1 && dayIndex >= 2) {
+            return "UNPAID_LEAVE";
+        }
+
+        if (dayIndex <= 15) return "PAID_LEAVE";
+        if (dayIndex <= 45) return "HALF_PAID_LEAVE";
+        return "UNPAID_LEAVE";
+    }
+
+    let isPaid = true;
+    if (leaveInfo.isPaid !== undefined) isPaid = leaveInfo.isPaid;
+    else if (typeName) {
+        if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
+        else if (normalizedType.includes("unpaid")) isPaid = false;
+    }
+
+    return isPaid ? "PAID_LEAVE" : "UNPAID_LEAVE";
+};
 
 // --- HELPER: Calculate Attendance Stats ---
 // --- HELPER: Parse "8h 45m" to decimal hours ---
@@ -61,7 +129,11 @@ const getApprovedLeavesMap = async (employees) => {
                 map[empId].push({
                     start: s,
                     end: e,
-                    leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave"
+                    leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave",
+                    numberOfDays: details.numberOfDays || 1,
+                    isPaid: details.isPaid,
+                    hasMedicalDocument: details.hasMedicalDocument,
+                    leavePayStatus: details.leavePayStatus || "FULLY_PAID"
                 });
             }
         }
@@ -94,7 +166,8 @@ const parseHours = (timeStr) => {
 };
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
+const getAttendanceStats = async (employee, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
+    const employeeId = employee._id;
     // 1. Setup Date Range
     const daysInMonth = new Date(year, month, 0).getDate();
     const strMonth = String(month).padStart(2, '0');
@@ -140,7 +213,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         const dateObj = new Date(year, month - 1, day);
         const dayOfWeek = dateObj.getDay(); // 0 = Sun
 
-        let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, UNPAID_LEAVE
+        let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, HALF_PAID_LEAVE, UNPAID_LEAVE
         let isLate = false;
         let lateTier = 0;
 
@@ -165,8 +238,11 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                     }
                 }
             } else if (recStatus === 'On Leave') {
-                // If record says leave, check if Paid/Unpaid
-                if (record.isPaid === false) status = 'UNPAID_LEAVE';
+                const mappedLeaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
+                if (mappedLeaveInfo) {
+                    status = resolveLeaveDayStatus(employee, mappedLeaveInfo, dateStr, leaveRules);
+                } else if (record.leavePayStatus === "HALF_PAID") status = 'HALF_PAID_LEAVE';
+                else if (record.isPaid === false || record.leavePayStatus === "UNPAID") status = 'UNPAID_LEAVE';
                 else status = 'PAID_LEAVE';
             } else {
                 status = 'ABSENT';
@@ -177,14 +253,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         if (status === 'UNKNOWN' || status === 'ABSENT') {
             const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
             if (leaveInfo) {
-                // Resolved Paid/Unpaid Logic
-                const typeName = leaveInfo.leaveType;
-                let isPaid = true;
-                if (typeName) {
-                    if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
-                    else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
-                }
-                status = isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE';
+                status = resolveLeaveDayStatus(employee, leaveInfo, dateStr, leaveRules);
             }
         }
 
@@ -204,6 +273,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         });
     }
 
+    const hasAnyWorkedOrApprovedDay = dayStatuses.some((item) =>
+        ["PRESENT", "PAID_LEAVE", "HALF_PAID_LEAVE"].includes(item.status)
+    );
+
     // --- PHASE 2: APPLY SANDWICH RULE ---
     // Rule: If (ABSENT) -> [WEEKEND/HOLIDAY] -> (ABSENT), then [WEEKEND/HOLIDAY] becomes (UNPAID_LEAVE/SANDWICH)
 
@@ -219,7 +292,14 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         if (logMap[dStr]) {
             const r = logMap[dStr];
             if (r.status === 'Present' || r.status === 'Late') return 'PRESENT';
-            if (r.status === 'On Leave') return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            if (r.status === 'On Leave') {
+                const mappedLeaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
+                if (mappedLeaveInfo) {
+                    return resolveLeaveDayStatus(employee, mappedLeaveInfo, dStr, leaveRules);
+                }
+                if (r.leavePayStatus === "HALF_PAID") return 'HALF_PAID_LEAVE';
+                return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            }
             return 'ABSENT';
         }
 
@@ -231,13 +311,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         // So safe to assume we have it.
         const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
         if (leaveInfo) {
-            const typeName = leaveInfo.leaveType;
-            let isPaid = true;
-            if (typeName) {
-                if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
-                else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
-            }
-            return isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE'; // Treat Unpaid Leave as Absent-equivalent for Sandwich
+            return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules);
         }
 
         // 3. Fallback
@@ -260,69 +334,71 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
     const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
 
-    console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
+    if (hasAnyWorkedOrApprovedDay) {
+        console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
 
-    let i = 0;
-    while (i < dayStatuses.length) {
-        if (isGap(dayStatuses[i].status)) {
-            // Found start of a gap sequence
-            let j = i;
-            while (j < dayStatuses.length && isGap(dayStatuses[j].status)) {
-                j++;
-            }
-            // Gap is from i to j-1
+        let i = 0;
+        while (i < dayStatuses.length) {
+            if (isGap(dayStatuses[i].status)) {
+                // Found start of a gap sequence
+                let j = i;
+                while (j < dayStatuses.length && isGap(dayStatuses[j].status)) {
+                    j++;
+                }
+                // Gap is from i to j-1
 
-            // Check Left Side
-            let leftIsAbsent = false;
-            if (i > 0) {
-                if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
-            } else {
-                // BOUNDARY CHECK: Scan backwards from Day 1
-                let backDate = new Date(year, month - 1, 1);
-                backDate.setDate(backDate.getDate() - 1); // Last day of prev month
+                // Check Left Side
+                let leftIsAbsent = false;
+                if (i > 0) {
+                    if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
+                } else {
+                    // BOUNDARY CHECK: Scan backwards from Day 1
+                    let backDate = new Date(year, month - 1, 1);
+                    backDate.setDate(backDate.getDate() - 1); // Last day of prev month
 
-                // Scan up to 7 days back looking for non-gap
-                for (let b = 0; b < 7; b++) {
-                    const st = getStatusForDate(backDate);
-                    if (!isGap(st)) {
-                        if (isAbsentOrLOP(st)) leftIsAbsent = true;
-                        break; // Found the anchor
+                    // Scan up to 7 days back looking for non-gap
+                    for (let b = 0; b < 7; b++) {
+                        const st = getStatusForDate(backDate);
+                        if (!isGap(st)) {
+                            if (isAbsentOrLOP(st)) leftIsAbsent = true;
+                            break; // Found the anchor
+                        }
+                        backDate.setDate(backDate.getDate() - 1);
                     }
-                    backDate.setDate(backDate.getDate() - 1);
                 }
-            }
 
-            // Check Right Side
-            let rightIsAbsent = false;
-            if (j < dayStatuses.length) {
-                if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
-            } else {
-                // BOUNDARY CHECK: Scan forwards from End of Month
-                let fwdDate = new Date(year, month - 1, daysInMonth);
-                fwdDate.setDate(fwdDate.getDate() + 1); // First day of next month
+                // Check Right Side
+                let rightIsAbsent = false;
+                if (j < dayStatuses.length) {
+                    if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
+                } else {
+                    // BOUNDARY CHECK: Scan forwards from End of Month
+                    let fwdDate = new Date(year, month - 1, daysInMonth);
+                    fwdDate.setDate(fwdDate.getDate() + 1); // First day of next month
 
-                for (let f = 0; f < 7; f++) {
-                    const st = getStatusForDate(fwdDate);
-                    if (!isGap(st)) {
-                        if (isAbsentOrLOP(st)) rightIsAbsent = true;
-                        break;
+                    for (let f = 0; f < 7; f++) {
+                        const st = getStatusForDate(fwdDate);
+                        if (!isGap(st)) {
+                            if (isAbsentOrLOP(st)) rightIsAbsent = true;
+                            break;
+                        }
+                        fwdDate.setDate(fwdDate.getDate() + 1);
                     }
-                    fwdDate.setDate(fwdDate.getDate() + 1);
                 }
-            }
 
-            console.log(`[DEBUG] Gap found Days ${i + 1} to ${j}: Left=${leftIsAbsent}, Right=${rightIsAbsent}`);
+                console.log(`[DEBUG] Gap found Days ${i + 1} to ${j}: Left=${leftIsAbsent}, Right=${rightIsAbsent}`);
 
-            if (leftIsAbsent && rightIsAbsent) {
-                for (let k = i; k < j; k++) {
-                    dayStatuses[k].status = 'SANDWICH_LEAVE';
-                    console.log(`  -> Day ${k + 1} marked SANDWICH`);
+                if (leftIsAbsent && rightIsAbsent) {
+                    for (let k = i; k < j; k++) {
+                        dayStatuses[k].status = 'SANDWICH_LEAVE';
+                        console.log(`  -> Day ${k + 1} marked SANDWICH`);
+                    }
                 }
-            }
 
-            i = j; // Advance
-        } else {
-            i++;
+                i = j; // Advance
+            } else {
+                i++;
+            }
         }
     }
 
@@ -333,6 +409,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     let lateTier1 = 0, lateTier2 = 0, lateTier3 = 0;
     let unpaidLeavesCount = 0;
     let paidLeavesCount = 0;
+    let halfPaidLeavesCount = 0;
 
     dayStatuses.forEach(d => {
         // console.log(`[DEBUG] Day ${d.day}: ${d.status}`);
@@ -351,6 +428,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                 paidDays++;
                 paidLeavesCount++;
                 console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+Paid)`);
+                break;
+            case 'HALF_PAID_LEAVE':
+                paidDays += 0.5;
+                halfPaidLeavesCount++;
                 break;
             case 'WEEKEND':
             case 'HOLIDAY':
@@ -391,17 +472,58 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         // else lopDays++;
 
         // Yes, my switch case matches this logic.
-
-        daysPresent: paidDays, // This variable name in return object is slightly misleading if it includes weekends, but standard in this codebase seems to be "Days Payable"
         daysAbsent: lopDays,
         unpaidLeaves: unpaidLeavesCount,
         paidLeaves: paidLeavesCount,
+        halfPaidLeaves: halfPaidLeavesCount,
         overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
         late: lateCount,
         lateTier1,
         lateTier2,
         lateTier3
     };
+};
+
+export const validatePayrollGeneration = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        if (!month || !year) {
+            return res.status(400).json({ message: "Month and year are required" });
+        }
+
+        const employees = await Employee.find({ status: "Active" }).select("_id name code department");
+        const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
+        const strMonth = String(month).padStart(2, "0");
+        const startStr = `${year}-${strMonth}-01`;
+        const endStr = `${year}-${strMonth}-${daysInMonth}`;
+
+        const warnings = [];
+
+        for (const employee of employees) {
+            const attendanceCount = await Attendance.countDocuments({
+                employee: employee._id,
+                date: { $gte: startStr, $lte: endStr }
+            });
+
+            if (attendanceCount === 0) {
+                warnings.push({
+                    employeeId: employee._id,
+                    name: employee.name,
+                    code: employee.code,
+                    department: employee.department,
+                    type: "ZERO_ATTENDANCE",
+                    message: `${employee.name} has zero attendance records for ${strMonth}/${year}.`
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            warnings
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to validate payroll generation" });
+    }
 };
 
 // --- API: Generate Payroll for a Month ---
@@ -450,8 +572,8 @@ export const generatePayroll = async (req, res) => {
         const payrollRecords = [];
 
         for (const emp of employees) {
-            const basicSalaryRaw = emp.basicSalary || "0";
-            const basicSalary = Number(String(basicSalaryRaw).replace(/[^0-9.-]+/g, ""));
+            const effectiveSalary = resolveEffectiveSalary(emp, month, year);
+            const basicSalary = effectiveSalary.visaBase || effectiveSalary.basicSalary;
 
             const allowanceList = [];
             const deductionList = [];
@@ -468,12 +590,23 @@ export const generatePayroll = async (req, res) => {
 
             // Get Stats
             const stats = await getAttendanceStats(
-                emp._id, month, year,
+                emp, month, year,
                 settings, shiftMap,
                 { code: emp.code },
                 approvedLeaveMap,
                 leaveRulesMap
             );
+
+            if (stats.halfPaidLeaves > 0) {
+                const halfPayDeduction = stats.halfPaidLeaves * (dailySalary / 2);
+                deductionList.push({
+                    name: "Sick Leave Half Pay Adjustment",
+                    amount: parseFloat(halfPayDeduction.toFixed(2)),
+                    type: "AUTO",
+                    meta: `${stats.halfPaidLeaves} day(s) at half pay`
+                });
+                totalDeductions += halfPayDeduction;
+            }
 
             // --- 2.5 SHIFT-BASED PENALTIES (Dynamic Late Deduction) ---
             // If the employee's shift has a "latePolicy", we apply it here.
@@ -821,7 +954,7 @@ export const getPayrollSummary = async (req, res) => {
     try {
         const { month, year } = req.query;
         const records = await Payroll.find({ month, year })
-            .populate("employee", "name code department designation role")
+            .populate("employee", "name code department designation role company basicSalary visaBase workBase ctc salaryHistory")
             .populate("allowances.addedBy", "name") // ✅ Populate Allowance Editor
             .populate("deductions.addedBy", "name"); // ✅ Populate Deduction Editor
 
@@ -1066,7 +1199,7 @@ export const exportPayroll = async (req, res) => {
     try {
         const { month, year } = req.query;
         // Populate fields needed for the report
-        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban bankName laborCardNumber personalId");
+        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department company bankAccount iban bankName laborCardNumber personalId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found for this month." });
@@ -1077,7 +1210,8 @@ export const exportPayroll = async (req, res) => {
         const monthName = monthNames[parseInt(month) - 1] || "UNKNOWN";
 
         // Company Constants (Hardcoded as per request image)
-        const COMPANY_NAME = "COMPANY NAME: LEPTIS HYPERMARKET LLC";
+        const exportCompanyName = records[0]?.employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
+        const COMPANY_NAME = `COMPANY NAME: ${exportCompanyName}`;
         const MOL_ID = "MOL ID No. 0000001564503";
         const REPORT_TITLE = `PAYROLL FOR THE MONTH OF ${monthName} - ${year}`;
 
@@ -1235,7 +1369,7 @@ export const generateSIF = async (req, res) => {
     try {
         const { month, year } = req.query;
         // Fetch only PROCESSED (Finalized) records ideally, but DRAFT is ok for testing
-        const records = await Payroll.find({ month, year }).populate("employee", "name code laborCardNumber bankAccount iban agentId");
+        const records = await Payroll.find({ month, year }).populate("employee", "name code bankName laborCardNumber bankAccount iban agentId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found." });
@@ -1265,24 +1399,37 @@ export const generateSIF = async (req, res) => {
             return res.status(200).json({ success: true, data: previewData });
         }
 
-        let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${recordCount},${totalAmount}\n`;
+        const groupedByBank = records.reduce((acc, record) => {
+            const bankName = (record.employee?.bankName || "UNSPECIFIED_BANK").replace(/[^a-zA-Z0-9_-]/g, "_");
+            if (!acc[bankName]) acc[bankName] = [];
+            acc[bankName].push(record);
+            return acc;
+        }, {});
 
-        // Body: EDR, PersonID, AgentID, Account, StartDate, EndDate, Days, Income, Basic, Extra, Deduction
-        records.forEach(r => {
-            const empId = r.employee?.laborCardNumber || r.employee?.code;
-            const agentId = r.employee?.agentId || "AGENT001";
-            const account = r.employee?.iban || r.employee?.bankAccount || "000000000000";
-            const amount = (r.netSalary || 0).toFixed(2);
+        const zipEntries = Object.entries(groupedByBank).map(([bankName, bankRecords]) => {
+            let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${bankRecords.length},${bankRecords.reduce((sum, item) => sum + (item.netSalary || 0), 0).toFixed(2)}\n`;
 
-            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-            const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
+            bankRecords.forEach(r => {
+                const empId = r.employee?.laborCardNumber || r.employee?.code;
+                const agentId = r.employee?.agentId || "AGENT001";
+                const account = r.employee?.iban || r.employee?.bankAccount || "000000000000";
+                const amount = (r.netSalary || 0).toFixed(2);
+                const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+                const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
 
-            // Standard EDR line
-            sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${r.basicSalary},${r.totalAllowances},0\n`;
+                sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${r.basicSalary},${r.totalAllowances},0\n`;
+            });
+
+            return {
+                name: `bank-transfer/${bankName}_${salaryMonth}.csv`,
+                content: sifContent
+            };
         });
 
-        res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.csv"`);
-        res.setHeader("Content-Type", "text/csv");
+        const archive = buildZipArchive(zipEntries);
+
+        res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.zip"`);
+        res.setHeader("Content-Type", "application/zip");
 
         // AUDIT LOG
         PayrollAudit.create({
@@ -1291,11 +1438,11 @@ export const generateSIF = async (req, res) => {
             performedByName: req.user ? req.user.name : "System",
             month,
             year,
-            details: `Generated SIF File: SIF_${employerId}_${creationDate}.csv`,
+            details: `Generated bank transfer ZIP: SIF_${employerId}_${creationDate}.zip`,
             totalNetSalary: totalAmount
         }).catch(console.error);
 
-        res.send(sifContent);
+        res.send(archive);
 
     } catch (error) {
         // console.error(error);
@@ -1427,7 +1574,7 @@ export const getMyPayslips = async (req, res) => {
 export const downloadPayslip = async (req, res) => {
     try {
         const { id } = req.params;
-        const payroll = await Payroll.findById(id).populate("employee", "name code designation department");
+        const payroll = await Payroll.findById(id).populate("employee", "name code designation department company");
 
         if (!payroll) {
             return res.status(404).json({ message: "Payslip not found" });
@@ -1442,6 +1589,7 @@ export const downloadPayslip = async (req, res) => {
         }
 
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year } = payroll;
+        const companyName = employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         const periodStr = `${monthName} ${year}`;
         const totalAllowances = payroll.totalAllowances || 0;
@@ -1480,6 +1628,7 @@ export const downloadPayslip = async (req, res) => {
         const centerX = pageWidth / 2;
 
         // Title
+        doc.fontSize(12).fillColor("#182d54").text(companyName, centerX - 140, 138, { align: "center", width: 280 });
         doc.fontSize(16).fillColor("#404040").text("PAYSLIP", centerX - 50, 155, { align: "center", width: 100 }); // Moved down to Y=155pt (approx 55mm)
         // doc.text(text, x, y, options)
 

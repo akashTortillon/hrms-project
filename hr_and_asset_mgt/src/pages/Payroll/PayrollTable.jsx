@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import "../../style/Payroll.css";
 import PayslipModal from "./PayslipModal";
 import AdjustmentModal from "./AdjustmentModal";
+import CTCModal from "./CTCModal.jsx";
 
 export default function PayrollEmployeesTable({ employees = [], onRefresh, isFinalized, onExport }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -9,6 +10,7 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustTarget, setAdjustTarget] = useState(null);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [showCtcModal, setShowCtcModal] = useState(false);
 
   // Close menu when clicking outside
   React.useEffect(() => {
@@ -26,6 +28,12 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
   const handleAdjust = (record = null) => {
     setAdjustTarget(record);
     setShowAdjustModal(true);
+    setActiveMenu(null);
+  };
+
+  const handleViewCtc = (record) => {
+    setSelectedRecord(record);
+    setShowCtcModal(true);
     setActiveMenu(null);
   };
 
@@ -106,6 +114,9 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
                           <button className="action-menu-item" onClick={() => handleView(record)}>
                             View Details
                           </button>
+                          <button className="action-menu-item" onClick={() => handleViewCtc(record)}>
+                            View CTC
+                          </button>
                           {isFinalized ? (
                             <button className="action-menu-item" onClick={() => handleAdjust(record)}>
                               View Adjustments
@@ -141,6 +152,12 @@ export default function PayrollEmployeesTable({ employees = [], onRefresh, isFin
         initialRecord={adjustTarget}
         onSuccess={onRefresh}
         isFinalized={isFinalized}
+      />
+
+      <CTCModal
+        show={showCtcModal}
+        onClose={() => setShowCtcModal(false)}
+        record={selectedRecord}
       />
     </>
   );

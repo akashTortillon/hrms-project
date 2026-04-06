@@ -182,7 +182,7 @@ export default function AdminRequests() {
      DATA SEGREGATION
   ========================= */
 
-  const pendingRequests = requests.filter((r) => r.status === "PENDING");
+  const pendingRequests = requests.filter((r) => ["PENDING", "MANAGER_APPROVED"].includes(r.status));
 
   const historyRequests = requests.filter((r) =>
     ["WITHDRAWN", "APPROVED", "REJECTED", "COMPLETED"].includes(r.status)
@@ -337,6 +337,9 @@ export default function AdminRequests() {
                   <ListGroup.Item key={req._id} className="request-item">
                     <div className="request-info">
                       <div className="request-name">{req.userId?.name}</div>
+                      <div className="request-type" style={{ marginBottom: "4px", color: "#2563eb" }}>
+                        Stage: {req.currentApprovalStage === "MANAGER" ? "Manager Approval" : req.currentApprovalStage === "HR" ? "HR Approval" : "Completed"}
+                      </div>
                       {renderRequestDetails(req)}
                     </div>
 

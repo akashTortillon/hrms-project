@@ -8,11 +8,15 @@ import { useRole } from "../../contexts/RoleContext.jsx";
 const allNavItems = [
   { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", permission: "VIEW_DASHBOARD" },
   { path: "/app/employees", icon: "users", label: "Employees", permission: "MANAGE_EMPLOYEES" },
+  { path: "/app/probation", icon: "clock (1)", label: "Probation", permission: "MANAGE_EMPLOYEES" },
   { path: "/app/onboarding", icon: "clipboard-list", label: "Onboarding", permission: "MANAGE_ONBOARDING" }, // New Onboarding
   { path: "/app/offboarding", icon: "briefcase", label: "Offboarding", permission: "MANAGE_OFFBOARDING" }, // New Offboarding
   { path: "/app/payroll", icon: "dollar", label: "Payroll", permission: "MANAGE_PAYROLL" },
   { path: "/app/attendance", icon: "clock (1)", label: "Attendance", permission: "VIEW_DASHBOARD" }, // Assuming linked to employee mgmt
   { path: "/app/documents", icon: "document (1)", label: "Documents", permission: "VIEW_DASHBOARD" }, // Changed from MANAGE_DOCUMENTS so everyone can see their own docs
+  { path: "/app/policies", icon: "document", label: "Policies", permission: "VIEW_DASHBOARD" },
+  { path: "/app/announcements", icon: "notification", label: "Announcements", permission: "VIEW_DASHBOARD" },
+  { path: "/app/appraisals", icon: "graph-arrow-increase", label: "Appraisals", permission: "MANAGE_APPRAISALS" },
   { path: "/app/assets", icon: "cube", label: "Assets", permission: "MANAGE_ASSETS" },
   { path: "/app/requests", icon: "document", label: "My Requests", permission: "VIEW_DASHBOARD" }, // Basic access
   { path: "/app/reports", icon: "reports", label: "Reports", permission: "VIEW_REPORTS" },

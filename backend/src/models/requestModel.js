@@ -1,5 +1,26 @@
 import mongoose from "mongoose";
 
+const approvalStageSchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ["PENDING", "APPROVED", "REJECTED", "SKIPPED"],
+    default: "PENDING"
+  },
+  actedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
+  },
+  actedAt: {
+    type: Date,
+    default: null
+  },
+  remarks: {
+    type: String,
+    default: ""
+  }
+}, { _id: false });
+
 const requestSchema = new mongoose.Schema(
   {
     userId: {
@@ -17,10 +38,28 @@ const requestSchema = new mongoose.Schema(
       enum: ["LEAVE", "SALARY", "DOCUMENT"],
       required: true
     },
+    currentApprovalStage: {
+      type: String,
+      enum: ["MANAGER", "HR", "COMPLETED"],
+      default: "HR"
+    },
+    managerApproval: {
+      type: approvalStageSchema,
+      default: () => ({ status: "PENDING" })
+    },
+    hrApproval: {
+      type: approvalStageSchema,
+      default: () => ({ status: "PENDING" })
+    },
+    designatedManager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
 
     status: {
       type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],
+      enum: ["PENDING", "MANAGER_APPROVED", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],
       default: "PENDING"
     },
     submittedAt: {
@@ -63,8 +102,17 @@ const requestSchema = new mongoose.Schema(
       default: ""
     },
     uploadedDocument: {
-      type: String, // File path
+      type: String,
       default: ""
+    },
+    uploadedDocumentUrl: {
+      type: String,
+      default: ""
+    },
+    uploadedDocumentStorage: {
+      type: String,
+      enum: ["LOCAL", "S3"],
+      default: "LOCAL"
     },
     uploadedAt: {
       type: Date,
@@ -85,6 +133,11 @@ const requestSchema = new mongoose.Schema(
     isFullyPaid: {
       type: Boolean,
       default: false
+    },
+    finalPayImpact: {
+      type: String,
+      enum: ["NONE", "UNPAID", "HALF_PAID", "FULLY_PAID"],
+      default: "NONE"
     }
   },
   { timestamps: true }

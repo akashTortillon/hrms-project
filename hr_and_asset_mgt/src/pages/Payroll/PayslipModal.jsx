@@ -12,6 +12,7 @@ export default function PayslipModal({ show, onClose, record }) {
     if (!record) return null;
 
     const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary } = record;
+    const companyName = employee?.company || "LEPTIS HYPERMARKET LLC";
     const monthName = record.month ? new Date(2000, record.month - 1).toLocaleString('default', { month: 'long' }) : '';
     const periodStr = `${monthName} ${record.year}`;
 
@@ -31,6 +32,11 @@ export default function PayslipModal({ show, onClose, record }) {
 
     const totalDeductions = (record.totalDeductions || 0) - hiddenAdvanceAmount;
     const grossEarnings = basicSalary + totalAllowances;
+    const formatAmount = (value) =>
+        (Number(value) || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
 
     // --- PDF GENERATION ---
     const handleDownloadPDF = async () => {
@@ -212,144 +218,156 @@ export default function PayslipModal({ show, onClose, record }) {
             show={show}
             title="Payslip Details"
             onClose={onClose}
-            width="900px" // Wider for better view
+            width="980px"
+            className="payslip-modal-shell"
         >
-            <div style={{ backgroundColor: '#f3f4f6', padding: '24px', display: 'flex', justifyContent: 'center' }}>
-                <div ref={payslipRef} style={{ backgroundColor: '#fff', width: '100%', maxWidth: '750px', padding: '30px 40px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1px solid #e5e7eb' }}>
+            <div className="payslip-modal-stage">
+                <div ref={payslipRef} className="payslip-sheet">
+                    <div className="payslip-sheet__glow" />
 
-                    {/* Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #182d54', paddingBottom: '15px', marginBottom: '20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <img src={logoLeptis} alt="Logo" style={{ height: '35px' }} />
-                            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#182d54' }}>leptis</span>
+                    <div className="payslip-sheet__header">
+                        <div className="payslip-brand">
+                            <div className="payslip-brand__badge">
+                                <img src={logoLeptis} alt="Logo" className="payslip-brand__logo" />
+                            </div>
+                            <div>
+                                <div className="payslip-brand__name">leptis</div>
+                                <div className="payslip-brand__subtext">Payroll Statement</div>
+                            </div>
                         </div>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827', letterSpacing: '1px' }}>SALARY SLIP</div>
-                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>Period: {periodStr}</div>
+
+                        <div className="payslip-sheet__title">
+                            <span className="payslip-sheet__eyebrow">{companyName}</span>
+                            <h2>SALARY SLIP</h2>
+                            <p>Period: {periodStr}</p>
                         </div>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#182d54' }}>لبتس</div>
+
+                        <div className="payslip-sheet__arabic">لبتس</div>
                     </div>
 
-                    {/* Employee Info */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 30px', marginBottom: '20px', padding: '15px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
-                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Employee Name</span>
-                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.name || "N/A"}</span>
+                    <div className="payslip-identity-grid">
+                        <div className="payslip-info-card">
+                            <div className="payslip-info-card__label">Employee Name</div>
+                            <div className="payslip-info-card__value">{employee?.name || "N/A"}</div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
-                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Employee ID</span>
-                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.code || "N/A"}</span>
+                        <div className="payslip-info-card">
+                            <div className="payslip-info-card__label">Employee ID</div>
+                            <div className="payslip-info-card__value">{employee?.code || "N/A"}</div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
-                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Designation</span>
-                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.designation || "N/A"}</span>
+                        <div className="payslip-info-card">
+                            <div className="payslip-info-card__label">Designation</div>
+                            <div className="payslip-info-card__value">{employee?.designation || "N/A"}</div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}>
-                            <span style={{ fontWeight: '600', color: '#4b5563', fontSize: '12px' }}>Department</span>
-                            <span style={{ color: '#111827', fontWeight: '500', fontSize: '12px' }}>{employee?.department || "N/A"}</span>
-                        </div>
-                    </div>
-
-                    {/* Attendance Summary */}
-                    <div style={{ marginBottom: '20px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>Attendance Summary</div>
-                        <div style={{ display: 'flex', gap: '25px', fontSize: '12px', color: '#555', background: '#f9f9f9', padding: '10px 15px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                            <div>Total Days: <strong>{attendanceSummary?.totalDays || 30}</strong></div>
-                            <div>Present: <strong>{attendanceSummary?.daysPresent || 0}</strong></div>
-                            <div>Absent: <strong>{attendanceSummary?.daysAbsent || 0}</strong></div>
+                        <div className="payslip-info-card">
+                            <div className="payslip-info-card__label">Department</div>
+                            <div className="payslip-info-card__value">{employee?.department || "N/A"}</div>
                         </div>
                     </div>
 
-                    {/* Salary Table */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                        {/* Earnings */}
+                    <div className="payslip-section">
+                        <div className="payslip-section__title">Attendance Summary</div>
+                        <div className="payslip-summary-grid">
+                            <div className="payslip-summary-stat">
+                                <span className="payslip-summary-stat__label">Total Days</span>
+                                <strong className="payslip-summary-stat__value">{attendanceSummary?.totalDays || 30}</strong>
+                            </div>
+                            <div className="payslip-summary-stat">
+                                <span className="payslip-summary-stat__label">Present</span>
+                                <strong className="payslip-summary-stat__value">{attendanceSummary?.daysPresent || 0}</strong>
+                            </div>
+                            <div className="payslip-summary-stat payslip-summary-stat--alert">
+                                <span className="payslip-summary-stat__label">Absent</span>
+                                <strong className="payslip-summary-stat__value">{attendanceSummary?.daysAbsent || 0}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="payslip-amount-grid">
                         <div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
+                            <table className="payslip-table">
                                 <thead>
-                                    <tr style={{ backgroundColor: '#182d54' }}>
-                                        <th style={{ textAlign: 'left', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Earnings</th>
-                                        <th style={{ textAlign: 'right', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Amount</th>
+                                    <tr>
+                                        <th>Earnings</th>
+                                        <th>Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>Basic Salary</td>
-                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(basicSalary) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        <td>Basic Salary</td>
+                                        <td className="payslip-table__amount">{formatAmount(basicSalary)}</td>
                                     </tr>
                                     {(allowances || []).map((a, idx) => (
                                         <tr key={idx}>
-                                            <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>{a.name}</td>
-                                            <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(a.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td>{a.name}</td>
+                                            <td className="payslip-table__amount">{formatAmount(a.amount)}</td>
                                         </tr>
                                     ))}
-                                    <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
-                                        <td style={{ padding: '10px 12px', fontSize: '12px' }}>Total Earnings</td>
-                                        <td style={{ padding: '10px 12px', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(grossEarnings) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <tr className="payslip-table__total">
+                                        <td>Total Earnings</td>
+                                        <td className="payslip-table__amount">{formatAmount(grossEarnings)}</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        {/* Deductions */}
                         <div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
+                            <table className="payslip-table">
                                 <thead>
-                                    <tr style={{ backgroundColor: '#182d54' }}>
-                                        <th style={{ textAlign: 'left', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Deductions</th>
-                                        <th style={{ textAlign: 'right', padding: '10px 12px', color: '#fff', fontSize: '12px', fontWeight: '600' }}>Amount</th>
+                                    <tr>
+                                        <th>Deductions</th>
+                                        <th>Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {displayDeductions.length > 0 ? (
                                         displayDeductions.map((d, idx) => (
                                             <tr key={idx}>
-                                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>{d.name}</td>
-                                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(d.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                <td>{d.name}</td>
+                                                <td className="payslip-table__amount">{formatAmount(d.amount)}</td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan="2" style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>No deductions</td>
+                                            <td colSpan="2" className="payslip-table__empty">No deductions</td>
                                         </tr>
                                     )}
-                                    <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
-                                        <td style={{ padding: '10px 12px', fontSize: '12px' }}>Total Deductions</td>
-                                        <td style={{ padding: '10px 12px', fontSize: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{(Number(totalDeductions) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <tr className="payslip-table__total">
+                                        <td>Total Deductions</td>
+                                        <td className="payslip-table__amount">{formatAmount(totalDeductions)}</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    {/* Net Pay */}
-                    <div style={{ backgroundColor: '#f0fdf4', border: '2px solid #16a34a', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '8px', marginBottom: '30px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: '700', color: '#15803d', textTransform: 'uppercase' }}>Net Salary Payable</span>
-                        <span style={{ fontSize: '20px', fontWeight: '800', color: '#111827' }}>{(Number(netSalary) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED</span>
+                    <div className="payslip-net-card">
+                        <div>
+                            <div className="payslip-net-card__label">Net Salary Payable</div>
+                            <div className="payslip-net-card__subtext">Final payout after deductions</div>
+                        </div>
+                        <div className="payslip-net-card__value">{formatAmount(netSalary)} AED</div>
                     </div>
 
-                    {/* Footer / Signatures */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px' }}>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ borderTop: '1px solid #374151', width: '150px', marginBottom: '5px' }}></div>
-                            <span style={{ fontSize: '11px', color: '#6b7280' }}>Employee Signature</span>
+                    <div className="payslip-signatures">
+                        <div className="payslip-signature">
+                            <div className="payslip-signature__line"></div>
+                            <span>Employee Signature</span>
                         </div>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ borderTop: '1px solid #374151', width: '150px', marginBottom: '5px' }}></div>
-                            <span style={{ fontSize: '11px', color: '#6b7280' }}>Employer Signature</span>
+                        <div className="payslip-signature">
+                            <div className="payslip-signature__line"></div>
+                            <span>Employer Signature</span>
                         </div>
                     </div>
 
-                    <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px', color: '#9ca3af' }}>
+                    <div className="payslip-footnote">
                         This is a computer-generated payslip.
                     </div>
-
                 </div>
             </div>
 
-            {/* Modal Actions */}
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="payslip-actions">
                 <button onClick={onClose} className="btn btn-secondary">Close</button>
-                <button onClick={handleDownloadPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button onClick={handleDownloadPDF} className="btn btn-primary payslip-download-btn">
                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>

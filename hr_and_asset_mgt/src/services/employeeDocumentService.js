@@ -20,3 +20,12 @@ export const uploadEmployeeDocument = async (formData) => {
     });
     return res.data;
 };
+
+export const uploadMyDocument = async (formData) => {
+    const res = await api.post(`${BASE_URL}/self`, formData, {
+        headers: {
+            "Content-Type": "multipart/form-data",
+        },
+    });
+    return res.data;
+};

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
+import { getEmployees } from "../../services/employeeService";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -10,6 +11,8 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const [designations, setDesignations] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [managers, setManagers] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
 
   useEffect(() => {
@@ -24,20 +27,37 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
       else if (raw.startsWith("971")) raw = raw.replace("971", "");
       setPhoneSuffix(raw);
     }
+
+    setForm((prev) => ({
+      ...prev,
+      laborCards: Array.isArray(employee.laborCards) && employee.laborCards.length
+        ? employee.laborCards.map((item, index) => ({
+          number: item.number || "",
+          expiryDate: item.expiryDate ? String(item.expiryDate).slice(0, 10) : "",
+          issueDate: item.issueDate ? String(item.issueDate).slice(0, 10) : "",
+          notes: item.notes || "",
+          isPrimary: index === 0
+        }))
+        : [{ number: employee.laborCardNumber || "", expiryDate: "", issueDate: "", notes: "", isPrimary: true }]
+    }));
   }, [employee]);
 
   const fetchMasters = async () => {
     try {
-      const [rolesData, typesData, desigData, branchesData] = await Promise.all([
+      const [rolesData, typesData, desigData, branchesData, companiesData, employeesData] = await Promise.all([
         roleService.getAll(),
         employeeTypeService.getAll(),
         getDesignations(),
-        getBranches()
+        getBranches(),
+        getCompanies(),
+        getEmployees()
       ]);
       setRoles(rolesData);
       setContractTypes(typesData);
       setDesignations(desigData);
       setBranchesList(branchesData);
+      setCompanies(companiesData);
+      setManagers(Array.isArray(employeesData) ? employeesData : []);
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
     } catch (error) {
@@ -47,6 +67,40 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleLaborCardChange = (index, field, value) => {
+    setForm((prev) => {
+      const nextCards = [...(prev.laborCards || [])];
+      nextCards[index] = {
+        ...nextCards[index],
+        [field]: value,
+        isPrimary: index === 0
+      };
+      return { ...prev, laborCards: nextCards };
+    });
+  };
+
+  const addLaborCard = () => {
+    setForm((prev) => ({
+      ...prev,
+      laborCards: [
+        ...(Array.isArray(prev.laborCards) ? prev.laborCards : []),
+        { number: "", expiryDate: "", issueDate: "", notes: "", isPrimary: false }
+      ]
+    }));
+  };
+
+  const removeLaborCard = (index) => {
+    setForm((prev) => {
+      const nextCards = (prev.laborCards || []).filter((_, cardIndex) => cardIndex !== index);
+      return {
+        ...prev,
+        laborCards: nextCards.length
+          ? nextCards.map((card, cardIndex) => ({ ...card, isPrimary: cardIndex === 0 }))
+          : [{ number: "", expiryDate: "", issueDate: "", notes: "", isPrimary: true }]
+      };
+    });
   };
 
   const handlePhoneChange = (e) => {
@@ -64,6 +118,17 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
         payload[field] = null;
       }
     });
+
+    payload.laborCards = (payload.laborCards || [])
+      .filter((item) => item && item.number?.trim())
+      .map((item, index) => ({
+        number: item.number.trim(),
+        expiryDate: item.expiryDate || "",
+        issueDate: item.issueDate || "",
+        notes: item.notes || "",
+        isPrimary: index === 0
+      }));
+    payload.laborCardNumber = payload.laborCards[0]?.number || payload.laborCardNumber || "";
 
     onUpdate(payload);
   };
@@ -162,6 +227,21 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
+                  <label>Company</label>
+                  <select
+                    name="company"
+                    value={form.company || ''}
+                    onChange={handleChange}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+                  >
+                    <option value="">Select Company</option>
+                    {companies.map(c => (
+                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
                   <label>Email</label>
                   <input name="email" value={form.email} onChange={handleChange} />
                 </div>
@@ -240,6 +320,29 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     <option value="">Select Shift</option>
                     {shifts.map(s => (
                       <option key={s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Designated Manager</label>
+                  <select
+                    name="designatedManager"
+                    value={form.designatedManager || ''}
+                    onChange={handleChange}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      backgroundColor: "white",
+                      fontSize: "14px",
+                      height: "42px"
+                    }}
+                  >
+                    <option value="">Select Manager</option>
+                    {managers.map(manager => (
+                      <option key={manager._id} value={manager._id}>{manager.name}</option>
                     ))}
                   </select>
                 </div>
@@ -432,9 +535,52 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   </select>
                 </div>
 
-                <div className="form-group">
-                  <label>Labor Card No / Work Permit</label>
-                  <input name="laborCardNumber" value={form.laborCardNumber || ''} onChange={handleChange} placeholder="e.g. 87654321" />
+                <div className="form-group full-width employee-labor-section">
+                  <div className="employee-section-row">
+                    <label className="employee-section-heading">Labour Cards</label>
+                    <button type="button" className="employee-add-inline-btn" onClick={addLaborCard}>
+                      + Add Card
+                    </button>
+                  </div>
+
+                  <div className="employee-labor-card-list">
+                    {(form.laborCards || []).map((card, index) => (
+                      <div className="employee-labor-card" key={`edit-labor-card-${index}`}>
+                        <div className="employee-labor-card-top">
+                          <span>Card {index + 1}</span>
+                          {(form.laborCards || []).length > 1 && (
+                            <button
+                              type="button"
+                              className="employee-remove-inline-btn"
+                              onClick={() => removeLaborCard(index)}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="employee-labor-grid">
+                          <div className="form-group">
+                            <label>Labor Card No {index + 1}</label>
+                            <input
+                              value={card.number || ""}
+                              onChange={(e) => handleLaborCardChange(index, "number", e.target.value)}
+                              placeholder="Enter Card No"
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label>Expiry Date</label>
+                            <input
+                              type="date"
+                              value={card.expiryDate || ""}
+                              onChange={(e) => handleLaborCardChange(index, "expiryDate", e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -445,6 +591,21 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 <div className="form-group">
                   <label>Basic Salary</label>
                   <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
+                </div>
+
+                <div className="form-group">
+                  <label>Visa Base</label>
+                  <input name="visaBase" value={form.visaBase || ''} onChange={handleChange} placeholder="Payroll basis" />
+                </div>
+
+                <div className="form-group">
+                  <label>Work Base</label>
+                  <input name="workBase" value={form.workBase || ''} onChange={handleChange} placeholder="Internal work base" />
+                </div>
+
+                <div className="form-group">
+                  <label>CTC</label>
+                  <input name="ctc" value={form.ctc || ''} onChange={handleChange} placeholder="Optional CTC" />
                 </div>
 
                 <div className="form-group">
@@ -485,6 +646,36 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       height: "42px"
                     }}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label>Designated Manager</label>
+                  <select
+                    name="designatedManager"
+                    value={form.designatedManager || ''}
+                    onChange={handleChange}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+                  >
+                    <option value="">Select Manager</option>
+                    {managers.map(manager => (
+                      <option key={manager._id} value={manager._id}>{manager.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Probation Start Date</label>
+                  <input type="date" name="probationStartDate" value={form.probationStartDate ? form.probationStartDate.slice(0, 10) : ''} onChange={handleChange} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }} />
+                </div>
+
+                <div className="form-group">
+                  <label>Probation End Date</label>
+                  <input type="date" name="probationEndDate" value={form.probationEndDate ? form.probationEndDate.slice(0, 10) : ''} onChange={handleChange} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }} />
+                </div>
+
+                <div className="form-group">
+                  <label>Fixed Probation Increment</label>
+                  <input name="fixedProbationIncrementAmount" value={form.fixedProbationIncrementAmount || ''} onChange={handleChange} placeholder="e.g. 500" />
                 </div>
 
                 {/* Bank Details Header */}

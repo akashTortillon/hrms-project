@@ -1,6 +1,82 @@
 import * as XLSX from "xlsx";
 import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
+import { createNotification } from "./notificationController.js";
+import User from "../models/userModel.js";
+import bcrypt from "bcryptjs";
+
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === "") return 0;
+  return Number(String(value).replace(/[^0-9.-]+/g, "")) || 0;
+};
+
+const buildLaborCards = (payload = {}) => {
+  if (Array.isArray(payload.laborCards) && payload.laborCards.length > 0) {
+    return payload.laborCards
+      .filter((item) => item && item.number)
+      .map((item, index) => ({
+        number: item.number,
+        issueDate: item.issueDate || null,
+        expiryDate: item.expiryDate || null,
+        notes: item.notes || "",
+        isPrimary: Boolean(item.isPrimary || index === 0)
+      }));
+  }
+
+  if (payload.laborCardNumber) {
+    return [{
+      number: payload.laborCardNumber,
+      issueDate: null,
+      expiryDate: null,
+      notes: "",
+      isPrimary: true
+    }];
+  }
+
+  return [];
+};
+
+const buildInitialSalaryHistory = (payload = {}) => {
+  const basicSalary = toNumber(payload.basicSalary);
+  const visaBase = toNumber(payload.visaBase || basicSalary);
+  const workBase = toNumber(payload.workBase || basicSalary);
+  const ctc = toNumber(payload.ctc || workBase);
+
+  if (!basicSalary && !visaBase && !workBase && !ctc) {
+    return [];
+  }
+
+  return [{
+    salaryType: "JOINING",
+    basicSalary,
+    visaBase,
+    workBase,
+    ctc,
+    incrementAmount: 0,
+    effectiveDate: payload.joinDate || new Date(),
+    notes: "Joining salary"
+  }];
+};
+
+const getProbationStatus = (payload = {}) => {
+  if (!payload.probationEndDate) return "NOT_APPLICABLE";
+  const today = new Date();
+  const probationEnd = new Date(payload.probationEndDate);
+  if (payload.probationConfirmedAt) return "CONFIRMED";
+  return probationEnd <= today ? "PENDING_CONFIRMATION" : "ACTIVE";
+};
+
+const resolveManagerUserId = async (designatedManager) => {
+  if (!designatedManager) return null;
+
+  const directUser = await User.findById(designatedManager).select("_id");
+  if (directUser) {
+    return directUser._id;
+  }
+
+  const linkedUser = await User.findOne({ employeeId: designatedManager }).select("_id");
+  return linkedUser?._id || null;
+};
 
 export const exportEmployees = async (req, res) => {
   try {
@@ -23,11 +99,10 @@ export const exportEmployees = async (req, res) => {
       matchStage.status = status;
     }
 
-    // Filter by Search (Name, Email, Code)
+    // Filter by Search (Name, Code)
     if (search) {
       matchStage.$or = [
         { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
         { code: { $regex: search, $options: "i" } }
       ];
     }
@@ -43,8 +118,11 @@ export const exportEmployees = async (req, res) => {
           "Role": "$role",
           "Department": "$department",
           "Branch": "$branch",
+          "Company": "$company",
           "Email": "$email",
           "Contact Number": "$phone",
+          "Visa Base": "$visaBase",
+          "Work Base": "$workBase",
           "Joining Date": {
             $dateToString: { format: "%Y-%m-%d", date: "$joinDate" }
           },
@@ -62,8 +140,11 @@ export const exportEmployees = async (req, res) => {
       { wch: 20 }, // Role
       { wch: 15 }, // Dept
       { wch: 15 }, // Branch
+      { wch: 20 }, // Company
       { wch: 30 }, // Email
       { wch: 15 }, // Phone
+      { wch: 12 }, // Visa Base
+      { wch: 12 }, // Work Base
       { wch: 15 }, // Date
       { wch: 10 }  // Status
     ];
@@ -82,12 +163,45 @@ export const exportEmployees = async (req, res) => {
     res.status(500).json({ message: "Export failed" });
   }
 };
-import User from "../models/userModel.js";
-import bcrypt from "bcryptjs";
 
 export const addEmployee = async (req, res) => {
   try {
-    const { name, code, role, department, branch, email, phone, joinDate, status } = req.body;
+    const {
+      name,
+      role,
+      department,
+      branch,
+      company,
+      email,
+      phone,
+      joinDate,
+      status,
+      dob,
+      nationality,
+      address,
+      passportExpiry,
+      emiratesIdExpiry,
+      designation,
+      contractType,
+      basicSalary,
+      visaBase,
+      workBase,
+      ctc,
+      accommodation,
+      visaExpiry,
+      shift,
+      laborCardNumber,
+      laborCards,
+      personalId,
+      bankName,
+      iban,
+      bankAccount,
+      agentId,
+      designatedManager,
+      probationStartDate,
+      probationEndDate,
+      fixedProbationIncrementAmount
+    } = req.body;
 
     // 1. Strict Validation
     if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
@@ -122,6 +236,8 @@ export const addEmployee = async (req, res) => {
       if (existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
       if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
     }
+
+    const resolvedDesignatedManager = await resolveManagerUserId(designatedManager);
 
     // 3. Generate Auto Incremented EMP Code
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
@@ -166,25 +282,53 @@ export const addEmployee = async (req, res) => {
     }
 
     // 5. Create Employee (Only if User valid)
-    const {
-      dob, nationality, address, passportExpiry, emiratesIdExpiry,
-      designation, contractType, basicSalary, accommodation, visaExpiry, shift
-    } = req.body;
-
     const employee = await Employee.create({
       name,
       code: nextCode,
       role,
       department,
       branch,
+      company: company || "",
       email,
       phone,
       joinDate,
       status: status || "Onboarding",
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
-      designation, contractType, basicSalary, accommodation, visaExpiry,
-      shift: shift || "Day Shift"
+      designation,
+      contractType,
+      basicSalary,
+      visaBase: toNumber(visaBase || basicSalary),
+      workBase: toNumber(workBase || basicSalary),
+      ctc: toNumber(ctc || workBase || basicSalary),
+      accommodation,
+      visaExpiry,
+      shift: shift || "Day Shift",
+      laborCardNumber: laborCardNumber || "",
+      laborCards: buildLaborCards({ laborCards, laborCardNumber }),
+      personalId,
+      bankName,
+      iban,
+      bankAccount,
+      agentId,
+      designatedManager: resolvedDesignatedManager,
+      probationStartDate: probationStartDate || joinDate || null,
+      probationEndDate: probationEndDate || null,
+      probationStatus: getProbationStatus({ probationEndDate }),
+      fixedProbationIncrementAmount: toNumber(fixedProbationIncrementAmount),
+      salaryHistory: buildInitialSalaryHistory({
+        basicSalary,
+        visaBase,
+        workBase,
+        ctc,
+        joinDate
+      })
     });
+
+    await User.findOneAndUpdate(
+      { email },
+      { employeeId: employee._id, role },
+      { new: true }
+    );
 
     res.status(201).json({
       message: createdUser
@@ -225,11 +369,10 @@ export const getEmployees = async (req, res) => {
       matchStage.status = status;
     }
 
-    // Filter by Search (Name, Email, Code)
+    // Filter by Search (Name, Code)
     if (search) {
       matchStage.$or = [
         { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
         { code: { $regex: search, $options: "i" } }
       ];
     }
@@ -307,11 +450,31 @@ export const updateEmployee = async (req, res) => {
       }
     }
 
-    const updatedEmployee = await Employee.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const payload = { ...req.body };
+
+    if (payload.designatedManager !== undefined) {
+      payload.designatedManager = await resolveManagerUserId(payload.designatedManager);
+    }
+
+    if (payload.laborCards || payload.laborCardNumber) {
+      payload.laborCards = buildLaborCards(payload);
+      payload.laborCardNumber = payload.laborCards[0]?.number || payload.laborCardNumber || "";
+    }
+
+    if (payload.visaBase !== undefined) payload.visaBase = toNumber(payload.visaBase);
+    if (payload.workBase !== undefined) payload.workBase = toNumber(payload.workBase);
+    if (payload.ctc !== undefined) payload.ctc = toNumber(payload.ctc);
+    if (payload.fixedProbationIncrementAmount !== undefined) {
+      payload.fixedProbationIncrementAmount = toNumber(payload.fixedProbationIncrementAmount);
+    }
+    if (payload.probationEndDate || payload.probationConfirmedAt) {
+      payload.probationStatus = getProbationStatus(payload);
+    }
+
+    const updatedEmployee = await Employee.findByIdAndUpdate(id, payload, {
+      new: true,
+      runValidators: true
+    });
 
     if (!updatedEmployee) {
       return res.status(404).json({ message: "Employee not found" });
@@ -324,6 +487,21 @@ export const updateEmployee = async (req, res) => {
         { email: updatedEmployee.email },
         { role: role }
       );
+    }
+
+    if (req.body.appendSalaryHistory) {
+      updatedEmployee.salaryHistory.push({
+        salaryType: req.body.salaryType || "MANUAL_ADJUSTMENT",
+        basicSalary: toNumber(updatedEmployee.basicSalary),
+        visaBase: toNumber(updatedEmployee.visaBase || updatedEmployee.basicSalary),
+        workBase: toNumber(updatedEmployee.workBase || updatedEmployee.basicSalary),
+        ctc: toNumber(updatedEmployee.ctc || updatedEmployee.workBase || updatedEmployee.basicSalary),
+        incrementAmount: toNumber(req.body.incrementAmount),
+        effectiveDate: req.body.effectiveSalaryDate || new Date(),
+        notes: req.body.salaryNotes || "",
+        createdBy: req.user._id
+      });
+      await updatedEmployee.save();
     }
 
     res.json({ employee: updatedEmployee });
@@ -354,6 +532,133 @@ export const deleteEmployee = async (req, res) => {
   } catch (error) {
     // console.error(error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const transferEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { company, branch, effectiveDate, reason } = req.body;
+
+    if (!effectiveDate) {
+      return res.status(400).json({ message: "Effective date is required" });
+    }
+
+    const employee = await Employee.findById(id);
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    employee.transferHistory.push({
+      previousCompany: employee.company || "",
+      newCompany: company || employee.company || "",
+      previousBranch: employee.branch || "",
+      newBranch: branch || employee.branch || "",
+      effectiveDate,
+      reason: reason || "",
+      transferredBy: req.user._id
+    });
+
+    if (company !== undefined) employee.company = company;
+    if (branch !== undefined) employee.branch = branch;
+
+    await employee.save();
+
+    res.json({ success: true, employee });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to transfer employee" });
+  }
+};
+
+export const getProbationReminders = async (req, res) => {
+  try {
+    const today = new Date();
+    const inSevenDays = new Date();
+    inSevenDays.setDate(today.getDate() + 7);
+
+    const employees = await Employee.find({
+      probationEndDate: { $gte: today, $lte: inSevenDays },
+      probationStatus: { $in: ["ACTIVE", "PENDING_CONFIRMATION"] }
+    }).sort({ probationEndDate: 1 });
+
+    const toNotify = employees.filter((employee) => !employee.probationReminderSentAt);
+
+    for (const employee of toNotify) {
+      const admins = await User.find({ role: { $in: ["Admin", "HR Admin", "HR Manager"] } }).select("_id");
+      await Promise.all(admins.map((admin) => createNotification({
+        recipient: admin._id,
+        title: "Probation confirmation due",
+        message: `${employee.name} probation ends on ${new Date(employee.probationEndDate).toLocaleDateString()}.`,
+        type: "INFO",
+        link: `/app/employees/${employee._id}`
+      })));
+      employee.probationReminderSentAt = new Date();
+      await employee.save();
+    }
+
+    res.json({ success: true, data: employees });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch probation reminders" });
+  }
+};
+
+export const confirmProbation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { remarks = "" } = req.body;
+    const employee = await Employee.findById(id);
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    employee.probationStatus = "CONFIRMED";
+    employee.probationConfirmedAt = new Date();
+    employee.probationConfirmedBy = req.user._id;
+
+    const lastSalaryEntry = [...(employee.salaryHistory || [])]
+      .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))[0];
+    const currentBasic = toNumber(lastSalaryEntry?.basicSalary || employee.basicSalary);
+    const currentVisaBase = toNumber(lastSalaryEntry?.visaBase || employee.visaBase || employee.basicSalary);
+    const currentWorkBase = toNumber(lastSalaryEntry?.workBase || employee.workBase || employee.basicSalary);
+    const currentCtc = toNumber(lastSalaryEntry?.ctc || employee.ctc || employee.workBase || employee.basicSalary);
+    const increment = toNumber(employee.fixedProbationIncrementAmount);
+
+    if (increment > 0) {
+      employee.basicSalary = String(currentBasic + increment);
+      employee.visaBase = currentVisaBase + increment;
+      employee.workBase = currentWorkBase + increment;
+      employee.ctc = currentCtc + increment;
+      employee.salaryHistory.push({
+        salaryType: "PROBATION_INCREMENT",
+        basicSalary: currentBasic + increment,
+        visaBase: currentVisaBase + increment,
+        workBase: currentWorkBase + increment,
+        ctc: currentCtc + increment,
+        incrementAmount: increment,
+        effectiveDate: employee.probationEndDate || new Date(),
+        notes: remarks || "Probation increment applied",
+        createdBy: req.user._id
+      });
+    }
+
+    await employee.save();
+
+    const linkedUser = await User.findOne({ email: employee.email });
+    if (linkedUser) {
+      await createNotification({
+        recipient: linkedUser._id,
+        title: "Probation confirmed",
+        message: "Your probation has been confirmed.",
+        type: "INFO",
+        link: `/app/employees/${employee._id}`
+      });
+    }
+
+    res.json({ success: true, employee });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to confirm probation" });
   }
 };
 
@@ -498,6 +803,7 @@ export const importEmployees = async (req, res) => {
           role: row["Role"],
           department: row["Department"],
           branch: row["Branch"] || "",
+          company: row["Company"] || "",
           email: email,
           phone: phone,
           joinDate: joinDate,
@@ -508,8 +814,12 @@ export const importEmployees = async (req, res) => {
           address: row["UAE Address"] || "",
           contractType: row["Employee Type"] || "",
           basicSalary: row["Basic Salary"] ? String(row["Basic Salary"]) : "",
+          visaBase: toNumber(row["Visa Base"] || row["Basic Salary"]),
+          workBase: toNumber(row["Work Base"] || row["Basic Salary"]),
+          ctc: toNumber(row["CTC"] || row["Work Base"] || row["Basic Salary"]),
           accommodation: row["Accommodation"] || "",
           laborCardNumber: row["Labor Card No"] || "",
+          laborCards: buildLaborCards({ laborCardNumber: row["Labor Card No"] || "" }),
           personalId: row["Personal ID (14 Digit)"] || "",
           bankName: row["Bank Name"] || "",
           iban: row["IBAN"] || "",
@@ -517,7 +827,18 @@ export const importEmployees = async (req, res) => {
           agentId: row["Agent ID (WPS)"] || "",
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
-          visaExpiry: visaExpiry
+          visaExpiry: visaExpiry,
+          probationStartDate: joinDate,
+          probationEndDate: parseExcelDate(row["Probation End Date"]),
+          probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
+          fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"]),
+          salaryHistory: buildInitialSalaryHistory({
+            basicSalary: row["Basic Salary"],
+            visaBase: row["Visa Base"] || row["Basic Salary"],
+            workBase: row["Work Base"] || row["Basic Salary"],
+            ctc: row["CTC"] || row["Work Base"] || row["Basic Salary"],
+            joinDate
+          })
         });
 
         // Add to local sets to prevent duplicates within the same file

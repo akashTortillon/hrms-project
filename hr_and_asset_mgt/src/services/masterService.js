@@ -38,6 +38,11 @@ export const addBranch = async (name) => (await createGenericService("branches")
 export const updateBranch = async (id, name) => (await createGenericService("branches").update(id, name));
 export const deleteBranch = async (id) => (await createGenericService("branches").delete(id));
 
+export const getCompanies = async () => (await createGenericService("companies").getAll());
+export const addCompany = async (name) => (await createGenericService("companies").add(name));
+export const updateCompany = async (id, name) => (await createGenericService("companies").update(id, name));
+export const deleteCompany = async (id) => (await createGenericService("companies").delete(id));
+
 export const getDesignations = async () => (await createGenericService("designations").getAll());
 export const addDesignation = async (name) => (await createGenericService("designations").add(name));
 export const updateDesignation = async (id, name) => (await createGenericService("designations").update(id, name));

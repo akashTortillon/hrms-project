@@ -10,6 +10,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
+  const [medicalFile, setMedicalFile] = useState(null);
 
   // ✅ NEW: SubType state for Salary requests
   const [salarySubType, setSalarySubType] = useState("salary_advance");
@@ -62,10 +63,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
     try {
       setLoading(true);
 
-      let requestData = {
-        requestType: activeType.toUpperCase(),
-        details: {}
-      };
+      let requestData;
 
       // Prepare details based on request type
       if (activeType === "leave") {
@@ -74,7 +72,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
-        requestData.details = {
+        const leaveDetails = {
           leaveType: leaveForm.leaveType,
           leaveTypeId: leaveForm.leaveTypeId, // ✅ NEW
           isPaid: leaveForm.isPaid,           // ✅ NEW
@@ -84,6 +82,12 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           toDate: leaveForm.isHalfDay ? leaveForm.fromDate : leaveForm.toDate,
           reason: leaveForm.reason
         };
+        requestData = new FormData();
+        requestData.append("requestType", "LEAVE");
+        requestData.append("details", JSON.stringify(leaveDetails));
+        if (medicalFile) {
+          requestData.append("document", medicalFile);
+        }
       } else if (activeType === "salary") {
         if (!salaryForm.amount || !salaryForm.reason) {
           toast.error("Please fill all required fields");
@@ -91,11 +95,14 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           return;
         }
         // ✅ NEW: Include subType for salary requests
-        requestData.subType = salarySubType;
-        requestData.details = {
+        requestData = {
+          requestType: "SALARY",
+          subType: salarySubType,
+          details: {
           amount: salaryForm.amount,
           repaymentPeriod: salarySubType === "salary_advance" ? "1 Month" : salaryForm.repaymentPeriod,
           reason: salaryForm.reason
+          }
         };
       } else if (activeType === "document") {
         if (!documentForm.purpose) {
@@ -103,9 +110,12 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
-        requestData.details = {
+        requestData = {
+          requestType: "DOCUMENT",
+          details: {
           documentType: documentForm.documentType,
           purpose: documentForm.purpose
+          }
         };
       }
 
@@ -135,6 +145,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         });
         setActiveType("leave");
         setSalarySubType("salary_advance"); // Reset subType
+        setMedicalFile(null);
         onClose();
         if (onSuccess) {
           onSuccess();
@@ -321,6 +332,22 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
               </div>
             </div>
 
+            {String(leaveForm.leaveType || "").toLowerCase().includes("sick") && (
+              <div className="form-row">
+                <div>
+                  <label>Medical Document</label>
+                  <input
+                    type="file"
+                    onChange={(e) => setMedicalFile(e.target.files?.[0] || null)}
+                    style={{ width: "100%" }}
+                  />
+                  <small style={{ color: "#6b7280" }}>
+                    Required for more than 1 consecutive sick-leave day. If not uploaded, leave becomes unpaid from day 2.
+                  </small>
+                </div>
+              </div>
+            )}
+
             <div>
               <label>Reason</label>
               <textarea
@@ -423,7 +450,6 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           <div className="leave-form">
             <div>
               <label>Document Type</label>
-              <label>Document Type</label>
               <select
                 value={documentForm.documentType}
                 onChange={(e) =>
@@ -446,6 +472,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 <option value="Salary Certificate">Salary Certificate</option>
                 <option value="Experience Letter">Experience Letter</option>
                 <option value="Employment Letter">Employment Letter</option>
+                <option value="Employment Certificate">Employment Certificate</option>
+                <option value="Bonafide Certificate">Bonafide Certificate</option>
                 <option value="NOC (No Objection Certificate)">NOC (No Objection Certificate)</option>
               </select>
             </div>

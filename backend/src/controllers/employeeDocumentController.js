@@ -1,7 +1,7 @@
 import EmployeeDocument from "../models/employeeDocumentModel.js";
 import Employee from "../models/employeeModel.js";
-import fs from "fs";
-import path from "path";
+import User from "../models/userModel.js";
+import { deleteStoredFile, storeUploadedFile } from "../utils/storage.js";
 
 // Add Document
 export const addDocument = async (req, res) => {
@@ -34,18 +34,87 @@ export const addDocument = async (req, res) => {
             }
         }
 
+        const storedFile = await storeUploadedFile({
+            file,
+            folder: "employee-documents",
+            preferS3: false
+        });
+
         const newDoc = await EmployeeDocument.create({
             employeeId,
             documentType,
             documentNumber,
             expiryDate,
-            filePath: file.path,
-            status
+            filePath: storedFile.filePath,
+            fileUrl: storedFile.fileUrl,
+            storage: storedFile.storage,
+            status,
+            uploadedBy: req.user?._id || null
         });
 
         res.status(201).json(newDoc);
     } catch (error) {
         // console.error("Add Employee Doc Error:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+export const uploadMyDocument = async (req, res) => {
+    try {
+        const user = req.user;
+        const { documentType, documentNumber, expiryDate } = req.body;
+
+        if (!req.file) {
+            return res.status(400).json({ message: "File is required" });
+        }
+
+        let employeeId = user.employeeId;
+        if (!employeeId) {
+            const employee = await Employee.findOne({
+                email: { $regex: new RegExp(`^${user.email}$`, "i") }
+            });
+            employeeId = employee?._id || null;
+        }
+
+        if (!employeeId) {
+            return res.status(404).json({ message: "No linked employee profile found" });
+        }
+
+        let status = "Valid";
+        if (expiryDate) {
+            const exp = new Date(expiryDate);
+            const today = new Date();
+            const thirtyDaysFromNow = new Date();
+            thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+            if (exp < today) status = "Expired";
+            else if (exp < thirtyDaysFromNow) status = "Expiring Soon";
+        }
+
+        const storedFile = await storeUploadedFile({
+            file: req.file,
+            folder: "employee-self-service",
+            preferS3: true
+        });
+
+        const document = await EmployeeDocument.create({
+            employeeId,
+            documentType,
+            documentNumber,
+            expiryDate,
+            filePath: storedFile.filePath,
+            fileUrl: storedFile.fileUrl,
+            storage: storedFile.storage,
+            status,
+            uploadedBy: user._id
+        });
+
+        if (!user.employeeId) {
+            await User.findByIdAndUpdate(user._id, { employeeId });
+        }
+
+        res.status(201).json(document);
+    } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 };
@@ -110,10 +179,7 @@ export const deleteDocument = async (req, res) => {
             return res.status(404).json({ message: "Document not found" });
         }
 
-        // Delete file from filesystem
-        if (fs.existsSync(doc.filePath)) {
-            fs.unlinkSync(doc.filePath);
-        }
+        deleteStoredFile(doc.filePath, doc.storage);
 
         await EmployeeDocument.findByIdAndDelete(id);
         res.json({ message: "Document deleted successfully" });

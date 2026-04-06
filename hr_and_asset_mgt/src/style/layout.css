@@ -870,6 +870,12 @@ body {
   border-color: var(--border);
 }
 
+.quick-action-btn .svg-icon,
+.quick-action-btn .svg-icon-white {
+  filter: invert(30%) sepia(83%) saturate(2326%) hue-rotate(204deg) brightness(96%) contrast(92%) !important;
+  opacity: 1 !important;
+}
+
 /* Dropdown card */
 .quick-action-menu {
   position: absolute !important;

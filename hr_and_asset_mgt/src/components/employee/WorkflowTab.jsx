@@ -43,7 +43,8 @@ const WorkflowTab = ({ employeeId, type }) => {
                 toast.success("Document uploaded successfully");
             }
         } catch (error) {
-            toast.error("Upload failed");
+            const message = error?.response?.data?.message || error?.message || "Upload failed";
+            toast.error(message);
         } finally {
             setUploadingId(null);
         }
@@ -59,7 +60,8 @@ const WorkflowTab = ({ employeeId, type }) => {
                 toast.success("Status updated");
             }
         } catch (error) {
-            toast.error("Update failed");
+            const message = error?.response?.data?.message || error?.message || "Update failed";
+            toast.error(message);
         }
     };
 

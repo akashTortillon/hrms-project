@@ -27,7 +27,12 @@ const REQUEST_API = "/api/requests";
 
 // Create a new request
 export const createRequest = async (requestData) => {
-  const response = await api.post(REQUEST_API, requestData);
+  const isMultipart = requestData instanceof FormData;
+  const response = await api.post(REQUEST_API, requestData, isMultipart ? {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  } : undefined);
   return response.data;
 };
 

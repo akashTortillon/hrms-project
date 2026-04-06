@@ -31,12 +31,28 @@ export default function EmployeesHeader({
           </p>
         </div>
 
-        {onAddEmployee && (
-          <button className="employees-add-btn" onClick={onAddEmployee}>
-            <SvgIcon name="plus" size={16} />
-            Add Employee
-          </button>
-        )}
+        <div className="employees-header-actions">
+          {onExport && (
+            <button className="employees-utility-btn" onClick={onExport}>
+              <SvgIcon name="download" size={16} />
+              Export
+            </button>
+          )}
+
+          {onImport && (
+            <button className="employees-utility-btn" onClick={onImport}>
+              <SvgIcon name="upload" size={16} />
+              Import
+            </button>
+          )}
+
+          {onAddEmployee && (
+            <button className="employees-add-btn" onClick={onAddEmployee}>
+              <SvgIcon name="plus" size={16} />
+              Add Employee
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -47,7 +63,7 @@ export default function EmployeesHeader({
             <SvgIcon name="search" size={18} />
             <input
               type="text"
-              placeholder="Search by name, ID, or email..."
+              placeholder="Search by name or employee ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -123,25 +139,6 @@ export default function EmployeesHeader({
             </select>
           </div>
 
-
-          {onImport && (
-            <button
-              className="employees-export-btn"
-              onClick={onImport}
-              style={{ marginRight: "10px" }}
-            >
-              <SvgIcon name="upload" size={16} />
-              Import
-            </button>
-          )}
-
-          {/* Export */}
-          {onExport && (
-            <button className="employees-export-btn" onClick={onExport}>
-              <SvgIcon name="download" size={16} />
-              Export
-            </button>
-          )}
         </div>
 
         <div className="employees-count">

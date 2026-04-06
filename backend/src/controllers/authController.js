@@ -204,6 +204,42 @@ export const refresh = async (req, res) => {
   }
 };
 
+export const getMe = async (req, res) => {
+  try {
+    const user = req.user;
+
+    let permissions = [];
+    if (user.role === "Admin") {
+      permissions = ["ALL"];
+    } else {
+      const roleDef = await Master.findOne({ type: "ROLE", name: user.role });
+      permissions = roleDef ? roleDef.permissions || [] : [];
+    }
+
+    let finalEmployeeId = user.employeeId;
+    if (!finalEmployeeId) {
+      const linkedEmp = await Employee.findOne({
+        email: { $regex: new RegExp(`^${user.email}$`, "i") }
+      });
+      if (linkedEmp) finalEmployeeId = linkedEmp._id;
+    }
+
+    res.json({
+      role: user.role,
+      permissions,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        employeeId: finalEmployeeId
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch current user" });
+  }
+};
+
 export const logout = async (req, res) => {
   const { refreshToken } = req.cookies;
 
@@ -246,6 +282,5 @@ export const changePassword = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 

@@ -17,13 +17,24 @@ router.use(protect); // All routes require login
 // Replace hardcoded role check with permission check
 // allows any role with MANAGE_EMPLOYEES to access workflows
 const requireWorkflowPermission = hasPermission("MANAGE_EMPLOYEES");
+const handleWorkflowUpload = (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (!err) return next();
+
+    const message = err.code === "LIMIT_FILE_SIZE"
+      ? "File size must be 10 MB or less."
+      : (err.message || "File upload failed.");
+
+    return res.status(400).json({ success: false, message });
+  });
+};
 
 // Lazy init or get
 router.get("/:employeeId/:type", requireWorkflowPermission, getEmployeeWorkflow);
 
 // Update item (upload or status)
 // This supports file upload 'file' field
-router.put("/:workflowId/:itemId", requireWorkflowPermission, upload.single('file'), updateWorkflowItem);
+router.put("/:workflowId/:itemId", requireWorkflowPermission, handleWorkflowUpload, updateWorkflowItem);
 
 // Add custom item
 router.post("/:workflowId/items", requireWorkflowPermission, addItemToWorkflow);

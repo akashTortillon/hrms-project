@@ -13,6 +13,14 @@ import Card from "../../components/reusable/Card";
    ✅ STATUS TEXT HELPER (DYNAMIC)
 ---------------------------------- */
 const getStatusText = (req) => {
+  if (req.status === "MANAGER_APPROVED") {
+    const managerName = req.managerApproval?.actedBy?.name || "Manager";
+    const managerDate = req.managerApproval?.actedAt
+      ? new Date(req.managerApproval.actedAt).toLocaleDateString()
+      : "";
+    return `Approved by ${managerName} on ${managerDate} and waiting for HR review`;
+  }
+
   // Debug log
   console.log("getStatusText called for:", req.requestId, {
     status: req.status,
@@ -138,6 +146,11 @@ export default function EmployeeRequests() {
       PENDING: {
         label: "Pending",
         class: "status-pending",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
+      MANAGER_APPROVED: {
+        label: "Manager Approved",
+        class: "status-approved",
         icon: <SvgIcon name="circle-tick" size={15} />
       },
       APPROVED: {

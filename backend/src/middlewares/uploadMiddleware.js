@@ -28,12 +28,15 @@ function checkFileType(file, cb) {
     if (extname && mimetype) {
         return cb(null, true);
     } else {
-        cb("Images and Documents only!");
+        cb(new Error("Only JPG, JPEG, PNG, PDF, DOC, and DOCX files are allowed."));
     }
 }
 
 const upload = multer({
     storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024,
+    },
     fileFilter: function (req, file, cb) {
         checkFileType(file, cb);
     },

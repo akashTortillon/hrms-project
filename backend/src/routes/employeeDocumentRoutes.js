@@ -1,9 +1,11 @@
 import express from "express";
-import { addDocument, getEmployeeDocuments, deleteDocument, getMyDocuments } from "../controllers/employeeDocumentController.js";
+import multer from "multer";
+import { addDocument, getEmployeeDocuments, deleteDocument, getMyDocuments, uploadMyDocument } from "../controllers/employeeDocumentController.js";
 import upload from "../config/multer.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 // Get docs for logged-in user (Prioritize this before /:id)
 router.get("/my/all", protect, getMyDocuments);
@@ -13,6 +15,7 @@ router.get("/:employeeId", protect, getEmployeeDocuments);
 
 // Upload a doc - HR Only
 router.post("/", protect, hasPermission("MANAGE_DOCUMENTS"), upload.single("file"), addDocument);
+router.post("/self", protect, memoryUpload.single("file"), uploadMyDocument);
 
 // Delete a doc - HR Only
 router.delete("/:id", protect, hasPermission("MANAGE_DOCUMENTS"), deleteDocument);

@@ -59,7 +59,7 @@ export const payrollService = {
         });
         // Try to get filename from header
         const contentDisposition = response.headers['content-disposition'];
-        let filename = `SIF_${year}${month}.csv`;
+        let filename = `SIF_${year}${month}.zip`;
         if (contentDisposition) {
             const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
             if (fileNameMatch && fileNameMatch.length === 2)

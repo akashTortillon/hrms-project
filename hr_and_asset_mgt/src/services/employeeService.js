@@ -25,6 +25,21 @@ export const updateEmployee = async (id, data) => {
   return res.data.employee;
 };
 
+export const transferEmployee = async (id, data) => {
+  const res = await api.post(`${EMPLOYEE_API}/${id}/transfer`, data);
+  return res.data;
+};
+
+export const confirmProbation = async (id, data = {}) => {
+  const res = await api.post(`${EMPLOYEE_API}/${id}/confirm-probation`, data);
+  return res.data;
+};
+
+export const getProbationReminders = async () => {
+  const res = await api.get(`${EMPLOYEE_API}/probation/reminders`);
+  return res.data;
+};
+
 // DELETE employee
 export const deleteEmployee = async (id) => {
   const res = await api.delete(EMPLOYEE_API + `/${id}`);

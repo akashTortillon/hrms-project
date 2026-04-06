@@ -5,6 +5,7 @@ const TYPE_MAPPING = {
     // HR
     "departments": "DEPARTMENT",
     "branches": "BRANCH",
+    "companies": "COMPANY",
     "designations": "DESIGNATION",
     "employee-types": "EMPLOYEE_TYPE",
     "leave-types": "LEAVE_TYPE",

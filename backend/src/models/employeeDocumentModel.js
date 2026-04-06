@@ -6,11 +6,18 @@ const employeeDocumentSchema = new mongoose.Schema({
     documentNumber: { type: String }, // Optional reference number
     expiryDate: { type: Date },
     filePath: { type: String, required: true }, // Path to stored file
+    fileUrl: { type: String, default: "" },
+    storage: {
+        type: String,
+        enum: ["LOCAL", "S3"],
+        default: "LOCAL"
+    },
     status: {
         type: String,
         enum: ["Valid", "Expiring Soon", "Expired"],
         default: "Valid"
     },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     uploadedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

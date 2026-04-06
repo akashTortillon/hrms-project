@@ -95,4 +95,12 @@ app.use("/api/search", searchRoutes);
 import notificationRoutes from "./routes/notificationRoutes.js";
 app.use("/api/notifications", notificationRoutes);
 
+// 🔹 Appraisal / Announcement / Policy APIs
+import appraisalRoutes from "./routes/appraisalRoutes.js";
+import announcementRoutes from "./routes/announcementRoutes.js";
+import policyRoutes from "./routes/policyRoutes.js";
+app.use("/api/appraisals", appraisalRoutes);
+app.use("/api/announcements", announcementRoutes);
+app.use("/api/policies", policyRoutes);
+
 export default app;

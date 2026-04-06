@@ -57,6 +57,7 @@
 
 
 import express from "express";
+import multer from "multer";
 import {
   createRequest,
   getMyRequests,
@@ -72,6 +73,7 @@ import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
 
 const router = express.Router();
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 /* =========================
    USER REQUEST ROUTES
@@ -79,7 +81,7 @@ const router = express.Router();
 
 // Create a new request
 // POST /api/requests
-router.post("/", protect, createRequest);
+router.post("/", protect, memoryUpload.single("document"), createRequest);
 
 // Get logged-in user's requests
 // GET /api/requests/my-requests
@@ -98,7 +100,6 @@ router.patch("/:id/withdraw", protect, withdrawRequest);
 router.get(
   "/admin/pending",
   protect,
-  hasPermission("APPROVE_REQUESTS"),
   getPendingRequestsForAdmin
 );
 
@@ -107,7 +108,6 @@ router.get(
 router.put(
   "/:requestId/action",
   protect,
-  hasPermission("APPROVE_REQUESTS"),
   updateRequestStatus
 );
 

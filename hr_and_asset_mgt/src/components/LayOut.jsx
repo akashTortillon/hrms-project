@@ -7,6 +7,7 @@ import { useState } from "react";
 import Dashboard from "../pages/Dashboard/DashboardView.jsx";
 import Employees from "../pages/Employees/EmployeesView.jsx";
 import EmployeeDetail from "../pages/Employees/EmployeeDetail.jsx";
+import ProbationRemindersView from "../pages/Employees/ProbationRemindersView.jsx";
 import Onboarding from "../pages/Onboarding/OnboardingView.jsx";
 import Offboarding from "../pages/Offboarding/OffboardingView.jsx";
 import Payroll from "../pages/Payroll/PayrollView.jsx";
@@ -17,6 +18,9 @@ import MyRequests from "../pages/MyRequests/MyRequests.jsx";
 import Reports from "../pages/Reports/ReportsView.jsx";
 import CustomReportBuilder from "../pages/Reports/pages/CustomReportBuilder.jsx";
 import Masters from "../pages/Masters/MastersView.jsx";
+import AppraisalsView from "../pages/Appraisals/AppraisalsView.jsx";
+import AnnouncementsView from "../pages/Announcements/AnnouncementsView.jsx";
+import PoliciesView from "../pages/Policies/PoliciesView.jsx";
 
 export default function Layout() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -52,6 +56,7 @@ export default function Layout() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="employees" element={<Employees />} />
               <Route path="employees/:id" element={<EmployeeDetail />} />
+              <Route path="probation" element={<ProbationRemindersView />} />
               <Route path="onboarding" element={<Onboarding />} />
               <Route path="offboarding" element={<Offboarding />} />
               <Route path="payroll" element={<Payroll />} />
@@ -59,6 +64,9 @@ export default function Layout() {
               <Route path="documents" element={<Documents />} />
               <Route path="assets" element={<Assets />} />
               <Route path="requests" element={<MyRequests />} />
+              <Route path="appraisals" element={<AppraisalsView />} />
+              <Route path="announcements" element={<AnnouncementsView />} />
+              <Route path="policies" element={<PoliciesView />} />
               <Route path="reports" element={<Reports />} />
               <Route path="reports/builder" element={<CustomReportBuilder />} />
               <Route path="masters" element={<Masters />} />

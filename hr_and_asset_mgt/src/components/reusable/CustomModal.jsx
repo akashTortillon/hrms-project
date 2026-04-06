@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import "../../style/Modal.css";
 
-export default function CustomModal({ show, title, children, onClose, footer }) {
+export default function CustomModal({ show, title, children, onClose, footer, width, className = "" }) {
     // Prevent background scrolling when modal is open
     useEffect(() => {
         if (show) {
@@ -18,7 +18,10 @@ export default function CustomModal({ show, title, children, onClose, footer }) 
 
     return (
         <div className="custom-modal-overlay">
-            <div className="custom-modal">
+            <div
+                className={`custom-modal ${className}`.trim()}
+                style={width ? { maxWidth: width } : undefined}
+            >
                 <div className="custom-modal-header">
                     <h3 className="custom-modal-title">{title}</h3>
                     <button className="custom-modal-close" onClick={onClose}>

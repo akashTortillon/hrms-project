@@ -1086,3 +1086,233 @@ system settings
   /* blue-500 */
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
+
+/* =========================
+   Premium Overrides
+========================= */
+
+.masters-page {
+  gap: 18px;
+}
+
+.masters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 28px 30px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(199, 161, 78, 0.22), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(37, 99, 235, 0.12), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbff 52%, #fffaf1 100%);
+  border: 1px solid #e8edf5;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+}
+
+.masters-header-eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #b98925;
+}
+
+.masters-title {
+  font-size: 34px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+  line-height: 1.05;
+}
+
+.masters-subtitle {
+  font-size: 15px;
+  color: #64748b;
+}
+
+.masters-header-stat {
+  min-width: 220px;
+  padding: 18px 18px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(215, 225, 243, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.masters-header-stat-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.masters-header-stat-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.masters-content {
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.07), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(249, 251, 255, 0.98) 100%);
+  border-radius: 24px;
+  padding: 24px;
+  border: 1px solid #e7ecf5;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+}
+
+.masters-tabs {
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f6f9ff 100%);
+  border: 1px solid #e6edf8;
+}
+
+.masters-tab {
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  color: #475569;
+  font-weight: 600;
+  transition: all 0.2s ease, transform 0.2s ease;
+}
+
+.masters-tab:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+
+.masters-tab.active {
+  background: linear-gradient(135deg, #ffffff 0%, #eef4ff 100%);
+  color: #2d5fe4;
+  border-color: #dce6fb;
+  box-shadow: 0 10px 20px rgba(45, 95, 228, 0.12);
+}
+
+.company-structure-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.company-structure-subtitle {
+  font-size: 15px;
+  color: #64748b;
+}
+
+.masters-card-container {
+  background:
+    radial-gradient(circle at top right, rgba(199, 161, 78, 0.08), transparent 22%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  border: 1px solid #e7ecf5;
+  border-radius: 22px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.masters-card-container:hover {
+  transform: translateY(-1px);
+  border-color: #dde6f4;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+.masters-card-header-clean {
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.masters-card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.masters-add-btn {
+  background: linear-gradient(135deg, #ffffff 0%, #f5f8ff 100%);
+  border: 1px solid #dbe5f5;
+  color: #2d5fe4;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  box-shadow: 0 8px 18px rgba(45, 95, 228, 0.08);
+}
+
+.masters-add-btn:hover {
+  background: linear-gradient(135deg, #ffffff 0%, #eef4ff 100%);
+  box-shadow: 0 12px 22px rgba(45, 95, 228, 0.12);
+}
+
+.masters-card-body {
+  padding: 0 22px 22px 22px;
+}
+
+.structure-item {
+  padding: 15px 18px !important;
+  border: 1px solid #ebf0f7 !important;
+  border-radius: 16px !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%) !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.structure-item:hover {
+  transform: translateY(-1px);
+  border-color: #dbe5f4 !important;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06) !important;
+}
+
+.structure-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.icon-btn {
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+  border-radius: 12px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.04);
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.icon-btn.edit:hover,
+.icon-btn.delete:hover {
+  transform: translateY(-1px);
+}
+
+.pill-list .text-muted.small {
+  margin: 6px 0 2px;
+  color: #94a3b8;
+}
+
+@media (max-width: 900px) {
+  .masters-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 768px) {
+  .masters-header,
+  .masters-content {
+    padding: 20px;
+    border-radius: 18px;
+  }
+
+  .masters-title {
+    font-size: 28px;
+  }
+
+  .masters-header-stat {
+    min-width: 0;
+    width: 100%;
+  }
+}

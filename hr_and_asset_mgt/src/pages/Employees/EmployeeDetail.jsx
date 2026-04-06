@@ -37,12 +37,14 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests } from "../../services/requestService";
 
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
+import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
+import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
@@ -80,6 +82,8 @@ export default function EmployeeDetail() {
 
     // Edit Modal State
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [showConfirmProbationModal, setShowConfirmProbationModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Change Password Modal State
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
@@ -98,6 +102,7 @@ export default function EmployeeDetail() {
 
     // Loan State
     const [loans, setLoans] = useState([]);
+    const [confirmingProbation, setConfirmingProbation] = useState(false);
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
@@ -237,11 +242,40 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handleTransferEmployee = async (transferData) => {
+        try {
+            await transferEmployee(effectiveId, transferData);
+            toast.success("Employee transferred successfully");
+            setShowTransferModal(false);
+            fetchEmployee();
+        } catch (error) {
+            console.error("Transfer failed", error);
+            toast.error(error.response?.data?.message || "Failed to transfer employee");
+        }
+    };
+
+    const handleConfirmProbation = async (payload) => {
+        try {
+            setConfirmingProbation(true);
+            await confirmProbation(effectiveId, payload);
+            toast.success("Probation confirmed successfully");
+            setShowConfirmProbationModal(false);
+            fetchEmployee();
+        } catch (error) {
+            console.error("Probation confirmation failed", error);
+            toast.error(error.response?.data?.message || "Failed to confirm probation");
+        } finally {
+            setConfirmingProbation(false);
+        }
+    };
+
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
 
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
+
+    const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
     const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans"];
     // Conditionally add Onboarding/Offboarding based on granular permissions
@@ -299,15 +333,35 @@ export default function EmployeeDetail() {
 
                 <div className="profile-actions">
                     {canEdit && (
-                        <button
-                            className="edit-profile-btn"
-                            onClick={() => {
-                                setEditMode("profile");
-                                setShowEditModal(true);
-                            }}
-                        >
-                            Edit Profile
-                        </button>
+                        <>
+                            <button
+                                className="edit-profile-btn"
+                                onClick={() => {
+                                    setEditMode("profile");
+                                    setShowEditModal(true);
+                                }}
+                            >
+                                Edit Profile
+                            </button>
+                            {!isSelf && (
+                                <>
+                                    <button
+                                        className="edit-profile-btn transfer-profile-btn"
+                                        onClick={() => setShowTransferModal(true)}
+                                    >
+                                        Transfer Employee
+                                    </button>
+                                    {canConfirmProbation && (
+                                        <button
+                                            className="edit-profile-btn probation-profile-btn"
+                                            onClick={() => setShowConfirmProbationModal(true)}
+                                        >
+                                            Confirm Probation
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </>
                     )}
                     {isSelf && (
                         <button
@@ -440,6 +494,10 @@ export default function EmployeeDetail() {
                                 <div>{employee.contractType || "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Company</label>
+                                <div>{employee.company || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
                                 <label>Department</label>
                                 <div>{employee.department || "N/A"}</div>
                             </div>
@@ -458,6 +516,22 @@ export default function EmployeeDetail() {
                             <div className="info-group">
                                 <label>Agent ID (WPS)</label>
                                 <div>{employee.agentId || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Probation Start Date</label>
+                                <div>{employee.probationStartDate ? new Date(employee.probationStartDate).toISOString().split("T")[0] : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Probation End Date</label>
+                                <div>{employee.probationEndDate ? new Date(employee.probationEndDate).toISOString().split("T")[0] : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Probation Status</label>
+                                <div>{employee.probationStatus ? employee.probationStatus.replace(/_/g, " ") : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Fixed Probation Increment</label>
+                                <div>{employee.fixedProbationIncrementAmount ? `${employee.fixedProbationIncrementAmount} AED` : "0 AED"}</div>
                             </div>
                             <div className="info-group">
                                 <label>Basic Salary</label>
@@ -497,6 +571,42 @@ export default function EmployeeDetail() {
                                     <div>{employee.bankAccount || "N/A"}</div>
                                 </div>
                             </div>
+                        </div>
+
+                        <div className="transfer-history-section">
+                            <div className="transfer-history-header">
+                                <h4>Transfer History</h4>
+                                <span>{employee.transferHistory?.length || 0} records</span>
+                            </div>
+
+                            {Array.isArray(employee.transferHistory) && employee.transferHistory.length > 0 ? (
+                                <div className="transfer-history-list">
+                                    {[...employee.transferHistory]
+                                        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                                        .map((entry, index) => (
+                                            <div key={`${entry.effectiveDate}-${index}`} className="transfer-history-card">
+                                                <div className="transfer-history-date">
+                                                    {entry.effectiveDate ? new Date(entry.effectiveDate).toISOString().split("T")[0] : "N/A"}
+                                                </div>
+                                                <div className="transfer-history-body">
+                                                    <div className="transfer-history-row">
+                                                        <strong>Company:</strong> {entry.previousCompany || "N/A"} to {entry.newCompany || "N/A"}
+                                                    </div>
+                                                    <div className="transfer-history-row">
+                                                        <strong>Branch:</strong> {entry.previousBranch || "N/A"} to {entry.newBranch || "N/A"}
+                                                    </div>
+                                                    <div className="transfer-history-row">
+                                                        <strong>Reason:</strong> {entry.reason || "N/A"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                </div>
+                            ) : (
+                                <div className="transfer-history-empty">
+                                    No transfer history recorded for this employee yet.
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
@@ -799,6 +909,23 @@ export default function EmployeeDetail() {
                     employeeId={effectiveId}
                     onClose={() => setShowUploadModal(false)}
                     onUpload={handleUploadDocument}
+                />
+            )}
+
+            {showTransferModal && (
+                <TransferEmployeeModal
+                    employee={employee}
+                    onClose={() => setShowTransferModal(false)}
+                    onSubmit={handleTransferEmployee}
+                />
+            )}
+
+            {showConfirmProbationModal && (
+                <ConfirmProbationModal
+                    employee={employee}
+                    onClose={() => setShowConfirmProbationModal(false)}
+                    onConfirm={handleConfirmProbation}
+                    submitting={confirmingProbation}
                 />
             )}
 

@@ -411,12 +411,52 @@ import Request from "../models/requestModel.js";
 import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import User from "../models/userModel.js";
+import Master from "../models/masterModel.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import { createNotification } from "./notificationController.js";
-import upload from "../config/multer.js";
 import path from "path";
 import fs from "fs";
 import mongoose from "mongoose";
+import { deleteStoredFile, storeUploadedFile } from "../utils/storage.js";
+
+const safeJsonParse = (value, fallback = {}) => {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const normalizeTypeName = (value = "") => String(value).trim().toLowerCase();
+
+const isSickLeave = (details = {}) => normalizeTypeName(details.leaveType).includes("sick");
+
+const getLeaveDays = (details = {}) => {
+  if (details.isHalfDay) return 0.5;
+  const fromDate = new Date(details.fromDate);
+  const toDate = new Date(details.toDate || details.fromDate);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return 0;
+  }
+  if (toDate < fromDate) {
+    return 0;
+  }
+  const diffDays = Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+  return Math.max(1, diffDays);
+};
+
+const resolveManagerRecipient = async (employee) => {
+  if (!employee?.designatedManager) return null;
+
+  const directUser = await User.findById(employee.designatedManager).select("_id name role employeeId");
+  if (directUser) {
+    return directUser;
+  }
+
+  return User.findOne({ employeeId: employee.designatedManager }).select("_id name role employeeId");
+};
 
 /**
  * Helper to notify all Admins and HR (Authorized Users)
@@ -451,7 +491,7 @@ const notifyAdmins = async (title, message, link) => {
   }
 };
 
-const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true, isHalfDay = false) => {
+const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true, isHalfDay = false, leavePayStatus = "FULLY_PAID") => {
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
 
@@ -478,6 +518,7 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
         shift: "Day Shift",
         leaveType,
         isPaid,
+        leavePayStatus,
         leaveDuration: isHalfDay ? 0.5 : 1
       },
       { upsert: true, new: true }
@@ -638,7 +679,8 @@ const sendSalaryAdvanceRejectionEmail = async (request, employeeUser) => {
 // ✅ UPDATED: Create a new request with subType support
 export const createRequest = async (req, res) => {
   try {
-    const { requestType, subType, details } = req.body;
+    const { requestType, subType } = req.body;
+    const details = safeJsonParse(req.body.details, req.body.details || {});
     const userId = req.user.id;
 
     if (!requestType || !details) {
@@ -653,6 +695,55 @@ export const createRequest = async (req, res) => {
         success: false,
         message: "Invalid request type"
       });
+    }
+
+    const employeeUser = await User.findById(userId);
+    const employee = employeeUser?.employeeId
+      ? await Employee.findById(employeeUser.employeeId)
+      : await Employee.findOne({ email: { $regex: new RegExp(`^${employeeUser?.email || ""}$`, "i") } });
+
+    if (requestType === "LEAVE") {
+      if (!details.fromDate || !details.toDate) {
+        return res.status(400).json({
+          success: false,
+          message: "From date and to date are required for leave requests"
+        });
+      }
+
+      if (new Date(details.toDate) < new Date(details.fromDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Leave end date cannot be earlier than start date"
+        });
+      }
+
+      const numberOfDays = getLeaveDays(details);
+      if (!numberOfDays) {
+        return res.status(400).json({
+          success: false,
+          message: "Unable to calculate leave days for the selected dates"
+        });
+      }
+      const sickLeave = isSickLeave(details);
+      let storedMedicalDoc = null;
+
+      if (req.file) {
+        storedMedicalDoc = await storeUploadedFile({
+          file: req.file,
+          folder: "leave-medical-documents",
+          preferS3: true
+        });
+      }
+
+      details.numberOfDays = numberOfDays;
+      details.medicalDocumentRequired = sickLeave && numberOfDays > 1;
+      details.hasMedicalDocument = Boolean(storedMedicalDoc);
+      details.medicalDocumentPath = storedMedicalDoc?.filePath || "";
+      details.medicalDocumentUrl = storedMedicalDoc?.fileUrl || "";
+      details.medicalDocumentStorage = storedMedicalDoc?.storage || "LOCAL";
+      details.leavePayStatus = details.hasMedicalDocument
+        ? "FULLY_PAID"
+        : (sickLeave && numberOfDays > 1 ? "UNPAID_FROM_DAY_2" : "FULLY_PAID");
     }
 
     // ✅ Standardized subType handling
@@ -674,30 +765,48 @@ export const createRequest = async (req, res) => {
     }
 
     const requestId = await generateRequestId();
+    const managerUser = requestType === "LEAVE" ? await resolveManagerRecipient(employee) : null;
+    const requiresManagerApproval = requestType === "LEAVE" && Boolean(managerUser?._id);
 
     const request = await Request.create({
       userId,
       requestId,
       requestType,
-      // Removed root subType
       details,
+      designatedManager: managerUser?._id || null,
+      currentApprovalStage: requiresManagerApproval ? "MANAGER" : "HR",
+      managerApproval: {
+        status: requiresManagerApproval ? "PENDING" : "SKIPPED"
+      },
+      hrApproval: {
+        status: requiresManagerApproval ? "PENDING" : "PENDING"
+      },
       status: "PENDING",
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      finalPayImpact: requestType === "LEAVE" && details.leavePayStatus === "UNPAID_FROM_DAY_2" ? "UNPAID" : "NONE"
     });
 
     // Send notifications
-    const employeeUser = await User.findById(userId);
     if (employeeUser) {
       if (requestType === "SALARY") {
         sendSalaryAdvanceSubmissionEmail(request, employeeUser).catch(e => console.error("Email error:", e));
       }
 
-      // Notify Admins
-      notifyAdmins(
-        `New ${requestType} Request`,
-        `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
-        `/app/requests`
-      ).catch(e => console.error("Notify error:", e));
+      if (requiresManagerApproval && managerUser?._id) {
+        createNotification({
+          recipient: managerUser._id,
+          title: "Leave request awaiting manager approval",
+          message: `${employeeUser.name} submitted leave request ${request.requestId}.`,
+          type: "REQUEST",
+          link: "/app/requests"
+        }).catch(e => console.error("Notify error:", e));
+      } else {
+        notifyAdmins(
+          `New ${requestType} Request`,
+          `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
+          `/app/requests`
+        ).catch(e => console.error("Notify error:", e));
+      }
     }
 
     return res.status(201).json({
@@ -719,8 +828,6 @@ export const getMyRequests = async (req, res) => {
   try {
     const userId = req.user.id;
     const { type, status, subType } = req.query;
-
-    console.log("getMyRequests hit:", { userId, query: req.query }); // DEBUG LOG
 
     const query = { userId: userId };
     if (type) query.requestType = type;
@@ -751,6 +858,8 @@ export const getMyRequests = async (req, res) => {
     const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
+      .populate("managerApproval.actedBy", "name role")
+      .populate("hrApproval.actedBy", "name role")
       .sort({ submittedAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -828,6 +937,13 @@ export const getPendingRequestsForAdmin = async (req, res) => {
     const { type, subType, status, page = 1, limit = 10 } = req.query;
 
     let query = {};
+    const isManagerOnlyRole = req.user.role === "Manager";
+    const canApproveHr = !isManagerOnlyRole && (
+      req.user.role === "Admin"
+      || req.user.permissions?.includes("ALL")
+      || req.user.permissions?.includes("APPROVE_REQUESTS")
+    );
+    const canApproveManager = req.user.role === "Admin" || req.user.permissions?.includes("ALL") || req.user.permissions?.includes("APPROVE_MANAGER_REQUESTS");
 
     // Filter by Status (Default: ALL if not specified, to match legacy behavior)
     if (status) {
@@ -848,6 +964,30 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       ];
     }
 
+    const managerScope = [];
+    if (req.user?._id) {
+      managerScope.push(req.user._id);
+    }
+    if (req.user?.employeeId) {
+      managerScope.push(req.user.employeeId);
+    }
+
+    if (!canApproveHr) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        currentApprovalStage: "MANAGER",
+        designatedManager: { $in: managerScope }
+      });
+    } else if (canApproveManager && !req.query.stage) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { currentApprovalStage: "HR" },
+          { currentApprovalStage: "MANAGER", designatedManager: { $in: managerScope } }
+        ]
+      });
+    }
+
     // Pagination
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -857,6 +997,9 @@ export const getPendingRequestsForAdmin = async (req, res) => {
 
     const requests = await Request.find(query)
       .populate("userId", "name email department avatar role") // Added more user details
+      .populate("designatedManager", "name role")
+      .populate("managerApproval.actedBy", "name role")
+      .populate("hrApproval.actedBy", "name role")
       .sort({ submittedAt: -1 })
       .skip(skip)
       .limit(limitNum);
@@ -892,19 +1035,59 @@ export const updateRequestStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Request not found" });
     }
 
-    if (request.status !== "PENDING") {
+    if (!["PENDING", "MANAGER_APPROVED"].includes(request.status)) {
       return res.status(400).json({ success: false, message: "Request already processed" });
     }
 
-    let newStatus = "REJECTED";
+    const isManagerStage = request.currentApprovalStage === "MANAGER";
+    const isManagerOnlyRole = req.user.role === "Manager";
+    const canApproveHr = !isManagerOnlyRole && (
+      req.user.role === "Admin"
+      || req.user.permissions?.includes("ALL")
+      || req.user.permissions?.includes("APPROVE_REQUESTS")
+    );
+    const canApproveManager = req.user.role === "Admin"
+      || req.user.permissions?.includes("ALL")
+      || req.user.permissions?.includes("APPROVE_MANAGER_REQUESTS")
+      || (request.designatedManager && (
+        request.designatedManager.toString() === req.user._id.toString()
+        || (req.user.employeeId && request.designatedManager.toString() === req.user.employeeId.toString())
+      ));
+
+    if (isManagerStage && !canApproveManager) {
+      return res.status(403).json({ success: false, message: "Only the designated manager can act on this request." });
+    }
+
+    if (!isManagerStage && !canApproveHr) {
+      return res.status(403).json({ success: false, message: "Only HR/Admin can act on this request." });
+    }
 
     if (action === "APPROVE") {
-      newStatus = "APPROVED";
+      if (isManagerStage) {
+        request.managerApproval = {
+          status: "APPROVED",
+          actedBy: req.user.id,
+          actedAt: new Date(),
+          remarks: req.body.remarks || ""
+        };
+        request.currentApprovalStage = "HR";
+        request.status = "MANAGER_APPROVED";
+        await request.save();
 
-      // Calculate Interest for Loans AND Salary Advances
-      if (request.status === "PENDING" && request.requestType === "SALARY") {
+        await notifyAdmins(
+          "Leave request awaiting HR approval",
+          `Request ${request.requestId} has been approved by the manager and is awaiting HR approval.`,
+          "/app/requests"
+        );
 
-        // Update specific Amount if Admin overrode it
+        return res.json({
+          success: true,
+          message: "Request approved by manager and forwarded to HR",
+          data: request
+        });
+      }
+
+      if (request.requestType === "SALARY") {
         if (req.body.amount) {
           request.details.amount = Number(req.body.amount);
         }
@@ -913,36 +1096,68 @@ export const updateRequestStatus = async (req, res) => {
         const principal = Number(request.details.amount) || 0;
         const totalRepayment = principal + (principal * rate / 100);
 
-        // Update details with finalized terms
         request.details = {
           ...request.details,
           interestRate: rate,
           totalRepaymentAmount: totalRepayment
         };
 
-        // Update Repayment Period if provided (Admin Override)
         if (req.body.repaymentPeriod) {
           request.details.repaymentPeriod = Number(req.body.repaymentPeriod);
         }
       }
-    }
 
-    request.status = newStatus;
-    request.approvedBy = req.user.id;
-    request.approvedAt = new Date();
+      request.hrApproval = {
+        status: "APPROVED",
+        actedBy: req.user.id,
+        actedAt: new Date(),
+        remarks: req.body.remarks || ""
+      };
+      request.currentApprovalStage = "COMPLETED";
+      request.status = "APPROVED";
+      request.approvedBy = req.user.id;
+      request.approvedAt = new Date();
 
-    if (action === "REJECT") {
+      if (request.requestType === "LEAVE") {
+        const { fromDate, toDate, leaveType, isPaid, isHalfDay, leavePayStatus } = request.details;
+        if (fromDate && toDate) {
+          await markLeaveAttendance(
+            request.userId,
+            fromDate,
+            toDate,
+            leaveType,
+            isPaid,
+            isHalfDay,
+            leavePayStatus === "HALF_PAID" ? "HALF_PAID" : (leavePayStatus === "UNPAID" ? "UNPAID" : "FULLY_PAID")
+          );
+        }
+      }
+    } else if (action === "REJECT") {
       if (!rejectionReason || !rejectionReason.trim()) {
         return res.status(400).json({ success: false, message: "Rejection reason is required" });
       }
-      request.rejectionReason = rejectionReason;
-    }
-
-    if (request.requestType === "LEAVE" && action === "APPROVE") {
-      const { fromDate, toDate, leaveType, isPaid, isHalfDay } = request.details;
-      if (fromDate && toDate) {
-        await markLeaveAttendance(request.userId, fromDate, toDate, leaveType, isPaid, isHalfDay);
+      if (isManagerStage) {
+        request.managerApproval = {
+          status: "REJECTED",
+          actedBy: req.user.id,
+          actedAt: new Date(),
+          remarks: rejectionReason.trim()
+        };
+      } else {
+        request.hrApproval = {
+          status: "REJECTED",
+          actedBy: req.user.id,
+          actedAt: new Date(),
+          remarks: rejectionReason.trim()
+        };
       }
+      request.rejectionReason = rejectionReason.trim();
+      request.status = "REJECTED";
+      request.currentApprovalStage = "COMPLETED";
+      request.approvedBy = req.user.id;
+      request.approvedAt = new Date();
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid action" });
     }
 
     await request.save();
@@ -950,8 +1165,8 @@ export const updateRequestStatus = async (req, res) => {
     // Notify Employee
     createNotification({
       recipient: request.userId,
-      title: `Request ${newStatus}`,
-      message: `Your ${request.requestType.toLowerCase()} request (${request.requestId}) has been ${newStatus.toLowerCase()}.`,
+      title: `Request ${request.status}`,
+      message: `Your ${request.requestType.toLowerCase()} request (${request.requestId}) has been ${request.status.toLowerCase()}.`,
       type: "REQUEST",
       link: "/app/requests"
     }).catch(e => console.error("Notification error:", e));
@@ -969,11 +1184,13 @@ export const updateRequestStatus = async (req, res) => {
     }
 
     const populatedRequest = await Request.findById(request._id)
-      .populate("approvedBy", "name role");
+      .populate("approvedBy", "name role")
+      .populate("managerApproval.actedBy", "name role")
+      .populate("hrApproval.actedBy", "name role");
 
     res.json({
       success: true,
-      message: `Request ${newStatus.toLowerCase()} successfully`,
+      message: `Request ${request.status.toLowerCase()} successfully`,
       data: populatedRequest
     });
   } catch (err) {
@@ -1016,14 +1233,28 @@ export const approveDocumentRequest = async (req, res) => {
       });
     }
 
-    // Update request with document info
+    const storedFile = await storeUploadedFile({
+      file: req.file,
+      folder: "document-requests",
+      preferS3: false
+    });
+
     request.status = "COMPLETED";
-    request.uploadedDocument = req.file.path;
+    request.currentApprovalStage = "COMPLETED";
+    request.uploadedDocument = storedFile.filePath;
+    request.uploadedDocumentUrl = storedFile.fileUrl;
+    request.uploadedDocumentStorage = storedFile.storage;
     request.uploadedAt = new Date();
     request.actionBy = req.user.id;
     request.actionDate = new Date();
     request.approvedBy = req.user.id;
     request.approvedAt = new Date();
+    request.hrApproval = {
+      status: "APPROVED",
+      actedBy: req.user.id,
+      actedAt: new Date(),
+      remarks: req.body.remarks || ""
+    };
 
     await request.save();
 
@@ -1091,11 +1322,18 @@ export const rejectDocumentRequest = async (req, res) => {
     }
 
     request.status = "REJECTED";
+    request.currentApprovalStage = "COMPLETED";
     request.rejectionReason = rejectionReason.trim();
     request.actionBy = req.user.id;
     request.actionDate = new Date();
     request.approvedBy = req.user.id;
     request.approvedAt = new Date();
+    request.hrApproval = {
+      status: "REJECTED",
+      actedBy: req.user.id,
+      actedAt: new Date(),
+      remarks: rejectionReason.trim()
+    };
 
     await request.save();
 
@@ -1148,11 +1386,15 @@ export const downloadDocument = async (req, res) => {
     }
 
     // Check if file exists
-    if (!fs.existsSync(request.uploadedDocument)) {
+    if (request.uploadedDocumentStorage === "LOCAL" && !fs.existsSync(request.uploadedDocument)) {
       return res.status(404).json({
         success: false,
         message: "Document file not found on server"
       });
+    }
+
+    if (request.uploadedDocumentStorage === "S3" && request.uploadedDocumentUrl) {
+      return res.redirect(request.uploadedDocumentUrl);
     }
 
     // Get file extension and set appropriate content type
@@ -1263,6 +1505,8 @@ export const getEmployeeRequests = async (req, res) => {
     const requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
+      .populate("managerApproval.actedBy", "name role")
+      .populate("hrApproval.actedBy", "name role")
       .sort({ submittedAt: -1 });
 
     console.log(`[getEmployeeRequests] Found ${requests.length} requests`);
