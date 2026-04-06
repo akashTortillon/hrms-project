@@ -118,11 +118,13 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
               <label>Employee ID (Optional)</label>
               <input
                 name="code"
-                placeholder="e.g. EMP001 (leave blank to auto-generate)"
+                placeholder="e.g. 10172 (leave blank to auto-generate)"
                 value={form.code}
                 onChange={(e) => {
                   const val = e.target.value || "";
-                  setForm(prev => ({ ...prev, code: val.toUpperCase() }));
+                  // Numeric-only employee ID
+                  const numericOnly = val.replace(/[^\d]/g, "");
+                  setForm((prev) => ({ ...prev, code: numericOnly }));
                 }}
               />
             </div>

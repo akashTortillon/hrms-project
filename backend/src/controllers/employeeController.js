@@ -113,13 +113,13 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Valid UAE Phone Number is required" });
     }
 
-    const safeCode = code != null && String(code).trim() ? String(code).trim().toUpperCase() : "";
+    const safeCode = code != null && String(code).trim() ? String(code).trim() : "";
 
     // Optional: validate Employee ID if provided
     if (safeCode) {
-      const validFormat = /^EMP\d+$/.test(safeCode);
+      const validFormat = /^\d+$/.test(safeCode);
       if (!validFormat) {
-        return res.status(400).json({ message: "Invalid Employee ID format. Expected like 'EMP001'." });
+        return res.status(400).json({ message: "Invalid Employee ID format. Expected numeric only (e.g. '10172')." });
       }
     }
 
@@ -139,12 +139,13 @@ export const addEmployee = async (req, res) => {
     }
 
     // 3. Determine Employee ID (use provided code or auto-generate next available)
-    const existingCodes = new Set(
-      (await Employee.find({}, { code: 1 })).map(e => String(e.code).trim().toUpperCase())
-    );
+    const existingCodes = new Set((await Employee.find({}, { code: 1 })).map((e) => String(e.code).trim()));
 
     const parseEmpNumber = (c) => {
-      const match = /^EMP(\d+)$/.exec(String(c).trim().toUpperCase());
+      const raw = String(c ?? "").trim();
+      if (!raw) return null;
+      if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+      const match = /^EMP(\d+)$/i.exec(raw);
       return match ? parseInt(match[1], 10) : null;
     };
 
@@ -157,7 +158,7 @@ export const addEmployee = async (req, res) => {
       }
       do {
         lastCodeNum++;
-        nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        nextCode = String(lastCodeNum);
       } while (existingCodes.has(nextCode));
     } else if (existingCodes.has(nextCode)) {
       return res.status(409).json({ message: "Employee ID already exists" });
@@ -421,7 +422,7 @@ export const importEmployees = async (req, res) => {
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
     const existingCodes = new Set(
       existingEmployees
-        .map(e => (e.code ? String(e.code).trim().toUpperCase() : ""))
+        .map((e) => (e.code ? String(e.code).trim() : ""))
         .filter(Boolean)
     );
 
@@ -437,7 +438,12 @@ export const importEmployees = async (req, res) => {
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
     let lastCodeNum = 0;
     if (lastEmployee && lastEmployee.code) {
-      lastCodeNum = parseInt(lastEmployee.code.replace("EMP", ""), 10) || 0;
+      const raw = String(lastEmployee.code).trim();
+      if (/^\d+$/.test(raw)) lastCodeNum = parseInt(raw, 10) || 0;
+      else {
+        const m = /^EMP(\d+)$/i.exec(raw);
+        lastCodeNum = m ? parseInt(m[1], 10) || 0 : 0;
+      }
     }
 
     const safeStr = (val) => (val != null && val !== "" ? String(val).trim() : "");
@@ -455,11 +461,14 @@ export const importEmployees = async (req, res) => {
         row["Employee Code"],
       ];
       const raw = safeStr(candidates.find(v => v != null && String(v).trim() !== ""));
-      return raw ? raw.toUpperCase() : "";
+      return raw ? raw : "";
     };
 
     const parseEmpNumber = (code) => {
-      const match = /^EMP(\d+)$/.exec(String(code).trim().toUpperCase());
+      const raw = String(code ?? "").trim();
+      if (!raw) return null;
+      if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+      const match = /^EMP(\d+)$/i.exec(raw);
       return match ? parseInt(match[1], 10) : null;
     };
 
@@ -501,7 +510,7 @@ export const importEmployees = async (req, res) => {
           errors.push({
             row: rowNum,
             email,
-            message: "Invalid Employee ID format. Expected like 'EMP001'.",
+            message: "Invalid Employee ID format. Expected numeric only (e.g. '10172').",
           });
           continue;
         }
@@ -570,7 +579,7 @@ export const importEmployees = async (req, res) => {
           // Find next free code to avoid collisions even if DB has gaps
           do {
             lastCodeNum++;
-            nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+            nextCode = String(lastCodeNum);
           } while (existingCodes.has(nextCode));
         }
 

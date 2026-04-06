@@ -91,7 +91,7 @@ export const login = async (req, res) => {
     const trimmed = String(loginId).trim();
     let emailToUse = trimmed;
 
-    // If input does not look like email, treat as Employee ID (code e.g. EMP001)
+    // If input does not look like email, treat as Employee ID (numeric-only code)
     if (!trimmed.includes("@")) {
       const emp = await Employee.findOne({
         code: { $regex: new RegExp(`^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }

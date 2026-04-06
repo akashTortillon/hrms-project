@@ -202,14 +202,16 @@ import Master from "../models/masterModel.js";
 import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
+import BiometricSyncState from "../models/biometricSyncStateModel.js";
 import mongoose from "mongoose";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import {
+  externalHealthCheck,
+  fetchAttendancePage,
+  fetchAttendanceSince
+} from "../services/externalAttendanceApi.js";
+import { compareCursor, formatSinceFrom, groupPunchesToDaily, toPunchLog } from "../services/biometricSyncProcessor.js";
 
 // Helper: Parse time to minutes (HH:MM) -> minutes
 const toMinutes = (time) => {
@@ -311,78 +313,126 @@ const calculateLateTier = (checkInTime, rules) => {
  */
 export const syncBiometrics = async (req, res) => {
   try {
-    // console.log("Starting Biometric Sync...");
-    const dataPath = path.join(__dirname, "../data/mockBiometricData.json");
-    if (!fs.existsSync(dataPath)) {
-      return res.status(404).json({ message: "Biometric data file not found" });
+    await externalHealthCheck().catch(() => null);
+
+    const provider = "leptis_attendance_api";
+    const cursor =
+      (await BiometricSyncState.findOne({ provider })) ||
+      (await BiometricSyncState.create({ provider }));
+
+    const cursorBefore = {
+      lastAuthDateTime: cursor.lastAuthDateTime,
+      lastUidOrSlno: cursor.lastUidOrSlno
+    };
+
+    const punches = [];
+    let fetchedRecords = 0;
+
+    if (!cursor.lastAuthDateTime) {
+      // Initial backfill: page through /api/attendance
+      let page = 1;
+      const limit = 5000;
+      let totalPages = 1;
+
+      while (page <= totalPages) {
+        const resp = await fetchAttendancePage({ page, limit });
+        const data = Array.isArray(resp?.data) ? resp.data : [];
+        totalPages = Number(resp?.totalPages || totalPages);
+
+        fetchedRecords += data.length;
+        punches.push(...data.map(toPunchLog));
+
+        page += 1;
+        if (data.length === 0) break;
+      }
+    } else {
+      // Delta sync: call /since using a 1-second lookback to safely handle same-timestamp ties.
+      const lookback = new Date(cursor.lastAuthDateTime);
+      lookback.setSeconds(lookback.getSeconds() - 1);
+      const from = formatSinceFrom(lookback);
+
+      const resp = await fetchAttendanceSince({ from });
+      const data = Array.isArray(resp?.data) ? resp.data : [];
+      fetchedRecords = data.length;
+
+      // Filter out already-processed items (timestamp + tie-breaker)
+      const cursorRef = {
+        authDateTime: cursor.lastAuthDateTime,
+        uidOrSlno: cursor.lastUidOrSlno ?? -1
+      };
+
+      for (const rec of data) {
+        const punch = toPunchLog(rec);
+        if (!punch?.timestamp || !punch?.employeeCode) continue;
+
+        const cmp = compareCursor(
+          { authDateTime: punch.timestamp, uidOrSlno: punch.uidOrSlno },
+          cursorRef
+        );
+        if (cmp <= 0) continue;
+        punches.push(punch);
+      }
     }
 
-    const rawData = fs.readFileSync(dataPath, "utf-8");
-    const logs = JSON.parse(rawData);
-    // console.log(`Found ${logs.length} biometric logs.`);
+    punches.sort((a, b) =>
+      compareCursor(
+        { authDateTime: a.timestamp, uidOrSlno: a.uidOrSlno },
+        { authDateTime: b.timestamp, uidOrSlno: b.uidOrSlno }
+      )
+    );
 
-    // 1. Group logs by Employee + Date
-    const groupedData = {};
-    const employeeCodes = new Set(); // To fetch relevant employees later
+    const { groupedData, employeeCodes } = groupPunchesToDaily(
+      punches.map((p) => ({
+        employeeCode: String(p.employeeCode),
+        timestamp: p.timestamp,
+        type: p.type
+      }))
+    );
 
-    for (const log of logs) {
-      const date = log.timestamp.split("T")[0];
-      const time = log.timestamp.split("T")[1].substring(0, 5); // HH:MM
-      const key = `${log.employeeCode}_${date}`;
-      employeeCodes.add(log.employeeCode);
-
-      if (!groupedData[key]) {
-        groupedData[key] = {
-          employeeCode: log.employeeCode,
-          date,
-          checkIn: null,
-          checkOut: null
-        };
-      }
-
-      if (log.type === "IN") {
-        // Keep earliest check-in
-        if (!groupedData[key].checkIn || time < groupedData[key].checkIn) {
-          groupedData[key].checkIn = time;
-        }
-      } else if (log.type === "OUT") {
-        // Keep latest check-out
-        if (!groupedData[key].checkOut || time > groupedData[key].checkOut) {
-          groupedData[key].checkOut = time;
-        }
-      }
-    }
-
-    // Fetch relevant employees to check for leaves
-    const employeesList = await Employee.find({ code: { $in: Array.from(employeeCodes) } });
+    // With numeric Employee.code, we can match directly on code.
+    const employeesList = await Employee.find({ code: { $in: employeeCodes.map(String) } });
     const leaveMap = await getApprovedLeavesMap(employeesList);
 
-    // 2. Process each grouped record
-    let syncedCount = 0;
+    let upserted = 0;
+    let skippedLeave = 0;
+    let skippedOnLeaveStatus = 0;
+    let skippedManual = 0;
     const errors = [];
 
-    for (const key in groupedData) {
-      const record = groupedData[key];
-      // console.log(`Processing: ${record.employeeCode} on ${record.date} | In: ${record.checkIn} Out: ${record.checkOut}`);
+    const employeeIndex = new Map(employeesList.map((e) => [String(e.code), e]));
 
-      const employee = employeesList.find(e => e.code === record.employeeCode);
+    for (const key of Object.keys(groupedData)) {
+      const record = groupedData[key];
+      const employee = employeeIndex.get(String(record.employeeCode));
 
       if (!employee) {
         errors.push(`Employee not found: ${record.employeeCode}`);
         continue;
       }
 
-      // ✅ CHECK LEAVE FIRST: If employee is on approved leave, ignore biometric entry
       if (isLeave(employee._id, record.date, leaveMap)) {
-        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} has Approved Leave. Skipping biometric overwrite.`);
+        skippedLeave++;
         continue;
       }
 
-      // Get Shift Rules
+      const existingRecord = await Attendance.findOne({
+        employee: employee._id,
+        date: record.date
+      });
+
+      if (existingRecord?.status === "On Leave") {
+        skippedOnLeaveStatus++;
+        continue;
+      }
+
+      if (existingRecord?.isManuallyEdited === true) {
+        skippedManual++;
+        continue;
+      }
+
       const shiftName = employee.shift || "Day Shift";
       const rules = await getShiftRules(shiftName);
 
-      // Determine Status
       let status = "Absent";
       let lateTier = 0;
 
@@ -391,26 +441,8 @@ export const syncBiometrics = async (req, res) => {
         status = lateTier > 0 ? "Late" : "Present";
       }
 
-      // Calculate Work Hours
       const workHours = calculateDuration(record.checkIn, record.checkOut);
 
-      // console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
-
-      // ✅ NEW: Protect "On Leave" status from being overwritten
-      const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
-      if (existingRecord && existingRecord.status === "On Leave") {
-        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
-        continue;
-      }
-
-      // // ✅ NEW: Protect "On Leave" status from being overwritten
-      // const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
-      // if (existingRecord && existingRecord.status === "On Leave") {
-      //   console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
-      //   continue;
-      // }
-
-      // Upsert Attendance
       await Attendance.findOneAndUpdate(
         { employee: employee._id, date: record.date },
         {
@@ -419,22 +451,69 @@ export const syncBiometrics = async (req, res) => {
           shift: shiftName,
           checkIn: record.checkIn,
           checkOut: record.checkOut,
-          checkOut: record.checkOut,
           status,
           lateTier,
           workHours
         },
         { upsert: true, new: true }
       );
-      syncedCount++;
+
+      upserted++;
     }
 
-    // console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
+    const newestPunch = punches[punches.length - 1];
+    if (newestPunch?.timestamp) {
+      cursor.lastAuthDateTime = new Date(newestPunch.timestamp);
+      cursor.lastUidOrSlno = Number.isFinite(newestPunch.uidOrSlno)
+        ? newestPunch.uidOrSlno
+        : cursor.lastUidOrSlno;
+    }
 
-    res.json({ message: "Sync successful", synced: syncedCount, errors });
+    cursor.lastRunAt = new Date();
+    cursor.lastRunStatus = "success";
+    cursor.lastError = null;
+    await cursor.save();
+
+    res.json({
+      message: "Sync successful",
+      fetchedRecords,
+      punchesProcessed: punches.length,
+      upserted,
+      skipped: {
+        leave: skippedLeave,
+        onLeaveStatus: skippedOnLeaveStatus,
+        manualEdited: skippedManual
+      },
+      errors,
+      cursor: {
+        before: cursorBefore,
+        after: {
+          lastAuthDateTime: cursor.lastAuthDateTime,
+          lastUidOrSlno: cursor.lastUidOrSlno
+        }
+      }
+    });
   } catch (error) {
-    // console.error("Sync error:", error);
-    res.status(500).json({ message: "Server error during sync" });
+    console.error("Biometric sync error:", error);
+    try {
+      const provider = "leptis_attendance_api";
+      await BiometricSyncState.findOneAndUpdate(
+        { provider },
+        {
+          provider,
+          lastRunAt: new Date(),
+          lastRunStatus: "fail",
+          lastError: String(error?.message || error)
+        },
+        { upsert: true }
+      );
+    } catch (_) {
+      // Swallow cursor write failures
+    }
+    res.status(500).json({
+      message: "Server error during sync",
+      error: String(error?.message || error)
+    });
   }
 };
 

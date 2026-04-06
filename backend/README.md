@@ -9,6 +9,7 @@
    - Create a `.env` file in this directory.
    - Copy content from `.env.example`.
    - Update `DB_URL` if needed (defaults to local MongoDB).
+   - Set `BIOMETRIC_API_BASE_URL` and `BIOMETRIC_API_TOKEN` to enable `POST /api/attendance/sync` to pull real biometric logs.
 
 3. Run the server:
    ```bash

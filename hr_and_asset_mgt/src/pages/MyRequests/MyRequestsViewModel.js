@@ -4,7 +4,7 @@ export const myRequests = [
   {
     id: 1,
     name: "John Smith",
-    empId: "EMP010",
+    empId: "10010",
     type: "Annual Leave",
     dateRange: "2025-12-05 to 2025-12-09",
     days: 5,
@@ -14,7 +14,7 @@ export const myRequests = [
   {
     id: 2,
     name: "Emma Wilson",
-    empId: "EMP015",
+    empId: "10015",
     type: "Salary Advance",
     dateRange: "Amount: AED 3,000",
     days: null,
@@ -24,7 +24,7 @@ export const myRequests = [
   {
     id: 3,
     name: "Liam Patel",
-    empId: "EMP024",
+    empId: "10024",
     type: "Remote Work",
     dateRange: "2025-12-12 to 2025-12-14",
     days: 3,
