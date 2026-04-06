@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
+import { toast } from "react-toastify";
 
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
@@ -67,10 +68,26 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
   };
 
   const handleSubmit = () => {
-    const { name, role, department, designation, contractType, email, phone, joinDate } = form;
+    // Keep UI validation aligned with backend `addEmployee` required fields.
+    // Backend requires: name, role, department, joinDate, valid email, valid phone.
+    const { name, role, department, email, phone, joinDate } = form;
 
-    if (!name || !role || !department || !email || !phone || !joinDate || !designation || !contractType) {
-      alert("All fields are required");
+    const missing = [];
+    if (!name?.trim()) missing.push("Employee Name");
+    if (!role?.trim()) missing.push("Role");
+    if (!department?.trim()) missing.push("Department");
+    if (!email?.trim()) missing.push("Email");
+    if (!phone?.trim()) missing.push("Phone Number");
+    if (!joinDate) missing.push("Joining Date");
+
+    if (missing.length) {
+      toast.error(`Please fill required fields: ${missing.join(", ")}`);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      toast.error("Please enter a valid email address");
       return;
     }
 
@@ -95,6 +112,19 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Employee Name</label>
               <input name="name" placeholder="Enter Full Name" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Employee ID (Optional)</label>
+              <input
+                name="code"
+                placeholder="e.g. EMP001 (leave blank to auto-generate)"
+                value={form.code}
+                onChange={(e) => {
+                  const val = e.target.value || "";
+                  setForm(prev => ({ ...prev, code: val.toUpperCase() }));
+                }}
+              />
             </div>
 
             <div className="form-group">

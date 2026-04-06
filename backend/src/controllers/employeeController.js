@@ -113,25 +113,54 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Valid UAE Phone Number is required" });
     }
 
-    // 2. Check for Duplicates (Email or Phone)
+    const safeCode = code != null && String(code).trim() ? String(code).trim().toUpperCase() : "";
+
+    // Optional: validate Employee ID if provided
+    if (safeCode) {
+      const validFormat = /^EMP\d+$/.test(safeCode);
+      if (!validFormat) {
+        return res.status(400).json({ message: "Invalid Employee ID format. Expected like 'EMP001'." });
+      }
+    }
+
+    // 2. Check for Duplicates (Email / Phone / Employee ID)
     const existingEmployee = await Employee.findOne({
-      $or: [{ email: email }, { phone: phone }]
+      $or: [
+        { email: email },
+        { phone: phone },
+        ...(safeCode ? [{ code: safeCode }] : [])
+      ]
     });
 
     if (existingEmployee) {
       if (existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
       if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
+      if (safeCode && existingEmployee.code === safeCode) return res.status(409).json({ message: "Employee ID already exists" });
     }
 
-    // 3. Generate Auto Incremented EMP Code
-    const lastEmployee = await Employee.findOne().sort({ code: -1 });
-    let nextCode = "EMP001";
+    // 3. Determine Employee ID (use provided code or auto-generate next available)
+    const existingCodes = new Set(
+      (await Employee.find({}, { code: 1 })).map(e => String(e.code).trim().toUpperCase())
+    );
 
-    if (lastEmployee && lastEmployee.code) {
-      const lastNumber = parseInt(lastEmployee.code.replace("EMP", ""), 10);
-      if (!isNaN(lastNumber)) {
-        nextCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
+    const parseEmpNumber = (c) => {
+      const match = /^EMP(\d+)$/.exec(String(c).trim().toUpperCase());
+      return match ? parseInt(match[1], 10) : null;
+    };
+
+    let nextCode = safeCode;
+    if (!nextCode) {
+      const lastEmployee = await Employee.findOne().sort({ code: -1 });
+      let lastCodeNum = 0;
+      if (lastEmployee && lastEmployee.code) {
+        lastCodeNum = parseEmpNumber(lastEmployee.code) || 0;
       }
+      do {
+        lastCodeNum++;
+        nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+      } while (existingCodes.has(nextCode));
+    } else if (existingCodes.has(nextCode)) {
+      return res.status(409).json({ message: "Employee ID already exists" });
     }
 
     // 4. Auto-create User account for login (CRITICAL STEP)
@@ -386,10 +415,15 @@ export const importEmployees = async (req, res) => {
     let successCount = 0;
     let errors = [];
 
-    // Pre-fetch all existing emails and phones to minimize DB calls in loop
+    // Pre-fetch all existing identifiers to minimize DB calls in loop
     const existingEmployees = await Employee.find({}, { email: 1, phone: 1, code: 1 });
     const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
+    const existingCodes = new Set(
+      existingEmployees
+        .map(e => (e.code ? String(e.code).trim().toUpperCase() : ""))
+        .filter(Boolean)
+    );
 
     // Pre-fetch Master Data for Strict Validation
     const masters = await Master.find({ isActive: true });
@@ -399,7 +433,7 @@ export const importEmployees = async (req, res) => {
     const validDesignations = new Set(masters.filter(m => m.type === 'DESIGNATION').map(m => m.name.toLowerCase()));
     const validContractTypes = new Set(masters.filter(m => m.type === 'EMPLOYEE_TYPE').map(m => m.name.toLowerCase()));
 
-    // Get last employee code
+    // Get last employee code (used only for fallback auto-generation)
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
     let lastCodeNum = 0;
     if (lastEmployee && lastEmployee.code) {
@@ -407,6 +441,27 @@ export const importEmployees = async (req, res) => {
     }
 
     const safeStr = (val) => (val != null && val !== "" ? String(val).trim() : "");
+    const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const readEmployeeCodeFromRow = (row) => {
+      // Support common header variations in CSV/Excel
+      const candidates = [
+        row["Employee ID"],
+        row["Employee Id"],
+        row["EmployeeID"],
+        row["Emp ID"],
+        row["EmpId"],
+        row["Code"],
+        row["Employee Code"],
+      ];
+      const raw = safeStr(candidates.find(v => v != null && String(v).trim() !== ""));
+      return raw ? raw.toUpperCase() : "";
+    };
+
+    const parseEmpNumber = (code) => {
+      const match = /^EMP(\d+)$/.exec(String(code).trim().toUpperCase());
+      return match ? parseInt(match[1], 10) : null;
+    };
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -421,6 +476,7 @@ export const importEmployees = async (req, res) => {
 
       const email = safeStr(row["Email"]);
       const phone = safeStr(row["Phone"]);
+      const providedCode = readEmployeeCodeFromRow(row);
 
       // Email Validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -437,6 +493,24 @@ export const importEmployees = async (req, res) => {
       if (phone && existingPhones.has(phone)) {
         errors.push({ row: rowNum, email, message: "Phone number already exists" });
         continue;
+      }
+      if (providedCode) {
+        // Ensure provided Employee ID is unique and well-formed
+        const parsedNum = parseEmpNumber(providedCode);
+        if (parsedNum == null) {
+          errors.push({
+            row: rowNum,
+            email,
+            message: "Invalid Employee ID format. Expected like 'EMP001'.",
+          });
+          continue;
+        }
+        if (existingCodes.has(providedCode)) {
+          errors.push({ row: rowNum, email, message: "Employee ID already exists" });
+          continue;
+        }
+        // Keep generator in sync so it doesn't collide later
+        if (parsedNum > lastCodeNum) lastCodeNum = parsedNum;
       }
 
       // 3. Strict Master Validation (safeStr handles numbers/empty from CSV/Excel)
@@ -491,8 +565,14 @@ export const importEmployees = async (req, res) => {
 
       // 4. Employee Creation
       try {
-        lastCodeNum++;
-        const nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        let nextCode = providedCode;
+        if (!nextCode) {
+          // Find next free code to avoid collisions even if DB has gaps
+          do {
+            lastCodeNum++;
+            nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+          } while (existingCodes.has(nextCode));
+        }
 
         // Date parsing helper
         const parseExcelDate = (val) => {
@@ -539,6 +619,7 @@ export const importEmployees = async (req, res) => {
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
         if (phone) existingPhones.add(phone);
+        if (nextCode) existingCodes.add(String(nextCode).trim().toUpperCase());
 
         successCount++;
 
