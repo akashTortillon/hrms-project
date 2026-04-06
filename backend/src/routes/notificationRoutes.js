@@ -16,8 +16,8 @@ router.use(protect);
 router.get("/", getNotifications);
 router.get("/unread-count", getUnreadCount);
 router.post("/dismiss-virtual/:virtualId", dismissVirtualNotification);
-router.patch("/:id/read", markAsRead);
 router.patch("/read-all", markAllAsRead);
+router.patch("/:id/read", markAsRead);
 router.delete("/:id", deleteNotification);
 
 export default router;
