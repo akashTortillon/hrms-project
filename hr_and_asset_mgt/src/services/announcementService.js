@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/announcements";
+const BASE_URL = "/announcements";
 
 export const announcementService = {
   getAll: async () => (await api.get(BASE_URL)).data,

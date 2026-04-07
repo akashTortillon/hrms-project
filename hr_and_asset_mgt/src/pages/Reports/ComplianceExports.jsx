@@ -28,9 +28,9 @@ export default function ComplianceExports() {
   const handleExport = async (type) => {
     let url = "";
     if (type === "wps") {
-      url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
+      url = `/reports/compliance/wps-sif?month=${month}&year=${year}`;
     } else if (type === "mol") {
-      url = `/api/reports/compliance/mol-report?month=${month}&year=${year}`;
+      url = `/reports/compliance/mol-report?month=${month}&year=${year}`;
     }
 
     if (url) {

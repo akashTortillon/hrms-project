@@ -1,17 +1,15 @@
 import { useState } from "react";
 import { loginUser } from "../../api/authService";
-import { Link, useNavigate } from "react-router-dom";
-import employeeImage from "../../assets/images/logo_login_image.png";
+import { useNavigate } from "react-router-dom";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
 
-
 export default function Login() {
   const navigate = useNavigate();
-
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -20,46 +18,28 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!form.email || !form.password) {
       setError("Email and password are required");
       return;
     }
-
     try {
       setLoading(true);
       const data = await loginUser(form);
-
-      console.log("Login response:", data); // ✅ Add this
-
       if (!data || !data.token) {
-        console.error("No token in response:", data); // ✅ Add this
         throw new Error("Invalid response from server");
       }
-
-      // Store token
       localStorage.setItem("token", data.token);
-      // Also store user info if available
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
         localStorage.setItem("userRole", data.role || "Employee");
-        // Store Permissions from Backend
         localStorage.setItem("userPermissions", JSON.stringify(data.permissions || []));
       } else if (data.role) {
         localStorage.setItem("userRole", data.role);
         localStorage.setItem("userPermissions", JSON.stringify(data.permissions || []));
       }
-
       toast.success("Login successful 🎉");
-
-      console.log("Token stored. Navigating to dashboard...");
-
-      // Navigate to the absolute path
       navigate("/app/dashboard", { replace: true });
-
-
     } catch (err) {
-      console.error("Login error:", err); // ✅ Add this
       toast.error(err.message || "Login failed ❌");
       setError(err.message || "Login failed. Please check your credentials.");
     } finally {
@@ -71,44 +51,146 @@ export default function Login() {
     <div className="login-page">
       <div className="login-container">
 
-        <div className="login-image">
-          <img src={employeeImage} alt="login Banner" />
+        {/* LEFT BRAND PANEL */}
+        <div className="login-brand-panel">
+          <div className="login-brand-content">
+            <div className="kayzan-logo-wrap">
+              {/* Kayzan Group SVG Logo */}
+              <svg viewBox="0 0 200 200" className="kayzan-logo-svg" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="100" cy="100" r="95" fill="none" stroke="url(#goldGrade)" strokeWidth="5" />
+                <defs>
+                  <linearGradient id="goldGrade" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#c8902a" />
+                    <stop offset="100%" stopColor="#f0c060" />
+                  </linearGradient>
+                </defs>
+                {/* K letter shape */}
+                <path
+                  d="M75 55 L75 145 M75 100 L125 55 M75 100 L125 145"
+                  stroke="url(#goldGrade)"
+                  strokeWidth="16"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+            </div>
+            <div className="kayzan-wordmark">
+              <span className="kayzan-name">KAYZAN</span>
+              <span className="kayzan-group">GROUP</span>
+            </div>
+            <p className="login-brand-tagline">Human Resource &amp; Asset Management</p>
+
+            <div className="login-brand-features">
+              <div className="feature-pill">
+                <span className="feature-dot"></span>
+                Employee Lifecycle
+              </div>
+              <div className="feature-pill">
+                <span className="feature-dot"></span>
+                Payroll &amp; Compliance
+              </div>
+              <div className="feature-pill">
+                <span className="feature-dot"></span>
+                Asset Tracking
+              </div>
+            </div>
+          </div>
         </div>
 
+        {/* RIGHT FORM PANEL */}
         <div className="login-form-wrapper">
           <div className="login-card">
-            <h2 style={{color:"white"}}>Login</h2>
+            <div className="login-card-header">
+              <h2>Welcome Back</h2>
+              <p className="login-subtitle">Sign in to your HRMS portal</p>
+            </div>
 
-            {error && <div className="error">{error}</div>}
+            {error && (
+              <div className="error" role="alert">
+                <span className="error-icon">⚠</span> {error}
+              </div>
+            )}
 
-            <form onSubmit={handleSubmit}>
-              <input
-                name="email"
-                placeholder="Email"
-                onChange={handleChange}
-              />
-              <input
-                type="password"
-                name="password"
-                placeholder="Password"
-                onChange={handleChange}
-              />
+            <form onSubmit={handleSubmit} noValidate>
+              <div className="form-group">
+                <label htmlFor="email">Email Address</label>
+                <div className="input-wrap">
+                  <span className="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                      <polyline points="22,6 12,13 2,6"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="you@kayzan.com"
+                    value={form.email}
+                    onChange={handleChange}
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
 
-              <button disabled={loading}>
-                {loading ? "Logging in..." : "Login"}
+              <div className="form-group">
+                <label htmlFor="password">Password</label>
+                <div className="input-wrap">
+                  <span className="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={handleChange}
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.44 18.44 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button id="login-submit-btn" type="submit" className="login-btn" disabled={loading}>
+                {loading ? (
+                  <span className="login-spinner">
+                    <span className="spinner-ring"></span>
+                    Signing in…
+                  </span>
+                ) : "Sign In"}
               </button>
             </form>
 
-            {/* <div className="login-footer">
-              Don’t have an account? <Link to="/register">Register</Link>
-            </div> */}
-
-
+            <div className="login-card-footer">
+              <span>Powered by</span>
+              <strong>Kayzan Group HRMS</strong>
+            </div>
           </div>
         </div>
+
       </div>
     </div>
-
-
   );
 }

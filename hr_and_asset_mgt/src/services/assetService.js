@@ -74,7 +74,7 @@ import api from "../api/apiClient";
 
 
 
-const ASSET_API = "/api/assets";
+const ASSET_API = "/assets";
 
 // ==================== ASSET CRUD ====================
 
@@ -203,7 +203,7 @@ import axios from "axios";
 // Bulk Import Assets (File Upload) - Bypassing global interceptor for FormData stability
 export const importAssets = async (formData) => {
   const token = localStorage.getItem("token");
-  const res = await axios.post(`${import.meta.env.VITE_API_BASE}/api/assets/import`, formData, {
+  const res = await axios.post(`${import.meta.env.VITE_API_BASE}/assets/import`, formData, {
     headers: {
       "Authorization": `Bearer ${token}`
       // Content-Type left undefined to let browser set multipart/form-data with boundary

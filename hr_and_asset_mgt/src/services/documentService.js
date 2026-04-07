@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/documents";
+const BASE_URL = "/documents";
 
 // Get all documents (supports query params: { search, type, status })
 export const getDocuments = async (params = {}) => {

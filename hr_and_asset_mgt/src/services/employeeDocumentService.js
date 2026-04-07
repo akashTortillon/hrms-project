@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/employee-docs";
+const BASE_URL = "/employee-docs";
 
 // Get logged-in user's documents
 export const getMyDocuments = async (employeeId) => {

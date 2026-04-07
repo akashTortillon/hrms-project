@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/appraisals";
+const BASE_URL = "/appraisals";
 
 export const appraisalService = {
   getCycles: async () => (await api.get(`${BASE_URL}/cycles`)).data,

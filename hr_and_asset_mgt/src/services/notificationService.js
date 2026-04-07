@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/notifications";
+const BASE_URL = "/notifications";
 
 /**
  * Fetch top notifications for user

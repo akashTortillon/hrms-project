@@ -1,5 +1,5 @@
 import api from "../api/apiClient";
-const API_BASE = "/api/dashboard";
+const API_BASE = "/dashboard";
 
 /**
  * ✅ Used for TOP DASHBOARD METRICS

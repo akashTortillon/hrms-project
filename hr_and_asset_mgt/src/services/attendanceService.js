@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const ATTENDANCE_API = "/api/attendance";
+const ATTENDANCE_API = "/attendance";
 
 // ✅ Fetch daily attendance for a specific date (with pagination/filters)
 export const getDailyAttendance = async (params) => {

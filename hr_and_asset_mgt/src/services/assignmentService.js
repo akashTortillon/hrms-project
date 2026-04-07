@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const ASSET_API = "/api/assets";
+const ASSET_API = "/assets";
 
 // Assign asset to employee
 export const assignAssetToEmployee = async (data) => {

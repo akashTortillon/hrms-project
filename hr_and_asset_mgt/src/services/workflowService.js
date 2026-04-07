@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/workflows";
+const BASE_URL = "/workflows";
 
 // Get Workflow (Lazy Init)
 export const getEmployeeWorkflow = async (employeeId, type) => {

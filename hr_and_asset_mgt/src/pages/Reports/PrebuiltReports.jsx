@@ -59,16 +59,16 @@ export default function PrebuiltReports() {
 
       if (type === "attendance") {
         if (mode === "daily") {
-          url = `/api/reports/department-attendance/daily?date=${date}`;
+          url = `/reports/department-attendance/daily?date=${date}`;
         } else {
-          url = `/api/reports/department-attendance?month=${month}&year=${year}`;
+          url = `/reports/department-attendance?month=${month}&year=${year}`;
         }
       } else if (type === "expiry") {
-        url = `/api/reports/document-expiry?days=${days}`;
+        url = `/reports/document-expiry?days=${days}`;
       } else if (type === "depreciation") {
-        url = `/api/reports/asset-depreciation`;
+        url = `/reports/asset-depreciation`;
       } else if (type === "payroll") {
-        url = `/api/reports/payroll-summary?month=${month}&year=${year}`;
+        url = `/reports/payroll-summary?month=${month}&year=${year}`;
       }
 
       const response = await api.get(url);
@@ -101,16 +101,16 @@ export default function PrebuiltReports() {
     // Note: using relative paths for api client
     if (reportType === "attendance") {
       url = mode === "daily"
-        ? `/api/reports/department-attendance/daily?date=${date}&export=true`
-        : `/api/reports/department-attendance?month=${month}&year=${year}&export=true`;
+        ? `/reports/department-attendance/daily?date=${date}&export=true`
+        : `/reports/department-attendance?month=${month}&year=${year}&export=true`;
     } else if (reportType === "expiry") {
-      url = `/api/reports/document-expiry?days=${days}&export=true`;
+      url = `/reports/document-expiry?days=${days}&export=true`;
     } else if (reportType === "depreciation") {
-      url = `/api/reports/asset-depreciation?export=true`;
+      url = `/reports/asset-depreciation?export=true`;
     } else if (reportType === "payroll") {
-      url = `/api/reports/payroll-summary?month=${month}&year=${year}&export=true`;
+      url = `/reports/payroll-summary?month=${month}&year=${year}&export=true`;
     } else if (reportType === "wps") {
-      url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
+      url = `/reports/compliance/wps-sif?month=${month}&year=${year}`;
     }
 
     if (url) {
@@ -217,7 +217,7 @@ export default function PrebuiltReports() {
       toast.success("PDF generated successfully");
 
       // Log the activity to update the dashboard stats
-      await api.post("/api/reports/log-activity", {
+      await api.post("/reports/log-activity", {
         type: "Export",
         reportName: title
       });
@@ -236,7 +236,7 @@ export default function PrebuiltReports() {
       setReportData([]);
       setReportType("wps");
 
-      const url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}&format=json`;
+      const url = `/reports/compliance/wps-sif?month=${month}&year=${year}&format=json`;
       const response = await api.get(url);
 
       if (response.data.success) {

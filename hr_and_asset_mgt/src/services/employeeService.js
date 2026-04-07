@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const EMPLOYEE_API = "/api/employees";
+const EMPLOYEE_API = "/employees";
 
 // ✅ Fetch employees
 export const getEmployees = async (params = {}) => {
@@ -63,7 +63,7 @@ export const importEmployees = async (formData) => {
   return res.data;
 };
 
-const DOC_API = "/api/employee-docs";
+const DOC_API = "/employee-docs";
 
 export const getEmployeeDocuments = async (employeeId) => {
   const res = await api.get(`${DOC_API}/${employeeId}`);

@@ -23,7 +23,7 @@ export default function ReportsOverview() {
 
   const fetchStats = async () => {
     try {
-      const response = await api.get("/api/reports/stats");
+      const response = await api.get("/reports/stats");
       if (response.data.success) {
         setStats(response.data.data);
       }

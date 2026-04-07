@@ -50,17 +50,74 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
       {/* Brand Header */}
       <div className="sidebar-brand">
         {isCollapsed ? (
-          <Button
-            variant="light"
+          <button
             className="icon-btn collapse-arrow-btn"
             onClick={toggleCollapse}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+            title="Expand sidebar"
           >
-            <SvgView name="arrow-right" size={20} />
-          </Button>
+            <svg viewBox="0 0 200 200" width="34" height="34" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="sidebarGoldMin" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#c8902a"/>
+                  <stop offset="100%" stopColor="#f0c060"/>
+                </linearGradient>
+              </defs>
+              <circle cx="100" cy="100" r="90" fill="none" stroke="url(#sidebarGoldMin)" strokeWidth="10"/>
+              <path
+                d="M72 52 L72 148 M72 100 L128 52 M72 100 L128 148"
+                stroke="url(#sidebarGoldMin)"
+                strokeWidth="18"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+          </button>
         ) : (
           <>
-
-            <SvgView name="leptis_logo" size={60} className="sidebar-brand-logo" />
+            {/* Kayzan Group Logo */}
+            <div className="sidebar-brand-logo" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+              <svg viewBox="0 0 200 200" width="42" height="42" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                <defs>
+                  <linearGradient id="sidebarGold" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#c8902a"/>
+                    <stop offset="100%" stopColor="#f0c060"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="100" cy="100" r="90" fill="none" stroke="url(#sidebarGold)" strokeWidth="9"/>
+                <path
+                  d="M72 52 L72 148 M72 100 L128 52 M72 100 L128 148"
+                  stroke="url(#sidebarGold)"
+                  strokeWidth="18"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+                <span style={{
+                  fontSize: "15px",
+                  fontWeight: 800,
+                  letterSpacing: "3px",
+                  background: "linear-gradient(135deg, #c8902a, #f0c060)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text"
+                }}>
+                  KAYZAN
+                </span>
+                <span style={{
+                  fontSize: "9px",
+                  fontWeight: 500,
+                  letterSpacing: "3px",
+                  color: "#8a7050",
+                  textTransform: "uppercase"
+                }}>
+                  GROUP
+                </span>
+              </div>
+            </div>
 
             <Button
               variant="light"

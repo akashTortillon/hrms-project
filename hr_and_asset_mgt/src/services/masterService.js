@@ -3,7 +3,7 @@ import api from "../api/apiClient";
 // --- UNIFIED MASTERS ---
 // All masters use the same endpoint structure: /api/masters/:type
 
-const UNIFIED_BASE = "/api/masters";
+const UNIFIED_BASE = "/masters";
 
 const createGenericService = (typeSlug) => ({
     getAll: async () => {

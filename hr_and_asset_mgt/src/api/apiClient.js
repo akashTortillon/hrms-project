@@ -2,7 +2,7 @@ import axios from "axios";
 
 // Create shared axios instance
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE || "http://localhost:5000",
+    baseURL: import.meta.env.VITE_API_BASE,
     headers: {
         "Content-Type": "application/json",
     },
@@ -61,7 +61,7 @@ api.interceptors.response.use(
                 // Call refresh endpoint
                 // We utilize axios directly to avoid interceptor loop for this specific call
                 const response = await axios.post(
-                    `${api.defaults.baseURL}/api/auth/refresh`,
+                    `${api.defaults.baseURL}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 );

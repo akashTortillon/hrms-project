@@ -23,7 +23,7 @@
 
 import api from "../api/apiClient";
 
-const REQUEST_API = "/api/requests";
+const REQUEST_API = "/requests";
 
 // Create a new request
 export const createRequest = async (requestData) => {

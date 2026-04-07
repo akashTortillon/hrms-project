@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/system-settings";
+const BASE_URL = "/system-settings";
 
 export const getSettings = async () => {
     const res = await api.get(`${BASE_URL}/`);

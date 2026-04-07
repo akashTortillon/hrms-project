@@ -46,7 +46,7 @@ export const RoleProvider = ({ children }) => {
     const fetchCurrentUser = async () => {
       try {
         setLoading(true);
-        const { data } = await api.get("/api/auth/me");
+        const { data } = await api.get("/auth/me");
         if (!isMounted) return;
 
         const nextRole = data?.role || "Employee";
