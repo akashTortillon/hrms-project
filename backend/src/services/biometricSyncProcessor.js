@@ -42,16 +42,48 @@ export function compareCursor(a, b) {
  * Groups punch logs into daily rollups.
  * Input punch: { employeeCode, timestamp (ISO), type: IN|OUT }
  */
-export function groupPunchesToDaily(punches) {
+function toTimeZoneParts(isoTimestamp, timeZone) {
+  const d = new Date(isoTimestamp);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+
+  const parts = formatter.formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+
+  const year = get("year");
+  const month = get("month");
+  const day = get("day");
+  const hour = get("hour");
+  const minute = get("minute");
+
+  if (!year || !month || !day || !hour || !minute) return null;
+
+  return {
+    date: `${year}-${month}-${day}`, // YYYY-MM-DD
+    time: `${hour}:${minute}` // HH:MM
+  };
+}
+
+export function groupPunchesToDaily(punches, { timeZone = "Asia/Dubai" } = {}) {
   const groupedData = {};
   const employeeCodes = new Set();
 
   for (const punch of punches) {
     if (!punch?.employeeCode || !punch?.timestamp || !punch?.type) continue;
 
-    const [date, timeFull] = String(punch.timestamp).split("T");
-    if (!date || !timeFull) continue;
-    const time = timeFull.substring(0, 5); // HH:MM
+    const parts = toTimeZoneParts(punch.timestamp, timeZone);
+    if (!parts) continue;
+    const date = parts.date;
+    const time = parts.time;
     const key = `${punch.employeeCode}_${date}`;
 
     employeeCodes.add(punch.employeeCode);

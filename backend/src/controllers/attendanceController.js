@@ -381,12 +381,16 @@ export const syncBiometrics = async (req, res) => {
       )
     );
 
+    const settings = await SystemSettings.findOne();
+    const timeZone = settings?.timezone || "Asia/Dubai";
+
     const { groupedData, employeeCodes } = groupPunchesToDaily(
       punches.map((p) => ({
         employeeCode: String(p.employeeCode),
         timestamp: p.timestamp,
         type: p.type
-      }))
+      })),
+      { timeZone }
     );
 
     // With numeric Employee.code, we can match directly on code.
