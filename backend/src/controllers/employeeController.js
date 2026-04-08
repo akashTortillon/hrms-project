@@ -198,8 +198,20 @@ export const addEmployee = async (req, res) => {
     // 5. Create Employee (Only if User valid)
     const {
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
-      designation, contractType, basicSalary, accommodation, visaExpiry, shift
+      designation, contractType, basicSalary, accommodation, visaExpiry, shift,
+      weeklyOffDays: rawWeeklyOff,
+      workingDayType: rawWdt
     } = req.body;
+
+    const parseWeeklyOffDays = (val) => {
+      if (!Array.isArray(val)) return undefined;
+      const out = [...new Set(val.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))];
+      return out.length ? out.sort((a, b) => a - b) : undefined;
+    };
+
+    const weeklyOffDays = parseWeeklyOffDays(rawWeeklyOff);
+    const wdtNum = parseInt(rawWdt, 10);
+    const workingDayType = [0, 2, 4, 8].includes(wdtNum) ? wdtNum : 4;
 
     const employee = await Employee.create({
       name,
@@ -213,7 +225,9 @@ export const addEmployee = async (req, res) => {
       status: status || "Onboarding",
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
       designation, contractType, basicSalary, accommodation, visaExpiry,
-      shift: shift || "Day Shift"
+      shift: shift || "Day Shift",
+      weeklyOffDays: weeklyOffDays ?? [],
+      workingDayType
     });
 
     res.status(201).json({
@@ -449,6 +463,25 @@ export const importEmployees = async (req, res) => {
     const safeStr = (val) => (val != null && val !== "" ? String(val).trim() : "");
     const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+    const parseWeeklyOffFromRow = (row) => {
+      const raw = safeStr(row["Weekly Off Days"] ?? row["weeklyOffDays"] ?? row["Weekly offs"]);
+      if (!raw) return [];
+      const parts = raw.split(/[,;/|]+/).map((s) => s.trim()).filter(Boolean);
+      const out = [];
+      for (const p of parts) {
+        const n = parseInt(p, 10);
+        if (Number.isInteger(n) && n >= 0 && n <= 6) out.push(n);
+      }
+      return [...new Set(out)].sort((a, b) => a - b);
+    };
+
+    const parseWorkingDayTypeFromRow = (row) => {
+      const raw = row["Working Day Type"];
+      if (raw === undefined || raw === null || raw === "") return 4;
+      const n = parseInt(String(raw).trim(), 10);
+      return [0, 2, 4, 8].includes(n) ? n : 4;
+    };
+
     const readEmployeeCodeFromRow = (row) => {
       // Support common header variations in CSV/Excel
       const candidates = [
@@ -622,7 +655,9 @@ export const importEmployees = async (req, res) => {
           agentId: safeStr(row["Agent ID (WPS)"]),
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
-          visaExpiry: visaExpiry
+          visaExpiry: visaExpiry,
+          weeklyOffDays: parseWeeklyOffFromRow(row),
+          workingDayType: parseWorkingDayTypeFromRow(row)
         });
 
         // Add to local sets to prevent duplicates within the same file

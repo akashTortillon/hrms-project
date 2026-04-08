@@ -2,6 +2,11 @@ import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 import { toast } from "react-toastify";
+import {
+  WORKING_DAY_TYPE_OPTIONS,
+  WORKING_DAY_TYPE_PRESETS,
+  WEEKDAY_CHECKBOXES,
+} from "../../constants/workingDays";
 
 
 export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions = [] }) {
@@ -31,7 +36,9 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     bankName: "",
     iban: "",
     bankAccount: "",
-    personalId: ""
+    personalId: "",
+    workingDayType: 4,
+    weeklyOffDays: [0],
   });
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
@@ -67,6 +74,19 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const handleWorkingDayTypeChange = (e) => {
+    const t = parseInt(e.target.value, 10);
+    const preset = WORKING_DAY_TYPE_PRESETS[t] ?? WORKING_DAY_TYPE_PRESETS[4];
+    setForm({ ...form, workingDayType: t, weeklyOffDays: [...preset] });
+  };
+
+  const toggleWeeklyOffDay = (day) => {
+    const set = new Set(form.weeklyOffDays || []);
+    if (set.has(day)) set.delete(day);
+    else set.add(day);
+    setForm({ ...form, weeklyOffDays: [...set].sort((a, b) => a - b) });
+  };
+
   const handleSubmit = () => {
     // Keep UI validation aligned with backend `addEmployee` required fields.
     // Backend requires: name, role, department, joinDate, valid email, valid phone.
@@ -91,7 +111,11 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
       return;
     }
 
-    onAddEmployee(form);
+    onAddEmployee({
+      ...form,
+      workingDayType: parseInt(form.workingDayType, 10),
+      weeklyOffDays: Array.isArray(form.weeklyOffDays) ? form.weeklyOffDays : [],
+    });
   };
 
   return (
@@ -286,6 +310,42 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                   <option key={s.name} value={s.name}>{s.name}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1' }}>
+              <label>Working day type (preset)</label>
+              <select
+                value={form.workingDayType}
+                onChange={handleWorkingDayTypeChange}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                {WORKING_DAY_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+                Weekly off days (edit per employee — any weekday)
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {WEEKDAY_CHECKBOXES.map(({ day, label }) => (
+                  <label key={day} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={(form.weeklyOffDays || []).includes(day)}
+                      onChange={() => toggleWeeklyOffDay(day)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
 
             {/* Employment Details */}

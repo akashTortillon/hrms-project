@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
+import {
+  WORKING_DAY_TYPE_OPTIONS,
+  WORKING_DAY_TYPE_PRESETS,
+  WEEKDAY_CHECKBOXES,
+  displayWeeklyOffDays,
+} from "../../constants/workingDays";
 
 
 export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOptions = [], editMode = "all" }) {
@@ -14,6 +20,14 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
   useEffect(() => {
     fetchMasters();
+
+    const wd = displayWeeklyOffDays(employee);
+    const wdt = employee.workingDayType ?? 4;
+    setForm({
+      ...employee,
+      weeklyOffDays: wd,
+      workingDayType: wdt,
+    });
 
     // Parse phone for display
     if (employee.phone) {
@@ -49,6 +63,19 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const handleWorkingDayTypeChange = (e) => {
+    const t = parseInt(e.target.value, 10);
+    const preset = WORKING_DAY_TYPE_PRESETS[t] ?? WORKING_DAY_TYPE_PRESETS[4];
+    setForm({ ...form, workingDayType: t, weeklyOffDays: [...preset] });
+  };
+
+  const toggleWeeklyOffDay = (day) => {
+    const set = new Set(form.weeklyOffDays || []);
+    if (set.has(day)) set.delete(day);
+    else set.add(day);
+    setForm({ ...form, weeklyOffDays: [...set].sort((a, b) => a - b) });
+  };
+
   const handlePhoneChange = (e) => {
     const val = e.target.value.replace(/\D/g, '');
     setPhoneSuffix(val);
@@ -64,6 +91,10 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
         payload[field] = null;
       }
     });
+
+    payload.workingDayType = parseInt(payload.workingDayType, 10);
+    if (![0, 2, 4, 8].includes(payload.workingDayType)) payload.workingDayType = 4;
+    payload.weeklyOffDays = Array.isArray(form.weeklyOffDays) ? form.weeklyOffDays : [];
 
     onUpdate(payload);
   };
@@ -445,6 +476,42 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 <div className="form-group">
                   <label>Basic Salary</label>
                   <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
+                </div>
+
+                <div className="form-group full-width" style={{ gridColumn: '1 / -1' }}>
+                  <label>Working day type (preset)</label>
+                  <select
+                    value={form.workingDayType ?? 4}
+                    onChange={handleWorkingDayTypeChange}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      backgroundColor: "white",
+                      fontSize: "14px",
+                      height: "42px"
+                    }}
+                  >
+                    {WORKING_DAY_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+                    Weekly off days (any weekday)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                    {WEEKDAY_CHECKBOXES.map(({ day, label }) => (
+                      <label key={day} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={(form.weeklyOffDays || []).includes(day)}
+                          onChange={() => toggleWeeklyOffDay(day)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="form-group">

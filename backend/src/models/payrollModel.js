@@ -51,6 +51,14 @@ const payrollSchema = new mongoose.Schema({
     // Attendance Summary for Calculations
     attendanceSummary: {
         totalDays: Number,
+        /** Calendar days in month (same as totalDays when derived from month range) */
+        calendarDaysInMonth: Number,
+        /** Denominator for daily rate: daysInMonth − weekly offs − holidays on working days */
+        plannedWorkingDays: Number,
+        weeklyOffCount: Number,
+        holidayOnWorkingDayCount: Number,
+        workingDayType: Number,
+        weeklyOffDays: [Number],
         daysPresent: Number,
         paidLeaves: Number, // ✅ NEW
         daysAbsent: Number,

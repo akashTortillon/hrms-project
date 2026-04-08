@@ -196,6 +196,7 @@
 
 
 
+import { getWeeklyOffDaySet, isWeeklyOffDate } from "../utils/workingDaysHelper.js";
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
@@ -834,13 +835,15 @@ export const getMonthlyAttendance = async (req, res) => {
     const result = employees.map(emp => {
       const empAttendance = attendanceMap[emp._id] || {};
       const attendanceData = {};
+      const weeklyOffSet = getWeeklyOffDaySet({
+        weeklyOffDays: emp.weeklyOffDays,
+        workingDayType: emp.workingDayType
+      });
 
       let present = 0, late = 0, absent = 0, leave = 0;
 
       days.forEach(day => {
         const record = empAttendance[day];
-        const dateObj = new Date(day);
-        const isSunday = dateObj.getDay() === 0;
         const isHoliday = holidaySet.has(day);
 
         let status;
@@ -853,7 +856,7 @@ export const getMonthlyAttendance = async (req, res) => {
             status = "On Leave";
           } else if (isLeave(emp._id, day, leaveMap)) { // Check approved leave requests
             status = "On Leave";
-          } else if (isSunday) {
+          } else if (isWeeklyOffDate(day, weeklyOffSet)) {
             status = "Weekend";
           } else if (isHoliday) {
             status = "Holiday";
@@ -1023,6 +1026,11 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     // ✅ NEW: Get Leave Map for this employee
     const leaveMap = await getApprovedLeavesMap([employee]);
 
+    const weeklyOffSet = getWeeklyOffDaySet({
+      weeklyOffDays: employee.weeklyOffDays,
+      workingDayType: employee.workingDayType
+    });
+
     const recordMap = {};
     records.forEach(r => recordMap[r.date] = r);
 
@@ -1037,7 +1045,6 @@ export const getEmployeeAttendanceStats = async (req, res) => {
       const day = String(currentDate.getDate()).padStart(2, "0");
       const dateStr = `${year}-${month}-${day}`;
 
-      const isSunday = currentDate.getDay() === 0;
       const isHoliday = holidaySet.has(dateStr);
       const record = recordMap[dateStr];
 
@@ -1048,11 +1055,11 @@ export const getEmployeeAttendanceStats = async (req, res) => {
         else if (record.status === "Absent") absent++;
       } else {
         // No record -> Implicit Status
-        // Only count implicit absent if typically a working day (not Sunday, not Holiday)
+        // Only count implicit absent if typically a working day (not weekly off, not Holiday)
         // ✅ Check for Leave
         if (isLeave(employee._id, dateStr, leaveMap)) {
           leave++;
-        } else if (!isSunday && !isHoliday) {
+        } else if (!isWeeklyOffDate(dateStr, weeklyOffSet) && !isHoliday) {
           absent++;
         }
       }
@@ -1108,6 +1115,11 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
     const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
     const history = [];
 
+    const weeklyOffSet = getWeeklyOffDaySet({
+      weeklyOffDays: employee.weeklyOffDays,
+      workingDayType: employee.workingDayType
+    });
+
     // Determine cutoff for "Future" (end of today)
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -1116,7 +1128,6 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
       const dateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const dateObj = new Date(dateStr);
 
-      const isSunday = dateObj.getDay() === 0;
       const isHoliday = holidaySet.has(dateStr);
       const record = attendanceMap[dateStr];
 
@@ -1128,7 +1139,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
         if (dateObj > today) status = "-"; // Future
         else if (employee.status === "On Leave") status = "On Leave";
         else if (isLeave(employee._id, dateStr, leaveMap)) status = "On Leave"; // ✅ Check Approved Leaves
-        else if (isSunday) status = "Weekend";
+        else if (isWeeklyOffDate(dateStr, weeklyOffSet)) status = "Weekend";
         else if (isHoliday) status = "Holiday";
         else status = "Absent";
       }
@@ -1210,13 +1221,15 @@ export const exportAttendance = async (req, res) => {
         };
 
         const empAttendance = attendanceMap[emp._id] || {};
+        const weeklyOffSet = getWeeklyOffDaySet({
+          weeklyOffDays: emp.weeklyOffDays,
+          workingDayType: emp.workingDayType
+        });
         let present = 0, late = 0, absent = 0, leave = 0;
 
         days.forEach(d => {
           const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const record = empAttendance[dateKey];
-          const dateObj = new Date(dateKey);
-          const isSunday = dateObj.getDay() === 0;
           const isHoliday = holidaySet.has(dateKey);
 
           let status = "";
@@ -1231,7 +1244,7 @@ export const exportAttendance = async (req, res) => {
           } else {
             if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
             else if (isLeave(emp._id, dateKey, leaveMap)) { status = "On Leave"; cellValue = "OL"; } // ✅ Checked
-            else if (isSunday) { status = "Weekend"; cellValue = "W"; }
+            else if (isWeeklyOffDate(dateKey, weeklyOffSet)) { status = "Weekend"; cellValue = "W"; }
             else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
             else { status = "Absent"; cellValue = "A"; }
           }

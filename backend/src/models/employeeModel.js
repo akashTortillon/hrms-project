@@ -31,7 +31,11 @@ const employeeSchema = new mongoose.Schema({
   bankName: { type: String },
   iban: { type: String },
   bankAccount: { type: String },
-  agentId: { type: String }
+  agentId: { type: String },
+  /** 0=Sun .. 6=Sat — source of truth for weekly off when non-empty; empty/absent uses workingDayType preset */
+  weeklyOffDays: [{ type: Number, min: 0, max: 6 }],
+  /** Preset: 0 none, 2 two days (default Fri+Sat in helper), 4 Sundays, 8 Sat+Sun */
+  workingDayType: { type: Number, enum: [0, 2, 4, 8], default: 4 }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);

@@ -1,3 +1,4 @@
+import { getPlannedWorkingDaysForEmployee, getWeeklyOffDaySet } from "../utils/workingDaysHelper.js";
 import Payroll from "../models/payrollModel.js";
 import Employee from "../models/employeeModel.js";
 import Master from "../models/masterModel.js";
@@ -16,6 +17,19 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// #region agent log (debug instrumentation)
+const __agentDebugPost = (payload) => {
+    try {
+        // Avoid logging secrets/PII. Keep payload small & numeric where possible.
+        fetch('http://127.0.0.1:7336/ingest/c25f7554-579a-4613-9e66-a636065aa850', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f01181' },
+            body: JSON.stringify({ sessionId: 'f01181', timestamp: Date.now(), ...payload }),
+        }).catch(() => { });
+    } catch (_) { }
+};
+// #endregion agent log (debug instrumentation)
 
 // --- HELPER: Calculate Attendance Stats ---
 // --- HELPER: Parse "8h 45m" to decimal hours ---
@@ -94,7 +108,7 @@ const parseHours = (timeStr) => {
 };
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
+const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}, employeeLike = null) => {
     // 1. Setup Date Range
     const daysInMonth = new Date(year, month, 0).getDate();
     const strMonth = String(month).padStart(2, '0');
@@ -110,6 +124,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     logs.forEach(l => logMap[l.date] = l);
 
     const settings = preFetchedSettings || await SystemSettings.findOne();
+    const weeklyOffSet = getWeeklyOffDaySet(employeeLike || {});
     const holidaySet = new Set();
     if (settings && settings.holidays) {
         settings.holidays.forEach(h => {
@@ -190,7 +205,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
 
         // C. Fallbacks (Weekend/Holiday/Absent)
         if (status === 'UNKNOWN') {
-            if (dayOfWeek === 0) status = 'WEEKEND'; // Sunday
+            if (weeklyOffSet.has(dayOfWeek)) status = 'WEEKEND';
             else if (holidaySet.has(dateStr)) status = 'HOLIDAY';
             else status = 'ABSENT';
         }
@@ -241,7 +256,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         }
 
         // 3. Fallback
-        if (dayOfWeek === 0) return 'WEEKEND';
+        if (weeklyOffSet.has(dayOfWeek)) return 'WEEKEND';
         // Need to check settings.holidays for this specific date
         // 'holidaySet' only has current month? 
         // We should check 'settings.holidays' raw array if available
@@ -371,28 +386,17 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         }
     });
 
+    const wdBreakdown = getPlannedWorkingDaysForEmployee(year, month, employeeLike || {}, settings);
+
     return {
         totalDays: daysInMonth,
-        daysPresent: paidDays, // Note: Present includes weekends/holidays/paid leaves in terms of "Days Paid" usually? 
-        // Wait, previously paidDays meant "Days to be Paid for".
-        // PRESENT, WEEKEND, HOLIDAY, PAID_LEAVE all contribute to Salary (if 30 day basis).
-        // ABSENT, UNPAID_LEAVE, SANDWICH reduce from 30? Or if 'paidDays' is solely 'Worked Days'?
-        // Logic in generatePayroll uses `dailySalary = basic / 30`.
-        // So normally everyone gets 30 days pay unless LOP exists.
-        // The `paidDays` returned here seems to track "Credits". 
-        // Let's stick to: paidDays = (Present + Weekend + Holiday + PaidLeave).
-        // lopDays = (Absent + UnpaidLeave + Sandwich).
-
-        // Wait! previous logic:
-        // if (isDayPresent) paidDays++;
-        // else if (isDayPaidLeave) paidDays++;
-        // else if (isDayUnpaidLeave) lopDays++;
-        // else if (Sunday || Holiday) paidDays++;
-        // else lopDays++;
-
-        // Yes, my switch case matches this logic.
-
-        daysPresent: paidDays, // This variable name in return object is slightly misleading if it includes weekends, but standard in this codebase seems to be "Days Payable"
+        calendarDaysInMonth: wdBreakdown.daysInMonth,
+        plannedWorkingDays: wdBreakdown.plannedWorkingDays,
+        weeklyOffCount: wdBreakdown.weeklyOffCount,
+        holidayOnWorkingDayCount: wdBreakdown.holidayOnWorkingDayCount,
+        workingDayType: employeeLike?.workingDayType ?? null,
+        weeklyOffDays: [...weeklyOffSet].sort((a, b) => a - b),
+        daysPresent: paidDays,
         daysAbsent: lopDays,
         unpaidLeaves: unpaidLeavesCount,
         paidLeaves: paidLeavesCount,
@@ -408,6 +412,16 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
 export const generatePayroll = async (req, res) => {
     try {
         const { month, year } = req.body;
+
+        // #region agent log (hypothesis A/B/C)
+        __agentDebugPost({
+            runId: 'pre-fix',
+            hypothesisId: 'A',
+            location: 'backend/src/controllers/payrollController.js:generatePayroll:entry',
+            message: 'generatePayroll called',
+            data: { month, year, hasUser: Boolean(req.user), role: req.user?.role || null }
+        });
+        // #endregion agent log (hypothesis A/B/C)
 
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
@@ -458,22 +472,25 @@ export const generatePayroll = async (req, res) => {
             let totalAllowances = 0;
             let totalDeductions = 0;
 
-            // Derived Rates
-            const dailySalary = basicSalary / 30; // Standard 30 days
+            const empPattern = { weeklyOffDays: emp.weeklyOffDays, workingDayType: emp.workingDayType };
 
-            // Determine Employee's Standard Hourly Rate based on THEIR assigned shift
-            const empShiftName = emp.shift || "Day Shift";
-            const empStandardHours = (shiftMap[empShiftName] && Number(shiftMap[empShiftName].workHours)) || 9;
-            const hourlySalary = dailySalary / empStandardHours;
-
-            // Get Stats
+            // Get Stats (includes plannedWorkingDays for daily rate)
             const stats = await getAttendanceStats(
                 emp._id, month, year,
                 settings, shiftMap,
                 { code: emp.code },
                 approvedLeaveMap,
-                leaveRulesMap
+                leaveRulesMap,
+                empPattern
             );
+
+            const plannedWorkingDays = stats.plannedWorkingDays || 30;
+            const dailySalary = basicSalary / plannedWorkingDays;
+
+            // Determine Employee's Standard Hourly Rate based on THEIR assigned shift
+            const empShiftName = emp.shift || "Day Shift";
+            const empStandardHours = (shiftMap[empShiftName] && Number(shiftMap[empShiftName].workHours)) || 9;
+            const hourlySalary = dailySalary / empStandardHours;
 
             // --- 2.5 SHIFT-BASED PENALTIES (Dynamic Late Deduction) ---
             // If the employee's shift has a "latePolicy", we apply it here.
@@ -767,6 +784,37 @@ export const generatePayroll = async (req, res) => {
             // 4. Calculate Net
             const netSalary = basicSalary + totalAllowances - totalDeductions;
 
+            // #region agent log (hypothesis B/C/D)
+            __agentDebugPost({
+                runId: 'pre-fix',
+                hypothesisId: 'B',
+                location: 'backend/src/controllers/payrollController.js:generatePayroll:per-employee-summary',
+                message: 'computed payroll draft numbers',
+                data: {
+                    empId: String(emp._id),
+                    month,
+                    year,
+                    basicSalary: Number.isFinite(basicSalary) ? Number(basicSalary.toFixed(2)) : null,
+                    plannedWorkingDays: stats.plannedWorkingDays ?? null,
+                    daysPresent: stats.daysPresent ?? null,
+                    daysAbsent: stats.daysAbsent ?? null,
+                    unpaidLeaves: stats.unpaidLeaves ?? null,
+                    paidLeaves: stats.paidLeaves ?? null,
+                    overtimeHours: stats.overtimeHours ?? null,
+                    late: stats.late ?? null,
+                    totalAllowances: Number.isFinite(totalAllowances) ? Number(totalAllowances.toFixed(2)) : null,
+                    totalDeductions: Number.isFinite(totalDeductions) ? Number(totalDeductions.toFixed(2)) : null,
+                    netSalary: Number.isFinite(netSalary) ? Number(netSalary.toFixed(2)) : null,
+                    hasNaN:
+                        !Number.isFinite(basicSalary) ||
+                        !Number.isFinite(dailySalary) ||
+                        !Number.isFinite(totalAllowances) ||
+                        !Number.isFinite(totalDeductions) ||
+                        !Number.isFinite(netSalary),
+                }
+            });
+            // #endregion agent log (hypothesis B/C/D)
+
             // 5. Prepare Record
             payrollRecords.push({
                 updateOne: {
@@ -985,6 +1033,16 @@ export const finalizePayroll = async (req, res) => {
     try {
         const { month, year } = req.body;
 
+        // #region agent log (hypothesis E)
+        __agentDebugPost({
+            runId: 'pre-fix',
+            hypothesisId: 'E',
+            location: 'backend/src/controllers/payrollController.js:finalizePayroll:entry',
+            message: 'finalizePayroll called',
+            data: { month, year, hasUser: Boolean(req.user), role: req.user?.role || null }
+        });
+        // #endregion agent log (hypothesis E)
+
         // 1. Fetch DRAFT records to process
         const records = await Payroll.find({ month, year, status: "DRAFT" });
 
@@ -1015,6 +1073,24 @@ export const finalizePayroll = async (req, res) => {
                     if (request) {
                         // Check if this deduction is already recorded (idempotency)
                         const alreadyRecorded = request.payrollDeductions.some(pd => pd.month == month && pd.year == year);
+
+                        // #region agent log (hypothesis E/F)
+                        __agentDebugPost({
+                            runId: 'pre-fix',
+                            hypothesisId: 'F',
+                            location: 'backend/src/controllers/payrollController.js:finalizePayroll:deduction-link',
+                            message: 'link payroll deduction to request',
+                            data: {
+                                reqId,
+                                alreadyRecorded,
+                                dedAmount: ded.amount ?? null,
+                                requestAmount: request?.details?.amount ?? null,
+                                requestTotalRepaymentAmount: request?.details?.totalRepaymentAmount ?? null,
+                                payrollMonth: month,
+                                payrollYear: year
+                            }
+                        });
+                        // #endregion agent log (hypothesis E/F)
 
                         if (!alreadyRecorded) {
                             request.payrollDeductions.push({
@@ -1462,6 +1538,24 @@ export const downloadPayslip = async (req, res) => {
         const totalDeductions = (payroll.totalDeductions || 0) - hiddenAdvanceAmount;
         const grossEarnings = basicSalary + totalAllowances;
 
+        // #region agent log (hypothesis G)
+        __agentDebugPost({
+            runId: 'pre-fix',
+            hypothesisId: 'G',
+            location: 'backend/src/controllers/payrollController.js:downloadPayslip:deduction-visibility',
+            message: 'payslip deduction hiding computed',
+            data: {
+                payrollId: String(payroll._id),
+                month,
+                year,
+                hiddenAdvanceAmount: Number.isFinite(hiddenAdvanceAmount) ? Number(hiddenAdvanceAmount.toFixed(2)) : null,
+                totalDeductionsStored: payroll.totalDeductions ?? null,
+                totalDeductionsDisplayed: Number.isFinite(totalDeductions) ? Number(totalDeductions.toFixed(2)) : null,
+                netSalary: Number.isFinite(netSalary) ? Number(netSalary.toFixed(2)) : null,
+            }
+        });
+        // #endregion agent log (hypothesis G)
+
         // 1. Generate Content PDF using PDFKit
         const doc = new PDFDocument({ size: "A4", margin: 50 });
         const buffers = [];
@@ -1518,21 +1612,25 @@ export const downloadPayslip = async (req, res) => {
         // Simple Table Header
         const tableTop = doc.y;
         doc.rect(40, tableTop, pageWidth - 80, 20).fill("#F0F0F0");
-        doc.fillColor("#323232").fontSize(9);
-        doc.text("Total Days", 50, tableTop + 6);
-        doc.text("Present", 150, tableTop + 6);
-        doc.text("Absent", 250, tableTop + 6);
-        doc.text("Late", 350, tableTop + 6); // Late days count
-        doc.text("Overtime (Hrs)", 450, tableTop + 6);
+        const calDays = (attendanceSummary?.calendarDaysInMonth ?? attendanceSummary?.totalDays) || 30;
+        const planDays = attendanceSummary?.plannedWorkingDays ?? calDays;
+        doc.fillColor("#323232").fontSize(8);
+        doc.text("Cal. days", 45, tableTop + 6);
+        doc.text("Plan work", 105, tableTop + 6);
+        doc.text("Paid days", 175, tableTop + 6);
+        doc.text("Absent", 245, tableTop + 6);
+        doc.text("Late", 305, tableTop + 6);
+        doc.text("OT (Hrs)", 360, tableTop + 6);
 
         // Table Body
         doc.rect(40, tableTop + 20, pageWidth - 80, 20).stroke();
-        doc.fillColor("#000000").font("Helvetica");
-        doc.text(String(attendanceSummary?.totalDays || 30), 50, tableTop + 26);
-        doc.text(String(attendanceSummary?.daysPresent || 0), 150, tableTop + 26);
-        doc.text(String(attendanceSummary?.daysAbsent || 0), 250, tableTop + 26);
-        doc.text(String(attendanceSummary?.late || 0), 350, tableTop + 26);
-        doc.text(String(attendanceSummary?.overtimeHours || 0), 450, tableTop + 26);
+        doc.fillColor("#000000").font("Helvetica").fontSize(9);
+        doc.text(String(calDays), 45, tableTop + 26);
+        doc.text(String(planDays), 105, tableTop + 26);
+        doc.text(String(attendanceSummary?.daysPresent || 0), 175, tableTop + 26);
+        doc.text(String(attendanceSummary?.daysAbsent || 0), 245, tableTop + 26);
+        doc.text(String(attendanceSummary?.late || 0), 305, tableTop + 26);
+        doc.text(String(attendanceSummary?.overtimeHours || 0), 360, tableTop + 26);
 
         doc.moveDown(3);
 

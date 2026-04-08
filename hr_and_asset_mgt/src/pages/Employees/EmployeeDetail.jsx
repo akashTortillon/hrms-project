@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import "../../style/EmployeeDetail.css";
+import { WORKING_DAY_TYPE_OPTIONS, displayWeeklyOffDays } from "../../constants/workingDays";
+
+const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Icons (using bootstrap-icons or valid imports, assuming generic svgs or library usage in project)
 const BackArrowIcon = () => (
@@ -403,7 +406,9 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab === "Employment" && (
+                {activeTab === "Employment" && (() => {
+                    const weeklyOffDisplay = displayWeeklyOffDays(employee);
+                    return (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Employment Information</h3>
@@ -464,6 +469,20 @@ export default function EmployeeDetail() {
                                 <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Working day preset</label>
+                                <div>
+                                    {WORKING_DAY_TYPE_OPTIONS.find((o) => o.value === (employee.workingDayType ?? 4))?.label ?? "—"}
+                                </div>
+                            </div>
+                            <div className="info-group">
+                                <label>Weekly off days</label>
+                                <div>
+                                    {weeklyOffDisplay.length
+                                        ? weeklyOffDisplay.map((d) => WEEKDAY_NAMES[d]).join(", ")
+                                        : "None"}
+                                </div>
+                            </div>
+                            <div className="info-group">
                                 <label>Accommodation</label>
                                 <div>{employee.accommodation || "N/A"}</div>
                             </div>
@@ -499,7 +518,8 @@ export default function EmployeeDetail() {
                             </div>
                         </div>
                     </>
-                )}
+                    );
+                })()}
 
                 {activeTab === "Documents" && (
                     <>
