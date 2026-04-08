@@ -154,6 +154,11 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         const dateStr = `${year}-${strMonth}-${String(day).padStart(2, '0')}`;
         const dateObj = new Date(year, month - 1, day);
         const dayOfWeek = dateObj.getDay(); // 0 = Sun
+        const isWeeklyOff = weeklyOffSet.has(dayOfWeek);
+        const isHoliday = holidaySet.has(dateStr);
+        // Planned working day means: not a weekly off and not a holiday.
+        // This aligns "Absent" with planned working days (not calendar days).
+        const isPlannedWorkingDay = !isWeeklyOff && !isHoliday;
 
         let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, UNPAID_LEAVE
         let isLate = false;
@@ -205,8 +210,8 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
 
         // C. Fallbacks (Weekend/Holiday/Absent)
         if (status === 'UNKNOWN') {
-            if (weeklyOffSet.has(dayOfWeek)) status = 'WEEKEND';
-            else if (holidaySet.has(dateStr)) status = 'HOLIDAY';
+            if (isWeeklyOff) status = 'WEEKEND';
+            else if (isHoliday) status = 'HOLIDAY';
             else status = 'ABSENT';
         }
 
@@ -215,133 +220,122 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
             dateStr,
             status,
             isLate,
-            lateTier
+            lateTier,
+            isPlannedWorkingDay,
+            isWeeklyOff,
+            isHoliday
         });
     }
 
-    // --- PHASE 2: APPLY SANDWICH RULE ---
-    // Rule: If (ABSENT) -> [WEEKEND/HOLIDAY] -> (ABSENT), then [WEEKEND/HOLIDAY] becomes (UNPAID_LEAVE/SANDWICH)
+    // --- PHASE 2: APPLY SANDWICH RULE (SKIPPED FOR PAYROLL) ---
+    // Payroll is prorated strictly on planned working days (and holidays-on-working-days),
+    // so we do NOT convert weekends/holidays into payable/unpayable days via "sandwich" logic.
+    // Keeping this disabled prevents weekends/holidays from inflating LOP/unpaid counts.
+    const applySandwichRule = false;
 
-    // Helper to get status for any date (including outside current month)
-    const getStatusForDate = (dObj) => {
-        const y = dObj.getFullYear();
-        const m = String(dObj.getMonth() + 1).padStart(2, '0');
-        const d = String(dObj.getDate()).padStart(2, '0');
-        const dStr = `${y}-${m}-${d}`;
-        const dayOfWeek = dObj.getDay();
+    if (applySandwichRule) {
+        // Helper to get status for any date (including outside current month)
+        const getStatusForDate = (dObj) => {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            const dStr = `${y}-${m}-${d}`;
+            const dayOfWeek = dObj.getDay();
 
-        // 1. Check Log
-        if (logMap[dStr]) {
-            const r = logMap[dStr];
-            if (r.status === 'Present' || r.status === 'Late') return 'PRESENT';
-            if (r.status === 'On Leave') return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            // 1. Check Log
+            if (logMap[dStr]) {
+                const r = logMap[dStr];
+                if (r.status === 'Present' || r.status === 'Late') return 'PRESENT';
+                if (r.status === 'On Leave') return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+                return 'ABSENT';
+            }
+
+            // 2. Check Leave Map
+            const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
+            if (leaveInfo) {
+                const typeName = leaveInfo.leaveType;
+                let isPaid = true;
+                if (typeName) {
+                    if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
+                    else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
+                }
+                return isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE';
+            }
+
+            // 3. Fallback
+            if (weeklyOffSet.has(dayOfWeek)) return 'WEEKEND';
+            if (settings && settings.holidays) {
+                const isHol = settings.holidays.some(h => {
+                    if (!h.date) return false;
+                    const hd = new Date(h.date);
+                    return hd.getFullYear() === y && hd.getMonth() === dObj.getMonth() && hd.getDate() === dObj.getDate();
+                });
+                if (isHol) return 'HOLIDAY';
+            }
+
             return 'ABSENT';
-        }
+        };
 
-        // 2. Check Leave Map (Assume we fetched enough? Or just basic check)
-        // Note: getLeaveInfo uses the 'map' passed in. 
-        // We might need to ensure 'leaveMap' covers adjacent months? 
-        // getApprovedLeavesMap fetches ALL approved leaves for the employee ideally?
-        // or ensure we requested enough. User's 'getApprovedLeavesMap' implementation fetches ALL matching user. 
-        // So safe to assume we have it.
-        const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
-        if (leaveInfo) {
-            const typeName = leaveInfo.leaveType;
-            let isPaid = true;
-            if (typeName) {
-                if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
-                else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
-            }
-            return isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE'; // Treat Unpaid Leave as Absent-equivalent for Sandwich
-        }
+        const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
+        const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
 
-        // 3. Fallback
-        if (weeklyOffSet.has(dayOfWeek)) return 'WEEKEND';
-        // Need to check settings.holidays for this specific date
-        // 'holidaySet' only has current month? 
-        // We should check 'settings.holidays' raw array if available
-        if (settings && settings.holidays) {
-            const isHol = settings.holidays.some(h => {
-                if (!h.date) return false;
-                const hd = new Date(h.date);
-                return hd.getFullYear() === y && hd.getMonth() === dObj.getMonth() && hd.getDate() === dObj.getDate();
-            });
-            if (isHol) return 'HOLIDAY';
-        }
+        console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
 
-        return 'ABSENT'; // Default fallback if no logs/rules
-    };
+        let i = 0;
+        while (i < dayStatuses.length) {
+            if (isGap(dayStatuses[i].status)) {
+                let j = i;
+                while (j < dayStatuses.length && isGap(dayStatuses[j].status)) j++;
 
-    const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
-    const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
-
-    console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
-
-    let i = 0;
-    while (i < dayStatuses.length) {
-        if (isGap(dayStatuses[i].status)) {
-            // Found start of a gap sequence
-            let j = i;
-            while (j < dayStatuses.length && isGap(dayStatuses[j].status)) {
-                j++;
-            }
-            // Gap is from i to j-1
-
-            // Check Left Side
-            let leftIsAbsent = false;
-            if (i > 0) {
-                if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
-            } else {
-                // BOUNDARY CHECK: Scan backwards from Day 1
-                let backDate = new Date(year, month - 1, 1);
-                backDate.setDate(backDate.getDate() - 1); // Last day of prev month
-
-                // Scan up to 7 days back looking for non-gap
-                for (let b = 0; b < 7; b++) {
-                    const st = getStatusForDate(backDate);
-                    if (!isGap(st)) {
-                        if (isAbsentOrLOP(st)) leftIsAbsent = true;
-                        break; // Found the anchor
-                    }
+                let leftIsAbsent = false;
+                if (i > 0) {
+                    if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
+                } else {
+                    let backDate = new Date(year, month - 1, 1);
                     backDate.setDate(backDate.getDate() - 1);
-                }
-            }
-
-            // Check Right Side
-            let rightIsAbsent = false;
-            if (j < dayStatuses.length) {
-                if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
-            } else {
-                // BOUNDARY CHECK: Scan forwards from End of Month
-                let fwdDate = new Date(year, month - 1, daysInMonth);
-                fwdDate.setDate(fwdDate.getDate() + 1); // First day of next month
-
-                for (let f = 0; f < 7; f++) {
-                    const st = getStatusForDate(fwdDate);
-                    if (!isGap(st)) {
-                        if (isAbsentOrLOP(st)) rightIsAbsent = true;
-                        break;
+                    for (let b = 0; b < 7; b++) {
+                        const st = getStatusForDate(backDate);
+                        if (!isGap(st)) {
+                            if (isAbsentOrLOP(st)) leftIsAbsent = true;
+                            break;
+                        }
+                        backDate.setDate(backDate.getDate() - 1);
                     }
+                }
+
+                let rightIsAbsent = false;
+                if (j < dayStatuses.length) {
+                    if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
+                } else {
+                    let fwdDate = new Date(year, month - 1, daysInMonth);
                     fwdDate.setDate(fwdDate.getDate() + 1);
+                    for (let f = 0; f < 7; f++) {
+                        const st = getStatusForDate(fwdDate);
+                        if (!isGap(st)) {
+                            if (isAbsentOrLOP(st)) rightIsAbsent = true;
+                            break;
+                        }
+                        fwdDate.setDate(fwdDate.getDate() + 1);
+                    }
                 }
-            }
 
-            console.log(`[DEBUG] Gap found Days ${i + 1} to ${j}: Left=${leftIsAbsent}, Right=${rightIsAbsent}`);
-
-            if (leftIsAbsent && rightIsAbsent) {
-                for (let k = i; k < j; k++) {
-                    dayStatuses[k].status = 'SANDWICH_LEAVE';
-                    console.log(`  -> Day ${k + 1} marked SANDWICH`);
+                if (leftIsAbsent && rightIsAbsent) {
+                    for (let k = i; k < j; k++) dayStatuses[k].status = 'SANDWICH_LEAVE';
                 }
-            }
 
-            i = j; // Advance
-        } else {
-            i++;
+                i = j;
+            } else {
+                i++;
+            }
         }
     }
 
     // --- PHASE 3: CALCULATE METRICS ---
+    // Paid/Payable days should align to the salary denominator (exclude weekly offs),
+    // but INCLUDE:
+    // - planned working days worked (PRESENT)
+    // - paid leaves (PAID_LEAVE) on planned working days
+    // - public holidays that fall on working days (HOLIDAY where NOT weekly off)
     let paidDays = 0;
     let lopDays = 0;
     let lateCount = 0;
@@ -353,8 +347,11 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         // console.log(`[DEBUG] Day ${d.day}: ${d.status}`);
         switch (d.status) {
             case 'PRESENT':
-                paidDays++;
-                console.log(`[DEBUG] Day ${d.day} is PRESENT (+Paid)`);
+                // Count as payable only when it's a planned working day (not weekly off/holiday).
+                if (d.isPlannedWorkingDay) {
+                    paidDays++;
+                    console.log(`[DEBUG] Day ${d.day} is PRESENT (+Payable)`);
+                }
                 if (d.isLate) {
                     lateCount++;
                     if (d.lateTier === 1) lateTier1++;
@@ -363,25 +360,37 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                 }
                 break;
             case 'PAID_LEAVE':
-                paidDays++;
-                paidLeavesCount++;
-                console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+Paid)`);
+                // Paid leave is treated as payable only when it falls on a planned working day.
+                // (A paid leave on a weekly off/holiday shouldn't inflate payable days.)
+                if (d.isPlannedWorkingDay) {
+                    paidDays++;
+                    paidLeavesCount++;
+                    console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+Payable)`);
+                }
                 break;
-            case 'WEEKEND':
             case 'HOLIDAY':
-                paidDays++;
-                console.log(`[DEBUG] Day ${d.day} is ${d.status} (+Paid)`);
+                // Public holiday on a working day is payable.
+                // If it coincides with weekly off, it should not be double-counted.
+                if (!d.isWeeklyOff) {
+                    paidDays++;
+                    console.log(`[DEBUG] Day ${d.day} is HOLIDAY (+Payable)`);
+                }
                 break;
             case 'UNPAID_LEAVE':
-                unpaidLeavesCount++;
+                // Count unpaid leave only when it falls on a planned working day.
+                // (Unpaid leave on weekly off/holiday should not reduce salary.)
+                if (d.isPlannedWorkingDay) unpaidLeavesCount++;
                 // lopDays++; // Removed to prevent double counting in generatePayroll (which adds Absent + Unpaid)
                 break;
             case 'SANDWICH_LEAVE': // Treated as Unpaid
-                unpaidLeavesCount++; // Or separate 'sandwichLeavesCount'?
+                // Sandwich days may include weekends/holidays by design.
+                // Keep them deductible regardless of planned-working-day status.
+                unpaidLeavesCount++; // Includes weekend/holiday converted by sandwich rule
                 // lopDays++; // Removed
                 break;
             case 'ABSENT':
-                lopDays++;
+                // ✅ Count "Absent" only on planned working days (exclude WEEKEND/HOLIDAY dates)
+                if (d.isPlannedWorkingDay) lopDays++;
                 break;
         }
     });
@@ -484,8 +493,13 @@ export const generatePayroll = async (req, res) => {
                 empPattern
             );
 
-            const plannedWorkingDays = stats.plannedWorkingDays || 30;
-            const dailySalary = basicSalary / plannedWorkingDays;
+            // Salary denominator:
+            // plannedWorkingDays excludes weekly offs AND holidays on working days.
+            // For payroll proration we want: planned working days + holidays on working days
+            // (paid leaves are part of the payable days count, not the denominator by themselves).
+            const salaryDenominatorDays =
+                (Number(stats.plannedWorkingDays) || 0) + (Number(stats.holidayOnWorkingDayCount) || 0) || 30;
+            const dailySalary = basicSalary / salaryDenominatorDays;
 
             // Determine Employee's Standard Hourly Rate based on THEIR assigned shift
             const empShiftName = emp.shift || "Day Shift";
@@ -632,12 +646,15 @@ export const generatePayroll = async (req, res) => {
                         if (statValue > 0) description = `${statValue} Days Late (Tier 3)`;
                     }
                     else if (basis === "ABSENT_DAYS") {
-                        statValue = stats.daysAbsent + stats.unpaidLeaves;
+                        // ✅ Payroll-safe LOP days:
+                        // Salary is prorated on `salaryDenominatorDays` (planned working days + holidays on working days).
+                        // Payable days are tracked in `stats.daysPresent` (present + paid leave + holidays on working days).
+                        // Therefore, LOP days must be: denominator − payableDays. This prevents LOP days from exceeding the denominator
+                        // (which previously caused full-basic deduction even with some paid days).
+                        const payableDays = Number(stats.daysPresent || 0);
+                        statValue = Math.max(0, salaryDenominatorDays - payableDays);
                         if (statValue > 0) {
-                            const parts = [];
-                            if (stats.daysAbsent > 0) parts.push(`${stats.daysAbsent} Absent`);
-                            if (stats.unpaidLeaves > 0) parts.push(`${stats.unpaidLeaves} Unpaid Leave`);
-                            description = parts.join(' + ');
+                            description = `${statValue} LOP days (Denom ${salaryDenominatorDays} - Payable ${payableDays})`;
                         }
                     }
                     else if (basis === "OVERTIME_HOURS") {
