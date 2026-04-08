@@ -113,13 +113,14 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Valid UAE Phone Number is required" });
     }
 
-    const safeCode = code != null && String(code).trim() ? String(code).trim() : "";
+    const safeCodeRaw = code != null && String(code).trim() ? String(code).trim() : "";
+    const safeCode = safeCodeRaw ? safeCodeRaw.toUpperCase() : "";
 
     // Optional: validate Employee ID if provided
     if (safeCode) {
-      const validFormat = /^\d+$/.test(safeCode);
+      const validFormat = /^[A-Z0-9]+$/.test(safeCode);
       if (!validFormat) {
-        return res.status(400).json({ message: "Invalid Employee ID format. Expected numeric only (e.g. '10172')." });
+        return res.status(400).json({ message: "Invalid Employee ID format. Use alphanumeric only (e.g. '10172' or 'EMP10172')." });
       }
     }
 
@@ -139,7 +140,11 @@ export const addEmployee = async (req, res) => {
     }
 
     // 3. Determine Employee ID (use provided code or auto-generate next available)
-    const existingCodes = new Set((await Employee.find({}, { code: 1 })).map((e) => String(e.code).trim()));
+    const existingCodes = new Set(
+      (await Employee.find({}, { code: 1 }))
+        .map((e) => (e.code ? String(e.code).trim().toUpperCase() : ""))
+        .filter(Boolean)
+    );
 
     const parseEmpNumber = (c) => {
       const raw = String(c ?? "").trim();
@@ -159,7 +164,7 @@ export const addEmployee = async (req, res) => {
       do {
         lastCodeNum++;
         nextCode = String(lastCodeNum);
-      } while (existingCodes.has(nextCode));
+      } while (existingCodes.has(String(nextCode).trim().toUpperCase()));
     } else if (existingCodes.has(nextCode)) {
       return res.status(409).json({ message: "Employee ID already exists" });
     }
@@ -282,15 +287,19 @@ export const getEmployees = async (req, res) => {
       { $match: matchStage }, // Apply filters first
       {
         $addFields: {
+          // Sort numeric codes first (as numbers), then fall back to string sort.
           numericCode: {
-            $toInt: {
-              $substr: ["$code", 3, -1]
-            }
-          }
+            $cond: [
+              { $regexMatch: { input: { $ifNull: ["$code", ""] }, regex: /^[0-9]+$/ } },
+              { $toInt: "$code" },
+              null
+            ]
+          },
+          codeUpper: { $toUpper: { $ifNull: ["$code", ""] } }
         }
       },
-      { $sort: { numericCode: 1 } },
-      { $project: { numericCode: 0 } }
+      { $sort: { numericCode: 1, codeUpper: 1 } },
+      { $project: { numericCode: 0, codeUpper: 0 } }
     ]);
 
 
@@ -497,6 +506,14 @@ export const importEmployees = async (req, res) => {
       return raw ? raw : "";
     };
 
+    const normalizeEmployeeCode = (val) => {
+      const raw = String(val ?? "").trim();
+      if (!raw) return "";
+      return raw.toUpperCase();
+    };
+
+    const isValidEmployeeCode = (val) => /^[A-Z0-9]+$/.test(String(val ?? "").trim().toUpperCase());
+
     const parseEmpNumber = (code) => {
       const raw = String(code ?? "").trim();
       if (!raw) return null;
@@ -518,7 +535,7 @@ export const importEmployees = async (req, res) => {
 
       const email = safeStr(row["Email"]);
       const phone = safeStr(row["Phone"]);
-      const providedCode = readEmployeeCodeFromRow(row);
+      const providedCode = normalizeEmployeeCode(readEmployeeCodeFromRow(row));
 
       // Email Validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -538,12 +555,11 @@ export const importEmployees = async (req, res) => {
       }
       if (providedCode) {
         // Ensure provided Employee ID is unique and well-formed
-        const parsedNum = parseEmpNumber(providedCode);
-        if (parsedNum == null) {
+        if (!isValidEmployeeCode(providedCode)) {
           errors.push({
             row: rowNum,
             email,
-            message: "Invalid Employee ID format. Expected numeric only (e.g. '10172').",
+            message: "Invalid Employee ID format. Use alphanumeric only (e.g. '10172' or 'EMP10172').",
           });
           continue;
         }
@@ -551,8 +567,9 @@ export const importEmployees = async (req, res) => {
           errors.push({ row: rowNum, email, message: "Employee ID already exists" });
           continue;
         }
-        // Keep generator in sync so it doesn't collide later
-        if (parsedNum > lastCodeNum) lastCodeNum = parsedNum;
+        // Keep generator in sync so it doesn't collide later for numeric/EMP<n> codes
+        const parsedNum = parseEmpNumber(providedCode);
+        if (parsedNum != null && parsedNum > lastCodeNum) lastCodeNum = parsedNum;
       }
 
       // 3. Strict Master Validation (safeStr handles numbers/empty from CSV/Excel)
