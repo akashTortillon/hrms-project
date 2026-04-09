@@ -20,6 +20,17 @@ const __dirname = path.dirname(__filename);
 
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
 
+const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month);
+
+const hasScheduledSkip = (details = {}, month, year) => {
+    const overrides = Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
+    return overrides.some((entry) =>
+        entry?.action === "SKIP"
+        && Number(entry.month) === Number(month)
+        && Number(entry.year) === Number(year)
+    );
+};
+
 const resolveEffectiveSalary = (employee, month, year) => {
     const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
     const history = [...(employee.salaryHistory || [])]
@@ -859,6 +870,26 @@ export const generatePayroll = async (req, res) => {
                     const principal = Number(amount) || 0;
                     const totalPayable = Number(totalRepaymentAmount) || principal; // Fallback to principal if no interest
                     const period = Number(repaymentPeriod) || 1;
+                    const startMonth = Number(req.details?.deductionStartMonth) || Number(month);
+                    const startYear = Number(req.details?.deductionStartYear) || Number(year);
+                    const currentCycleKey = getPayrollCycleKey(month, year);
+                    const startCycleKey = getPayrollCycleKey(startMonth, startYear);
+
+                    if (currentCycleKey < startCycleKey) {
+                        continue;
+                    }
+
+                    if (hasScheduledSkip(req.details, month, year)) {
+                        continue;
+                    }
+
+                    const alreadyDeductedThisCycle = Array.isArray(req.payrollDeductions) && req.payrollDeductions.some((entry) =>
+                        Number(entry.month) === Number(month) && Number(entry.year) === Number(year)
+                    );
+
+                    if (alreadyDeductedThisCycle) {
+                        continue;
+                    }
 
                     // Logic: Deduction Amount
                     let deductionAmount = 0;
@@ -951,18 +982,37 @@ export const generatePayroll = async (req, res) => {
 
 // --- API: Get Payroll Summary ---
 export const getPayrollSummary = async (req, res) => {
+
     try {
-        const { month, year } = req.query;
-        const records = await Payroll.find({ month, year })
-            .populate("employee", "name code department designation role company basicSalary visaBase workBase ctc salaryHistory")
-            .populate("allowances.addedBy", "name") // ✅ Populate Allowance Editor
-            .populate("deductions.addedBy", "name"); // ✅ Populate Deduction Editor
+        const { month, year, company, branch, search, page = 1, limit = 50 } = req.query;
 
-        let totalNet = 0;
-        let totalBasic = 0;
-        let totalAllowances = 0;
-        let totalDeductions = 0;
+        // 1. Fetch all payroll records for month/year
+        let records = await Payroll.find({ month, year })
+            .populate("employee", "name code department designation role company branch basicSalary visaBase workBase ctc salaryHistory visaCompany workPermitCompany")
+            .populate("allowances.addedBy", "name")
+            .populate("deductions.addedBy", "name");
 
+        // 2. Filter by company
+        if (company) {
+            records = records.filter(r => r.employee?.company === company);
+        }
+
+        // 3. Filter by branch
+        if (branch) {
+            records = records.filter(r => r.employee?.branch === branch);
+        }
+
+        // 4. Filter by search (name or code)
+        if (search) {
+            const q = search.toLowerCase();
+            records = records.filter(r =>
+                r.employee?.name?.toLowerCase().includes(q) ||
+                r.employee?.code?.toLowerCase().includes(q)
+            );
+        }
+
+        // 5. Stats (before pagination)
+        let totalNet = 0, totalBasic = 0, totalAllowances = 0, totalDeductions = 0;
         records.forEach(r => {
             totalNet += r.netSalary || 0;
             totalBasic += r.basicSalary || 0;
@@ -970,14 +1020,27 @@ export const getPayrollSummary = async (req, res) => {
             totalDeductions += r.totalDeductions || 0;
         });
 
+        // 6. Pagination
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const totalRecords = records.length;
+        const totalPages = Math.ceil(totalRecords / limitNum);
+        const paginatedRecords = records.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
         res.status(200).json({
-            records,
+            records: paginatedRecords,
             stats: {
-                count: records.length,
+                count: totalRecords,
                 totalBasic,
                 totalAllowances,
                 totalDeductions,
                 totalNet
+            },
+            pagination: {
+                current: pageNum,
+                limit: limitNum,
+                totalRecords,
+                totalPages
             }
         });
 
@@ -985,6 +1048,7 @@ export const getPayrollSummary = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
 
 // --- API: Get Audit Logs for a Specific Payroll Record ---
 export const getPayrollAuditLogs = async (req, res) => {

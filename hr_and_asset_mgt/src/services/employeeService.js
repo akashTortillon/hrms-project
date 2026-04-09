@@ -46,6 +46,12 @@ export const deleteEmployee = async (id) => {
   return res.data;
 };
 
+// RESET PASSWORD
+export const resetEmployeePassword = async (id) => {
+  const res = await api.put(`${EMPLOYEE_API}/${id}/reset-password`);
+  return res.data;
+};
+
 // EXPORT employees (Excel)
 export const exportEmployees = async (params = {}) => {
   const res = await api.get(EMPLOYEE_API + "/export", {

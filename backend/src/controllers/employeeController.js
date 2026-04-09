@@ -4,6 +4,7 @@ import Master from "../models/masterModel.js";
 import { createNotification } from "./notificationController.js";
 import User from "../models/userModel.js";
 import bcrypt from "bcryptjs";
+import { sendEmail } from "../utils/sendEmail.js";
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === "") return 0;
@@ -862,5 +863,70 @@ export const importEmployees = async (req, res) => {
   } catch (error) {
     // console.error("Import Error:", error);
     res.status(500).json({ message: "Server error during import" });
+  }
+};
+
+export const resetEmployeePassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the employee
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Find the associated user
+    const user = await User.findOne({ employeeId: id });
+    if (!user) {
+      return res.status(404).json({ message: "Linked user account not found for this employee." });
+    }
+
+    // Generate random 8-char password
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let newPassword = "";
+    for (let i = 0; i < 8; i++) {
+        newPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // Hash it and save
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    // Email the employee
+    const emailOptions = {
+        to: employee.email,
+        subject: "Administrator Triggered Password Reset - HRMS",
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                <div style="background-color: #ef4444; color: white; padding: 20px; text-align: center;">
+                    <h2 style="margin: 0;">Password Reset</h2>
+                </div>
+                <div style="padding: 20px; background-color: #ffffff; color: #333333;">
+                    <p style="font-size: 16px;">Hello <strong>${employee.name}</strong>,</p>
+                    <p style="font-size: 16px;">Your administrator has manually reset your HRMS account password.</p>
+                     
+                    <div style="margin: 20px 0; padding: 15px; background-color: #f1f5f9; border-left: 4px solid #3b82f6; border-radius: 4px;">
+                        <span style="font-size: 14px; color: #64748b; text-transform: uppercase;">Your New Temporary Password:</span>
+                        <div style="font-size: 24px; font-weight: bold; font-family: monospace; color: #0f172a; margin-top: 5px;">${newPassword}</div>
+                    </div>
+                </div>
+                <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-top: 1px solid #e2e8f0;">
+                    <p style="font-size: 12px; color: #64748b; margin: 0;">Please log into your account and change this temporary password immediately inside your Profile Settings.</p>
+                </div>
+            </div>
+        `
+    };
+
+    const emailResult = await sendEmail(emailOptions);
+
+    if (!emailResult.success) {
+      return res.status(500).json({ message: "Password was reset but failed to send email. The temporary password is: " + newPassword });
+    }
+
+    res.status(200).json({ message: "Password reset successfully and email dispatched to employee." });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ message: "Server error resetting password", error: error.message });
   }
 };

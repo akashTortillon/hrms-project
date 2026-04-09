@@ -11,13 +11,12 @@ const createGenericService = (typeSlug) => ({
         return res.data;
     },
     add: async (data) => {
-        // Handle both simple name string and complex object
-        const payload = typeof data === 'string' ? { name: data } : data;
+        const payload = (typeof data === 'string') ? { name: data } : data;
         const res = await api.post(`${UNIFIED_BASE}/${typeSlug}`, payload);
         return res.data;
     },
     update: async (id, data) => {
-        const payload = typeof data === 'string' ? { name: data } : data;
+        const payload = (typeof data === 'string') ? { name: data } : data;
         const res = await api.put(`${UNIFIED_BASE}/${typeSlug}/${id}`, payload);
         return res.data;
     },

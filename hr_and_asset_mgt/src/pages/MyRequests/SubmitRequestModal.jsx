@@ -257,9 +257,17 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   placeholder="5"
                   value={leaveForm.isHalfDay ? "0.5" : leaveForm.numberOfDays}
                   disabled={leaveForm.isHalfDay}
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, numberOfDays: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const days = parseInt(e.target.value, 10);
+                    if (!isNaN(days) && days > 0 && leaveForm.fromDate) {
+                      const from = new Date(leaveForm.fromDate);
+                      from.setDate(from.getDate() + days - 1);
+                      const toDate = from.toISOString().split('T')[0];
+                      setLeaveForm({ ...leaveForm, numberOfDays: e.target.value, toDate });
+                    } else {
+                      setLeaveForm({ ...leaveForm, numberOfDays: e.target.value });
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -291,14 +299,17 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 <input
                   type="date"
                   value={leaveForm.fromDate}
-                  onChange={(e) =>
-                    setLeaveForm({
-                      ...leaveForm,
-                      fromDate: e.target.value,
-                      // Sync toDate automatically if half day
-                      toDate: leaveForm.isHalfDay ? e.target.value : leaveForm.toDate
-                    })
-                  }
+                  onChange={(e) => {
+                    const from = e.target.value;
+                    let toDate = leaveForm.isHalfDay ? from : leaveForm.toDate;
+                    // Auto-calc toDate if numberOfDays is already set
+                    if (!leaveForm.isHalfDay && leaveForm.numberOfDays && parseInt(leaveForm.numberOfDays) > 0) {
+                      const d = new Date(from);
+                      d.setDate(d.getDate() + parseInt(leaveForm.numberOfDays) - 1);
+                      toDate = d.toISOString().split('T')[0];
+                    }
+                    setLeaveForm({ ...leaveForm, fromDate: from, toDate });
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px",
@@ -316,9 +327,16 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   type="date"
                   value={leaveForm.isHalfDay ? leaveForm.fromDate : leaveForm.toDate}
                   disabled={leaveForm.isHalfDay}
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, toDate: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const toDate = e.target.value;
+                    // Auto-calc numberOfDays from date range
+                    let days = leaveForm.numberOfDays;
+                    if (leaveForm.fromDate && toDate) {
+                      const diff = Math.floor((new Date(toDate) - new Date(leaveForm.fromDate)) / 86400000) + 1;
+                      if (diff > 0) days = String(diff);
+                    }
+                    setLeaveForm({ ...leaveForm, toDate, numberOfDays: days });
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px",

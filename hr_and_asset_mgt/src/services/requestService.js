@@ -100,8 +100,23 @@ export const updateRequestStatus = async (id, payload) => {
   return response.data;
 };
 
+export const updateRepaymentSchedule = async (id, payload) => {
+  const response = await api.patch(
+    `${REQUEST_API}/${id}/repayment-schedule`,
+    payload
+  );
+  return response.data;
+};
+
 // Get requests for a specific employee
 export const getEmployeeRequests = async (employeeId, params = {}) => {
   const response = await api.get(`${REQUEST_API}/employee/${employeeId}`, { params });
   return response.data; // expect { success: true, data: [] }
 };
+
+// Get leave summary breakdown by type
+export const getLeaveSummary = async (params = {}) => {
+  const response = await api.get(`${REQUEST_API}/leave-summary`, { params });
+  return response.data;
+};
+

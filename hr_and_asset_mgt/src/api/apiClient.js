@@ -9,12 +9,18 @@ const api = axios.create({
     withCredentials: true, // Important for cookies (refreshToken)
 });
 
-// Request Interceptor: Attach Token
+// Request Interceptor: Attach Token and Handle FormData Content-Type
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem("token");
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Crucial: Allow browser to set boundary for FormData by removing application/json
+    if (config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
+    }
+
     return config;
 }, (error) => {
     return Promise.reject(error);

@@ -24,7 +24,9 @@ export default function AttendanceFilters({
   searchQuery,
   setSearchQuery,
   selectedStatus,
-  setSelectedStatus
+  setSelectedStatus,
+  showSearch = true,
+  showStatusFilter = true
 }) {
   return (
     <div className="attendance-filters">
@@ -122,7 +124,7 @@ export default function AttendanceFilters({
       )}
 
       {/* NEW: Status Filter */}
-      {viewMode === "day" && (
+      {viewMode === "day" && showStatusFilter && (
         <div className="filter-group">
           <label className="filter-label">Status</label>
           <select
@@ -140,7 +142,7 @@ export default function AttendanceFilters({
       )}
 
       {/* NEW: Search Filter */}
-      {viewMode === "day" && (
+      {viewMode === "day" && showSearch && (
         <div className="filter-group">
           <label className="filter-label">Search</label>
           <input

@@ -21,11 +21,20 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     dob: "",
     nationality: "",
     address: "",
+    passportNo: "",
     passportExpiry: "",
+    emiratesIdNo: "",
     emiratesIdExpiry: "",
     basicSalary: "",
+    allowance: "",
+    hra: "",
+    totalSalary: "",
     accommodation: "",
+    visaNo: "",
+    visaFileNo: "",
     visaExpiry: "",
+    visaCompany: "",
+    workPermitCompany: "",
     visaBase: "",
     workBase: "",
     ctc: "",
@@ -441,6 +450,27 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Allowance (AED)</label>
+              <input name="allowance" type="number" placeholder="e.g. 500" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>HRA (AED)</label>
+              <input name="hra" type="number" placeholder="e.g. 300" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Total Salary (AED)</label>
+              <input
+                name="totalSalary"
+                type="number"
+                placeholder="Auto or manual"
+                value={form.totalSalary}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
               <label>Visa Base (AED)</label>
               <input name="visaBase" placeholder="Payroll basis" onChange={handleChange} />
             </div>
@@ -484,15 +514,53 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 name="visaExpiry"
                 value={form.visaExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }}
               />
+            </div>
+
+            {/* Visa & Work Permit */}
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1', margin: '15px 0 10px 0' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#1f2937', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>Visa & Work Permit</h4>
+            </div>
+
+            <div className="form-group">
+              <label>Visa Number</label>
+              <input name="visaNo" placeholder="e.g. 201/2023/12345" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Visa File Number</label>
+              <input name="visaFileNo" placeholder="e.g. 10100/2023" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Visa Company</label>
+              <select
+                name="visaCompany"
+                value={form.visaCompany}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Visa Company</option>
+                {companies.map(c => (
+                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Work Permit Company</label>
+              <select
+                name="workPermitCompany"
+                value={form.workPermitCompany}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Work Permit Company</option>
+                {companies.map(c => (
+                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="form-group">
@@ -564,21 +632,24 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Passport Number</label>
+              <input name="passportNo" placeholder="e.g. A1234567" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
               <label>Passport Expiry</label>
               <input
                 type="date"
                 name="passportExpiry"
                 value={form.passportExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }}
               />
+            </div>
+
+            <div className="form-group">
+              <label>Emirates ID Number</label>
+              <input name="emiratesIdNo" placeholder="e.g. 784-1990-1234567-8" onChange={handleChange} />
             </div>
 
             <div className="form-group">

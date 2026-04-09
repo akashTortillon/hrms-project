@@ -226,6 +226,40 @@
 }
 
 
+/* Logo Upload & Preview */
+.company-logo-upload {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.logo-preview-box {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  border: 2px dashed #e5e7eb;
+  overflow: hidden;
+  background: #f9fafb;
+}
+
+.rendered-item-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-right: 12px;
+}
+
+.rendered-item-logo img {
+  width: 100%;
+  height: 100%;
+  object-contain: true;
+}
+
 /* Roles & Permissions */
 
 .roles-card h3 {

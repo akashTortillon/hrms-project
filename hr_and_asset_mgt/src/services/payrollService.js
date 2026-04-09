@@ -9,8 +9,9 @@ export const payrollService = {
     },
 
     // Get Payroll Summary (Records)
-    getSummary: async (month, year) => {
-        const response = await api.get(`/payroll/summary?month=${month}&year=${year}`);
+    getSummary: async (month, year, filters = {}) => {
+        const params = new URLSearchParams({ month, year, ...filters }).toString();
+        const response = await api.get(`/payroll/summary?${params}`);
         return response.data;
     },
 

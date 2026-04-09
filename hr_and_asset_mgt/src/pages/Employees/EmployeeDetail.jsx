@@ -37,14 +37,15 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation, resetEmployeePassword } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
-import { getEmployeeRequests } from "../../services/requestService";
+import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
 
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
 import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
+import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
 import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
@@ -72,6 +73,7 @@ export default function EmployeeDetail() {
     const canEdit = hasPermission("MANAGE_EMPLOYEES");
     const canManageDocs = hasPermission("MANAGE_DOCUMENTS");
     const canManageAssets = hasPermission("MANAGE_ASSETS");
+    const canManageRepayments = hasPermission("APPROVE_REQUESTS") || hasPermission("ALL") || user?.role === "Admin";
 
 
 
@@ -103,6 +105,14 @@ export default function EmployeeDetail() {
     // Loan State
     const [loans, setLoans] = useState([]);
     const [confirmingProbation, setConfirmingProbation] = useState(false);
+    const [showSkipLoanModal, setShowSkipLoanModal] = useState(false);
+    const [selectedLoanForSkip, setSelectedLoanForSkip] = useState(null);
+    const [savingLoanSkip, setSavingLoanSkip] = useState(false);
+
+    // Leave Summary State
+    const [leaveSummary, setLeaveSummary] = useState([]);
+    const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
+    const [leaveSummaryYear, setLeaveSummaryYear] = useState(new Date().getFullYear());
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
@@ -229,6 +239,27 @@ export default function EmployeeDetail() {
         }
     };
 
+    // Fetch leave summary when tab becomes active
+    const fetchLeaveSummary = async (year = leaveSummaryYear) => {
+        if (!effectiveId) return;
+        setLeaveSummaryLoading(true);
+        try {
+            const params = { year };
+            if (!isSelf) params.userId = effectiveId;
+            const res = await getLeaveSummary(params);
+            setLeaveSummary(res.data || []);
+        } catch (e) {
+            console.error("Leave summary fetch error:", e);
+        } finally {
+            setLeaveSummaryLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === "Leave Summary") {
+            fetchLeaveSummary(leaveSummaryYear);
+        }
+    }, [activeTab, leaveSummaryYear]);
 
     const handleAssignAsset = async (data) => {
         try {
@@ -269,6 +300,27 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handleOpenSkipLoanModal = (loan) => {
+        setSelectedLoanForSkip(loan);
+        setShowSkipLoanModal(true);
+    };
+
+    const handleSkipLoanMonth = async (requestId, payload) => {
+        try {
+            setSavingLoanSkip(true);
+            await updateRepaymentSchedule(requestId, payload);
+            toast.success("Repayment skip saved successfully");
+            setShowSkipLoanModal(false);
+            setSelectedLoanForSkip(null);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Repayment skip failed", error);
+            toast.error(error.response?.data?.message || "Failed to save repayment skip");
+        } finally {
+            setSavingLoanSkip(false);
+        }
+    };
+
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
@@ -277,7 +329,7 @@ export default function EmployeeDetail() {
 
     const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans"];
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary"];
     // Conditionally add Onboarding/Offboarding based on granular permissions
     if (hasPermission("MANAGE_ONBOARDING")) {
         tabs.push("Onboarding");
@@ -359,6 +411,23 @@ export default function EmployeeDetail() {
                                             Confirm Probation
                                         </button>
                                     )}
+                                    <button
+                                        className="edit-profile-btn reset-pass-btn"
+                                        style={{ marginLeft: '8px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5' }}
+                                        onClick={async () => {
+                                            if (window.confirm("Are you sure you want to reset this employee's password? An email will be sent immediately with a new temporary password.")) {
+                                                try {
+                                                    await resetEmployeePassword(effectiveId);
+                                                    toast.success("Password reset successfully. Email sent to employee.");
+                                                } catch (err) {
+                                                    console.error("Password reset failed", err);
+                                                    toast.error(err.response?.data?.message || "Failed to reset password");
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        Reset Password
+                                    </button>
                                 </>
                             )}
                         </>
@@ -648,7 +717,7 @@ export default function EmployeeDetail() {
                                             {doc.status}
                                         </span>
                                         <a
-                                            href={`${import.meta.env.VITE_API_BASE}/${doc.filePath.replace(/\\/g, '/')}`}
+                                            href={`${import.meta.env.VITE_API_BASE.replace(/\/api$/, '')}/${doc.filePath.replace(/\\/g, '/')}`}
                                             target="_blank" rel="noopener noreferrer"
                                             style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer' }}
                                         >
@@ -823,11 +892,7 @@ export default function EmployeeDetail() {
                                             <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
                                                 Approved: {new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}
                                             </div>
-                                            {(loan.details.interestRate > 0) && (
-                                                <div style={{ fontSize: '12px', color: '#d97706', marginTop: '2px' }}>
-                                                    Interest Rate: {loan.details.interestRate}%
-                                                </div>
-                                            )}
+                                        
                                         </div>
                                         <div style={{ textAlign: 'right' }}>
                                             <div style={{ fontWeight: '600', color: '#111827' }}>
@@ -840,6 +905,56 @@ export default function EmployeeDetail() {
                                             )}
                                         </div>
                                     </div>
+
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                                        {loan.details?.deductionStartMonth && loan.details?.deductionStartYear && (
+                                            <span style={{
+                                                fontSize: '12px',
+                                                color: '#1d4ed8',
+                                                background: '#dbeafe',
+                                                borderRadius: '999px',
+                                                padding: '6px 10px',
+                                                fontWeight: '500'
+                                            }}>
+                                                Starts: {String(loan.details.deductionStartMonth).padStart(2, '0')}/{loan.details.deductionStartYear}
+                                            </span>
+                                        )}
+                                        {Array.isArray(loan.details?.repaymentScheduleOverrides) && loan.details.repaymentScheduleOverrides
+                                            .filter((item) => item?.action === 'SKIP')
+                                            .map((item, index) => (
+                                                <span key={`${loan._id}-skip-${index}`} style={{
+                                                    fontSize: '12px',
+                                                    color: '#92400e',
+                                                    background: '#fef3c7',
+                                                    borderRadius: '999px',
+                                                    padding: '6px 10px',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    Skip: {String(item.month).padStart(2, '0')}/{item.year}
+                                                </span>
+                                            ))}
+                                    </div>
+
+                                    {canManageRepayments && !loan.isFullyPaid && (
+                                        <div style={{ marginBottom: '14px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenSkipLoanModal(loan)}
+                                                style={{
+                                                    border: '1px solid #f59e0b',
+                                                    background: '#fff7ed',
+                                                    color: '#b45309',
+                                                    borderRadius: '8px',
+                                                    padding: '8px 12px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Skip One Month
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Progress Bar */}
                                     {(() => {
@@ -885,7 +1000,59 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && (
+                {activeTab === "Leave Summary" && (
+                    <div style={{ padding: '8px 0' }}>
+                        {/* Year filter */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937', fontWeight: '700' }}>📅 Leave Summary</h3>
+                            <select
+                                value={leaveSummaryYear}
+                                onChange={async (e) => {
+                                    const yr = Number(e.target.value);
+                                    setLeaveSummaryYear(yr);
+                                    setLeaveSummaryLoading(true);
+                                    try {
+                                        const user = JSON.parse(localStorage.getItem('user') || '{}');
+                                        const params = { year: yr };
+                                        if (!isSelf && effectiveId) params.userId = effectiveId;
+                                        const res = await getLeaveSummary(params);
+                                        setLeaveSummary(res.data || []);
+                                    } catch (err) { console.error(err); }
+                                    finally { setLeaveSummaryLoading(false); }
+                                }}
+                                style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', background: 'white', cursor: 'pointer' }}
+                            >
+                                {[2026, 2025, 2024, 2023].map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
+
+                        {leaveSummaryLoading ? (
+                            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>Loading...</div>
+                        ) : leaveSummary.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px', background: '#f9fafb', borderRadius: '12px' }}>
+                                No approved leave records found for {leaveSummaryYear}.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+                                {leaveSummary.map((item, idx) => {
+                                    const colors = ['#eff6ff','#f0fdf4','#fefce8','#fdf4ff','#fff7ed','#f0f9ff'];
+                                    const textColors = ['#1d4ed8','#15803d','#a16207','#7e22ce','#c2410c','#0c4a6e'];
+                                    const bg = colors[idx % colors.length];
+                                    const tc = textColors[idx % textColors.length];
+                                    return (
+                                        <div key={item.type} style={{ background: bg, borderRadius: '12px', padding: '20px', border: `1px solid ${bg}` }}>
+                                            <div style={{ fontSize: '13px', color: tc, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>{item.type}</div>
+                                            <div style={{ fontSize: '32px', fontWeight: '800', color: tc }}>{item.totalDays}</div>
+                                            <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>days • {item.count} request{item.count !== 1 ? 's' : ''}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
@@ -926,6 +1093,19 @@ export default function EmployeeDetail() {
                     onClose={() => setShowConfirmProbationModal(false)}
                     onConfirm={handleConfirmProbation}
                     submitting={confirmingProbation}
+                />
+            )}
+
+            {showSkipLoanModal && (
+                <SkipLoanMonthModal
+                    show={showSkipLoanModal}
+                    request={selectedLoanForSkip}
+                    onClose={() => {
+                        setShowSkipLoanModal(false);
+                        setSelectedLoanForSkip(null);
+                    }}
+                    onSubmit={handleSkipLoanMonth}
+                    submitting={savingLoanSkip}
                 />
             )}
 

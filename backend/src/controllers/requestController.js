@@ -447,6 +447,33 @@ const getLeaveDays = (details = {}) => {
   return Math.max(1, diffDays);
 };
 
+const parsePayrollCycle = (month, year) => {
+  const parsedMonth = Number(month);
+  const parsedYear = Number(year);
+
+  if (!Number.isInteger(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+    return null;
+  }
+
+  if (!Number.isInteger(parsedYear) || parsedYear < 2000 || parsedYear > 9999) {
+    return null;
+  }
+
+  return { month: parsedMonth, year: parsedYear };
+};
+
+const getNextPayrollCycle = (baseDate = new Date()) => {
+  const next = new Date(baseDate);
+  next.setMonth(next.getMonth() + 1, 1);
+  return {
+    month: next.getMonth() + 1,
+    year: next.getFullYear()
+  };
+};
+
+const getScheduleOverrides = (details = {}) =>
+  Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
+
 const resolveManagerRecipient = async (employee) => {
   if (!employee?.designatedManager) return null;
 
@@ -1080,6 +1107,19 @@ export const updateRequestStatus = async (req, res) => {
           "/app/requests"
         );
 
+        // Notify the employee that the manager approved
+        try {
+          await createNotification({
+            recipient: request.userId,
+            title: "Manager Approved Request",
+            message: `Your request ${request.requestId} has been approved by your manager and forwarded to HR.`,
+            type: "REQUEST",
+            link: "/app/requests"
+          });
+        } catch (notifErr) {
+          console.error("Failed to notify employee of manager approval:", notifErr);
+        }
+
         return res.json({
           success: true,
           message: "Request approved by manager and forwarded to HR",
@@ -1105,6 +1145,21 @@ export const updateRequestStatus = async (req, res) => {
         if (req.body.repaymentPeriod) {
           request.details.repaymentPeriod = Number(req.body.repaymentPeriod);
         }
+
+        const startCurrentCycle = req.body.startCurrentCycle === true || req.body.startCurrentCycle === "true";
+        const startCycle = startCurrentCycle
+          ? {
+            month: new Date().getMonth() + 1,
+            year: new Date().getFullYear()
+          }
+          : getNextPayrollCycle();
+
+        request.details = {
+          ...request.details,
+          deductionStartMonth: startCycle.month,
+          deductionStartYear: startCycle.year,
+          repaymentScheduleOverrides: getScheduleOverrides(request.details)
+        };
       }
 
       request.hrApproval = {
@@ -1196,6 +1251,136 @@ export const updateRequestStatus = async (req, res) => {
   } catch (err) {
     // console.error("❌ Update request error:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const updateSalaryRepaymentSchedule = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { action, month, year, reason = "" } = req.body;
+
+    const canManageSchedule = req.user.role === "Admin"
+      || req.user.permissions?.includes("ALL")
+      || req.user.permissions?.includes("APPROVE_REQUESTS");
+
+    if (!canManageSchedule) {
+      return res.status(403).json({
+        success: false,
+        message: "Only HR/Admin can update repayment schedules."
+      });
+    }
+
+    if (action !== "SKIP_MONTH") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid repayment schedule action."
+      });
+    }
+
+    const cycle = parsePayrollCycle(month, year);
+    if (!cycle) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid payroll month and year are required."
+      });
+    }
+
+    const request = await Request.findById(requestId);
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Request not found"
+      });
+    }
+
+    if (request.requestType !== "SALARY") {
+      return res.status(400).json({
+        success: false,
+        message: "Only loan and salary advance requests support repayment scheduling."
+      });
+    }
+
+    if (request.status !== "APPROVED") {
+      return res.status(400).json({
+        success: false,
+        message: "Repayment schedule can only be updated for approved requests."
+      });
+    }
+
+    if (request.isFullyPaid) {
+      return res.status(400).json({
+        success: false,
+        message: "This request is already fully repaid."
+      });
+    }
+
+    const existingDeductions = Array.isArray(request.payrollDeductions) ? request.payrollDeductions : [];
+    const alreadyDeducted = existingDeductions.some((entry) =>
+      Number(entry.month) === cycle.month && Number(entry.year) === cycle.year
+    );
+
+    if (alreadyDeducted) {
+      return res.status(400).json({
+        success: false,
+        message: "This payroll cycle was already deducted and cannot be skipped."
+      });
+    }
+
+    const details = request.details || {};
+    const scheduleOverrides = getScheduleOverrides(details);
+    const alreadySkipped = scheduleOverrides.some((entry) =>
+      entry?.action === "SKIP"
+      && Number(entry.month) === cycle.month
+      && Number(entry.year) === cycle.year
+    );
+
+    if (alreadySkipped) {
+      return res.status(400).json({
+        success: false,
+        message: "A skip is already scheduled for this payroll cycle."
+      });
+    }
+
+    request.details = {
+      ...details,
+      repaymentScheduleOverrides: [
+        ...scheduleOverrides,
+        {
+          action: "SKIP",
+          month: cycle.month,
+          year: cycle.year,
+          reason: reason.trim(),
+          addedBy: req.user._id,
+          addedAt: new Date()
+        }
+      ]
+    };
+
+    await request.save();
+
+    createNotification({
+      recipient: request.userId,
+      title: "Loan deduction rescheduled",
+      message: `A repayment skip was added for ${String(cycle.month).padStart(2, "0")}/${cycle.year} on request ${request.requestId}. Deductions will resume automatically after that cycle.`,
+      type: "REQUEST",
+      link: "/app/requests"
+    }).catch((error) => console.error("Notification error:", error));
+
+    const populatedRequest = await Request.findById(request._id)
+      .populate("approvedBy", "name role")
+      .populate("managerApproval.actedBy", "name role")
+      .populate("hrApproval.actedBy", "name role");
+
+    return res.status(200).json({
+      success: true,
+      message: `Repayment skip added for ${String(cycle.month).padStart(2, "0")}/${cycle.year}.`,
+      data: populatedRequest
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update repayment schedule"
+    });
   }
 };
 
@@ -1523,3 +1708,61 @@ export const getEmployeeRequests = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/requests/leave-summary
+ * Returns leave type breakdown for current user (or admin can query any userId)
+ */
+export const getLeaveSummary = async (req, res) => {
+  try {
+    const { userId: queryUserId, year } = req.query;
+
+    // Admin/HR can pass userId; employees use their own
+    const targetUserId = (req.user.role === "Admin" || req.user.permissions?.includes("APPROVE_REQUESTS"))
+      ? (queryUserId || req.user._id)
+      : req.user._id;
+
+    const matchQuery = {
+      userId: targetUserId,
+      requestType: "LEAVE",
+      status: "APPROVED"
+    };
+
+    // Filter by year if provided
+    if (year) {
+      const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
+      const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
+      matchQuery.createdAt = { $gte: startOfYear, $lte: endOfYear };
+    }
+
+    const leaveRequests = await Request.find(matchQuery);
+
+    // Aggregate by leave type
+    const summary = {};
+    let totalDays = 0;
+
+    for (const req of leaveRequests) {
+      const details = req.details || {};
+      const leaveType = details.leaveType || details.leaveTypeId || "Other";
+      const days = parseFloat(details.numberOfDays || 1);
+
+      if (!summary[leaveType]) {
+        summary[leaveType] = { type: leaveType, count: 0, totalDays: 0 };
+      }
+      summary[leaveType].count += 1;
+      summary[leaveType].totalDays += days;
+      totalDays += days;
+    }
+
+    res.json({
+      success: true,
+      data: Object.values(summary),
+      totalDays,
+      totalRequests: leaveRequests.length
+    });
+  } catch (error) {
+    console.error("Get leave summary error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch leave summary" });
+  }
+};
+

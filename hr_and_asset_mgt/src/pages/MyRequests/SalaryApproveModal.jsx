@@ -7,6 +7,18 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     const [tenure, setTenure] = useState(1);
     const [amount, setAmount] = useState(0);
     const [approving, setApproving] = useState(false);
+    const [startCurrentCycle, setStartCurrentCycle] = useState(false);
+
+    const getCycleLabel = (useCurrentCycle) => {
+        const base = new Date();
+        if (!useCurrentCycle) {
+            base.setMonth(base.getMonth() + 1, 1);
+        }
+        return base.toLocaleString("en-US", {
+            month: "long",
+            year: "numeric"
+        });
+    };
 
     useEffect(() => {
         if (request && request.details) {
@@ -15,6 +27,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
 
             // Reset interest to 0 on new request open
             setInterestRate(0);
+            setStartCurrentCycle(false);
         }
     }, [request]);
 
@@ -24,7 +37,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
             await onApprove(request._id, {
                 amount: parseFloat(amount),
                 interestRate: isLoan ? parseFloat(interestRate) : 0,
-                repaymentPeriod: isLoan ? parseInt(tenure) : 1
+                repaymentPeriod: isLoan ? parseInt(tenure) : 1,
+                startCurrentCycle
             });
         } catch (error) {
             console.error("Approval failed:", error);
@@ -198,9 +212,36 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                                 marginTop: '8px'
                             }}>
                                 <span>Advance Deduction:</span>
-                                <strong style={{ color: '#dc3545' }}>{parseFloat(amount || 0).toFixed(2)} / next payslip</strong>
+                                <strong style={{ color: '#dc3545' }}>{parseFloat(amount || 0).toFixed(2)} / cycle</strong>
                             </div>
                         )}
+                    </div>
+
+                    <div style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '10px',
+                        padding: '14px 16px',
+                        background: '#fffaf0'
+                    }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={startCurrentCycle}
+                                onChange={(e) => setStartCurrentCycle(e.target.checked)}
+                                style={{ marginTop: '3px' }}
+                            />
+                            <div>
+                                <div style={{ fontWeight: '600', color: '#1f2937' }}>
+                                    Start deduction in current payroll cycle
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                    Leave unchecked to defer the first deduction to {getCycleLabel(false)}.
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#92400e', marginTop: '6px' }}>
+                                    First deduction will start in {getCycleLabel(startCurrentCycle)}.
+                                </div>
+                            </div>
+                        </label>
                     </div>
 
                 </div>

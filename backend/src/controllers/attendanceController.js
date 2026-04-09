@@ -720,7 +720,8 @@ export const getMonthlyAttendance = async (req, res) => {
 
     if (!canViewAll) {
       if (!req.user.employeeId) {
-        return res.status(403).json({ message: "Access Denied: No employee profile linked" });
+        // Return graceful empty array instead of 403 to prevent frontend crashing
+        return res.status(200).json([]);
       }
       employeeQuery._id = req.user.employeeId;
     }

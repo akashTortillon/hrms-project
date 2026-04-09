@@ -7,88 +7,96 @@ import SvgIcon from "../../components/svgIcon/svgView";
 export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
   const cards = [
     {
-      title: "Total Basic Salary",
-      amount: `${(stats?.totalBasic || 0).toLocaleString()} AED`,
-      variant: "blue",
+      title: "Most recent payroll",
+      amount: `₦${(stats?.totalNet || 0).toLocaleString()}`,
+      trend: stats?.lastMonthComparison || "+2.4%",
+      trendTerm: "vs last month",
+      icon: "users",
+      color: "#3b82f6"
     },
     {
-      title: "Total Allowances",
-      amount: `${(stats?.totalAllowances || 0).toLocaleString()} AED`,
-      variant: "green",
+      title: "Employee in payroll",
+      amount: (stats?.empCount || 0).toString(),
+      trend: "-2.4%", // Mock trends for UI completeness
+      trendTerm: "vs last month",
+      icon: "users",
+      color: "#facc15"
     },
     {
-      title: "Total Deductions",
-      amount: `${(stats?.totalDeductions || 0).toLocaleString()} AED`,
-      variant: "red",
+      title: "Pending Salary Approvals",
+      amount: (stats?.pendingApprovals || 0).toString(),
+      trend: "This month's salary",
+      icon: "clock (1)",
+      color: "#f97316"
     },
     {
-      title: "Net Payable",
-      amount: `${(stats?.totalNet || 0).toLocaleString()} AED`,
-      variant: "blue", // purple maps to blue or we can use another variant if needed
-    },
-  ];
-
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+        title: "Total Deductions",
+        amount: `₦${(stats?.totalDeductions || 0).toLocaleString()}`,
+        trend: "For this month",
+        icon: "dollar",
+        color: "#f43f5e"
+      },
   ];
 
   return (
     <>
-      <div className="payroll-header">
-        <div>
-          <h2 className="employees-title">Payroll Processing</h2>
-          <p className="employees-subtitle">
-            Manage monthly salary processing and WPS compliance
-          </p>
+      <div className="payroll-new-header">
+        <div className="header-titles">
+          <h2 className="payroll-main-title">Payroll Management</h2>
+          <p className="payroll-main-subtitle">Manage all employee salaries, bonuses, deductions, and net pay.</p>
         </div>
 
         <div className="payroll-header-actions">
-          {/* Month Selector */}
-          <div style={{ width: '100%', maxWidth: '200px' }}>
-            <input
-              type="month"
-              className="payroll-month-select"
-              value={`${year}-${String(month).padStart(2, '0')}`}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val) {
-                  const [y, m] = val.split('-');
-                  setYear(Number(y));
-                  setMonth(Number(m));
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                backgroundColor: "white",
-                fontSize: "14px",
-                height: "40px",
-                fontFamily: "inherit"
-              }}
-            />
-          </div>
-
-          <button className="payroll-export-btn" onClick={onExportWPS}>
-            <SvgIcon name="download" size={16} />
-            Export WPS File
-          </button>
+           <div className="period-selector">
+              <select className="period-select" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select className="period-select" value={year} onChange={(e) => setYear(Number(e.target.value))}>
+                {[2024, 2025, 2026].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+           </div>
+           <button className="export-record-btn" onClick={onExportWPS}>
+              <SvgIcon name="download" size={14} />
+              Export Record
+            </button>
+            <button className="new-payroll-btn">
+              <span className="plus-icon">+</span>
+              New payroll
+            </button>
         </div>
       </div>
 
-      <div className="payroll-summary-grid">
+      {/* Alert Bar */}
+      <div className="payroll-alert-bar">
+        <div className="alert-content">
+            <span className="alert-icon">⚠️</span>
+            <span className="alert-text">Payroll submission for the current pay period is due in 2 days. Review and finalize all employee payroll details</span>
+        </div>
+        <button className="alert-close">×</button>
+      </div>
+
+      <div className="payroll-stat-row">
         {cards.map((item, index) => (
-          <StatCard
-            key={index}
-            title={item.title}
-            value={item.amount}
-            iconName="dollar"
-            colorVariant={item.variant}
-          />
+          <div key={index} className="payroll-stat-card">
+            <div className="card-left">
+              <span className="card-title">{item.title}</span>
+              <h3 className="card-amount">{item.amount}</h3>
+              <div className={`card-trend ${item.trend.startsWith('+') ? 'positive' : item.trend.startsWith('-') ? 'negative' : ''}`}>
+                <span className="trend-val">{item.trend}</span>
+                <span className="trend-term">{item.trendTerm}</span>
+              </div>
+            </div>
+            <div className="card-right" style={{ backgroundColor: `${item.color}15` }}>
+              <SvgIcon name={item.icon} size={20} color={item.color} />
+            </div>
+          </div>
         ))}
       </div>
     </>
   );
 }
+

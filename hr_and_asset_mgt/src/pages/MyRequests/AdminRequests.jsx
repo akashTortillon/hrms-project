@@ -95,7 +95,8 @@ export default function AdminRequests() {
         action: "APPROVE",
         amount: data.amount,
         interestRate: data.interestRate,
-        repaymentPeriod: data.repaymentPeriod
+        repaymentPeriod: data.repaymentPeriod,
+        startCurrentCycle: data.startCurrentCycle
       });
       await fetchRequests();
       setShowSalaryModal(false);
@@ -344,20 +345,32 @@ export default function AdminRequests() {
                     </div>
 
                     <div className="request-actions">
-                      <AppButton
-                        variant="success"
-                        onClick={() => handleApprove(req)}
-                        disabled={processing}
-                      >
-                        {processing ? "..." : "Approve"}
-                      </AppButton>
-                      <AppButton
-                        variant="danger"
-                        onClick={() => handleRejectClick(req)}
-                        disabled={processing}
-                      >
-                        {processing ? "..." : "Reject"}
-                      </AppButton>
+                      {req.currentApprovalStage === 'MANAGER' && localStorage.getItem('userRole') !== 'Manager' && localStorage.getItem('userRole') !== 'Admin' && (!req.designatedManager || (req.designatedManager._id !== JSON.parse(localStorage.getItem('user') || '{}')._id && req.designatedManager._id !== JSON.parse(localStorage.getItem('user') || '{}').employeeId)) ? (
+                        <div style={{
+                          background: '#fef3c7', color: '#92400e', borderRadius: '8px',
+                          padding: '8px 14px', fontSize: '13px', fontWeight: '600'
+                        }}>
+                          ⏳ Awaiting Manager Approval
+                        </div>
+                      ) : (
+                        <>
+                          <AppButton
+                            variant="success"
+                            onClick={() => handleApprove(req)}
+                            disabled={processing}
+                          >
+                            {processing ? "..." : "Approve"}
+                          </AppButton>
+                          <AppButton
+                            variant="danger"
+                            onClick={() => handleRejectClick(req)}
+                            disabled={processing}
+                            style={{ marginLeft: '8px' }}
+                          >
+                            {processing ? "..." : "Reject"}
+                          </AppButton>
+                        </>
+                      )}
                     </div>
                   </ListGroup.Item>
                 ))}

@@ -44,6 +44,10 @@ export default function CompanyStructure() {
     inputValue,
     setInputValue,
     loading,
+    imageFile,
+    setImageFile,
+    imagePreview,
+    setImagePreview,
     handleOpenAdd,
     handleOpenEdit,
     handleSave,
@@ -148,6 +152,53 @@ export default function CompanyStructure() {
               autoFocus
             />
           </div>
+
+          {modalType === "Company" && (
+            <div className="company-logo-upload">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
+              <div className="flex items-center gap-4">
+                <div className="logo-preview-box">
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="Company Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="flex items-center justify-center bg-gray-100 w-full h-full text-gray-400">
+                      No Logo
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="company-logo-input"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        setImageFile(file);
+                        setImagePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  <label htmlFor="company-logo-input" className="cursor-pointer px-3 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 text-xs font-semibold hover:bg-blue-100">
+                    Upload New Logo
+                  </label>
+                  {imagePreview && (
+                    <button 
+                      type="button" 
+                      className="text-red-500 text-xs text-left"
+                      onClick={() => {
+                        setImageFile(null);
+                        setImagePreview(null);
+                      }}
+                    >
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {modalType === "Role" && (
             <div>

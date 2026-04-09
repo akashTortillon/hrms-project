@@ -324,6 +324,8 @@ function Attendance() {
         setSearchQuery={(q) => updateParams({ search: q, page: 1 })}
         selectedStatus={selectedStatus}
         setSelectedStatus={(s) => updateParams({ status: s, page: 1 })}
+        showSearch={!isEmployee}
+        showStatusFilter={!isEmployee}
       />
 
       <AttendanceTable

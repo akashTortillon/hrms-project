@@ -153,11 +153,8 @@ export const getMyDocuments = async (req, res) => {
         }
 
         if (!employeeId) {
-            // console.warn(`[WARN] No linked employee profile found for user: ${user.email}`);
-            return res.status(404).json({
-                message: "No linked employee profile found for this user. Please ensure your user email matches your employee record or contact admin.",
-                code: "NO_LINKED_PROFILE"
-            });
+            // Graceful response instead of 404 to prevent frontend crashes
+            return res.status(200).json([]);
         }
 
         const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });

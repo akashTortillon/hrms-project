@@ -64,10 +64,12 @@ import {
   withdrawRequest,
   getPendingRequestsForAdmin,
   updateRequestStatus,
+  updateSalaryRepaymentSchedule,
   approveDocumentRequest,
   rejectDocumentRequest,
   downloadDocument,
-  getEmployeeRequests
+  getEmployeeRequests,
+  getLeaveSummary
 } from "../controllers/requestController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
@@ -111,12 +113,26 @@ router.put(
   updateRequestStatus
 );
 
+router.patch(
+  "/:requestId/repayment-schedule",
+  protect,
+  updateSalaryRepaymentSchedule
+);
+
 // Get requests for a specific employee
 // GET /api/requests/employee/:employeeId
 router.get(
   "/employee/:employeeId",
   protect,
   getEmployeeRequests
+);
+
+// Get leave summary (breakdown by type)
+// GET /api/requests/leave-summary
+router.get(
+  "/leave-summary",
+  protect,
+  getLeaveSummary
 );
 
 /* =========================

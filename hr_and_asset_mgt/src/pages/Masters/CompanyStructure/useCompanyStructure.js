@@ -31,6 +31,8 @@ export default function useCompanyStructure() {
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
     const [editId, setEditId] = useState(null);
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
@@ -82,6 +84,8 @@ export default function useCompanyStructure() {
         setInputValue("");
         setSelectedPermissions([]);
         setEditId(null);
+        setImageFile(null);
+        setImagePreview(null);
         setShowModal(true);
     };
 
@@ -90,6 +94,10 @@ export default function useCompanyStructure() {
         setInputValue(item.name);
         if (type === "Role") {
             setSelectedPermissions(item.permissions || []);
+        }
+        if (type === "Company") {
+            setImagePreview(item.image);
+            setImageFile(null);
         }
         setEditId(item._id);
         setShowModal(true);
@@ -100,23 +108,32 @@ export default function useCompanyStructure() {
         setLoading(true);
         try {
             if (modalType === "Department") {
-                if (editId) await updateDepartment(editId, inputValue);
-                else await addDepartment(inputValue);
+                const payload = { name: inputValue };
+                if (editId) await updateDepartment(editId, payload);
+                else await addDepartment(payload);
                 const data = await getDepartments();
                 setDepartments(data);
             } else if (modalType === "Company") {
-                if (editId) await updateCompany(editId, inputValue);
-                else await addCompany(inputValue);
+                const formData = new FormData();
+                formData.append("name", inputValue);
+                if (imageFile) {
+                    formData.append("image", imageFile);
+                }
+                
+                if (editId) await updateCompany(editId, formData);
+                else await addCompany(formData);
                 const data = await getCompanies();
                 setCompanies(data);
             } else if (modalType === "Branch") {
-                if (editId) await updateBranch(editId, inputValue);
-                else await addBranch(inputValue);
+                const payload = { name: inputValue };
+                if (editId) await updateBranch(editId, payload);
+                else await addBranch(payload);
                 const data = await getBranches();
                 setBranches(data);
             } else if (modalType === "Designation") {
-                if (editId) await updateDesignation(editId, inputValue);
-                else await addDesignation(inputValue);
+                const payload = { name: inputValue };
+                if (editId) await updateDesignation(editId, payload);
+                else await addDesignation(payload);
                 const data = await getDesignations();
                 setDesignations(data);
             } else if (modalType === "Role") {
@@ -137,6 +154,8 @@ export default function useCompanyStructure() {
         } finally {
             setLoading(false);
             setEditId(null);
+            setImageFile(null);
+            setImagePreview(null);
         }
     };
 
@@ -197,6 +216,10 @@ export default function useCompanyStructure() {
         inputValue,
         setInputValue,
         loading,
+        imageFile,
+        setImageFile,
+        imagePreview,
+        setImagePreview,
         handleOpenAdd,
         handleOpenEdit,
         handleSave,

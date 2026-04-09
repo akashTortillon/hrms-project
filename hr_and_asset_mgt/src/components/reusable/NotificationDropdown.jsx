@@ -76,6 +76,11 @@ export default function NotificationDropdown({
                       <div className="notification-item-title">
                         {item.title}
                       </div>
+                      {item.message && (
+                        <div className="notification-item-message" style={{ fontSize: '12px', color: '#6b7280', marginTop: '3px', lineHeight: '1.3' }}>
+                          {item.message}
+                        </div>
+                      )}
                       <div className="notification-item-time">{item.time}</div>
                     </div>
                     <div className="notification-item-actions">

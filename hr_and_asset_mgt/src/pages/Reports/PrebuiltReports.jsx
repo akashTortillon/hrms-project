@@ -10,7 +10,7 @@ import Button from "../../components/reusable/Button";
 import ScheduledReports from "./ScheduledReports";
 import "../../style/Reports.css";
 
-const TABS = ["All", "HR", "Payroll", "Assets", "Documents", "Compliance"];
+const TABS = ["All", "HR", "Payroll", "Assets", "Documents", "Compliance", "Work Permit", "Work Visa"];
 
 const MONTHS = [
   { value: 1, label: "January" },
@@ -69,6 +69,10 @@ export default function PrebuiltReports() {
         url = `/reports/asset-depreciation`;
       } else if (type === "payroll") {
         url = `/reports/payroll-summary?month=${month}&year=${year}`;
+      } else if (type === "work-permit") {
+        url = `/employees?limit=1000`;
+      } else if (type === "work-visa") {
+        url = `/employees?limit=1000`;
       }
 
       const response = await api.get(url);
@@ -81,6 +85,15 @@ export default function PrebuiltReports() {
           toast.success("Report generated successfully");
         }
         setReportData(data);
+      } else if (type === "work-permit" || type === "work-visa") {
+        // Employees API returns array directly
+        const allEmps = Array.isArray(response.data) ? response.data : (response.data.employees || response.data.data || []);
+        const filtered = type === "work-permit"
+          ? allEmps.filter(e => e.workPermitCompany)
+          : allEmps.filter(e => e.visaCompany);
+        if (!filtered.length) toast.warning("No employees found with " + (type === "work-permit" ? "Work Permit Company" : "Visa Company") + " set.");
+        else toast.success("Report generated successfully");
+        setReportData(filtered);
       } else {
         toast.error("Failed to generate report");
         setError("Failed to generate report");
@@ -594,6 +607,36 @@ export default function PrebuiltReports() {
             </div>
           </Card>
         )}
+
+        {/* Work Permit Report */}
+        {(activeTab === "Work Permit" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon" style={{ background: '#eff6ff' }}>🔖</div>
+              <span className="report-tag" style={{ background: '#dbeafe', color: '#1d4ed8' }}>HR</span>
+            </div>
+            <h4 className="report-title">Work Permit Report</h4>
+            <p className="report-desc">List of employees grouped by Work Permit Company.</p>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={() => handleGenerate("work-permit")} disabled={loading}>Generate</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Work Visa Report */}
+        {(activeTab === "Work Visa" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon" style={{ background: '#f0fdf4' }}>🛂</div>
+              <span className="report-tag" style={{ background: '#dcfce7', color: '#15803d' }}>HR</span>
+            </div>
+            <h4 className="report-title">Work Visa Report</h4>
+            <p className="report-desc">List of employees grouped by Visa Company with expiry status.</p>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={() => handleGenerate("work-visa")} disabled={loading}>Generate</Button>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Result Section */}
@@ -605,6 +648,8 @@ export default function PrebuiltReports() {
             {reportType === "depreciation" && `Asset Depreciation Schedule – As of Today`}
             {reportType === "payroll" && `Payroll Summary – ${MONTHS.find(m => m.value === month)?.label} ${year}`}
             {reportType === "wps" && `WPS Salary File Preview – ${MONTHS.find(m => m.value === month)?.label} ${year}`}
+            {reportType === "work-permit" && '🔖 Work Permit Report'}
+            {reportType === "work-visa" && '🛂 Work Visa Report'}
           </h3>
 
           <div className="report-table-wrapper">
@@ -659,6 +704,15 @@ export default function PrebuiltReports() {
                     <th>Net Payable</th>
                   </tr>
                 )}
+                {(reportType === "work-permit" || reportType === "work-visa") && (
+                  <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Department</th>
+                    <th>{reportType === "work-permit" ? "Work Permit Company" : "Visa Company"}</th>
+                    <th>Visa Expiry</th>
+                  </tr>
+                )}
               </thead>
               <tbody>
                 {reportData.map((row, index) => (
@@ -710,6 +764,21 @@ export default function PrebuiltReports() {
                         <td>AED {row["Basic"]}</td>
                         <td>AED {row["Allowances"]}</td>
                         <td><strong>AED {row["Total Net"]}</strong></td>
+                      </>
+                    )}
+                    {(reportType === "work-permit" || reportType === "work-visa") && (
+                      <>
+                        <td><strong>{row.name}</strong></td>
+                        <td style={{ color: '#6b7280' }}>{row.code}</td>
+                        <td>{row.department}</td>
+                        <td>
+                          <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: '6px', fontSize: '13px' }}>
+                            {reportType === "work-permit" ? row.workPermitCompany : row.visaCompany}
+                          </span>
+                        </td>
+                        <td style={{ color: row.visaExpiry && new Date(row.visaExpiry) < new Date() ? '#dc2626' : '#16a34a' }}>
+                          {row.visaExpiry ? new Date(row.visaExpiry).toLocaleDateString() : '—'}
+                        </td>
                       </>
                     )}
                   </tr>
