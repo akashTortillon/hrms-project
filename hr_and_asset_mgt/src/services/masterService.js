@@ -2,7 +2,7 @@ import api from "../api/apiClient";
 
 // --- UNIFIED MASTERS ---
 // All masters use the same endpoint structure: /api/masters/:type
-
+// huhu
 const UNIFIED_BASE = "/masters";
 
 const createGenericService = (typeSlug) => ({
