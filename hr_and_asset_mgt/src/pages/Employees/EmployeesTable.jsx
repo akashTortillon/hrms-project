@@ -89,6 +89,11 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete, onRes
                             <SvgIcon name="lock" size={18} />
                           </button>
                         )}
+                        {/*
+                          Delete Employee action is intentionally disabled in UI.
+                          (Backend/API still exists; can be re-enabled later if needed.)
+                        */}
+                        {/*
                         <button
                           type="button"
                           className="icon-btn delete-btn"
@@ -100,6 +105,7 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete, onRes
                         >
                           <SvgIcon name="delete" size={18} />
                         </button>
+                        */}
                       </div>
                     </td>
                   )}
