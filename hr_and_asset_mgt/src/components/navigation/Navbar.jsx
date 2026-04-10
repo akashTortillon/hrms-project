@@ -124,10 +124,22 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
           <QuickActionMenu
             items={quickActions}
             onSelect={(action) => {
-              console.log("Selected:", action.key);
+              switch (action?.key) {
+                case "addEmployee":
+                  navigate("/app/employees");
+                  break;
+                case "addAsset":
+                  navigate("/app/assets");
+                  break;
+                case "uploadDocument":
+                  navigate("/app/documents");
+                  break;
+                default:
+                  break;
+              }
             }}
           >
-            <SvgIcon name="plus" size={15} />
+            <SvgIcon name="plus" size={15} className="svg-icon-black" />
           </QuickActionMenu>
 
 

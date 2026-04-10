@@ -1131,6 +1131,11 @@ body {
   filter: brightness(0) invert(1);
 }
 
+.svg-icon-black {
+  /* Use original SVG color (typically black) */
+  filter: none !important;
+}
+
 /* ===================================================================
    GLOBAL DROPDOWN VIEWPORT CONSTRAINTS
    Prevents all dropdowns from overflowing viewport boundaries
