@@ -21,6 +21,7 @@ const PERMISSIONS_LIST = [
   "MANAGE_SETTINGS",
   "APPROVE_REQUESTS",
   "APPROVE_MANAGER_REQUESTS",
+  "APPROVE_FINANCE_REQUESTS",
   "VIEW_REPORTS",
   "MANAGE_ONBOARDING",
   "MANAGE_OFFBOARDING",
@@ -35,9 +36,12 @@ export default function CompanyStructure() {
     companies,
     branches,
     designations,
+    repaymentPeriods,
     roles,
     selectedPermissions,
     setSelectedPermissions,
+    repaymentMonths,
+    setRepaymentMonths,
     showModal,
     setShowModal,
     modalType,
@@ -100,6 +104,16 @@ export default function CompanyStructure() {
           onAdd={() => handleOpenAdd("Designation")}
         >
           <RenderList items={designations} type="Designation" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+        </MastersCard>
+      </div>
+
+      <div className="mt-4">
+        <MastersCard
+          title="Repayment Periods"
+          description="Loan tenure options used in employee loan requests"
+          onAdd={() => handleOpenAdd("Repayment Period")}
+        >
+          <RenderList items={repaymentPeriods} type="Repayment Period" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
         </MastersCard>
       </div>
 
@@ -197,6 +211,23 @@ export default function CompanyStructure() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {modalType === "Repayment Period" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Month Count</label>
+              <input
+                type="number"
+                min="1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Example: 6"
+                value={repaymentMonths}
+                onChange={(e) => setRepaymentMonths(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Example: name can be "6 Months" and month count should be 6.
+              </p>
             </div>
           )}
 

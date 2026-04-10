@@ -98,5 +98,21 @@ export const payrollService = {
         document.body.appendChild(link);
         link.click();
         link.parentNode.removeChild(link);
+    },
+
+    // Download Employee Payslip PDF
+    downloadPayslipPdf: async (payrollId, employeeName = "employee") => {
+        const response = await api.get(`/payroll/download/${payrollId}`, {
+            responseType: 'blob'
+        });
+        const safeName = String(employeeName || "employee").replace(/[^a-z0-9_-]+/gi, "_");
+        const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Payslip_${safeName}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(url);
     }
 };

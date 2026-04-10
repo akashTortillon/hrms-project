@@ -17,7 +17,8 @@ import {
     addDesignation,
     updateDesignation,
     deleteDesignation,
-    roleService
+    roleService,
+    repaymentPeriodService
 } from "../../../services/masterService.js";
 
 export default function useCompanyStructure() {
@@ -25,8 +26,10 @@ export default function useCompanyStructure() {
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [designations, setDesignations] = useState([]);
+    const [repaymentPeriods, setRepaymentPeriods] = useState([]);
     const [roles, setRoles] = useState([]);
     const [selectedPermissions, setSelectedPermissions] = useState([]);
+    const [repaymentMonths, setRepaymentMonths] = useState("");
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
@@ -77,12 +80,20 @@ export default function useCompanyStructure() {
         } catch (error) {
             console.error("❌ Error fetching roles:", error);
         }
+
+        try {
+            const data = await repaymentPeriodService.getAll();
+            setRepaymentPeriods(data);
+        } catch (error) {
+            console.error("❌ Error fetching repayment periods:", error);
+        }
     };
 
     const handleOpenAdd = (type) => {
         setModalType(type);
         setInputValue("");
         setSelectedPermissions([]);
+        setRepaymentMonths("");
         setEditId(null);
         setImageFile(null);
         setImagePreview(null);
@@ -94,6 +105,9 @@ export default function useCompanyStructure() {
         setInputValue(item.name);
         if (type === "Role") {
             setSelectedPermissions(item.permissions || []);
+        }
+        if (type === "Repayment Period") {
+            setRepaymentMonths(String(item.metadata?.months || parseInt(item.name, 10) || ""));
         }
         if (type === "Company") {
             setImagePreview(item.image);
@@ -145,6 +159,20 @@ export default function useCompanyStructure() {
                 else await roleService.add(payload);
                 const data = await roleService.getAll();
                 setRoles(data);
+            } else if (modalType === "Repayment Period") {
+                const months = Number(repaymentMonths);
+                if (!Number.isFinite(months) || months <= 0) {
+                    toast.warning("Please enter a valid repayment month count");
+                    return;
+                }
+                const payload = {
+                    name: inputValue,
+                    metadata: { months }
+                };
+                if (editId) await repaymentPeriodService.update(editId, payload);
+                else await repaymentPeriodService.add(payload);
+                const data = await repaymentPeriodService.getAll();
+                setRepaymentPeriods(data);
             }
             toast.success(`${modalType} ${editId ? "updated" : "added"} successfully!`);
             setShowModal(false);
@@ -166,6 +194,7 @@ export default function useCompanyStructure() {
         else if (type === "Branch") item = branches.find(i => i._id === id);
         else if (type === "Designation") item = designations.find(i => i._id === id);
         else if (type === "Role") item = roles.find(i => i._id === id);
+        else if (type === "Repayment Period") item = repaymentPeriods.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -191,6 +220,9 @@ export default function useCompanyStructure() {
             } else if (type === "Role") {
                 await roleService.delete(id);
                 setRoles(roles.filter((r) => r._id !== id));
+            } else if (type === "Repayment Period") {
+                await repaymentPeriodService.delete(id);
+                setRepaymentPeriods(repaymentPeriods.filter((period) => period._id !== id));
             }
             toast.success(`${type} deleted successfully`);
             setDeleteConfig({ ...deleteConfig, show: false });
@@ -207,9 +239,12 @@ export default function useCompanyStructure() {
         companies,
         branches,
         designations,
+        repaymentPeriods,
         roles,
         selectedPermissions,
         setSelectedPermissions,
+        repaymentMonths,
+        setRepaymentMonths,
         showModal,
         setShowModal,
         modalType,

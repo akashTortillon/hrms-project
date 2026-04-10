@@ -41,6 +41,63 @@ export default function AdminRequests() {
   const [requestTypeFilter, setRequestTypeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+  const currentRole = localStorage.getItem("userRole");
+  const currentRoleLabel = String(currentRole || "");
+  const currentPermissions = currentUser?.permissions || [];
+  const canActAsHr = currentRole === "Admin" || /^HR/i.test(currentRoleLabel) || currentPermissions.includes("ALL") || currentPermissions.includes("APPROVE_REQUESTS");
+  const canActAsFinance = /^Finance/i.test(currentRoleLabel) || currentPermissions.includes("ALL") || currentPermissions.includes("APPROVE_FINANCE_REQUESTS");
+  const isDesignatedManager = (req) => {
+    const managerId = req.designatedManager?._id || req.designatedManager;
+    return Boolean(
+      managerId &&
+      (
+        managerId === currentUser?._id ||
+        managerId === currentUser?.id ||
+        managerId === currentUser?.employeeId
+      )
+    );
+  };
+  const canActAsManager = (req) => (
+    req.currentApprovalStage === "MANAGER" &&
+    (currentRole === "Manager" || currentPermissions.includes("APPROVE_MANAGER_REQUESTS")) &&
+    isDesignatedManager(req)
+  );
+  const isDesignatedFinanceManager = (req) => {
+    const financeId = req.designatedFinanceManager?._id || req.designatedFinanceManager;
+    return Boolean(
+      financeId &&
+      (
+        financeId === currentUser?._id ||
+        financeId === currentUser?.id ||
+        financeId === currentUser?.employeeId
+      )
+    );
+  };
+  const canShowFinanceButtons = (req) => (
+    req.currentApprovalStage === "FINANCE" &&
+    canActAsFinance &&
+    isDesignatedFinanceManager(req)
+  );
+  const canShowActionButtons = (req) => {
+    if (req.currentApprovalStage === "MANAGER") return canActAsManager(req);
+    if (req.currentApprovalStage === "FINANCE") return canShowFinanceButtons(req);
+    if (req.currentApprovalStage === "HR") return canActAsHr;
+    return false;
+  };
+  const getStageLabel = (req) => {
+    if (req.currentApprovalStage === "MANAGER") return "Waiting for manager approval";
+    if (req.currentApprovalStage === "FINANCE") return "Finance approval pending";
+    if (req.currentApprovalStage === "HR") return "HR approval pending";
+    return "Completed";
+  };
+
   useEffect(() => {
     fetchRequests();
   }, []);
@@ -69,7 +126,7 @@ export default function AdminRequests() {
       // Open modal for document upload
       setSelectedRequest(request);
       setShowApproveModal(true);
-    } else if (request.requestType === "SALARY") {
+    } else if (request.requestType === "SALARY" && request.currentApprovalStage === "HR") {
       // Open modal for Salary (Loan/Advance) approval
       setSelectedSalaryReq(request);
       setShowSalaryModal(true);
@@ -94,7 +151,6 @@ export default function AdminRequests() {
       await updateRequestStatus(requestId, {
         action: "APPROVE",
         amount: data.amount,
-        interestRate: data.interestRate,
         repaymentPeriod: data.repaymentPeriod,
         startCurrentCycle: data.startCurrentCycle
       });
@@ -183,7 +239,7 @@ export default function AdminRequests() {
      DATA SEGREGATION
   ========================= */
 
-  const pendingRequests = requests.filter((r) => ["PENDING", "MANAGER_APPROVED"].includes(r.status));
+  const pendingRequests = requests.filter((r) => ["PENDING", "MANAGER_APPROVED", "FINANCE_APPROVED"].includes(r.status));
 
   const historyRequests = requests.filter((r) =>
     ["WITHDRAWN", "APPROVED", "REJECTED", "COMPLETED"].includes(r.status)
@@ -248,7 +304,7 @@ export default function AdminRequests() {
             </div>
             {(details.subType === "loan" || subType === "loan") && details.repaymentPeriod && (
               <div className="request-repayment">
-                Repayment Period: {details.repaymentPeriod}
+                Repayment Period: {details.repaymentPeriod} month{Number(details.repaymentPeriod) === 1 ? "" : "s"}
               </div>
             )}
             {details.reason && (
@@ -339,18 +395,20 @@ export default function AdminRequests() {
                     <div className="request-info">
                       <div className="request-name">{req.userId?.name}</div>
                       <div className="request-type" style={{ marginBottom: "4px", color: "#2563eb" }}>
-                        Stage: {req.currentApprovalStage === "MANAGER" ? "Manager Approval" : req.currentApprovalStage === "HR" ? "HR Approval" : "Completed"}
+                        Stage: {getStageLabel(req)}
                       </div>
                       {renderRequestDetails(req)}
                     </div>
 
                     <div className="request-actions">
-                      {req.currentApprovalStage === 'MANAGER' && localStorage.getItem('userRole') !== 'Manager' && localStorage.getItem('userRole') !== 'Admin' && (!req.designatedManager || (req.designatedManager._id !== JSON.parse(localStorage.getItem('user') || '{}')._id && req.designatedManager._id !== JSON.parse(localStorage.getItem('user') || '{}').employeeId)) ? (
+                      {!canShowActionButtons(req) ? (
                         <div style={{
                           background: '#fef3c7', color: '#92400e', borderRadius: '8px',
                           padding: '8px 14px', fontSize: '13px', fontWeight: '600'
                         }}>
-                          ⏳ Awaiting Manager Approval
+                          {req.currentApprovalStage === "MANAGER"
+                            ? "Waiting for manager approval"
+                            : (req.currentApprovalStage === "FINANCE" ? "Waiting for finance approval" : "HR approval pending")}
                         </div>
                       ) : (
                         <>

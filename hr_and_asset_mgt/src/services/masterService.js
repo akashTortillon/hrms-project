@@ -53,6 +53,7 @@ export const leaveTypeService = createGenericService('leave-types');
 export const documentTypeService = createGenericService('document-types');
 export const nationalityService = createGenericService('nationalities');
 export const payrollRuleService = createGenericService('payroll-rules');
+export const repaymentPeriodService = createGenericService('repayment-periods');
 export const workflowTemplateService = createGenericService('workflow-templates');
 export const shiftService = createGenericService('shifts');
 

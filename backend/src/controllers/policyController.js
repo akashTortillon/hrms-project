@@ -1,10 +1,17 @@
 import PolicyDocument from "../models/policyDocumentModel.js";
-import { deleteStoredFile, storeUploadedFile } from "../utils/storage.js";
+import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 
 export const getPolicies = async (req, res) => {
   try {
     const policies = await PolicyDocument.find({ isActive: true }).sort({ createdAt: -1 });
-    res.json(policies);
+    const signedPolicies = await Promise.all(
+      policies.map(async (policy) => {
+        const item = policy.toObject();
+        item.fileUrl = await getSignedFileUrl(item);
+        return item;
+      })
+    );
+    res.json(signedPolicies);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch policies" });
   }
@@ -19,7 +26,7 @@ export const uploadPolicy = async (req, res) => {
     const storedFile = await storeUploadedFile({
       file: req.file,
       folder: "policies",
-      preferS3: false
+      preferS3: true
     });
 
     const policy = await PolicyDocument.create({

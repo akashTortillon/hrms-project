@@ -346,6 +346,21 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     ))}
                   </select>
                 </div>
+
+                <div className="form-group">
+                  <label>Finance Manager</label>
+                  <select
+                    name="designatedFinanceManager"
+                    value={form.designatedFinanceManager || ''}
+                    onChange={handleChange}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+                  >
+                    <option value="">Select Finance Manager</option>
+                    {managers.map(manager => (
+                      <option key={`finance-basic-${manager._id}`} value={manager._id}>{manager.name}</option>
+                    ))}
+                  </select>
+                </div>
               </>
             )}
 
@@ -631,6 +646,26 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
+                  <label>Visa Company</label>
+                  <input name="visaCompany" value={form.visaCompany || ''} onChange={handleChange} placeholder="Company on visa" />
+                </div>
+
+                <div className="form-group">
+                  <label>Work Permit Company</label>
+                  <input name="workPermitCompany" value={form.workPermitCompany || ''} onChange={handleChange} placeholder="Company on work permit" />
+                </div>
+
+                <div className="form-group">
+                  <label>Visa No</label>
+                  <input name="visaNo" value={form.visaNo || ''} onChange={handleChange} placeholder="Enter visa number" />
+                </div>
+
+                <div className="form-group">
+                  <label>Visa File No</label>
+                  <input name="visaFileNo" value={form.visaFileNo || ''} onChange={handleChange} placeholder="Enter visa file number" />
+                </div>
+
+                <div className="form-group">
                   <label>Visa Expiry</label>
                   <input
                     type="date"
@@ -659,6 +694,21 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     <option value="">Select Manager</option>
                     {managers.map(manager => (
                       <option key={manager._id} value={manager._id}>{manager.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Finance Manager</label>
+                  <select
+                    name="designatedFinanceManager"
+                    value={form.designatedFinanceManager || ''}
+                    onChange={handleChange}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+                  >
+                    <option value="">Select Finance Manager</option>
+                    {managers.map(manager => (
+                      <option key={`finance-employment-${manager._id}`} value={manager._id}>{manager.name}</option>
                     ))}
                   </select>
                 </div>

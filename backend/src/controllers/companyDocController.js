@@ -1,4 +1,5 @@
 import CompanyDocument from "../models/companyDocModel.js";
+import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 
 // GET all docs with Filters & Search
 export const getDocs = async (req, res) => {
@@ -23,7 +24,14 @@ export const getDocs = async (req, res) => {
         }
 
         const docs = await CompanyDocument.find(query).sort({ expiryDate: 1 });
-        res.json(docs);
+        const signedDocs = await Promise.all(
+            docs.map(async (doc) => {
+                const item = doc.toObject();
+                item.fileUrl = await getSignedFileUrl(item);
+                return item;
+            })
+        );
+        res.json(signedDocs);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -54,6 +62,12 @@ export const uploadDoc = async (req, res) => {
             else if (diffDays <= 30) status = "Expiring Soon";
         }
 
+        const storedFile = await storeUploadedFile({
+            file: req.file,
+            folder: "company-documents",
+            preferS3: true
+        });
+
         const newDoc = new CompanyDocument({
             name,
             type,
@@ -63,7 +77,9 @@ export const uploadDoc = async (req, res) => {
             status, // Save calculated status
             uploadedBy: uploaderId,
             uploaderRole: uploaderRole,
-            filePath: req.file.path.replace(/\\/g, "/"), // normalize path
+            filePath: storedFile.filePath,
+            fileUrl: storedFile.fileUrl,
+            storage: storedFile.storage,
         });
 
         const savedDoc = await newDoc.save();
@@ -79,7 +95,7 @@ export const deleteDoc = async (req, res) => {
         const doc = await CompanyDocument.findById(req.params.id);
         if (!doc) return res.status(404).json({ message: "Document not found" });
 
-        // TODO: Ideally delete file from disk here too using fs.unlink
+        deleteStoredFile(doc.filePath, doc.storage);
         await CompanyDocument.findByIdAndDelete(req.params.id);
         res.json({ message: "Document deleted" });
     } catch (error) {

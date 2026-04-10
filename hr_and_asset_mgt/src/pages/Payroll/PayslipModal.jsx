@@ -1,42 +1,13 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import "../../style/Payroll.css";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { PDFDocument } from 'pdf-lib';
-
-// Company → logo filename mapping (files served from /public folder)
-const COMPANY_LOGO_MAP = {
-  "Rizan Jewellery": "/1710577642_1703923938_Rizan_jewellery.webp",
-  "Centriz": "/1710578900_1703769304_centriz.webp",
-  "Digitriz": "/1710578900_1703769304_digitriz.webp",
-  "City Medicals": "/1710578988_1703924346_citymedicals.webp",
-  "Regain": "/1710578988_1703924346_regain.webp",
-  "Peak": "/1710579133_1703924042_peak.webp",
-  "Rizan Trading": "/1716451857_1703923938_Rizan_trading.png",
-  "Puretouch": "/1716451857_1703923982_puretouch.png",
-  "Rizan GND": "/1716451857_rizan_gnd.png",
-  "Flyriz": "/1722933347_Flyriz-Logo_172X79_pxl-X-1x.png",
-  "Elevage": "/1731932446_elevage.png",
-  "Silver": "/1743670033_silver-logo.png",
-  "Leptis": "/logo-leptis.png",
-  "LEPTIS HYPERMARKET LLC": "/logo-leptis.png",
-};
-const DEFAULT_LOGO = "/1716451857_1703923982_puretouch.png";
+import { downloadPayslipPdf, getPayslipBranding } from "./payslipPdf.js";
 
 export default function PayslipModal({ show, onClose, record, companies = [] }) {
-    const payslipRef = useRef();
-
     if (!record) return null;
 
     const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary } = record;
-    const companyName = employee?.company || "LEPTIS HYPERMARKET LLC";
-    
-    // Find dynamic company object
-    const dynamicCompany = companies.find(c => c.name === companyName);
-    
-    // Use dynamic image if available, else fallback to hardcoded map or default
-    const companyLogoSrc = dynamicCompany?.image || COMPANY_LOGO_MAP[companyName] || DEFAULT_LOGO;
+    const { companyName, companyLogoSrc } = getPayslipBranding(record, companies);
     
     const monthName = record.month ? new Date(2000, record.month - 1).toLocaleString('default', { month: 'long' }) : '';
     const periodStr = `${monthName} ${record.year}`;
@@ -63,188 +34,9 @@ export default function PayslipModal({ show, onClose, record, companies = [] }) 
             maximumFractionDigits: 2
         });
 
-    // --- PDF GENERATION ---
     const handleDownloadPDF = async () => {
         try {
-            // 1. Create the content PDF using jsPDF
-            const contentDoc = new jsPDF();
-            const pageWidth = contentDoc.internal.pageSize.getWidth();
-            // const pageHeight = contentDoc.internal.pageSize.getHeight();
-
-            // Note: We leave space for the letterhead header/footer
-            // Let's assume content starts at 50mm and ends before 260mm
-
-            // Title
-            contentDoc.setFontSize(16);
-            contentDoc.setTextColor(40);
-            contentDoc.text("PAYSLIP", pageWidth / 2, 55, { align: 'center' });
-
-            contentDoc.setFontSize(12);
-            contentDoc.setTextColor(100);
-            contentDoc.text(`Period: ${periodStr}`, pageWidth / 2, 61, { align: 'center' });
-
-            // 2. Employee Details
-            contentDoc.setFontSize(10);
-            contentDoc.setTextColor(0);
-
-            const startY = 70;
-            // Details Box
-            contentDoc.setDrawColor(240);
-            contentDoc.setFillColor(250, 250, 250);
-            contentDoc.rect(14, startY - 5, pageWidth - 28, 25, 'F');
-
-            // Left Column
-            contentDoc.setFont("helvetica", "normal");
-            contentDoc.text("Employee Name:", 20, startY + 2);
-            contentDoc.setFont("helvetica", "bold");
-            contentDoc.text(employee?.name || "Unknown", 55, startY + 2);
-
-            contentDoc.setFont("helvetica", "normal");
-            contentDoc.text("Designation:", 20, startY + 10);
-            contentDoc.setFont("helvetica", "bold");
-            contentDoc.text(employee?.designation || "N/A", 55, startY + 10);
-
-            // Right Column
-            contentDoc.setFont("helvetica", "normal");
-            contentDoc.text("Employee ID:", pageWidth / 2 + 10, startY + 2);
-            contentDoc.setFont("helvetica", "bold");
-            contentDoc.text(employee?.code || "N/A", pageWidth / 2 + 50, startY + 2);
-
-            contentDoc.setFont("helvetica", "normal");
-            contentDoc.text("Department:", pageWidth / 2 + 10, startY + 10);
-            contentDoc.setFont("helvetica", "bold");
-            contentDoc.text(employee?.department || "N/A", pageWidth / 2 + 50, startY + 10);
-
-            // 3. Attendance Summary
-            autoTable(contentDoc, {
-                startY: startY + 25,
-                head: [['Total Days', 'Present', 'Absent', 'Late', 'Overtime (Hrs)']],
-                body: [[
-                    attendanceSummary?.totalDays || 30,
-                    attendanceSummary?.daysPresent || 0,
-                    attendanceSummary?.daysAbsent || 0,
-                    attendanceSummary?.late || 0,
-                    attendanceSummary?.overtimeHours || 0
-                ]],
-                theme: 'plain',
-                styles: { fontSize: 9, cellPadding: 2, halign: 'center' },
-                headStyles: { fillColor: [240, 240, 240], textColor: 50, fontStyle: 'bold' }
-            });
-
-            // 4. Earnings & Deductions Table
-            const earningsRows = [
-                ['Basic Salary', basicSalary.toLocaleString()],
-                ...(allowances || []).map(a => [a.name, a.amount.toLocaleString()])
-            ];
-
-            const deductionRows = [
-                ...displayDeductions.map(d => [d.name, d.amount.toLocaleString()])
-            ];
-
-            const maxLength = Math.max(earningsRows.length, deductionRows.length);
-            const tableBody = [];
-
-            for (let i = 0; i < maxLength; i++) {
-                const earn = earningsRows[i] || ['', ''];
-                const deduct = deductionRows[i] || ['', ''];
-                tableBody.push([earn[0], earn[1], deduct[0], deduct[1]]);
-            }
-
-            tableBody.push([
-                { content: 'Total Earnings', styles: { fontStyle: 'bold', fillColor: [249, 250, 251] } },
-                { content: grossEarnings.toLocaleString(), styles: { fontStyle: 'bold', halign: 'right', fillColor: [249, 250, 251] } },
-                { content: 'Total Deductions', styles: { fontStyle: 'bold', fillColor: [249, 250, 251] } },
-                { content: totalDeductions.toLocaleString(), styles: { fontStyle: 'bold', halign: 'right', fillColor: [249, 250, 251] } }
-            ]);
-
-            autoTable(contentDoc, {
-                startY: contentDoc.lastAutoTable.finalY + 10,
-                head: [['Earnings', 'Amount (AED)', 'Deductions', 'Amount (AED)']],
-                body: tableBody,
-                theme: 'grid',
-                headStyles: { fillColor: [24, 45, 84], textColor: 255 },
-                styles: { fontSize: 9 },
-                columnStyles: {
-                    0: { cellWidth: 55 },
-                    1: { cellWidth: 35, halign: 'right' },
-                    2: { cellWidth: 55 },
-                    3: { cellWidth: 35, halign: 'right' }
-                }
-            });
-
-            // 5. Net Salary
-            const finalY = contentDoc.lastAutoTable.finalY + 8;
-
-            contentDoc.setFillColor(240, 253, 244);
-            contentDoc.rect(14, finalY, pageWidth - 28, 12, 'F');
-            contentDoc.setDrawColor(22, 163, 74);
-            contentDoc.rect(14, finalY, pageWidth - 28, 12, 'S');
-
-            contentDoc.setFontSize(11);
-            contentDoc.setTextColor(21, 128, 61);
-            contentDoc.setFont("helvetica", "bold");
-            contentDoc.text("NET SALARY PAYABLE", 20, finalY + 8);
-            contentDoc.text(`${netSalary.toLocaleString()} AED`, pageWidth - 20, finalY + 8, { align: 'right' });
-
-            // 6. Footer (Signatures)
-            const signatureY = finalY + 40; 
-            contentDoc.setTextColor(0);
-            contentDoc.setFontSize(9);
-            contentDoc.setFont("helvetica", "normal");
-
-            contentDoc.line(20, signatureY, 70, signatureY);
-            contentDoc.text("Employee Signature", 45, signatureY + 5, { align: 'center' });
-
-            contentDoc.line(pageWidth - 70, signatureY, pageWidth - 20, signatureY);
-            contentDoc.text("Employer Signature", pageWidth - 45, signatureY + 5, { align: 'center' });
-
-            // --- ADD DYNAMIC LOGO AT THE TOP ---
-            try {
-                // Fetch image and draw to canvas to normalize format (Webp to PNG) for jsPDF
-                const img = new Image();
-                img.crossOrigin = "Anonymous";
-                img.src = companyLogoSrc;
-                await new Promise((resolve) => {
-                    img.onload = resolve;
-                    img.onerror = resolve; // Continue even if logo fails
-                });
-
-                if (img.width > 0) {
-                    const canvas = document.createElement("canvas");
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext("2d");
-                    ctx.drawImage(img, 0, 0);
-                    const dataUrl = canvas.toDataURL("image/png");
-
-                    // Scale logo nicely
-                    const maxWidth = 50; 
-                    const maxHeight = 25;
-                    const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
-                    const finalW = img.width * ratio;
-                    const finalH = img.height * ratio;
-
-                    contentDoc.addImage(dataUrl, 'PNG', 14, 15, finalW, finalH);
-                    
-                    // Add Company Name next to logo
-                    contentDoc.setFontSize(16);
-                    contentDoc.setTextColor(40);
-                    contentDoc.setFont("helvetica", "bold");
-                    contentDoc.text(companyName.toUpperCase(), 14 + finalW + 5, 25);
-                } else {
-                    // Fallback if image totally fails to load
-                    contentDoc.setFontSize(18);
-                    contentDoc.setTextColor(40);
-                    contentDoc.setFont("helvetica", "bold");
-                    contentDoc.text(companyName.toUpperCase(), 14, 25);
-                }
-            } catch (imgError) {
-                console.error("Logo injection error", imgError);
-            }
-
-            // Save and download directly without merging
-            contentDoc.save(`Payslip_${employee?.name || 'Employee'}_${monthName}_${record.year}.pdf`);
-
+            await downloadPayslipPdf(record, companies);
         } catch (error) {
             console.error("Error generating PDF:", error);
             alert("Failed to generate PDF. Please try again.");
@@ -566,7 +358,7 @@ export default function PayslipModal({ show, onClose, record, companies = [] }) 
             `}
             </style>
             <div className="payslip-modal-stage">
-                <div ref={payslipRef} className="payslip-sheet">
+                <div className="payslip-sheet">
                     <div className="payslip-sheet__glow" />
 
                     <div className="payslip-sheet__header">

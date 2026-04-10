@@ -19,6 +19,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const resolveCompanyLogoPath = (companyImage) => {
+    if (!companyImage || /^https?:\/\//i.test(companyImage)) return null;
+
+    const normalized = String(companyImage).replace(/^\/+/, "");
+    const candidates = [
+        path.join(__dirname, "..", normalized),
+        path.join(__dirname, "..", "..", normalized),
+        path.join(__dirname, "..", "..", "hr_and_asset_mgt", "public", normalized),
+        path.join(__dirname, "..", "..", "hr_and_asset_mgt", "public", path.basename(normalized))
+    ];
+
+    return candidates.find((candidate) => {
+        const ext = path.extname(candidate).toLowerCase();
+        return [".png", ".jpg", ".jpeg"].includes(ext) && fs.existsSync(candidate);
+    }) || null;
+};
 
 const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month);
 
@@ -1654,6 +1672,10 @@ export const downloadPayslip = async (req, res) => {
 
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year } = payroll;
         const companyName = employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
+        const companyMaster = companyName
+            ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
+            : null;
+        const companyLogoPath = resolveCompanyLogoPath(companyMaster?.image || process.env.COMPANY_LOGO);
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         const periodStr = `${monthName} ${year}`;
         const totalAllowances = payroll.totalAllowances || 0;
@@ -1692,6 +1714,13 @@ export const downloadPayslip = async (req, res) => {
         const centerX = pageWidth / 2;
 
         // Title
+        if (companyLogoPath) {
+            try {
+                doc.image(companyLogoPath, 50, 112, { fit: [90, 46], align: "left", valign: "center" });
+            } catch (imageError) {
+                console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
+            }
+        }
         doc.fontSize(12).fillColor("#182d54").text(companyName, centerX - 140, 138, { align: "center", width: 280 });
         doc.fontSize(16).fillColor("#404040").text("PAYSLIP", centerX - 50, 155, { align: "center", width: 100 }); // Moved down to Y=155pt (approx 55mm)
         // doc.text(text, x, y, options)

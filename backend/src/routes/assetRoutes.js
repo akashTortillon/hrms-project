@@ -27,8 +27,10 @@ import {
 } from "../controllers/assignmentController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import upload from "../config/multer.js";
+import multer from "multer";
 
 const router = express.Router();
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 /* =========================
    IMPORT/EXPORT ROUTES
@@ -97,7 +99,7 @@ router.put("/:id/amc", protect, hasPermission("MANAGE_ASSETS"), updateAmcDetails
    DOCUMENT ROUTES
 ========================= */
 // Uploading asset docs should probably be restricted to managers
-router.post("/:id/documents", protect, hasPermission("MANAGE_ASSETS"), upload.single("document"), uploadDocument);
+router.post("/:id/documents", protect, hasPermission("MANAGE_ASSETS"), memoryUpload.single("document"), uploadDocument);
 router.delete("/:id/documents/:documentId", protect, hasPermission("MANAGE_ASSETS"), deleteDocument);
 router.get("/:id/documents/:documentId/download", protect, downloadDocument); // Viewing might be open
 

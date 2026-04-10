@@ -40,6 +40,7 @@ const EditIcon = () => (
 import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation, resetEmployeePassword } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
+import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
 
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
@@ -111,6 +112,14 @@ export default function EmployeeDetail() {
 
     // Leave Summary State
     const [leaveSummary, setLeaveSummary] = useState([]);
+    const [leaveSummaryTotals, setLeaveSummaryTotals] = useState({
+        sick: 0,
+        casual: 0,
+        annual: 0,
+        unpaid: 0,
+        approvedDays: 0,
+        pendingRequests: 0
+    });
     const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
     const [leaveSummaryYear, setLeaveSummaryYear] = useState(new Date().getFullYear());
 
@@ -245,9 +254,17 @@ export default function EmployeeDetail() {
         setLeaveSummaryLoading(true);
         try {
             const params = { year };
-            if (!isSelf) params.userId = effectiveId;
+            if (!isSelf) params.employeeId = effectiveId;
             const res = await getLeaveSummary(params);
             setLeaveSummary(res.data || []);
+            setLeaveSummaryTotals(res.totals || {
+                sick: 0,
+                casual: 0,
+                annual: 0,
+                unpaid: 0,
+                approvedDays: 0,
+                pendingRequests: 0
+            });
         } catch (e) {
             console.error("Leave summary fetch error:", e);
         } finally {
@@ -318,6 +335,22 @@ export default function EmployeeDetail() {
             toast.error(error.response?.data?.message || "Failed to save repayment skip");
         } finally {
             setSavingLoanSkip(false);
+        }
+    };
+
+    const handleViewEmployeeDocument = async (document) => {
+        try {
+            if (document.fileUrl) {
+                window.open(document.fileUrl, "_blank", "noopener,noreferrer");
+                return;
+            }
+            const blob = await downloadEmployeeDocument(document._id);
+            const url = window.URL.createObjectURL(blob);
+            window.open(url, "_blank", "noopener,noreferrer");
+            setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+        } catch (error) {
+            console.error("Document view failed", error);
+            toast.error(error.response?.data?.message || "Failed to open document");
         }
     };
 
@@ -579,8 +612,16 @@ export default function EmployeeDetail() {
                                 <div>{employee.designation || "N/A"}</div>
                             </div>
                             <div className="info-group">
-                                <label>Labor Card No</label>
-                                <div>{employee.laborCardNumber || "N/A"}</div>
+                                <label>Labour Cards</label>
+                                <div>
+                                    {Array.isArray(employee.laborCards) && employee.laborCards.length > 0
+                                        ? employee.laborCards.map((card, index) => (
+                                            <span key={`${card.number}-${index}`} style={{ display: 'block' }}>
+                                                {card.number || "N/A"}{card.expiryDate ? ` - Exp: ${new Date(card.expiryDate).toISOString().split("T")[0]}` : ""}
+                                            </span>
+                                        ))
+                                        : (employee.laborCardNumber || "N/A")}
+                                </div>
                             </div>
                             <div className="info-group">
                                 <label>Agent ID (WPS)</label>
@@ -609,6 +650,22 @@ export default function EmployeeDetail() {
                             <div className="info-group">
                                 <label>Accommodation</label>
                                 <div>{employee.accommodation || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa Company</label>
+                                <div>{employee.visaCompany || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Work Permit Company</label>
+                                <div>{employee.workPermitCompany || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa No</label>
+                                <div>{employee.visaNo || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa File No</label>
+                                <div>{employee.visaFileNo || "N/A"}</div>
                             </div>
                             <div className="info-group">
                                 <label>Visa Expiry</label>
@@ -716,13 +773,13 @@ export default function EmployeeDetail() {
                                         }}>
                                             {doc.status}
                                         </span>
-                                        <a
-                                            href={`${import.meta.env.VITE_API_BASE.replace(/\/api$/, '')}/${doc.filePath.replace(/\\/g, '/')}`}
-                                            target="_blank" rel="noopener noreferrer"
-                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer' }}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleViewEmployeeDocument(doc)}
+                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
                                         >
                                             View
-                                        </a>
+                                        </button>
                                         {/* Optional Delete Button */}
                                     </div>
                                 </div>
@@ -1012,11 +1069,18 @@ export default function EmployeeDetail() {
                                     setLeaveSummaryYear(yr);
                                     setLeaveSummaryLoading(true);
                                     try {
-                                        const user = JSON.parse(localStorage.getItem('user') || '{}');
                                         const params = { year: yr };
-                                        if (!isSelf && effectiveId) params.userId = effectiveId;
+                                        if (!isSelf && effectiveId) params.employeeId = effectiveId;
                                         const res = await getLeaveSummary(params);
                                         setLeaveSummary(res.data || []);
+                                        setLeaveSummaryTotals(res.totals || {
+                                            sick: 0,
+                                            casual: 0,
+                                            annual: 0,
+                                            unpaid: 0,
+                                            approvedDays: 0,
+                                            pendingRequests: 0
+                                        });
                                     } catch (err) { console.error(err); }
                                     finally { setLeaveSummaryLoading(false); }
                                 }}
@@ -1024,6 +1088,22 @@ export default function EmployeeDetail() {
                             >
                                 {[2026, 2025, 2024, 2023].map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '18px' }}>
+                            {[
+                                ["Sick Leave", leaveSummaryTotals.sick, "#e0f2fe", "#0369a1"],
+                                ["Casual Leave", leaveSummaryTotals.casual, "#dcfce7", "#166534"],
+                                ["Annual Leave", leaveSummaryTotals.annual, "#fef3c7", "#92400e"],
+                                ["Unpaid Leave", leaveSummaryTotals.unpaid, "#fee2e2", "#991b1b"],
+                                ["Approved Days", leaveSummaryTotals.approvedDays, "#ede9fe", "#5b21b6"],
+                                ["Pending Requests", leaveSummaryTotals.pendingRequests, "#f1f5f9", "#334155"]
+                            ].map(([label, value, bg, color]) => (
+                                <div key={label} style={{ background: bg, border: '1px solid rgba(15,23,42,0.06)', borderRadius: '14px', padding: '14px 16px' }}>
+                                    <div style={{ fontSize: '12px', color, fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                                    <div style={{ fontSize: '24px', color, fontWeight: '800', marginTop: '6px' }}>{Number(value || 0)}</div>
+                                </div>
+                            ))}
                         </div>
 
                         {leaveSummaryLoading ? (

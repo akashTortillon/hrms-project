@@ -3,13 +3,14 @@ import "../../style/SubmitRequestModal.css";
 
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
-import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
+import { leaveTypeService, repaymentPeriodService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
 import { toast } from "react-toastify";
 
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
+  const [repaymentPeriods, setRepaymentPeriods] = useState([]);
   const [medicalFile, setMedicalFile] = useState(null);
 
   // ✅ NEW: SubType state for Salary requests
@@ -29,9 +30,22 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
   const [salaryForm, setSalaryForm] = useState({
     amount: "",
-    repaymentPeriod: "3 Months",
+    repaymentPeriod: "",
     reason: ""
   });
+
+  const fallbackRepaymentPeriods = [
+    { _id: "fallback-1", name: "1 Month", metadata: { months: 1 } },
+    { _id: "fallback-3", name: "3 Months", metadata: { months: 3 } },
+    { _id: "fallback-6", name: "6 Months", metadata: { months: 6 } },
+    { _id: "fallback-12", name: "12 Months", metadata: { months: 12 } }
+  ];
+
+  const repaymentPeriodOptions = repaymentPeriods.length > 0 ? repaymentPeriods : fallbackRepaymentPeriods;
+  const getRepaymentMonths = (period) => {
+    const months = Number(period.metadata?.months ?? period.value ?? parseInt(period.name, 10));
+    return Number.isFinite(months) && months > 0 ? months : 1;
+  };
 
   const [documentForm, setDocumentForm] = useState({
     documentType: "Salary Certificate",
@@ -57,6 +71,29 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
       }
     };
     fetchLeaveTypes();
+  }, []);
+
+  useEffect(() => {
+    const fetchRepaymentPeriods = async () => {
+      try {
+        const data = await repaymentPeriodService.getAll();
+        const periods = Array.isArray(data) ? data : [];
+        setRepaymentPeriods(periods);
+        const firstPeriod = periods[0] || fallbackRepaymentPeriods[1];
+        setSalaryForm(prev => ({
+          ...prev,
+          repaymentPeriod: String(getRepaymentMonths(firstPeriod))
+        }));
+      } catch (error) {
+        console.error("Failed to fetch repayment periods:", error);
+        setRepaymentPeriods([]);
+        setSalaryForm(prev => ({
+          ...prev,
+          repaymentPeriod: String(getRepaymentMonths(fallbackRepaymentPeriods[1]))
+        }));
+      }
+    };
+    fetchRepaymentPeriods();
   }, []);
 
   const handleSubmit = async () => {
@@ -100,7 +137,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           subType: salarySubType,
           details: {
           amount: salaryForm.amount,
-          repaymentPeriod: salarySubType === "salary_advance" ? "1 Month" : salaryForm.repaymentPeriod,
+          repaymentPeriod: salarySubType === "salary_advance" ? "1" : salaryForm.repaymentPeriod,
           reason: salaryForm.reason
           }
         };
@@ -136,7 +173,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         });
         setSalaryForm({
           amount: "",
-          repaymentPeriod: "3 Months",
+          repaymentPeriod: String(getRepaymentMonths(repaymentPeriodOptions[0] || fallbackRepaymentPeriods[1])),
           reason: ""
         });
         setDocumentForm({
@@ -443,9 +480,14 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   }}
                 >
                   <option value="" disabled>Select Period</option>
-                  <option value="3 Months">3 Months</option>
-                  <option value="6 Months">6 Months</option>
-                  <option value="9 Months">9 Months</option>
+                  {repaymentPeriodOptions.map((period) => {
+                    const months = getRepaymentMonths(period);
+                    return (
+                      <option key={period._id || period.name} value={months}>
+                        {period.name || `${months} Month${months > 1 ? "s" : ""}`}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}

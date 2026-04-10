@@ -19,35 +19,24 @@ const StatusBadge = ({ status }) => {
 const DocumentsTable = ({ documents = [], onDelete }) => {
   const getFileUrl = (path) => {
     if (!path) return "#";
-    // Ensure correct URL construction. Backend serves uploads at /uploads
-    // path from DB is like "uploads/file.pdf"
-    const backendUrl = import.meta.env.VITE_API_BASE.replace("/api", "");
-    // If VITE_API_BASE is "http://localhost:5000/api", then we want "http://localhost:5000"
-    // But currently check your .env. Likely http://localhost:5000/api
-
-    // Safer way: assume VITE_API_BASE is just the base, e.g. http://localhost:5000
-    // If path is "uploads/foo.pdf", we want http://localhost:5000/uploads/foo.pdf
-
-    // Let's assume path is relative.
-    return `${import.meta.env.VITE_API_BASE.replace('/api', '')}/${path}`;
+    const apiOrigin = (import.meta.env.VITE_API_BASE || "").replace(/\/api\/?$/, "");
+    return `${apiOrigin}/${String(path).replace(/^\/+/, "")}`;
   };
 
-  const handleDownload = async (url, filename) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
+  const openUrl = (url, filename, shouldDownload = false) => {
+    if (!url) return;
+    const link = document.createElement('a');
+    link.href = url;
+    if (shouldDownload) link.download = filename || 'document';
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename || 'document';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      console.error("Download failed", error);
-    }
+  const handleDownload = (url, filename) => {
+    openUrl(url, filename, true);
   };
 
   const columns = [
@@ -114,19 +103,24 @@ const DocumentsTable = ({ documents = [], onDelete }) => {
       render: (row) => (
         <div className="action-icons">
           <a
-            href={getFileUrl(row.filePath)}
+            href={row.fileUrl || getFileUrl(row.filePath)}
             target="_blank"
             rel="noopener noreferrer"
             className="primary"
             style={{ cursor: 'pointer' }}
             title="View"
+            onClick={(event) => {
+              if (!row.fileUrl && row.isPersonal) {
+                event.preventDefault();
+              }
+            }}
           >
             <SvgIcon name="eye" size={18} />
           </a>
 
           <span
             onClick={() => {
-              const url = getFileUrl(row.filePath);
+              const url = row.fileUrl || getFileUrl(row.filePath);
               // Extract extension or default to .pdf
               const ext = row.filePath?.split('.').pop() || 'pdf';
               const filename = `${row.title}.${ext}`;
@@ -139,14 +133,16 @@ const DocumentsTable = ({ documents = [], onDelete }) => {
             <SvgIcon name="download" size={18} />
           </span>
 
-          <span
-            className="danger"
-            onClick={() => onDelete(row._id || row.id)}
-            style={{ cursor: 'pointer' }}
-            title="Delete"
-          >
-            <SvgIcon name="delete" size={18} />
-          </span>
+          {onDelete && (
+            <span
+              className="danger"
+              onClick={() => onDelete(row._id || row.id)}
+              style={{ cursor: 'pointer' }}
+              title="Delete"
+            >
+              <SvgIcon name="delete" size={18} />
+            </span>
+          )}
         </div>
       ),
     },

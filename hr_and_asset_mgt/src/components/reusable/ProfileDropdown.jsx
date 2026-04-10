@@ -54,13 +54,15 @@ export default function ProfileDropdown({
         >
           My Profile
         </button>
-        <button
-          className="profile-dropdown__item"
-          type="button"
-          onClick={() => onSettings?.()}
-        >
-          Settings
-        </button>
+        {onSettings && (
+          <button
+            className="profile-dropdown__item"
+            type="button"
+            onClick={() => onSettings?.()}
+          >
+            Settings
+          </button>
+        )}
         <div className="profile-dropdown__divider" />
         <button
           className="profile-dropdown__item profile-dropdown__item--danger"
@@ -73,7 +75,6 @@ export default function ProfileDropdown({
     </div>
   );
 }
-
 
 
 

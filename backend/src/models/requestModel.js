@@ -40,10 +40,14 @@ const requestSchema = new mongoose.Schema(
     },
     currentApprovalStage: {
       type: String,
-      enum: ["MANAGER", "HR", "COMPLETED"],
+      enum: ["MANAGER", "FINANCE", "HR", "COMPLETED"],
       default: "HR"
     },
     managerApproval: {
+      type: approvalStageSchema,
+      default: () => ({ status: "PENDING" })
+    },
+    financeApproval: {
       type: approvalStageSchema,
       default: () => ({ status: "PENDING" })
     },
@@ -56,10 +60,15 @@ const requestSchema = new mongoose.Schema(
       ref: "User",
       default: null
     },
+    designatedFinanceManager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
 
     status: {
       type: String,
-      enum: ["PENDING", "MANAGER_APPROVED", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],
+      enum: ["PENDING", "MANAGER_APPROVED", "FINANCE_APPROVED", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],
       default: "PENDING"
     },
     submittedAt: {

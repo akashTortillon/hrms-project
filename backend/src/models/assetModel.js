@@ -96,6 +96,15 @@ const documentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  fileUrl: {
+    type: String,
+    default: ""
+  },
+  storage: {
+    type: String,
+    enum: ["LOCAL", "S3"],
+    default: "S3"
+  },
   uploadedAt: {
     type: Date,
     default: Date.now

@@ -29,3 +29,10 @@ export const uploadMyDocument = async (formData) => {
     });
     return res.data;
 };
+
+export const downloadEmployeeDocument = async (documentId) => {
+    const res = await api.get(`${BASE_URL}/${documentId}/download`, {
+        responseType: "blob"
+    });
+    return res.data;
+};

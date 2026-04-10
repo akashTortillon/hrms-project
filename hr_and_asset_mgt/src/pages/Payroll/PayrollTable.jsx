@@ -5,6 +5,7 @@ import AdjustmentModal from "./AdjustmentModal";
 import CTCModal from "./CTCModal.jsx";
 import { toast } from "react-toastify";
 import { payrollService } from "../../services/payrollService";
+import { downloadPayslipPdf } from "./payslipPdf.js";
 
 export default function PayrollEmployeesTable({ employees = [], loading, onRefresh, isFinalized, onExport, activeTab, setActiveTab, companies = [] }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -56,6 +57,17 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
     setActiveMenu(null);
   };
 
+  const handleDownloadPdf = async (record) => {
+    try {
+      setActiveMenu(null);
+      await downloadPayslipPdf(record, companies);
+      toast.success("Payslip PDF downloaded");
+    } catch (err) {
+      console.error("Failed to download payslip PDF", err);
+      toast.error("Failed to download payslip PDF");
+    }
+  };
+
   return (
     <>
       <div className="payroll-list-table-wrapper">
@@ -92,6 +104,7 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
                    {activeMenu === record._id && (
                      <div className="p-action-dropdown">
                         <button onClick={() => handleView(record)}>View Details</button>
+                        <button onClick={() => handleDownloadPdf(record)}>Download PDF</button>
                         <button onClick={() => handleAdjust(record)}>
                            {isFinalized ? 'View Adjustments' : 'Adjustments'}
                         </button>

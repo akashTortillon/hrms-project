@@ -158,6 +158,7 @@ import Employee from "../models/employeeModel.js";
 import fs from "fs";
 import path from "path";
 import XLSX from "xlsx";
+import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 
 // Generate next asset code (AST001, AST002, etc.)
 const generateAssetCode = async () => {
@@ -901,10 +902,18 @@ export const uploadDocument = async (req, res) => {
       return res.status(404).json({ message: "Asset not found" });
     }
 
+    const storedFile = await storeUploadedFile({
+      file: req.file,
+      folder: "asset-documents",
+      preferS3: true
+    });
+
     const document = {
       type,
       fileName: req.file.originalname,
-      filePath: req.file.path,
+      filePath: storedFile.filePath,
+      fileUrl: storedFile.fileUrl,
+      storage: storedFile.storage,
       uploadedBy: req.user.id,
       uploadedAt: new Date()
     };
@@ -940,10 +949,7 @@ export const deleteDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Delete file from filesystem
-    if (fs.existsSync(document.filePath)) {
-      fs.unlinkSync(document.filePath);
-    }
+    deleteStoredFile(document.filePath, document.storage);
 
     asset.documents.pull(documentId);
     await asset.save();
@@ -970,6 +976,10 @@ export const downloadDocument = async (req, res) => {
     const document = asset.documents.id(documentId);
     if (!document) {
       return res.status(404).json({ message: "Document not found" });
+    }
+
+    if (document.storage === "S3") {
+      return res.redirect(await getSignedFileUrl(document.toObject ? document.toObject() : document));
     }
 
     if (!fs.existsSync(document.filePath)) {

@@ -2,8 +2,11 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const LOCAL_ROOT = path.resolve("uploads");
+let s3Client = null;
 
 const ensureDir = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
@@ -33,11 +36,24 @@ const buildPublicUrl = ({ bucket, region, key, endpoint }) => {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 };
 
+const getS3Client = () => {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: process.env.AWS_REGION || "eu-north-1",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+  return s3Client;
+};
+
 const uploadToS3 = async ({ buffer, mimeType, key }) => {
   const accessKey = process.env.AWS_ACCESS_KEY_ID;
   const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
-  const bucket = process.env.AWS_S3_BUCKET;
-  const region = process.env.AWS_REGION || "ap-south-1";
+  const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
+  const region = process.env.AWS_REGION || "eu-north-1";
   const endpoint = process.env.AWS_S3_ENDPOINT || "";
 
   if (!accessKey || !secretKey || !bucket) {
@@ -132,9 +148,13 @@ export const storeUploadedFile = async ({ file, folder = "employee", preferS3 = 
   if (preferS3) {
     try {
       const key = `${folder}/${Date.now()}-${sanitizeFileName(originalName)}`;
-      return await uploadToS3({ buffer, mimeType, key });
+      const stored = await uploadToS3({ buffer, mimeType, key });
+      if (file.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+      return stored;
     } catch (error) {
-      return storeLocally({ buffer, originalName, folder });
+      throw error;
     }
   }
 
@@ -150,4 +170,19 @@ export const deleteStoredFile = (filePath, storage = "LOCAL") => {
   if (fs.existsSync(absolutePath)) {
     fs.unlinkSync(absolutePath);
   }
+};
+
+export const getSignedFileUrl = async ({ filePath, fileUrl, storage = "LOCAL", expiresIn = 60 * 60 * 12 }) => {
+  if (storage !== "S3") {
+    return fileUrl || (filePath ? `/${String(filePath).replace(/^\/+/, "")}` : "");
+  }
+
+  const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
+  if (!bucket || !filePath) {
+    return fileUrl || "";
+  }
+
+  const key = String(filePath).replace(/^\/+/, "");
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+  return getSignedUrl(getS3Client(), command, { expiresIn });
 };

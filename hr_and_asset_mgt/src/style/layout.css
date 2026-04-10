@@ -933,8 +933,8 @@ body {
   position: absolute !important;
   top: calc(100% + 8px) !important;
   right: 0 !important;
-  width: 380px !important;
-  max-width: 450px !important;
+  width: 440px !important;
+  max-width: min(480px, calc(100vw - 24px)) !important;
   border-radius: 14px !important;
   padding: 0 !important;
   background: #ffffff !important;
@@ -1053,6 +1053,15 @@ body {
   font-weight: 500;
   margin-bottom: 3px;
   line-height: 1.4;
+}
+
+.notification-item-message {
+  color: #475569;
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .notification-item.unread .notification-item-title {

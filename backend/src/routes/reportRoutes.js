@@ -6,6 +6,7 @@ import {
     getDocumentExpiryReport,
     getAssetDepreciationReport,
     getPayrollSummaryReport,
+    getBranchWiseEmployeeReport,
     generateCustomReport,
     getSchedules,
     createSchedule,
@@ -37,6 +38,7 @@ router.get("/asset-depreciation", getAssetDepreciationReport);
 
 // Payroll Reports
 router.get("/payroll-summary", getPayrollSummaryReport);
+router.get("/employees/branch-wise", getBranchWiseEmployeeReport);
 
 // Dashboard Stats
 router.get("/stats", getReportStats);

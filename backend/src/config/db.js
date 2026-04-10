@@ -9,6 +9,11 @@ const ensureDefaultRoles = async () => {
       name: "Manager",
       description: "Line manager with first-level leave approval access",
       permissions: ["VIEW_DASHBOARD", "VIEW_ALL_EMPLOYEES", "APPROVE_MANAGER_REQUESTS"]
+    },
+    {
+      name: "Finance Manager",
+      description: "Finance approver for loan and salary advance requests before HR review",
+      permissions: ["VIEW_DASHBOARD", "VIEW_ALL_EMPLOYEES", "APPROVE_FINANCE_REQUESTS"]
     }
   ];
 

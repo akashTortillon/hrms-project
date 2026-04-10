@@ -1,7 +1,44 @@
 import EmployeeDocument from "../models/employeeDocumentModel.js";
 import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
-import { deleteStoredFile, storeUploadedFile } from "../utils/storage.js";
+import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
+
+const isDocumentManager = (user = {}) =>
+    user.role === "Admin"
+    || user.role === "HR"
+    || user.role === "HR Admin"
+    || user.permissions?.includes("ALL")
+    || user.permissions?.includes("MANAGE_DOCUMENTS");
+
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const resolveEmployeeIdForUser = async (user) => {
+    if (user.employeeId) return user.employeeId;
+
+    if (!user.email) return null;
+
+    const employee = await Employee.findOne({
+        email: { $regex: new RegExp(`^${escapeRegex(user.email)}$`, "i") }
+    }).select("_id");
+
+    if (employee?._id) {
+        await User.findByIdAndUpdate(user._id, { employeeId: employee._id });
+    }
+
+    return employee?._id || null;
+};
+
+const canAccessDocument = async (user, document) => {
+    if (isDocumentManager(user)) return true;
+    const employeeId = await resolveEmployeeIdForUser(user);
+    return employeeId && document.employeeId?.toString() === employeeId.toString();
+};
+
+const attachSignedFileUrl = async (document) => {
+    const item = document.toObject ? document.toObject() : { ...document };
+    item.fileUrl = await getSignedFileUrl(item);
+    return item;
+};
 
 // Add Document
 export const addDocument = async (req, res) => {
@@ -14,8 +51,6 @@ export const addDocument = async (req, res) => {
         }
 
         if (!employeeId || !documentType) {
-            // Clean up file if validation fails
-            fs.unlinkSync(file.path);
             return res.status(400).json({ message: "Employee ID and Document Type are required" });
         }
 
@@ -37,7 +72,7 @@ export const addDocument = async (req, res) => {
         const storedFile = await storeUploadedFile({
             file,
             folder: "employee-documents",
-            preferS3: false
+            preferS3: true
         });
 
         const newDoc = await EmployeeDocument.create({
@@ -123,11 +158,43 @@ export const uploadMyDocument = async (req, res) => {
 export const getEmployeeDocuments = async (req, res) => {
     try {
         const { employeeId } = req.params;
+        const canManage = isDocumentManager(req.user);
+        const ownEmployeeId = await resolveEmployeeIdForUser(req.user);
+        const isSelf = ownEmployeeId && ownEmployeeId.toString() === employeeId;
+
+        if (!canManage && !isSelf) {
+            return res.status(403).json({ message: "You can only view your own documents" });
+        }
+
         const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
-        res.json(documents);
+        res.json(await Promise.all(documents.map(attachSignedFileUrl)));
     } catch (error) {
         // console.error("Get Employee Docs Error:", error);
         res.status(500).json({ message: "Server error" });
+    }
+};
+
+export const downloadEmployeeDocument = async (req, res) => {
+    try {
+        const { documentId } = req.params;
+        const document = await EmployeeDocument.findById(documentId);
+
+        if (!document) {
+            return res.status(404).json({ message: "Document not found" });
+        }
+
+        const allowed = await canAccessDocument(req.user, document);
+        if (!allowed) {
+            return res.status(403).json({ message: "You do not have access to this document" });
+        }
+
+        if (document.storage === "S3") {
+            return res.redirect(await getSignedFileUrl(document.toObject ? document.toObject() : document));
+        }
+
+        return res.status(404).json({ message: "Document URL is not available" });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to download document" });
     }
 };
 
@@ -159,7 +226,7 @@ export const getMyDocuments = async (req, res) => {
 
         const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
         // console.log(`[DEBUG] Found ${documents.length} documents for employee ${employeeId}`);
-        res.json(documents);
+        res.json(await Promise.all(documents.map(attachSignedFileUrl)));
     } catch (error) {
         // console.error("Get My Docs Error:", error);
         res.status(500).json({ message: "Server error while fetching personal documents" });

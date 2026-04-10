@@ -4,7 +4,8 @@ import {
     addItem,
     updateItem,
     deleteItem,
-    cleanupMasterData
+    cleanupMasterData,
+    getCompanyLogoProxy
 } from "../controllers/masterController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
@@ -19,6 +20,7 @@ router.post("/system/cleanup", cleanupMasterData);
 router.use(protect);
 
 // Routes
+router.get("/companies/:id/logo", getCompanyLogoProxy);
 router.get("/:type", (req, res, next) => {
     const sensitiveTypes = ["roles", "payroll-rules", "workflow-templates"];
     if (sensitiveTypes.includes(req.params.type)) {

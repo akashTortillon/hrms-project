@@ -136,7 +136,7 @@ const WorkflowTab = ({ employeeId, type }) => {
                             {/* File Link if Uploaded */}
                             {item.documentUrl && (
                                 <a
-                                    href={`${import.meta.env.VITE_API_BASE || "http://localhost:5000"}${item.documentUrl}`}
+                                    href={`${(import.meta.env.VITE_API_BASE || "http://localhost:5000").replace(/\/api\/?$/, "")}${item.documentUrl}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="view-doc-link"

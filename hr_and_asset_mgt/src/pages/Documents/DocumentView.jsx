@@ -154,6 +154,7 @@ function Documents() {
         status: doc.status,
         daysLeft: daysLeft,
         filePath: doc.filePath,
+        fileUrl: doc.fileUrl,
         isPersonal: false
       };
     });
@@ -184,6 +185,7 @@ function Documents() {
         status: doc.status || "Valid",
         daysLeft: daysLeft,
         filePath: doc.filePath,
+        fileUrl: doc.fileUrl,
         isPersonal: true
       };
     });

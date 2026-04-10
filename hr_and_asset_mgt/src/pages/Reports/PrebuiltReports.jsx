@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../../api/apiClient";
 import { toast } from "react-toastify";
 import jsPDF from "jspdf";
@@ -8,6 +8,7 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
 import ScheduledReports from "./ScheduledReports";
+import { getBranches, getCompanies, getDepartments } from "../../services/masterService.js";
 import "../../style/Reports.css";
 
 const TABS = ["All", "HR", "Payroll", "Assets", "Documents", "Compliance", "Work Permit", "Work Visa"];
@@ -33,6 +34,20 @@ export default function PrebuiltReports() {
   const [reportData, setReportData] = useState([]);
   const [reportType, setReportType] = useState(""); // attendance | expiry | depreciation | payroll
   const [error, setError] = useState(null);
+  const [reportSummary, setReportSummary] = useState(null);
+  const [pagination, setPagination] = useState(null);
+  const [branchOptions, setBranchOptions] = useState([]);
+  const [companyOptions, setCompanyOptions] = useState([]);
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [branchReportFilters, setBranchReportFilters] = useState({
+    branch: "All Branches",
+    company: "All Companies",
+    department: "All Departments",
+    status: "All Status",
+    search: "",
+    page: 1,
+    limit: 10
+  });
 
   /** 🔁 Report Mode (for Attendance) */
   const [mode, setMode] = useState("monthly"); // daily | monthly
@@ -46,6 +61,18 @@ export default function PrebuiltReports() {
   const [year, setYear] = useState(currentDate.getFullYear());
   const [days, setDays] = useState(30);
 
+  useEffect(() => {
+    Promise.all([getBranches(), getCompanies(), getDepartments()])
+      .then(([branches, companies, departments]) => {
+        setBranchOptions(Array.isArray(branches) ? branches : []);
+        setCompanyOptions(Array.isArray(companies) ? companies : []);
+        setDepartmentOptions(Array.isArray(departments) ? departments : []);
+      })
+      .catch((masterError) => {
+        console.error("Failed to load report masters", masterError);
+      });
+  }, []);
+
   const handleGenerate = async (type) => {
     if (loading) return;
 
@@ -54,6 +81,8 @@ export default function PrebuiltReports() {
       setError(null);
       setReportData([]);
       setReportType(type);
+      setReportSummary(null);
+      setPagination(null);
 
       let url = "";
 
@@ -73,11 +102,31 @@ export default function PrebuiltReports() {
         url = `/employees?limit=1000`;
       } else if (type === "work-visa") {
         url = `/employees?limit=1000`;
+      } else if (type === "branch-wise-employees") {
+        const params = new URLSearchParams();
+        if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+        if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+        if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+        if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+        if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+        params.set("page", String(branchReportFilters.page || 1));
+        params.set("limit", String(branchReportFilters.limit || 10));
+        url = `/reports/employees/branch-wise?${params.toString()}`;
       }
 
       const response = await api.get(url);
 
-      if (response.data.success) {
+      if (type === "branch-wise-employees" && response.data.success) {
+        const data = response.data.data || [];
+        if (!data.length) {
+          toast.warning("No employees found for the selected filters");
+        } else {
+          toast.success("Branch-wise employee report generated");
+        }
+        setReportData(data);
+        setReportSummary(response.data.summary || null);
+        setPagination(response.data.pagination || null);
+      } else if (response.data.success) {
         const data = response.data.data || [];
         if (!data.length) {
           toast.warning("No data found for selected period");
@@ -124,6 +173,15 @@ export default function PrebuiltReports() {
       url = `/reports/payroll-summary?month=${month}&year=${year}&export=true`;
     } else if (reportType === "wps") {
       url = `/reports/compliance/wps-sif?month=${month}&year=${year}`;
+    } else if (reportType === "branch-wise-employees") {
+      const params = new URLSearchParams();
+      if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+      if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+      if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+      if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+      if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+      params.set("export", "true");
+      url = `/reports/employees/branch-wise?${params.toString()}`;
     }
 
     if (url) {
@@ -139,6 +197,7 @@ export default function PrebuiltReports() {
           if (reportType === "wps") filename = "WPS_SIF.sif";
           else if (reportType === "attendance") filename = `Attendance_${mode}_${date || `${month}_${year}`}.xlsx`;
           else if (reportType === "payroll") filename = `Payroll_${month}_${year}.xlsx`;
+          else if (reportType === "branch-wise-employees") filename = "Branch_Wise_Employee_Report.xlsx";
 
           link.setAttribute('download', filename);
           document.body.appendChild(link);
@@ -190,6 +249,7 @@ export default function PrebuiltReports() {
         : reportType === "expiry" ? `Document Expiry Forecast - Next ${days} Days`
           : reportType === "depreciation" ? `Asset Depreciation Schedule`
             : reportType === "payroll" ? `Payroll Summary - ${MONTHS.find(m => m.value === month)?.label} ${year}`
+              : reportType === "branch-wise-employees" ? "Branch Wise Employee Report"
               : "HR Report";
 
       doc.setTextColor(17, 24, 39); // #111827
@@ -206,7 +266,8 @@ export default function PrebuiltReports() {
         attendance: ["Department", "Employees", "Present", "Absent", "Late", "Leave"],
         expiry: ["Type", "Owner", "Document", "Expiry Date", "Days Rem."],
         depreciation: ["Code", "Name", "Cost", "Annual Dep.", "Accumulated", "Book Value"],
-        payroll: ["Department", "Emps", "Basic", "Allowances", "Deductions", "Net Paid"]
+        payroll: ["Department", "Emps", "Basic", "Allowances", "Deductions", "Net Paid"],
+        "branch-wise-employees": ["Employee", "Code", "Company", "Branch", "Department", "Status"]
       };
 
       const tableData = reportData.map(row => {
@@ -214,6 +275,7 @@ export default function PrebuiltReports() {
         if (reportType === "expiry") return [row.type, row.owner, row.docType, new Date(row.expiryDate).toLocaleDateString(), `${row.daysRemaining} days`];
         if (reportType === "depreciation") return [row.assetCode, row.name, `AED ${row.purchaseCost}`, `AED ${row.annualDepreciation}`, `AED ${row.accumulatedDepreciation}`, `AED ${row.netBookValue}`];
         if (reportType === "payroll") return [row.department, row.employeeCount, `AED ${row.totalBasic}`, `AED ${row.totalAllowances}`, `AED ${row.totalDeductions}`, `AED ${row.totalNet}`];
+        if (reportType === "branch-wise-employees") return [row.name, row.code, row.company || "—", row.branch || "—", row.department || "—", row.status || "—"];
         return [];
       });
 
@@ -428,6 +490,58 @@ export default function PrebuiltReports() {
           </Card>
         )}
 
+        {(activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="users" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Branch-wise Employee Report</h4>
+            <p className="report-desc">Headcount and employee directory by branch with company, department, status, and payroll basis details.</p>
+            <div className="report-filters">
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.branch} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, branch: e.target.value, page: 1 }))}>
+                  <option>All Branches</option>
+                  {branchOptions.map((item) => <option key={`report-branch-${item._id || item.name}`} value={item.name}>{item.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.company} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, company: e.target.value, page: 1 }))}>
+                  <option>All Companies</option>
+                  {companyOptions.map((item) => <option key={`report-company-${item._id || item.name}`} value={item.name}>{item.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.department} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, department: e.target.value, page: 1 }))}>
+                  <option>All Departments</option>
+                  {departmentOptions.map((item) => <option key={`report-department-${item._id || item.name || item}`} value={item.name || item}>{item.name || item}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.status} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, status: e.target.value, page: 1 }))}>
+                  <option>All Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="Onboarding">Onboarding</option>
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <input
+                  type="text"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", boxSizing: "border-box" }}
+                  value={branchReportFilters.search}
+                  placeholder="Search employee, code, email..."
+                  onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, search: e.target.value, page: 1 }))}
+                />
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={() => handleGenerate("branch-wise-employees")} disabled={loading}>Generate</Button>
+            </div>
+          </Card>
+        )}
+
         {/* Document Expiry */}
         {(activeTab === "Documents" || activeTab === "All") && (
           <Card className="report-card">
@@ -467,7 +581,7 @@ export default function PrebuiltReports() {
         {(activeTab === "Assets" || activeTab === "All") && (
           <Card className="report-card">
             <div className="report-card-header">
-              <div className="report-icon"><SvgIcon name="dollar" size={22} /></div>
+              <div className="report-icon"><SvgIcon name="cube" size={22} /></div>
               <span className="report-tag">Assets</span>
             </div>
             <h4 className="report-title">Asset Depreciation Schedule</h4>
@@ -612,7 +726,7 @@ export default function PrebuiltReports() {
         {(activeTab === "Work Permit" || activeTab === "All") && (
           <Card className="report-card">
             <div className="report-card-header">
-              <div className="report-icon" style={{ background: '#eff6ff' }}>🔖</div>
+              <div className="report-icon" style={{ background: '#eff6ff' }}><SvgIcon name="briefcase" size={22} color="#1d4ed8" /></div>
               <span className="report-tag" style={{ background: '#dbeafe', color: '#1d4ed8' }}>HR</span>
             </div>
             <h4 className="report-title">Work Permit Report</h4>
@@ -627,7 +741,7 @@ export default function PrebuiltReports() {
         {(activeTab === "Work Visa" || activeTab === "All") && (
           <Card className="report-card">
             <div className="report-card-header">
-              <div className="report-icon" style={{ background: '#f0fdf4' }}>🛂</div>
+              <div className="report-icon" style={{ background: '#f0fdf4' }}><SvgIcon name="clipboard-list" size={22} color="#15803d" /></div>
               <span className="report-tag" style={{ background: '#dcfce7', color: '#15803d' }}>HR</span>
             </div>
             <h4 className="report-title">Work Visa Report</h4>
@@ -650,7 +764,25 @@ export default function PrebuiltReports() {
             {reportType === "wps" && `WPS Salary File Preview – ${MONTHS.find(m => m.value === month)?.label} ${year}`}
             {reportType === "work-permit" && '🔖 Work Permit Report'}
             {reportType === "work-visa" && '🛂 Work Visa Report'}
+            {reportType === "branch-wise-employees" && "Branch-wise Employee Report"}
           </h3>
+
+          {reportType === "branch-wise-employees" && reportSummary && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px", marginBottom: "18px" }}>
+              {[
+                { label: "Total Employees", value: reportSummary.totalEmployees || 0 },
+                { label: "Active", value: reportSummary.activeEmployees || 0 },
+                { label: "Onboarding", value: reportSummary.onboardingEmployees || 0 },
+                { label: "Branches", value: reportSummary.branchCount || 0 },
+                { label: "Departments", value: reportSummary.departmentCount || 0 }
+              ].map((item) => (
+                <div key={item.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "14px 16px" }}>
+                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#0f172a" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="report-table-wrapper">
             <table className="report-table">
@@ -711,6 +843,18 @@ export default function PrebuiltReports() {
                     <th>Department</th>
                     <th>{reportType === "work-permit" ? "Work Permit Company" : "Visa Company"}</th>
                     <th>Visa Expiry</th>
+                  </tr>
+                )}
+                {reportType === "branch-wise-employees" && (
+                  <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Company</th>
+                    <th>Branch</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Status</th>
+                    <th>Visa Base</th>
                   </tr>
                 )}
               </thead>
@@ -781,11 +925,84 @@ export default function PrebuiltReports() {
                         </td>
                       </>
                     )}
+                    {reportType === "branch-wise-employees" && (
+                      <>
+                        <td><strong>{row.name}</strong><div style={{ color: "#64748b", fontSize: "12px" }}>{row.email || "—"}</div></td>
+                        <td>{row.code}</td>
+                        <td>{row.company || "—"}</td>
+                        <td>{row.branch || "—"}</td>
+                        <td>{row.department || "—"}</td>
+                        <td>{row.designation || "—"}</td>
+                        <td>{row.status || "—"}</td>
+                        <td>AED {Number(row.visaBase || 0).toLocaleString()}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {reportType === "branch-wise-employees" && pagination && pagination.pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "16px" }}>
+              <div style={{ color: "#64748b", fontSize: "14px" }}>
+                Page {pagination.page} of {pagination.pages} • {pagination.total} employees
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (pagination.page > 1) {
+                      const nextPage = pagination.page - 1;
+                      setBranchReportFilters((prev) => ({ ...prev, page: nextPage }));
+                      const params = new URLSearchParams();
+                      if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+                      if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+                      if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+                      if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+                      if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+                      params.set("page", String(nextPage));
+                      params.set("limit", String(branchReportFilters.limit || 10));
+                      api.get(`/reports/employees/branch-wise?${params.toString()}`).then((response) => {
+                        if (response.data.success) {
+                          setReportData(response.data.data || []);
+                          setReportSummary(response.data.summary || null);
+                          setPagination(response.data.pagination || null);
+                        }
+                      });
+                    }
+                  }}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (pagination.page < pagination.pages) {
+                      const nextPage = pagination.page + 1;
+                      setBranchReportFilters((prev) => ({ ...prev, page: nextPage }));
+                      const params = new URLSearchParams();
+                      if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+                      if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+                      if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+                      if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+                      if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+                      params.set("page", String(nextPage));
+                      params.set("limit", String(branchReportFilters.limit || 10));
+                      api.get(`/reports/employees/branch-wise?${params.toString()}`).then((response) => {
+                        if (response.data.success) {
+                          setReportData(response.data.data || []);
+                          setReportSummary(response.data.summary || null);
+                          setPagination(response.data.pagination || null);
+                        }
+                      });
+                    }
+                  }}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
           <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
             <Button variant="outline" onClick={() => handleExport("excel")}>Export as Excel</Button>
             <Button variant="outline" onClick={() => handleExport("pdf")}>Export as PDF</Button>

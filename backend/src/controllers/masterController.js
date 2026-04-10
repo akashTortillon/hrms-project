@@ -13,6 +13,7 @@ const TYPE_MAPPING = {
     "nationalities": "NATIONALITY",
     "payroll-rules": "PAYROLL_RULE",
     "workflow-templates": "WORKFLOW_TEMPLATE",
+    "repayment-periods": "REPAYMENT_PERIOD",
     "shifts": "SHIFT",
 
     // Asset
@@ -28,6 +29,7 @@ const TYPE_MAPPING = {
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import dotenv from "dotenv";
+import fetch from "node-fetch";
 
 dotenv.config();
 
@@ -77,6 +79,42 @@ export const getItems = async (req, res) => {
         }
 
         res.status(200).json(signedItems);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const getCompanyLogoProxy = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const company = await Master.findById(id);
+
+        if (!company || company.type !== "COMPANY" || !company.image) {
+            return res.status(404).json({ message: "Company logo not found" });
+        }
+
+        const imageUrl = company.image.includes("amazonaws.com")
+            ? await (async () => {
+                const bucket = process.env.AWS_S3_BUCKET_NAME || process.env.AWS_S3_BUCKET || "kayzen";
+                const url = new URL(company.image);
+                let key = decodeURIComponent(url.pathname.substring(1));
+                if (key.startsWith(bucket + "/")) {
+                    key = key.substring(bucket.length + 1);
+                }
+                const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+                return getSignedUrl(getS3Client(), command, { expiresIn: 43200 });
+            })()
+            : company.image;
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+            return res.status(502).json({ message: "Failed to fetch company logo" });
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        res.setHeader("Content-Type", response.headers.get("content-type") || "image/png");
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.send(buffer);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

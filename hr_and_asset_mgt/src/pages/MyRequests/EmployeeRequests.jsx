@@ -21,6 +21,14 @@ const getStatusText = (req) => {
     return `Approved by ${managerName} on ${managerDate} and waiting for HR review`;
   }
 
+  if (req.status === "FINANCE_APPROVED") {
+    const financeName = req.financeApproval?.actedBy?.name || "Finance Manager";
+    const financeDate = req.financeApproval?.actedAt
+      ? new Date(req.financeApproval.actedAt).toLocaleDateString()
+      : "";
+    return `Approved by ${financeName} on ${financeDate} and waiting for HR review`;
+  }
+
   // Debug log
   console.log("getStatusText called for:", req.requestId, {
     status: req.status,
@@ -150,6 +158,11 @@ export default function EmployeeRequests() {
       },
       MANAGER_APPROVED: {
         label: "Manager Approved",
+        class: "status-approved",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
+      FINANCE_APPROVED: {
+        label: "Finance Approved",
         class: "status-approved",
         icon: <SvgIcon name="circle-tick" size={15} />
       },

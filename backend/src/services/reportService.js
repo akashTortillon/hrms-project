@@ -223,6 +223,105 @@ export const getPayrollSummary = async (month, year) => {
   return summary;
 };
 
+export const getBranchWiseEmployeeReport = async ({
+  branch,
+  company,
+  department,
+  status,
+  search,
+  page = 1,
+  limit = 10
+} = {}) => {
+  const query = {};
+
+  if (branch && branch !== "All Branches") query.branch = branch;
+  if (company && company !== "All Companies") query.company = company;
+  if (department && department !== "All Departments") query.department = department;
+  if (status && status !== "All Status") query.status = status;
+  if (search) {
+    const regex = new RegExp(search, "i");
+    query.$or = [
+      { name: regex },
+      { code: regex },
+      { email: regex },
+      { designation: regex }
+    ];
+  }
+
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.max(1, Number(limit) || 10);
+  const skip = (pageNum - 1) * limitNum;
+
+  const [total, rows, totals] = await Promise.all([
+    Employee.countDocuments(query),
+    Employee.find(query)
+      .sort({ branch: 1, company: 1, name: 1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    Employee.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalEmployees: { $sum: 1 },
+          activeEmployees: {
+            $sum: { $cond: [{ $eq: ["$status", "Active"] }, 1, 0] }
+          },
+          onboardingEmployees: {
+            $sum: { $cond: [{ $eq: ["$status", "Onboarding"] }, 1, 0] }
+          },
+          uniqueBranches: { $addToSet: "$branch" },
+          uniqueDepartments: { $addToSet: "$department" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          totalEmployees: 1,
+          activeEmployees: 1,
+          onboardingEmployees: 1,
+          branchCount: {
+            $size: {
+              $filter: {
+                input: "$uniqueBranches",
+                as: "branchName",
+                cond: { $and: [{ $ne: ["$$branchName", null] }, { $ne: ["$$branchName", ""] }] }
+              }
+            }
+          },
+          departmentCount: {
+            $size: {
+              $filter: {
+                input: "$uniqueDepartments",
+                as: "deptName",
+                cond: { $and: [{ $ne: ["$$deptName", null] }, { $ne: ["$$deptName", ""] }] }
+              }
+            }
+          }
+        }
+      }
+    ])
+  ]);
+
+  return {
+    rows,
+    pagination: {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      pages: Math.ceil(total / limitNum)
+    },
+    summary: totals[0] || {
+      totalEmployees: 0,
+      activeEmployees: 0,
+      onboardingEmployees: 0,
+      branchCount: 0,
+      departmentCount: 0
+    }
+  };
+};
+
 /**
  * Generic Custom Report Builder logic
  */

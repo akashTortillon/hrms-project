@@ -91,6 +91,11 @@ const employeeSchema = new mongoose.Schema({
     ref: "User",
     default: null
   },
+  designatedFinanceManager: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
+  },
   probationStartDate: { type: Date, default: null },
   probationEndDate: { type: Date, default: null },
   probationStatus: {

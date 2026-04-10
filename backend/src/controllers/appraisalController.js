@@ -1,6 +1,8 @@
 import AppraisalCycle from "../models/appraisalCycleModel.js";
 import Appraisal from "../models/appraisalModel.js";
 import Employee from "../models/employeeModel.js";
+import User from "../models/userModel.js";
+import { createNotification } from "./notificationController.js";
 
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
 
@@ -104,6 +106,20 @@ export const approveAppraisal = async (req, res) => {
       createdBy: req.user._id
     });
     await employee.save();
+
+    const linkedUser = await User.findOne({
+      email: { $regex: new RegExp(`^${employee.email}$`, "i") }
+    }).select("_id");
+
+    if (linkedUser) {
+      await createNotification({
+        recipient: linkedUser._id,
+        title: "Salary increment applied",
+        message: `Your salary increment was approved by ${req.user.name || "HR/Admin"}. Salary updated from AED ${latestVisaBase.toFixed(2)} to AED ${(latestVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`,
+        type: "INFO",
+        link: "/app/requests"
+      });
+    }
 
     res.json(appraisal);
   } catch (error) {

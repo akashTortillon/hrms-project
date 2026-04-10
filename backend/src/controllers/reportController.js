@@ -159,6 +159,61 @@ export const getPayrollSummaryReport = async (req, res) => {
   }
 };
 
+export const getBranchWiseEmployeeReport = async (req, res) => {
+  try {
+    const {
+      branch,
+      company,
+      department,
+      status,
+      search,
+      page = 1,
+      limit = 10
+    } = req.query;
+    const isExport = req.query.export === "true";
+
+    const result = await reportService.getBranchWiseEmployeeReport({
+      branch,
+      company,
+      department,
+      status,
+      search,
+      page,
+      limit: isExport ? 5000 : limit
+    });
+
+    if (isExport) {
+      const exportData = result.rows.map((item) => ({
+        "Employee Code": item.code,
+        "Employee Name": item.name,
+        "Company": item.company || "—",
+        "Branch": item.branch || "—",
+        "Department": item.department || "—",
+        "Designation": item.designation || "—",
+        "Role": item.role || "—",
+        "Status": item.status || "—",
+        "Joining Date": item.joinDate ? new Date(item.joinDate).toLocaleDateString() : "—",
+        "Visa Base": item.visaBase || 0,
+        "Work Base": item.workBase || 0,
+        "Email": item.email || "—",
+        "Phone": item.phone || "—"
+      }));
+      await logActivity("Export", "Branch Wise Employee Report");
+      return sendExcelResponse(res, exportData, "Branch_Wise_Employee_Report", "Branch Employees");
+    }
+
+    await logActivity("Generation", "Branch Wise Employee Report");
+    return res.status(200).json({
+      success: true,
+      data: result.rows,
+      pagination: result.pagination,
+      summary: result.summary
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
 export const generateCustomReport = async (req, res) => {
   try {
     const { dataset, columns, filters, export: isExport } = req.body;

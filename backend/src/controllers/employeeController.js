@@ -79,6 +79,18 @@ const resolveManagerUserId = async (designatedManager) => {
   return linkedUser?._id || null;
 };
 
+const resolveFinanceManagerUserId = async (designatedFinanceManager) => {
+  if (!designatedFinanceManager) return null;
+
+  const directUser = await User.findById(designatedFinanceManager).select("_id");
+  if (directUser) {
+    return directUser._id;
+  }
+
+  const linkedUser = await User.findOne({ employeeId: designatedFinanceManager }).select("_id");
+  return linkedUser?._id || null;
+};
+
 export const exportEmployees = async (req, res) => {
   try {
     const { department, status, search, branch } = req.query;
@@ -122,6 +134,13 @@ export const exportEmployees = async (req, res) => {
           "Company": "$company",
           "Email": "$email",
           "Contact Number": "$phone",
+          "Visa Company": "$visaCompany",
+          "Work Permit Company": "$workPermitCompany",
+          "Visa No": "$visaNo",
+          "Visa File No": "$visaFileNo",
+          "Visa Expiry": {
+            $dateToString: { format: "%Y-%m-%d", date: "$visaExpiry" }
+          },
           "Visa Base": "$visaBase",
           "Work Base": "$workBase",
           "Joining Date": {
@@ -189,6 +208,10 @@ export const addEmployee = async (req, res) => {
       workBase,
       ctc,
       accommodation,
+      visaCompany,
+      workPermitCompany,
+      visaNo,
+      visaFileNo,
       visaExpiry,
       shift,
       laborCardNumber,
@@ -199,6 +222,7 @@ export const addEmployee = async (req, res) => {
       bankAccount,
       agentId,
       designatedManager,
+      designatedFinanceManager,
       probationStartDate,
       probationEndDate,
       fixedProbationIncrementAmount
@@ -239,6 +263,7 @@ export const addEmployee = async (req, res) => {
     }
 
     const resolvedDesignatedManager = await resolveManagerUserId(designatedManager);
+    const resolvedDesignatedFinanceManager = await resolveFinanceManagerUserId(designatedFinanceManager);
 
     // 3. Generate Auto Incremented EMP Code
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
@@ -302,6 +327,10 @@ export const addEmployee = async (req, res) => {
       workBase: toNumber(workBase || basicSalary),
       ctc: toNumber(ctc || workBase || basicSalary),
       accommodation,
+      visaCompany: visaCompany || "",
+      workPermitCompany: workPermitCompany || "",
+      visaNo: visaNo || "",
+      visaFileNo: visaFileNo || "",
       visaExpiry,
       shift: shift || "Day Shift",
       laborCardNumber: laborCardNumber || "",
@@ -312,6 +341,7 @@ export const addEmployee = async (req, res) => {
       bankAccount,
       agentId,
       designatedManager: resolvedDesignatedManager,
+      designatedFinanceManager: resolvedDesignatedFinanceManager,
       probationStartDate: probationStartDate || joinDate || null,
       probationEndDate: probationEndDate || null,
       probationStatus: getProbationStatus({ probationEndDate }),
@@ -378,25 +408,23 @@ export const getEmployees = async (req, res) => {
       ];
     }
 
-    const employees = await Employee.aggregate([
-      { $match: matchStage }, // Apply filters first
-      {
-        $addFields: {
-          numericCode: {
-            $toInt: {
-              $substr: ["$code", 3, -1]
-            }
-          }
-        }
-      },
-      { $sort: { numericCode: 1 } },
-      { $project: { numericCode: 0 } }
-    ]);
+    const employees = await Employee.find(matchStage).lean();
+
+    const getCodeOrder = (code = "") => {
+      const numeric = parseInt(String(code).replace(/[^\d]/g, ""), 10);
+      return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER;
+    };
+
+    employees.sort((a, b) => {
+      const codeDiff = getCodeOrder(a.code) - getCodeOrder(b.code);
+      if (codeDiff !== 0) return codeDiff;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
 
 
     res.json(employees);
   } catch (error) {
-    // console.error(error);
+    console.error("Get employees error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -455,6 +483,9 @@ export const updateEmployee = async (req, res) => {
 
     if (payload.designatedManager !== undefined) {
       payload.designatedManager = await resolveManagerUserId(payload.designatedManager);
+    }
+    if (payload.designatedFinanceManager !== undefined) {
+      payload.designatedFinanceManager = await resolveFinanceManagerUserId(payload.designatedFinanceManager);
     }
 
     if (payload.laborCards || payload.laborCardNumber) {
@@ -650,8 +681,10 @@ export const confirmProbation = async (req, res) => {
     if (linkedUser) {
       await createNotification({
         recipient: linkedUser._id,
-        title: "Probation confirmed",
-        message: "Your probation has been confirmed.",
+        title: increment > 0 ? "Salary increment applied" : "Probation confirmed",
+        message: increment > 0
+          ? `Your probation has been confirmed by ${req.user.name || "HR/Admin"}. Salary updated from AED ${currentVisaBase.toFixed(2)} to AED ${(currentVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(employee.probationEndDate || new Date()).toLocaleDateString()}.`
+          : `Your probation has been confirmed by ${req.user.name || "HR/Admin"}.`,
         type: "INFO",
         link: `/app/employees/${employee._id}`
       });
@@ -819,6 +852,10 @@ export const importEmployees = async (req, res) => {
           workBase: toNumber(row["Work Base"] || row["Basic Salary"]),
           ctc: toNumber(row["CTC"] || row["Work Base"] || row["Basic Salary"]),
           accommodation: row["Accommodation"] || "",
+          visaCompany: row["Visa Company"] || "",
+          workPermitCompany: row["Work Permit Company"] || "",
+          visaNo: row["Visa No"] || "",
+          visaFileNo: row["Visa File No"] || "",
           laborCardNumber: row["Labor Card No"] || "",
           laborCards: buildLaborCards({ laborCardNumber: row["Labor Card No"] || "" }),
           personalId: row["Personal ID (14 Digit)"] || "",

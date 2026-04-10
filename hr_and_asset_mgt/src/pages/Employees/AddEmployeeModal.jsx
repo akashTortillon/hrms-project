@@ -47,6 +47,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     bankAccount: "",
     personalId: "",
     designatedManager: "",
+    designatedFinanceManager: "",
     probationStartDate: "",
     probationEndDate: "",
     fixedProbationIncrementAmount: ""
@@ -190,6 +191,21 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 <option value="">Select Role</option>
                 {roles.map(r => (
                   <option key={r.name} value={r.name}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Finance Manager</label>
+              <select
+                name="designatedFinanceManager"
+                value={form.designatedFinanceManager}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Finance Manager</option>
+                {managers.map(manager => (
+                  <option key={`finance-${manager._id}`} value={manager._id}>{manager.name}</option>
                 ))}
               </select>
             </div>
