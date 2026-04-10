@@ -85,11 +85,14 @@ export default function PayslipModal({ show, onClose, record }) {
             contentDoc.text(employee?.department || "N/A", pageWidth / 2 + 50, startY + 10);
 
             // 3. Attendance Summary
+            const calDays = (attendanceSummary?.calendarDaysInMonth ?? attendanceSummary?.totalDays) || 30;
+            const planDays = attendanceSummary?.plannedWorkingDays ?? calDays;
             autoTable(contentDoc, {
                 startY: startY + 25,
-                head: [['Total Days', 'Present', 'Absent', 'Late', 'Overtime (Hrs)']],
+                head: [['Calendar days', 'Planned work days', 'Paid days', 'Absent', 'Late', 'OT (Hrs)']],
                 body: [[
-                    attendanceSummary?.totalDays || 30,
+                    calDays,
+                    planDays,
                     attendanceSummary?.daysPresent || 0,
                     attendanceSummary?.daysAbsent || 0,
                     attendanceSummary?.late || 0,
@@ -253,9 +256,12 @@ export default function PayslipModal({ show, onClose, record }) {
                     {/* Attendance Summary */}
                     <div style={{ marginBottom: '20px' }}>
                         <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>Attendance Summary</div>
-                        <div style={{ display: 'flex', gap: '25px', fontSize: '12px', color: '#555', background: '#f9f9f9', padding: '10px 15px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                            <div>Total Days: <strong>{attendanceSummary?.totalDays || 30}</strong></div>
-                            <div>Present: <strong>{attendanceSummary?.daysPresent || 0}</strong></div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 25px', fontSize: '12px', color: '#555', background: '#f9f9f9', padding: '10px 15px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                            <div>Calendar days: <strong>{attendanceSummary?.calendarDaysInMonth ?? attendanceSummary?.totalDays ?? 30}</strong></div>
+                            <div>Planned working days: <strong>{attendanceSummary?.plannedWorkingDays ?? '—'}</strong></div>
+                            <div>Weekly offs (month): <strong>{attendanceSummary?.weeklyOffCount ?? '—'}</strong></div>
+                            <div>Holidays on work days: <strong>{attendanceSummary?.holidayOnWorkingDayCount ?? '—'}</strong></div>
+                            <div>Paid days: <strong>{attendanceSummary?.daysPresent || 0}</strong></div>
                             <div>Absent: <strong>{attendanceSummary?.daysAbsent || 0}</strong></div>
                         </div>
                     </div>

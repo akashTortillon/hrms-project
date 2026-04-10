@@ -639,12 +639,12 @@
   text-transform: uppercase;
 }
 
-.header-sunday {
+.header-weekend-col {
   background-color: #b91c1c !important;
-  /* Darker red for contrast with white text */
+  /* Weekly-off column (dynamic per org / employee presets) */
 }
 
-.cell-sunday {
+.cell-weekend {
   background-color: #fef9f9;
 }
 

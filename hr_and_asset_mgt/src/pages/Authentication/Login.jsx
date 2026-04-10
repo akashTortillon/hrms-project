@@ -9,7 +9,7 @@ import { toast } from "react-toastify";
 export default function Login() {
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ email: "", password: "" }); // "email" field accepts Email or Employee ID
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +22,7 @@ export default function Login() {
     e.preventDefault();
 
     if (!form.email || !form.password) {
-      setError("Email and password are required");
+      setError("Email / Employee ID and password are required");
       return;
     }
 
@@ -84,7 +84,7 @@ export default function Login() {
             <form onSubmit={handleSubmit}>
               <input
                 name="email"
-                placeholder="Email"
+                placeholder="Email or Employee ID"
                 onChange={handleChange}
               />
               <input

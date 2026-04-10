@@ -50,6 +50,7 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
     const handleDownloadTemplate = () => {
         const templateData = [
             {
+                "Employee ID": "10172",
                 "Full Name": "Reny",
                 "Email": "reny@tortilon.com",
                 "Phone": "+971501111111",

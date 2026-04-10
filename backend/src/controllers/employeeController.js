@@ -113,25 +113,60 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Valid UAE Phone Number is required" });
     }
 
-    // 2. Check for Duplicates (Email or Phone)
+    const safeCodeRaw = code != null && String(code).trim() ? String(code).trim() : "";
+    const safeCode = safeCodeRaw ? safeCodeRaw.toUpperCase() : "";
+
+    // Optional: validate Employee ID if provided
+    if (safeCode) {
+      const validFormat = /^[A-Z0-9]+$/.test(safeCode);
+      if (!validFormat) {
+        return res.status(400).json({ message: "Invalid Employee ID format. Use alphanumeric only (e.g. '10172' or 'EMP10172')." });
+      }
+    }
+
+    // 2. Check for Duplicates (Email / Phone / Employee ID)
     const existingEmployee = await Employee.findOne({
-      $or: [{ email: email }, { phone: phone }]
+      $or: [
+        { email: email },
+        { phone: phone },
+        ...(safeCode ? [{ code: safeCode }] : [])
+      ]
     });
 
     if (existingEmployee) {
       if (existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
       if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
+      if (safeCode && existingEmployee.code === safeCode) return res.status(409).json({ message: "Employee ID already exists" });
     }
 
-    // 3. Generate Auto Incremented EMP Code
-    const lastEmployee = await Employee.findOne().sort({ code: -1 });
-    let nextCode = "EMP001";
+    // 3. Determine Employee ID (use provided code or auto-generate next available)
+    const existingCodes = new Set(
+      (await Employee.find({}, { code: 1 }))
+        .map((e) => (e.code ? String(e.code).trim().toUpperCase() : ""))
+        .filter(Boolean)
+    );
 
-    if (lastEmployee && lastEmployee.code) {
-      const lastNumber = parseInt(lastEmployee.code.replace("EMP", ""), 10);
-      if (!isNaN(lastNumber)) {
-        nextCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
+    const parseEmpNumber = (c) => {
+      const raw = String(c ?? "").trim();
+      if (!raw) return null;
+      if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+      const match = /^EMP(\d+)$/i.exec(raw);
+      return match ? parseInt(match[1], 10) : null;
+    };
+
+    let nextCode = safeCode;
+    if (!nextCode) {
+      const lastEmployee = await Employee.findOne().sort({ code: -1 });
+      let lastCodeNum = 0;
+      if (lastEmployee && lastEmployee.code) {
+        lastCodeNum = parseEmpNumber(lastEmployee.code) || 0;
       }
+      do {
+        lastCodeNum++;
+        nextCode = String(lastCodeNum);
+      } while (existingCodes.has(String(nextCode).trim().toUpperCase()));
+    } else if (existingCodes.has(nextCode)) {
+      return res.status(409).json({ message: "Employee ID already exists" });
     }
 
     // 4. Auto-create User account for login (CRITICAL STEP)
@@ -168,8 +203,20 @@ export const addEmployee = async (req, res) => {
     // 5. Create Employee (Only if User valid)
     const {
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
-      designation, contractType, basicSalary, accommodation, visaExpiry, shift
+      designation, contractType, basicSalary, accommodation, visaExpiry, shift,
+      weeklyOffDays: rawWeeklyOff,
+      workingDayType: rawWdt
     } = req.body;
+
+    const parseWeeklyOffDays = (val) => {
+      if (!Array.isArray(val)) return undefined;
+      const out = [...new Set(val.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))];
+      return out.length ? out.sort((a, b) => a - b) : undefined;
+    };
+
+    const weeklyOffDays = parseWeeklyOffDays(rawWeeklyOff);
+    const wdtNum = parseInt(rawWdt, 10);
+    const workingDayType = [0, 2, 4, 8].includes(wdtNum) ? wdtNum : 4;
 
     const employee = await Employee.create({
       name,
@@ -183,7 +230,9 @@ export const addEmployee = async (req, res) => {
       status: status || "Onboarding",
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
       designation, contractType, basicSalary, accommodation, visaExpiry,
-      shift: shift || "Day Shift"
+      shift: shift || "Day Shift",
+      weeklyOffDays: weeklyOffDays ?? [],
+      workingDayType
     });
 
     res.status(201).json({
@@ -238,15 +287,19 @@ export const getEmployees = async (req, res) => {
       { $match: matchStage }, // Apply filters first
       {
         $addFields: {
+          // Sort numeric codes first (as numbers), then fall back to string sort.
           numericCode: {
-            $toInt: {
-              $substr: ["$code", 3, -1]
-            }
-          }
+            $cond: [
+              { $regexMatch: { input: { $ifNull: ["$code", ""] }, regex: /^[0-9]+$/ } },
+              { $toInt: "$code" },
+              null
+            ]
+          },
+          codeUpper: { $toUpper: { $ifNull: ["$code", ""] } }
         }
       },
-      { $sort: { numericCode: 1 } },
-      { $project: { numericCode: 0 } }
+      { $sort: { numericCode: 1, codeUpper: 1 } },
+      { $project: { numericCode: 0, codeUpper: 0 } }
     ]);
 
 
@@ -364,18 +417,37 @@ export const importEmployees = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const isCsv =
+      req.file.mimetype === "text/csv" ||
+      (req.file.originalname && req.file.originalname.toLowerCase().endsWith(".csv"));
+
+    let workbook;
+    if (isCsv) {
+      const csvString = req.file.buffer.toString("utf8");
+      workbook = XLSX.read(csvString, { type: "string", raw: false });
+    } else {
+      workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    }
+
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
+    if (!sheet) {
+      return res.status(400).json({ message: "No sheet found in the uploaded file." });
+    }
     const data = XLSX.utils.sheet_to_json(sheet);
 
     let successCount = 0;
     let errors = [];
 
-    // Pre-fetch all existing emails and phones to minimize DB calls in loop
+    // Pre-fetch all existing identifiers to minimize DB calls in loop
     const existingEmployees = await Employee.find({}, { email: 1, phone: 1, code: 1 });
     const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
+    const existingCodes = new Set(
+      existingEmployees
+        .map((e) => (e.code ? String(e.code).trim() : ""))
+        .filter(Boolean)
+    );
 
     // Pre-fetch Master Data for Strict Validation
     const masters = await Master.find({ isActive: true });
@@ -385,12 +457,70 @@ export const importEmployees = async (req, res) => {
     const validDesignations = new Set(masters.filter(m => m.type === 'DESIGNATION').map(m => m.name.toLowerCase()));
     const validContractTypes = new Set(masters.filter(m => m.type === 'EMPLOYEE_TYPE').map(m => m.name.toLowerCase()));
 
-    // Get last employee code
+    // Get last employee code (used only for fallback auto-generation)
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
     let lastCodeNum = 0;
     if (lastEmployee && lastEmployee.code) {
-      lastCodeNum = parseInt(lastEmployee.code.replace("EMP", ""), 10) || 0;
+      const raw = String(lastEmployee.code).trim();
+      if (/^\d+$/.test(raw)) lastCodeNum = parseInt(raw, 10) || 0;
+      else {
+        const m = /^EMP(\d+)$/i.exec(raw);
+        lastCodeNum = m ? parseInt(m[1], 10) || 0 : 0;
+      }
     }
+
+    const safeStr = (val) => (val != null && val !== "" ? String(val).trim() : "");
+    const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const parseWeeklyOffFromRow = (row) => {
+      const raw = safeStr(row["Weekly Off Days"] ?? row["weeklyOffDays"] ?? row["Weekly offs"]);
+      if (!raw) return [];
+      const parts = raw.split(/[,;/|]+/).map((s) => s.trim()).filter(Boolean);
+      const out = [];
+      for (const p of parts) {
+        const n = parseInt(p, 10);
+        if (Number.isInteger(n) && n >= 0 && n <= 6) out.push(n);
+      }
+      return [...new Set(out)].sort((a, b) => a - b);
+    };
+
+    const parseWorkingDayTypeFromRow = (row) => {
+      const raw = row["Working Day Type"];
+      if (raw === undefined || raw === null || raw === "") return 4;
+      const n = parseInt(String(raw).trim(), 10);
+      return [0, 2, 4, 8].includes(n) ? n : 4;
+    };
+
+    const readEmployeeCodeFromRow = (row) => {
+      // Support common header variations in CSV/Excel
+      const candidates = [
+        row["Employee ID"],
+        row["Employee Id"],
+        row["EmployeeID"],
+        row["Emp ID"],
+        row["EmpId"],
+        row["Code"],
+        row["Employee Code"],
+      ];
+      const raw = safeStr(candidates.find(v => v != null && String(v).trim() !== ""));
+      return raw ? raw : "";
+    };
+
+    const normalizeEmployeeCode = (val) => {
+      const raw = String(val ?? "").trim();
+      if (!raw) return "";
+      return raw.toUpperCase();
+    };
+
+    const isValidEmployeeCode = (val) => /^[A-Z0-9]+$/.test(String(val ?? "").trim().toUpperCase());
+
+    const parseEmpNumber = (code) => {
+      const raw = String(code ?? "").trim();
+      if (!raw) return null;
+      if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+      const match = /^EMP(\d+)$/i.exec(raw);
+      return match ? parseInt(match[1], 10) : null;
+    };
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -398,13 +528,14 @@ export const importEmployees = async (req, res) => {
       let errorMsg = null;
 
       // 1. Basic Validation
-      if (!row["Full Name"] || !row["Email"] || !row["Role"] || !row["Department"]) {
+      if (!safeStr(row["Full Name"]) || !safeStr(row["Email"]) || !safeStr(row["Role"]) || !safeStr(row["Department"])) {
         errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Role, Department)" });
         continue;
       }
 
-      const email = row["Email"].trim();
-      const phone = row["Phone"] ? String(row["Phone"]).trim() : "";
+      const email = safeStr(row["Email"]);
+      const phone = safeStr(row["Phone"]);
+      const providedCode = normalizeEmployeeCode(readEmployeeCodeFromRow(row));
 
       // Email Validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -422,13 +553,31 @@ export const importEmployees = async (req, res) => {
         errors.push({ row: rowNum, email, message: "Phone number already exists" });
         continue;
       }
+      if (providedCode) {
+        // Ensure provided Employee ID is unique and well-formed
+        if (!isValidEmployeeCode(providedCode)) {
+          errors.push({
+            row: rowNum,
+            email,
+            message: "Invalid Employee ID format. Use alphanumeric only (e.g. '10172' or 'EMP10172').",
+          });
+          continue;
+        }
+        if (existingCodes.has(providedCode)) {
+          errors.push({ row: rowNum, email, message: "Employee ID already exists" });
+          continue;
+        }
+        // Keep generator in sync so it doesn't collide later for numeric/EMP<n> codes
+        const parsedNum = parseEmpNumber(providedCode);
+        if (parsedNum != null && parsedNum > lastCodeNum) lastCodeNum = parsedNum;
+      }
 
-      // 3. Strict Master Validation
-      const role = row["Role"].trim();
-      const department = row["Department"].trim();
-      const branch = row["Branch"] ? row["Branch"].trim() : "";
-      const designation = row["Designation"] ? row["Designation"].trim() : "";
-      const contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+      // 3. Strict Master Validation (safeStr handles numbers/empty from CSV/Excel)
+      const role = safeStr(row["Role"]);
+      const department = safeStr(row["Department"]);
+      const branch = safeStr(row["Branch"]);
+      const designation = safeStr(row["Designation"]);
+      const contractType = safeStr(row["Employee Type"]);
 
       if (!validRoles.has(role.toLowerCase())) {
         errors.push({ row: rowNum, email, message: `Invalid Role: '${role}'. Exact spelling must match Master list.` });
@@ -461,11 +610,11 @@ export const importEmployees = async (req, res) => {
         const userExists = await User.findOne({ email });
         if (!userExists) {
           await User.create({
-            name: row["Full Name"],
+            name: safeStr(row["Full Name"]) || email,
             email: email,
             phone: userPhone,
             password: hashedPassword,
-            role: row["Role"]
+            role: role
           });
         }
       } catch (uErr) {
@@ -475,8 +624,14 @@ export const importEmployees = async (req, res) => {
 
       // 4. Employee Creation
       try {
-        lastCodeNum++;
-        const nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        let nextCode = providedCode;
+        if (!nextCode) {
+          // Find next free code to avoid collisions even if DB has gaps
+          do {
+            lastCodeNum++;
+            nextCode = String(lastCodeNum);
+          } while (existingCodes.has(nextCode));
+        }
 
         // Date parsing helper
         const parseExcelDate = (val) => {
@@ -493,36 +648,39 @@ export const importEmployees = async (req, res) => {
         let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
         await Employee.create({
-          name: row["Full Name"],
+          name: safeStr(row["Full Name"]) || email,
           code: nextCode,
-          role: row["Role"],
-          department: row["Department"],
-          branch: row["Branch"] || "",
+          role: role,
+          department: department,
+          branch: branch,
           email: email,
           phone: phone,
           joinDate: joinDate,
-          status: row["Status"] || "Onboarding",
-          designation: row["Designation"] || row["Role"],
-          shift: row["Shift"] || "Day Shift", // Default
-          nationality: row["Nationality"] || "",
-          address: row["UAE Address"] || "",
-          contractType: row["Employee Type"] || "",
-          basicSalary: row["Basic Salary"] ? String(row["Basic Salary"]) : "",
-          accommodation: row["Accommodation"] || "",
-          laborCardNumber: row["Labor Card No"] || "",
-          personalId: row["Personal ID (14 Digit)"] || "",
-          bankName: row["Bank Name"] || "",
-          iban: row["IBAN"] || "",
-          bankAccount: row["Account Number"] || "",
-          agentId: row["Agent ID (WPS)"] || "",
+          status: safeStr(row["Status"]) || "Onboarding",
+          designation: designation || role,
+          shift: safeStr(row["Shift"]) || "Day Shift",
+          nationality: safeStr(row["Nationality"]),
+          address: safeStr(row["UAE Address"]),
+          contractType: contractType,
+          basicSalary: row["Basic Salary"] != null && row["Basic Salary"] !== "" ? String(row["Basic Salary"]) : "",
+          accommodation: safeStr(row["Accommodation"]),
+          laborCardNumber: safeStr(row["Labor Card No"]),
+          personalId: safeStr(row["Personal ID (14 Digit)"]),
+          bankName: safeStr(row["Bank Name"]),
+          iban: safeStr(row["IBAN"]),
+          bankAccount: safeStr(row["Account Number"]),
+          agentId: safeStr(row["Agent ID (WPS)"]),
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
-          visaExpiry: visaExpiry
+          visaExpiry: visaExpiry,
+          weeklyOffDays: parseWeeklyOffFromRow(row),
+          workingDayType: parseWorkingDayTypeFromRow(row)
         });
 
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
         if (phone) existingPhones.add(phone);
+        if (nextCode) existingCodes.add(String(nextCode).trim().toUpperCase());
 
         successCount++;
 
@@ -539,7 +697,11 @@ export const importEmployees = async (req, res) => {
     });
 
   } catch (error) {
-    // console.error("Import Error:", error);
-    res.status(500).json({ message: "Server error during import" });
+    console.error("Import Error:", error);
+    const message =
+      error.message && error.message.includes("buffer")
+        ? "Invalid or unsupported file format. Please use Excel (.xlsx, .xls) or CSV with UTF-8 encoding."
+        : "Server error during import";
+    res.status(500).json({ message });
   }
 };

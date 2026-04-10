@@ -4,7 +4,17 @@ import SvgIcon from "../../components/svgIcon/svgView";
 
 
 
-export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
+export default function PayrollSummaryCards({
+  stats,
+  month,
+  year,
+  setMonth,
+  setYear,
+  onExportWPS,
+  branches = [],
+  selectedBranch = "",
+  setSelectedBranch = () => { },
+}) {
   const cards = [
     {
       title: "Total Basic Salary",
@@ -69,6 +79,32 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
                 fontFamily: "inherit"
               }}
             />
+          </div>
+
+          {/* Branch Selector */}
+          <div style={{ width: '100%', maxWidth: '200px' }}>
+            <select
+              className="payroll-month-select"
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                backgroundColor: "white",
+                fontSize: "14px",
+                height: "40px",
+                fontFamily: "inherit"
+              }}
+            >
+              <option value="">All Branches</option>
+              {branches.map((b) => (
+                <option key={b._id || b.name} value={b.name}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <button className="payroll-export-btn" onClick={onExportWPS}>

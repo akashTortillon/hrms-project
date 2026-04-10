@@ -15,9 +15,6 @@ export default function SystemSettings() {
     settings,
     handleSettingsChange,
     toggleNotification,
-    handleImport,
-    handleBackup,
-    handleRestore,
     // Modal & Handlers
     showModal,
     setShowModal,
@@ -132,7 +129,11 @@ export default function SystemSettings() {
         </div>
       </MastersCard>
 
-      {/* Data Management */}
+      {/*
+        Data Management (Bulk Import / Backup / Restore)
+        Currently disabled in UI because handlers are placeholders ("coming soon").
+      */}
+      {/*
       <MastersCard title="Data Management">
         <div className="data-actions">
           <div className="data-action">
@@ -160,6 +161,7 @@ export default function SystemSettings() {
           </div>
         </div>
       </MastersCard>
+      */}
 
       <CustomModal
         show={showModal}

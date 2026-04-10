@@ -8,6 +8,7 @@ import PayrollSummaryCards from "./PayrollCards";
 import PayrollStatus from "./PayrollStatus";
 import PayrollEmployeesTable from "./PayrollTable";
 import { payrollService } from "../../services/payrollService";
+import { getBranches } from "../../services/masterService.js";
 
 function Payroll() {
   const [month, setMonth] = useState(1); // Jan
@@ -15,15 +16,30 @@ function Payroll() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ count: 0, totalBasic: 0, totalNet: 0 });
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState("");
 
   useEffect(() => {
     fetchPayroll();
-  }, [month, year]);
+  }, [month, year, selectedBranch]);
+
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const data = await getBranches();
+        setBranches(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error(e);
+        setBranches([]);
+      }
+    };
+    fetchBranches();
+  }, []);
 
   const fetchPayroll = async () => {
     try {
       setLoading(true);
-      const data = await payrollService.getSummary(month, year);
+      const data = await payrollService.getSummary(month, year, selectedBranch);
       setRecords(data.records || []);
       setStats(data.stats || {});
     } catch (error) {
@@ -62,7 +78,7 @@ function Payroll() {
 
   const handleExportExcel = async () => {
     try {
-      await payrollService.exportExcel(month, year);
+      await payrollService.exportExcel(month, year, selectedBranch);
       toast.success("Export Downloaded!");
     } catch (error) {
       console.error(error);
@@ -72,7 +88,7 @@ function Payroll() {
 
   const handleGenerateSIF = async () => {
     try {
-      await payrollService.generateSIF(month, year);
+      await payrollService.generateSIF(month, year, selectedBranch);
       toast.success("SIF File Generated!");
     } catch (error) {
       console.error(error);
@@ -108,6 +124,9 @@ function Payroll() {
         setMonth={setMonth}
         setYear={setYear}
         onExportWPS={handleGenerateSIF}
+        branches={branches}
+        selectedBranch={selectedBranch}
+        setSelectedBranch={setSelectedBranch}
       />
 
       <PayrollStatus

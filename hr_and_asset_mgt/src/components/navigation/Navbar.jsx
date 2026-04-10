@@ -58,10 +58,23 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   }, []);
 
   const handleNotificationClick = async (notif) => {
-    if (!notif.isRead) {
-      await markNotificationAsRead(notif._id);
-      loadNotifications();
+    if (notif.link) {
+      navigate(notif.link);
     }
+    if (notif.isVirtual) {
+      try {
+        await dismissVirtualNotification(notif._id);
+      } catch (e) {
+        console.error("Failed to dismiss virtual notification", e);
+      }
+    } else if (!notif.isRead) {
+      try {
+        await markNotificationAsRead(notif._id);
+      } catch (e) {
+        console.error("Failed to mark notification as read", e);
+      }
+    }
+    loadNotifications();
   };
 
   const handleMarkAllAsRead = async () => {
@@ -69,8 +82,21 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
     loadNotifications();
   };
 
-  const handleDeleteNotification = async (id) => {
-    await deleteNotification(id);
+  const handleDeleteNotification = async (item) => {
+    const id = item?.id ?? item?._id;
+    if (item?.isVirtual) {
+      try {
+        await dismissVirtualNotification(id);
+      } catch (e) {
+        console.error("Failed to dismiss virtual notification", e);
+      }
+    } else {
+      try {
+        await deleteNotification(id);
+      } catch (e) {
+        console.error("Failed to delete notification", e);
+      }
+    }
     loadNotifications();
   };
 
@@ -98,10 +124,22 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
           <QuickActionMenu
             items={quickActions}
             onSelect={(action) => {
-              console.log("Selected:", action.key);
+              switch (action?.key) {
+                case "addEmployee":
+                  navigate("/app/employees");
+                  break;
+                case "addAsset":
+                  navigate("/app/assets");
+                  break;
+                case "uploadDocument":
+                  navigate("/app/documents");
+                  break;
+                default:
+                  break;
+              }
             }}
           >
-            <SvgIcon name="plus" size={15} />
+            <SvgIcon name="plus" size={15} className="svg-icon-black" />
           </QuickActionMenu>
 
 

@@ -9,8 +9,13 @@ export const payrollService = {
     },
 
     // Get Payroll Summary (Records)
-    getSummary: async (month, year) => {
-        const response = await api.get(`/api/payroll/summary?month=${month}&year=${year}`);
+    getSummary: async (month, year, branch = "") => {
+        const params = new URLSearchParams({
+            month: String(month),
+            year: String(year),
+        });
+        if (branch) params.set("branch", branch);
+        const response = await api.get(`/api/payroll/summary?${params.toString()}`);
         return response.data;
     },
 
@@ -39,8 +44,13 @@ export const payrollService = {
     },
 
     // Export Excel
-    exportExcel: async (month, year) => {
-        const response = await api.get(`/api/payroll/export?month=${month}&year=${year}`, {
+    exportExcel: async (month, year, branch = "") => {
+        const params = new URLSearchParams({
+            month: String(month),
+            year: String(year),
+        });
+        if (branch) params.set("branch", branch);
+        const response = await api.get(`/api/payroll/export?${params.toString()}`, {
             responseType: 'blob'
         });
         const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -53,8 +63,13 @@ export const payrollService = {
     },
 
     // Generate SIF
-    generateSIF: async (month, year) => {
-        const response = await api.get(`/api/payroll/export-sif?month=${month}&year=${year}`, {
+    generateSIF: async (month, year, branch = "") => {
+        const params = new URLSearchParams({
+            month: String(month),
+            year: String(year),
+        });
+        if (branch) params.set("branch", branch);
+        const response = await api.get(`/api/payroll/export-sif?${params.toString()}`, {
             responseType: 'blob'
         });
         // Try to get filename from header

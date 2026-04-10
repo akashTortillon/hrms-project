@@ -273,6 +273,19 @@
   fill: #b91c1c;
 }
 
+/* 🔒 Reset password icon */
+.reset-password-btn svg {
+  fill: #2563eb;
+}
+
+.reset-password-btn:hover {
+  background: #eff6ff;
+}
+
+.reset-password-btn:hover svg {
+  fill: #1d4ed8;
+}
+
 /* =========================
    DEPARTMENT
 ========================= */
@@ -348,6 +361,10 @@
 }
 
 .actions-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
   border: none;
   background: none;
   cursor: pointer;

@@ -6,7 +6,7 @@ import "../../style/Employees.css";
 
 import { useRole } from "../../contexts/RoleContext";
 
-export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
+export default function EmployeesTable({ employees = [], onEdit, onDelete, onResetPassword }) {
   const navigate = useNavigate();
   const { hasPermission } = useRole();
 
@@ -76,6 +76,24 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
                   {hasPermission("MANAGE_EMPLOYEES") && (
                     <td className="actions-col">
                       <div className="actions-btn">
+                        {onResetPassword && (
+                          <button
+                            type="button"
+                            className="icon-btn reset-password-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onResetPassword(emp);
+                            }}
+                            title="Reset login password"
+                          >
+                            <SvgIcon name="lock" size={18} />
+                          </button>
+                        )}
+                        {/*
+                          Delete Employee action is intentionally disabled in UI.
+                          (Backend/API still exists; can be re-enabled later if needed.)
+                        */}
+                        {/*
                         <button
                           type="button"
                           className="icon-btn delete-btn"
@@ -87,6 +105,7 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
                         >
                           <SvgIcon name="delete" size={18} />
                         </button>
+                        */}
                       </div>
                     </td>
                   )}
