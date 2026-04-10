@@ -884,11 +884,22 @@ export const generatePayroll = async (req, res) => {
 // --- API: Get Payroll Summary ---
 export const getPayrollSummary = async (req, res) => {
     try {
-        const { month, year } = req.query;
-        const records = await Payroll.find({ month, year })
-            .populate("employee", "name code department designation role")
+        const { month, year, branch } = req.query;
+
+        const employeeMatch = {};
+        if (branch) employeeMatch.branch = branch;
+
+        let records = await Payroll.find({ month, year })
+            .populate({
+                path: "employee",
+                select: "name code department designation role branch",
+                ...(branch ? { match: employeeMatch } : {})
+            })
             .populate("allowances.addedBy", "name") // ✅ Populate Allowance Editor
             .populate("deductions.addedBy", "name"); // ✅ Populate Deduction Editor
+
+        // If we used populate match, payroll docs remain but employee becomes null — remove them.
+        if (branch) records = records.filter((r) => r.employee);
 
         let totalNet = 0;
         let totalBasic = 0;
@@ -1157,9 +1168,19 @@ export const finalizePayroll = async (req, res) => {
 // --- API: Export Payroll to Excel ---
 export const exportPayroll = async (req, res) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, branch } = req.query;
+
+        const employeeMatch = {};
+        if (branch) employeeMatch.branch = branch;
+
         // Populate fields needed for the report
-        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban bankName laborCardNumber personalId");
+        let records = await Payroll.find({ month, year }).populate({
+            path: "employee",
+            select: "name code designation department branch bankAccount iban bankName laborCardNumber personalId",
+            ...(branch ? { match: employeeMatch } : {})
+        });
+
+        if (branch) records = records.filter((r) => r.employee);
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found for this month." });
@@ -1326,9 +1347,19 @@ export const exportPayroll = async (req, res) => {
 // --- API: Generate SIF File (WPS) ---
 export const generateSIF = async (req, res) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, branch } = req.query;
+
+        const employeeMatch = {};
+        if (branch) employeeMatch.branch = branch;
+
         // Fetch only PROCESSED (Finalized) records ideally, but DRAFT is ok for testing
-        const records = await Payroll.find({ month, year }).populate("employee", "name code laborCardNumber bankAccount iban agentId");
+        let records = await Payroll.find({ month, year }).populate({
+            path: "employee",
+            select: "name code branch laborCardNumber bankAccount iban agentId",
+            ...(branch ? { match: employeeMatch } : {})
+        });
+
+        if (branch) records = records.filter((r) => r.employee);
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found." });
