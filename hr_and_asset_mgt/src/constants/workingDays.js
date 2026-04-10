@@ -1,4 +1,8 @@
-/** Match backend `workingDaysHelper.js` presets (JS weekday: 0 Sun .. 6 Sat) */
+/**
+ * Must match backend `backend/src/utils/workingDaysHelper.js` → `PRESET_WEEKLY_OFF_BY_TYPE`.
+ * Weekday: JS `Date#getDay()` — 0 Sun .. 6 Sat.
+ * If payroll presets change, update both files and run `npm test` in backend.
+ */
 export const WORKING_DAY_TYPE_PRESETS = {
   0: [],
   2: [5, 6],

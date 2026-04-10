@@ -1,6 +1,9 @@
 /**
  * Payroll / attendance: per-employee weekly offs and planned working days in a calendar month.
  * weekdays: Date#getDay() — 0 Sun .. 6 Sat
+ *
+ * **Keep in sync with UI:** `hr_and_asset_mgt/src/constants/workingDays.js`
+ * (`WORKING_DAY_TYPE_PRESETS` + option labels). If you change a preset here, update that file too.
  */
 
 /** @param {unknown} n */

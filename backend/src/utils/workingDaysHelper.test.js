@@ -15,6 +15,7 @@ describe("workingDaysHelper", () => {
   });
 
   it("getWeeklyOffDaySet falls back to workingDayType presets", () => {
+    assert.deepEqual([...getWeeklyOffDaySet({ workingDayType: 2 })].sort(), [5, 6]); // Fri+Sat — mirror FE workingDays.js
     assert.deepEqual([...getWeeklyOffDaySet({ workingDayType: 4 })].sort(), [0]);
     assert.deepEqual([...getWeeklyOffDaySet({ workingDayType: 8 })].sort(), [0, 6]);
     assert.deepEqual([...getWeeklyOffDaySet({ workingDayType: 0 })].length, 0);

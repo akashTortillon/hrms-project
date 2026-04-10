@@ -1,4 +1,5 @@
 import SvgIcon from "../../components/svgIcon/svgView.jsx";
+import { displayWeeklyOffDays } from "../../constants/workingDays.js";
 import "../../style/Attendance.css";
 
 
@@ -38,7 +39,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
       case "Present":
         return "status-present";
       case "Weekend":
-        return "status-weekend"; // New class for Sundays
+        return "status-weekend";
       case "Holiday":
         return "status-holiday";
       default:
@@ -60,6 +61,12 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
     // Generate days array
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
+    // Column headers: highlight weekdays that are a weekly off for at least one listed employee
+    const unionWeeklyOffDays = new Set();
+    records.forEach((emp) => {
+      displayWeeklyOffDays(emp).forEach((d) => unionWeeklyOffDays.add(d));
+    });
+
     return (
       <div className="attendance-table-card monthly-view">
         <div className="attendance-table-header">
@@ -74,9 +81,9 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                 <th className="stats-col-header">Stats</th>
                 {days.map(d => {
                   const dateObj = new Date(year, month - 1, d);
-                  const isSunday = dateObj.getDay() === 0;
+                  const isWeeklyOffColumn = unionWeeklyOffDays.has(dateObj.getDay());
                   return (
-                    <th key={d} className={`day-col-header ${isSunday ? 'header-sunday' : ''}`}>
+                    <th key={d} className={`day-col-header ${isWeeklyOffColumn ? 'header-weekend-col' : ''}`}>
                       <div className="day-number">{d}</div>
                       <div className="day-name">{dateObj.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
                     </th>
@@ -107,15 +114,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       // Construct key yyyy-mm-dd
                       const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                       const record = emp.attendance[dateKey] || {};
-                      let status = record.status;
-
-                      // Check for Sunday
-                      const dateObj = new Date(year, month - 1, d);
-                      const isSunday = dateObj.getDay() === 0;
-
-                      if (isSunday) {
-                        status = "Weekend";
-                      }
+                      const status = record.status;
 
                       // Define styles for the letter itself
                       let color = '#374151'; // default gray
@@ -129,9 +128,10 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       else if (status === 'On Leave') { color = '#ca8a04'; bg = '#fef9c3'; }
 
                       const abbr = status ? getStatusAbbr(status) : "-";
+                      const isWeekendCell = status === "Weekend";
 
                       return (
-                        <td key={d} className={`status-cell ${isSunday ? 'cell-sunday' : ''}`} style={{ textAlign: 'center', padding: '0' }}>
+                        <td key={d} className={`status-cell ${isWeekendCell ? 'cell-weekend' : ''}`} style={{ textAlign: 'center', padding: '0' }}>
                           {status && (
                             <div
                               style={{

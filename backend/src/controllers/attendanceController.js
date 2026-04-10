@@ -896,6 +896,8 @@ export const getMonthlyAttendance = async (req, res) => {
         department: emp.department,
         branch: emp.branch,
         shift: emp.shift || "Day Shift",
+        weeklyOffDays: emp.weeklyOffDays,
+        workingDayType: emp.workingDayType,
         stats: { present, late, absent, leave },
         attendance: attendanceData
       };
