@@ -52,7 +52,7 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
 // Work Permit / Visa Report Table (Original columns + New Style)
 function WorkReportTable({ records, reportType, loading, onExport }) {
   const companyKey = reportType === 'permit' ? 'workPermitCompany' : 'visaCompany';
-  const label = reportType === 'permit' ? 'Work Permit Company' : 'Visa Company';
+  const label = reportType === 'permit' ? 'Location' : 'Visa';
 
   const filtered = records.filter(r => r.employee?.[companyKey]);
 
@@ -61,8 +61,8 @@ function WorkReportTable({ records, reportType, loading, onExport }) {
        <div className="list-header" style={{ marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                 <div>
-                   <h2 className="list-title">{label}</h2>
-                   <p className="list-subtitle">Employee list filtered by {reportType === 'permit' ? 'work permit' : 'visa'} company</p>
+                   <h2 className="list-title">{label} Report</h2>
+                   <p className="list-subtitle">Employee list filtered by {reportType === 'permit' ? 'location' : 'visa'}</p>
                 </div>
                 <button className="export-record-btn" onClick={onExport}>
                     <SvgIcon name="download" size={14} />
@@ -224,9 +224,9 @@ function Payroll() {
     }
   };
 
-  const handleExportExcel = async () => {
+  const handleExportExcel = async (reportType = null) => {
     try {
-      await payrollService.exportExcel(month, year);
+      await payrollService.exportExcel(month, year, reportType);
       toast.success("Export Downloaded!");
     } catch (error) {
       toast.error("Export failed.");
@@ -284,16 +284,16 @@ function Payroll() {
             Dashboard & Payroll
           </button>
           <button 
-            className={`tab-pill ${activeTab === 'Work Permit Report' ? 'active' : ''}`}
-            onClick={() => setActiveTab('Work Permit Report')}
+            className={`tab-pill ${activeTab === 'Location report' ? 'active' : ''}`}
+            onClick={() => setActiveTab('Location report')}
           >
-            Work Permit Report
+            Location report
           </button>
           <button 
-            className={`tab-pill ${activeTab === 'Work Visa Report' ? 'active' : ''}`}
-            onClick={() => setActiveTab('Work Visa Report')}
+            className={`tab-pill ${activeTab === 'Visa report' ? 'active' : ''}`}
+            onClick={() => setActiveTab('Visa report')}
           >
-            Work Visa Report
+            Visa report
           </button>
       </div>
 
@@ -407,21 +407,21 @@ function Payroll() {
         </>
       )}
 
-      {activeTab === 'Work Permit Report' && (
+      {activeTab === 'Location report' && (
         <WorkReportTable 
             records={allRecords} 
             reportType="permit" 
             loading={loading} 
-            onExport={handleExportExcel} 
+            onExport={() => handleExportExcel('permit')} 
         />
       )}
 
-      {activeTab === 'Work Visa Report' && (
+      {activeTab === 'Visa report' && (
         <WorkReportTable 
             records={allRecords} 
             reportType="visa" 
             loading={loading} 
-            onExport={handleExportExcel} 
+            onExport={() => handleExportExcel('visa')} 
         />
       )}
     </div>

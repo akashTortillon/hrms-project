@@ -1279,12 +1279,28 @@ export const finalizePayroll = async (req, res) => {
 // --- API: Export Payroll to Excel ---
 export const exportPayroll = async (req, res) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, reportType } = req.query;
+
         // Populate fields needed for the report
-        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department company bankAccount iban bankName laborCardNumber personalId");
+        // ✅ ADDED: Specialized filtering for Work Permit / Visa reports
+        let match = {};
+        if (reportType === 'permit') {
+            match = { workPermitCompany: { $ne: null, $exists: true } };
+        } else if (reportType === 'visa') {
+            match = { visaCompany: { $ne: null, $exists: true } };
+        }
+
+        let records = await Payroll.find({ month, year }).populate({
+            path: "employee",
+            select: "name code designation department company bankAccount iban bankName laborCardNumber personalId workPermitCompany visaCompany",
+            match
+        });
+
+        // Filter out records where employee didn't match the specific report criteria
+        records = records.filter(r => r.employee !== null);
 
         if (!records || records.length === 0) {
-            return res.status(404).json({ message: "No payroll records found for this month." });
+            return res.status(404).json({ message: `No ${reportType || ''} payroll records found for this month.` });
         }
 
         // --- Prepare Data for Excel ---
@@ -1295,7 +1311,13 @@ export const exportPayroll = async (req, res) => {
         const exportCompanyName = records[0]?.employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
         const COMPANY_NAME = `COMPANY NAME: ${exportCompanyName}`;
         const MOL_ID = "MOL ID No. 0000001564503";
-        const REPORT_TITLE = `PAYROLL FOR THE MONTH OF ${monthName} - ${year}`;
+
+        // ✅ DYNAMIC TITLE based on report type
+        let reportPrefix = "PAYROLL";
+        if (reportType === 'permit') reportPrefix = "LOCATION REPORT";
+        if (reportType === 'visa') reportPrefix = "VISA REPORT";
+
+        const REPORT_TITLE = `${reportPrefix} FOR THE MONTH OF ${monthName} - ${year}`;
 
         // 1. Define the Array of Arrays (AoA) Structure
         const aoa = [];

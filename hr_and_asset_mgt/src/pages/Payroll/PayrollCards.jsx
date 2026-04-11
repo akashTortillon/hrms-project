@@ -63,21 +63,11 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
               <SvgIcon name="download" size={14} />
               Export Record
             </button>
-            <button className="new-payroll-btn">
-              <span className="plus-icon">+</span>
-              New payroll
-            </button>
+            
         </div>
       </div>
 
-      {/* Alert Bar */}
-      <div className="payroll-alert-bar">
-        <div className="alert-content">
-            <span className="alert-icon">⚠️</span>
-            <span className="alert-text">Payroll submission for the current pay period is due in 2 days. Review and finalize all employee payroll details</span>
-        </div>
-        <button className="alert-close">×</button>
-      </div>
+      
 
       <div className="payroll-stat-row">
         {cards.map((item, index) => (

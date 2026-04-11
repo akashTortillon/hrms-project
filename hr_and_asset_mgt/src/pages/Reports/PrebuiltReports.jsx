@@ -442,45 +442,43 @@ export default function PrebuiltReports() {
                 </div>
               ) : (
                 <>
-                  <>
-                    <div style={{ width: '140px' }}>
-                      <select
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #d1d5db',
-                          backgroundColor: 'white',
-                          fontSize: '14px'
-                        }}
-                        value={month}
-                        onChange={(e) => setMonth(Number(e.target.value))}
-                      >
-                        {MONTHS.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ width: '100px' }}>
-                      <select
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #d1d5db',
-                          backgroundColor: 'white',
-                          fontSize: '14px'
-                        }}
-                        value={year}
-                        onChange={(e) => setYear(Number(e.target.value))}
-                      >
-                        {[0, 1, 2, 3, 4].map(i => {
-                          const y = currentDate.getFullYear() - i;
-                          return <option key={y} value={y}>{y}</option>;
-                        })}
-                      </select>
-                    </div>
-                  </>
+                  <div style={{ flex: '2', minWidth: 0 }}>
+                    <select
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #d1d5db',
+                        backgroundColor: 'white',
+                        fontSize: '14px'
+                      }}
+                      value={month}
+                      onChange={(e) => setMonth(Number(e.target.value))}
+                    >
+                      {MONTHS.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: '1', minWidth: 0 }}>
+                    <select
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #d1d5db',
+                        backgroundColor: 'white',
+                        fontSize: '14px'
+                      }}
+                      value={year}
+                      onChange={(e) => setYear(Number(e.target.value))}
+                    >
+                      {[0, 1, 2, 3, 4].map(i => {
+                        const y = currentDate.getFullYear() - i;
+                        return <option key={y} value={y}>{y}</option>;
+                      })}
+                    </select>
+                  </div>
                 </>
               )}
             </div>
@@ -602,7 +600,7 @@ export default function PrebuiltReports() {
             <h4 className="report-title">Payroll Monthly Summary</h4>
             <p className="report-desc">Total cost breakdown per department for the selected month.</p>
             <div className="report-filters">
-              <div style={{ width: '140px' }}>
+              <div style={{ flex: '2', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -621,7 +619,7 @@ export default function PrebuiltReports() {
                   ))}
                 </select>
               </div>
-              <div style={{ width: '100px' }}>
+              <div style={{ flex: '1', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -660,7 +658,7 @@ export default function PrebuiltReports() {
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Last: {new Date().toISOString().split('T')[0]} • Monthly</div>
 
             <div className="report-filters">
-              <div style={{ width: '140px' }}>
+              <div style={{ flex: '2', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -679,7 +677,7 @@ export default function PrebuiltReports() {
                   ))}
                 </select>
               </div>
-              <div style={{ width: '100px' }}>
+              <div style={{ flex: '1', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',

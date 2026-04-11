@@ -4,6 +4,7 @@ import {
   Navbar,
   Container,
 } from "react-bootstrap";
+import { toast } from "react-toastify";
 import GlobalSearch from "./GlobalSearch";
 
 import SvgIcon from "../svgIcon/svgView.jsx";
@@ -83,8 +84,20 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   };
 
   const handleDeleteNotification = async (id) => {
-    await deleteNotification(id);
-    loadNotifications();
+    try {
+      // ✅ Handle both virtual and database notifications
+      if (typeof id === 'string' && id.startsWith("virtual-")) {
+        await dismissVirtualNotification(id);
+        toast.success("Notification dismissed");
+      } else {
+        await deleteNotification(id);
+        toast.success("Notification deleted");
+      }
+      loadNotifications();
+    } catch (err) {
+      console.error("Failed to delete notification", err);
+      toast.error("Failed to remove notification");
+    }
   };
 
   const handleLogout = () => {

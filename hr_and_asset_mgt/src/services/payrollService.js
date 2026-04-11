@@ -40,14 +40,23 @@ export const payrollService = {
     },
 
     // Export Excel
-    exportExcel: async (month, year) => {
-        const response = await api.get(`/payroll/export?month=${month}&year=${year}`, {
+    exportExcel: async (month, year, reportType = null) => {
+        let urlPath = `/payroll/export?month=${month}&year=${year}`;
+        if (reportType) urlPath += `&reportType=${reportType}`;
+
+        const response = await api.get(urlPath, {
             responseType: 'blob'
         });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `Payroll_${month}_${year}.xlsx`);
+        
+        // Dynamic filename
+        let filename = `Payroll_${month}_${year}.xlsx`;
+        if (reportType === 'permit') filename = `Location_Report_${month}_${year}.xlsx`;
+        else if (reportType === 'visa') filename = `Visa_Report_${month}_${year}.xlsx`;
+
+        link.setAttribute('download', filename);
         document.body.appendChild(link);
         link.click();
         link.parentNode.removeChild(link);
