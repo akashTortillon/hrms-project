@@ -255,6 +255,9 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 24px;
+  flex-wrap: nowrap !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Custom premium scrollbar for sidebar */

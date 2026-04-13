@@ -1,4 +1,8 @@
 import Master from "../models/masterModel.js";
+import Employee from "../models/employeeModel.js";
+import Asset from "../models/assetModel.js";
+import Assignment from "../models/assignmentModel.js";
+import Request from "../models/requestModel.js";
 
 // Mapping frontend "slugs" to db types
 const TYPE_MAPPING = {
@@ -222,12 +226,85 @@ export const updateItem = async (req, res) => {
 export const deleteItem = async (req, res) => {
     try {
         const { id } = req.params;
-        const deleted = await Master.findByIdAndDelete(id);
+        const item = await Master.findById(id);
 
-        if (!deleted) {
+        if (!item) {
             return res.status(404).json({ message: "Item not found" });
         }
 
+        // --- LINKAGE CHECKS ---
+
+        // 1. Check Employees (String-based references)
+        const linkedEmployees = await Employee.countDocuments({
+            $or: [
+                { department: item.name },
+                { branch: item.name },
+                { role: item.name },
+                { designation: item.name },
+                { contractType: item.name }
+            ]
+        });
+        if (linkedEmployees > 0) {
+            return res.status(400).json({ 
+                message: `Cannot delete: This ${item.type.toLowerCase()} is linked to ${linkedEmployees} employee(s).` 
+            });
+        }
+
+        // 2. Check Assets (String and ID-based)
+        const linkedAssets = await Asset.countDocuments({
+            $or: [
+                { type: item.name },
+                { category: item.name },
+                { location: item.name },
+                { department: item.name },
+                { "currentLocation.shop": id },
+                { "maintenanceLogs.serviceType": id },
+                { "maintenanceLogs.provider": id }
+            ]
+        });
+        if (linkedAssets > 0) {
+            return res.status(400).json({ 
+                message: `Cannot delete: This ${item.type.toLowerCase()} is linked to ${linkedAssets} asset(s) or maintenance records.` 
+            });
+        }
+
+        // 3. Check Assignments (String and ID-based)
+        const linkedAssignments = await Assignment.countDocuments({
+            $or: [
+                { fromDepartment: item.name },
+                { toDepartment: item.name },
+                { shop: id }
+            ]
+        });
+        if (linkedAssignments > 0) {
+            return res.status(400).json({ 
+                message: `Cannot delete: This ${item.type.toLowerCase()} is referenced in ${linkedAssignments} assignment history records.` 
+            });
+        }
+
+        // 4. Check Requests (String-based)
+        const linkedRequests = await Request.countDocuments({
+            $or: [
+                { documentType: item.name }
+            ]
+        });
+        if (linkedRequests > 0) {
+            return res.status(400).json({ 
+                message: `Cannot delete: This ${item.type.toLowerCase()} is referenced in ${linkedRequests} active or historical requests.` 
+            });
+        }
+
+        // 5. Check Master (Self-linkage, e.g. Categories linked to Asset Type)
+        const linkedMasters = await Master.countDocuments({ assetTypeId: id });
+        if (linkedMasters > 0) {
+            return res.status(400).json({ 
+                message: `Cannot delete: This master item is referenced by ${linkedMasters} other master entries.` 
+            });
+        }
+
+        // --- END LINKAGE CHECKS ---
+
+        await Master.findByIdAndDelete(id);
         res.status(200).json({ message: "Item deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: error.message });
