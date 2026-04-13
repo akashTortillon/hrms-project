@@ -289,23 +289,23 @@ export default function Employees() {
 
 
   // 🔹 DELETE employee
-  const handleDeleteEmployee = async (emp) => {
-    const confirmDelete = window.confirm(
-      `Do you want to delete ${emp.name}?`
-    );
+  // const handleDeleteEmployee = async (emp) => {
+  //   const confirmDelete = window.confirm(
+  //     `Do you want to delete ${emp.name}?`
+  //   );
 
-    if (!confirmDelete) return;
+  //   if (!confirmDelete) return;
 
-    try {
-      await deleteEmployee(emp._id || emp.id);
-      fetchEmployees();
-      toast.success("Employee removed successfully");
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to delete employee"
-      );
-    }
-  };
+  //   try {
+  //     await deleteEmployee(emp._id || emp.id);
+  //     fetchEmployees();
+  //     toast.success("Employee removed successfully");
+  //   } catch (error) {
+  //     toast.error(
+  //       error.response?.data?.message || "Failed to delete employee"
+  //     );
+  //   }
+  // };
 
   // 🔹 EXPORT to Excel (Backend)
   const handleExport = async () => {
@@ -363,7 +363,7 @@ export default function Employees() {
       {/* TABLE - Use 'employees' directly as it is now filtered from backend */}
       <EmployeesTable
         employees={employees}
-        onDelete={handleDeleteEmployee}
+        // onDelete={handleDeleteEmployee}
       />
 
       {/* ADD MODAL */}

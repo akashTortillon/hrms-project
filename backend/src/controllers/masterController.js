@@ -220,7 +220,18 @@ export const updateItem = async (req, res) => {
 };
 
 export const deleteItem = async (req, res) => {
-    // ... existing logic ...
+    try {
+        const { id } = req.params;
+        const deleted = await Master.findByIdAndDelete(id);
+
+        if (!deleted) {
+            return res.status(404).json({ message: "Item not found" });
+        }
+
+        res.status(200).json({ message: "Item deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
 export const cleanupMasterData = async (req, res) => {

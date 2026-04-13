@@ -76,7 +76,7 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
                   {hasPermission("MANAGE_EMPLOYEES") && (
                     <td className="actions-col">
                       <div className="actions-btn">
-                        <button
+                        {/* <button
                           type="button"
                           className="icon-btn delete-btn"
                           onClick={(e) => {
@@ -86,7 +86,7 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
                           title="Delete Employee"
                         >
                           <SvgIcon name="delete" size={18} />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   )}
