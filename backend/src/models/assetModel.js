@@ -181,6 +181,10 @@ const assetSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
+  branch: {
+    type: String,
+    default: ""
+  },
 
   custodian: {
     type: {

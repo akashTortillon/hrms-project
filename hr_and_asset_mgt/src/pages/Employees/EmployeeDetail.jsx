@@ -364,12 +364,12 @@ export default function EmployeeDetail() {
 
     const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary"];
     // Conditionally add Onboarding/Offboarding based on granular permissions
-    if (hasPermission("MANAGE_ONBOARDING")) {
+    /* if (hasPermission("MANAGE_ONBOARDING")) {
         tabs.push("Onboarding");
     }
     if (hasPermission("MANAGE_OFFBOARDING")) {
         tabs.push("Offboarding");
-    }
+    } */
 
     return (
         <div className="employee-detail-container">

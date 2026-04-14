@@ -1023,13 +1023,28 @@ export const generatePayroll = async (req, res) => {
 export const getPayrollSummary = async (req, res) => {
 
     try {
-        const { month, year, company, branch, visaCompany, workPermitCompany, search, page = 1, limit = 50 } = req.query;
+        const { month, year, company, branch, visaCompany, workPermitCompany, search, reportType, page = 1, limit = 50 } = req.query;
 
-        // 1. Fetch all payroll records for month/year
+        // ✅ Native Backend Filtering (Database Level)
+        let employeeMatch = {};
+        if (reportType === 'permit') {
+            employeeMatch = { workPermitCompany: { $ne: null, $exists: true } };
+        } else if (reportType === 'visa') {
+            employeeMatch = { visaCompany: { $ne: null, $exists: true } };
+        }
+
+        // 1. Fetch payroll records for month/year with native employee match
         let records = await Payroll.find({ month, year })
-            .populate("employee", "name code department designation role company branch basicSalary visaBase workBase ctc salaryHistory visaCompany workPermitCompany")
+            .populate({
+                path: "employee",
+                select: "name code department designation role company branch basicSalary visaBase workBase ctc salaryHistory visaCompany workPermitCompany",
+                match: employeeMatch
+            })
             .populate("allowances.addedBy", "name")
             .populate("deductions.addedBy", "name");
+
+        // Filter out records where employee didn't match the criteria (for populated nulls)
+        records = records.filter(r => r.employee !== null);
 
         // 2. Filter by company
         if (company) {

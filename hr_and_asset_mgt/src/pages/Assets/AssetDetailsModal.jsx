@@ -116,6 +116,7 @@ export default function AssetDetailsModal({ onClose, asset }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   <DetailRow label="Location" value={asset.location} />
                   <DetailRow label="Sub Location" value={asset.subLocation || "N/A"} />
+                  <DetailRow label="Branch" value={asset.branch || "N/A"} />
                   <DetailRow label="Department" value={asset.department || "N/A"} />
                   <DetailRow
                     label="Custodian"

@@ -404,39 +404,38 @@
 .payroll-filter-section {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
+  gap: 12px;
+  align-items: center;
   margin-bottom: 24px;
-  padding: 20px;
+  padding: 8px;
   background: #f8fafc;
   border-radius: 12px;
-  border: 1px solid #eef2f6;
+  border: 1px solid #e2e8f0;
 }
 
 .filter-group {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1 1 160px;
+  flex: 1;
   min-width: 140px;
-  max-width: 220px;
-}
-
-.filter-group label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-  text-transform: uppercase;
 }
 
 .filter-group input, .filter-group select {
-  padding: 10px 14px;
-  border-radius: 8px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 10px;
   border: 1px solid #e2e8f0;
   font-size: 13px;
   background: white;
   width: 100%;
+  color: #475569;
+  transition: all 0.2s;
   box-sizing: border-box;
+}
+
+.filter-group input:focus, .filter-group select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .filter-action-btns {
@@ -447,16 +446,16 @@
 }
 
 .filter-btn-primary {
-  padding: 10px 24px;
+  height: 42px;
+  padding: 0 24px;
   background: #0f172a;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
   transition: all 0.2s;
 }
 

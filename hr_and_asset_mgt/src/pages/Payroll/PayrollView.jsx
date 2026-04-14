@@ -13,7 +13,6 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
   return (
     <div className="payroll-filter-section">
       <div className="filter-group">
-        <label>Company</label>
         <select
           value={filters.company || ''}
           onChange={e => setFilters(f => ({ ...f, company: e.target.value, page: 1 }))}
@@ -24,7 +23,6 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
       </div>
 
       <div className="filter-group">
-        <label>Branch</label>
         <select
           value={filters.branch || ''}
           onChange={e => setFilters(f => ({ ...f, branch: e.target.value, page: 1 }))}
@@ -34,39 +32,18 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
         </select>
       </div>
 
-      <div className="filter-group">
-        <label>Visa Company</label>
-        <select
-          value={filters.visaCompany || ''}
-          onChange={e => setFilters(f => ({ ...f, visaCompany: e.target.value, page: 1 }))}
-        >
-          <option value="">All Visa Companies</option>
-          {companies.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
-        </select>
-      </div>
-
-      <div className="filter-group">
-        <label>Location</label>
-        <select
-          value={filters.workPermitCompany || ''}
-          onChange={e => setFilters(f => ({ ...f, workPermitCompany: e.target.value, page: 1 }))}
-        >
-          <option value="">All Locations</option>
-          {companies.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
-        </select>
-      </div>
-
-      <div className="filter-group">
-        <label>Search name</label>
+      <div className="filter-group" style={{ flex: 2 }}>
         <input
           type="text"
-          placeholder="Enter name"
+          placeholder="Search employees..."
           value={filters.search || ''}
           onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
         />
       </div>
 
-      <button className="filter-btn-primary" onClick={() => setFilters(f => ({...f, page: 1}))}>Filter</button>
+      <button className="filter-btn-primary" onClick={() => setFilters(f => ({...f, page: 1}))}>
+        Apply Filters
+      </button>
     </div>
   );
 }
@@ -79,57 +56,49 @@ function WorkReportTable({ records, reportType, loading, onExport }) {
   const filtered = records.filter(r => r.employee?.[companyKey]);
 
   return (
-    <div className="payroll-list-container">
-       <div className="list-header" style={{ marginBottom: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                <div>
-                   <h2 className="list-title">{label} Report</h2>
-                   <p className="list-subtitle">Employee list filtered by {reportType === 'permit' ? 'location' : 'visa'}</p>
-                </div>
-                <button className="export-record-btn" onClick={onExport}>
-                    <SvgIcon name="download" size={14} />
-                    Export Record
-                </button>
-            </div>
-        </div>
-
-      <div className="payroll-list-table-wrapper">
-        <table className="payroll-modern-table">
-          <thead>
-            <tr>
-              <th>EMPLOYEE</th>
-              <th>{label.toUpperCase()}</th>
-              <th>BASIC SALARY</th>
-              <th>ALLOWANCES</th>
-              <th>DEDUCTIONS</th>
-              <th>NET SALARY</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="6" className="text-center p-4">Loading...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan="6" className="text-center p-4">No records found.</td></tr>
-            ) : filtered.map(record => (
-              <tr key={record._id}>
-                <td>
-                  <div className="p-emp-name">{record.employee?.name || 'Unknown'}</div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>{record.employee?.code}</div>
-                </td>
-                <td>
-                  <span className="p-status-badge approved">
-                    {record.employee?.[companyKey]}
-                  </span>
-                </td>
-                <td className="p-salary">{(record.basicSalary || 0).toLocaleString()} AED</td>
-                <td style={{ color: '#10b981' }}>+{(record.totalAllowances || 0).toLocaleString()} AED</td>
-                <td style={{ color: '#f43f5e' }}>-{(record.totalDeductions || 0).toLocaleString()} AED</td>
-                <td className="p-salary" style={{ fontWeight: '700' }}>{(record.netSalary || 0).toLocaleString()} AED</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="payroll-list-table-wrapper">
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px' }}>
+          <button className="export-record-btn" onClick={onExport}>
+              <SvgIcon name="download" size={14} />
+              Export Record
+          </button>
       </div>
+
+      <table className="payroll-modern-table">
+        <thead>
+          <tr>
+            <th>EMPLOYEE</th>
+            <th>{label.toUpperCase()}</th>
+            <th>BASIC SALARY</th>
+            <th>ALLOWANCES</th>
+            <th>DEDUCTIONS</th>
+            <th>NET SALARY</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan="6" className="text-center p-4">Loading...</td></tr>
+          ) : filtered.length === 0 ? (
+            <tr><td colSpan="6" className="text-center p-4">No records found.</td></tr>
+          ) : filtered.map(record => (
+            <tr key={record._id}>
+              <td>
+                <div className="p-emp-name">{record.employee?.name || 'Unknown'}</div>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>{record.employee?.code}</div>
+              </td>
+              <td>
+                <span className="p-status-badge approved">
+                  {record.employee?.[companyKey]}
+                </span>
+              </td>
+              <td className="p-salary">{(record.basicSalary || 0).toLocaleString()} AED</td>
+              <td style={{ color: '#10b981' }}>+{(record.totalAllowances || 0).toLocaleString()} AED</td>
+              <td style={{ color: '#f43f5e' }}>-{(record.totalDeductions || 0).toLocaleString()} AED</td>
+              <td className="p-salary" style={{ fontWeight: '700' }}>{(record.netSalary || 0).toLocaleString()} AED</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -191,7 +160,7 @@ function Payroll() {
     if (activeTab !== 'Payroll') {
       fetchAllRecords();
     }
-  }, [activeTab, month, year]);
+  }, [activeTab, month, year, filters]);
 
   const fetchPayroll = async () => {
     try {
@@ -211,7 +180,8 @@ function Payroll() {
   const fetchAllRecords = async () => {
     try {
       setLoading(true);
-      const data = await payrollService.getSummary(month, year, { limit: 1000 });
+      const reportType = activeTab === 'Location report' ? 'permit' : activeTab === 'Visa report' ? 'visa' : null;
+      const data = await payrollService.getSummary(month, year, { ...filters, reportType, limit: 1000 });
       setAllRecords(data.records || []);
     } catch (error) {
       console.error(error);
@@ -430,21 +400,49 @@ function Payroll() {
       )}
 
       {activeTab === 'Location report' && (
-        <WorkReportTable 
-            records={allRecords} 
-            reportType="permit" 
-            loading={loading} 
-            onExport={() => handleExportExcel('permit')} 
-        />
+        <div className="payroll-list-container">
+            <div className="list-header">
+                <h2 className="list-title">Location Report</h2>
+                <p className="list-subtitle">Analysis filtered by location</p>
+            </div>
+            
+            <PayrollFilters
+                filters={filters}
+                setFilters={setFilters}
+                companies={companies}
+                branches={branches}
+            />
+
+            <WorkReportTable 
+                records={allRecords} 
+                reportType="permit" 
+                loading={loading} 
+                onExport={() => handleExportExcel('permit')} 
+            />
+        </div>
       )}
 
       {activeTab === 'Visa report' && (
-        <WorkReportTable 
-            records={allRecords} 
-            reportType="visa" 
-            loading={loading} 
-            onExport={() => handleExportExcel('visa')} 
-        />
+        <div className="payroll-list-container">
+            <div className="list-header">
+                <h2 className="list-title">Visa Report</h2>
+                <p className="list-subtitle">Analysis filtered by visa company</p>
+            </div>
+
+            <PayrollFilters
+                filters={filters}
+                setFilters={setFilters}
+                companies={companies}
+                branches={branches}
+            />
+
+            <WorkReportTable 
+                records={allRecords} 
+                reportType="visa" 
+                loading={loading} 
+                onExport={() => handleExportExcel('visa')} 
+            />
+        </div>
       )}
     </div>
   );

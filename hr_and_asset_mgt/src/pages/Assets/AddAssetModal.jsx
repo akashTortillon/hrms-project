@@ -13,6 +13,7 @@ export default function AddAssetModal({
   onAddAsset,
   onUpdateAsset,
   asset = null,
+  branches = [],
 }) {
   const isEditMode = !!asset;
 
@@ -34,6 +35,7 @@ export default function AddAssetModal({
     warrantyPeriod: "",
     serviceDueDate: "",
     status: "Available",
+    branch: "",
   });
 
   /* -------------------- LOAD MASTERS & EMPLOYEES -------------------- */
@@ -52,17 +54,15 @@ export default function AddAssetModal({
   };
 
   const fetchMasters = async () => {
-    try {
-      const [typesRes, categoriesRes] = await Promise.all([
-        assetTypeService.getAll(),
-        assetCategoryService.getAll(),
-      ]);
+    // Fetch Asset Types
+    assetTypeService.getAll()
+      .then(res => setAssetTypes(Array.isArray(res) ? res : []))
+      .catch(err => console.error("Failed to load asset types", err));
 
-      setAssetTypes(Array.isArray(typesRes) ? typesRes : []);
-      setCategories(Array.isArray(categoriesRes) ? categoriesRes : []);
-    } catch (error) {
-      console.error("Failed to fetch asset masters", error);
-    }
+    // Fetch Asset Categories
+    assetCategoryService.getAll()
+      .then(res => setCategories(Array.isArray(res) ? res : []))
+      .catch(err => console.error("Failed to load asset categories", err));
   };
 
   /* -------------------- PREFILL FORM (EDIT MODE) -------------------- */
@@ -87,6 +87,7 @@ export default function AddAssetModal({
         ? new Date(asset.serviceDueDate).toISOString().split("T")[0]
         : "",
       status: asset.status || "Available",
+      branch: asset.branch || "",
     });
   }, [asset]);
 
@@ -130,6 +131,7 @@ export default function AddAssetModal({
       warrantyPeriod: form.warrantyPeriod ? Number(form.warrantyPeriod) : null,
       serviceDueDate: form.serviceDueDate || null,
       status: form.status,
+      branch: form.branch || null,
     };
 
     if (isEditMode) {
@@ -228,6 +230,26 @@ export default function AddAssetModal({
                 ))}
               </select>
             </div>
+
+            <select
+              name="branch"
+              value={form.branch}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: 'white',
+                fontSize: '14px',
+                height: '42px'
+              }}
+            >
+              <option value="">Select Branch (Optional)</option>
+              {branches.map(b => (
+                <option key={b._id || b.name} value={b.name}>{b.name}</option>
+              ))}
+            </select>
 
             <input name="department" placeholder="Department" value={form.department} onChange={handleChange} />
             <input name="purchaseCost" type="number" placeholder="Purchase Cost (AED) *" value={form.purchaseCost} onChange={handleChange} />

@@ -120,6 +120,9 @@ const AssetsFilters = ({
   setType,
   status,
   setStatus,
+  branch,
+  setBranch,
+  branches = [],
   assetTypes = [],
   assetStatuses = [],
   total = 0,
@@ -131,6 +134,7 @@ const AssetsFilters = ({
         Object.entries({
           type: type !== "ALL" ? type : undefined,
           status: status !== "ALL" ? status : undefined,
+          branch: branch !== "ALL" ? branch : undefined,
           search: search || undefined,
         }).filter(([_, value]) => value) // Remove empty values
       );
@@ -167,47 +171,49 @@ const AssetsFilters = ({
           />
         </div>
 
-        {/* Asset Type */}
-        {/* Asset Type */}
-        <div style={{ width: '100%' }}>
-          {/* Asset Type */}
-          <div style={{ width: '100%' }}>
-            <select
-              className="assets-select"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              <option value="ALL">All Types</option>
-              {assetTypes.map(t => (
-                <option key={t._id || t.name} value={t.name}>{t.name}</option>
-              ))}
-            </select>
-          </div>
+        {/* Dropdowns */}
+        <select
+          className="assets-select"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="ALL">All Types</option>
+          {assetTypes.map(t => (
+            <option key={t._id || t.name} value={t.name}>{t.name}</option>
+          ))}
+        </select>
 
-          {/* Asset Status */}
-          <div style={{ width: '100%' }}>
-            <select
-              className="assets-select"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="ALL">All Status</option>
-              {assetStatuses.map(s => (
-                <option key={s._id || s.name} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <select
+          className="assets-select"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="ALL">All Status</option>
+          {assetStatuses.map(s => (
+            <option key={s._id || s.name} value={s.name}>{s.name}</option>
+          ))}
+        </select>
+
+        <select
+          className="assets-select"
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+        >
+          <option value="ALL">All Branches</option>
+          {branches.map(b => (
+            <option key={b._id || b.name} value={b.name}>{b.name}</option>
+          ))}
+        </select>
 
         {/* Export */}
         <button className="assets-export-btn" onClick={handleExportAssets}>
           <SvgIcon name="download" size={16} />
-          Export Assets
+          Export
         </button>
       </div>
 
       <div className="assets-count">
-        Showing {total} of {total} assets
+        Found {total} active {total === 1 ? 'asset' : 'assets'} matching your filters
       </div>
     </div>
   );

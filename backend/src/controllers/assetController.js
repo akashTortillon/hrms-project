@@ -189,7 +189,8 @@ export const createAsset = async (req, res) => {
       purchaseDate,
       status,
       warrantyPeriod,
-      serviceDueDate
+      serviceDueDate,
+      branch
     } = req.body;
 
     // Validation
@@ -231,6 +232,7 @@ export const createAsset = async (req, res) => {
       warrantyPeriod: warrantyPeriod ? parseInt(warrantyPeriod) : null,
       warrantyExpiryDate,
       serviceDueDate: serviceDueDate || null,
+      branch: branch || "",
       status: status || "Available",
       currentLocation: {
         type: custodian ? "EMPLOYEE" : "STORE",
@@ -271,7 +273,7 @@ export const createAsset = async (req, res) => {
 
 export const getAssets = async (req, res) => {
   try {
-    const { search, type, status } = req.query;
+    const { search, type, status, branch } = req.query;
 
     // Base filter
     const filter = {};
@@ -292,6 +294,11 @@ export const getAssets = async (req, res) => {
     // Filter by asset status
     if (status && status !== "ALL") {
       filter.status = status;
+    }
+
+    // Filter by branch
+    if (branch && branch !== "ALL") {
+      filter.branch = branch;
     }
 
     // Search (case-insensitive, partial match)
@@ -356,7 +363,7 @@ export const getAssetById = async (req, res) => {
 export const updateAsset = async (req, res) => {
   try {
     const { id } = req.params;
-    const { warrantyPeriod, purchaseDate, custodian, ...otherFields } = req.body;
+    const { warrantyPeriod, purchaseDate, custodian, branch, ...otherFields } = req.body;
 
     // Validate custodian if provided
     if (custodian) {
@@ -378,6 +385,7 @@ export const updateAsset = async (req, res) => {
       ...otherFields,
       ...(purchaseDate && { purchaseDate }),
       ...(custodian !== undefined && { custodian: custodian || null }),
+      ...(branch !== undefined && { branch: branch || "" }),
       ...(warrantyPeriod && { warrantyPeriod: parseInt(warrantyPeriod) }),
       ...(warrantyExpiryDate && { warrantyExpiryDate })
     };
@@ -748,7 +756,7 @@ export const deleteMaintenanceLog = async (req, res) => {
 
 export const exportAssets = async (req, res) => {
   try {
-    const { department, status, search, category, location } = req.query;
+    const { department, status, search, category, location, branch } = req.query;
     let matchStage = {};
 
     // Filters
@@ -756,6 +764,7 @@ export const exportAssets = async (req, res) => {
     if (status && status !== "All Status") matchStage.status = status;
     if (category && category !== "All Categories") matchStage.category = category;
     if (location && location !== "All Locations") matchStage.location = location;
+    if (branch && branch !== "All Branches") matchStage.branch = branch;
     if (search) {
       matchStage.$or = [
         { name: { $regex: search, $options: "i" } },
