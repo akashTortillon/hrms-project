@@ -648,6 +648,20 @@ export default function EmployeeDetail() {
                                 <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Accommodation Allowance</label>
+                                <div>{employee.accommodationAllowance ? `${employee.accommodationAllowance} AED` : "0 AED"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Vehicle Allowance</label>
+                                <div>{employee.vehicleAllowance ? `${employee.vehicleAllowance} AED` : "0 AED"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Total Salary</label>
+                                <div style={{ fontWeight: '700', color: '#111827' }}>
+                                    {employee.totalSalary ? `${employee.totalSalary} AED` : "N/A"}
+                                </div>
+                            </div>
+                            <div className="info-group">
                                 <label>Accommodation</label>
                                 <div>{employee.accommodation || "N/A"}</div>
                             </div>

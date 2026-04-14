@@ -637,6 +637,27 @@ export const generatePayroll = async (req, res) => {
                 totalDeductions += halfPayDeduction;
             }
 
+            // --- 2.2 FIXED EMPLOYEE ALLOWANCES ---
+            const fixedAllowances = [
+                { name: "Housing Rent Allowance (HRA)", value: emp.hra },
+                { name: "Accommodation Allowance", value: emp.accommodationAllowance },
+                { name: "Vehicle Allowance", value: emp.vehicleAllowance },
+                { name: "Other Allowance", value: emp.allowance }
+            ];
+
+            fixedAllowances.forEach(fa => {
+                const amount = Number(fa.value) || 0;
+                if (amount > 0) {
+                    allowanceList.push({
+                        name: fa.name,
+                        amount: amount,
+                        type: "AUTO",
+                        meta: "Fixed Monthly Allowance"
+                    });
+                    totalAllowances += amount;
+                }
+            });
+
             // --- 2.5 SHIFT-BASED PENALTIES (Dynamic Late Deduction) ---
             // If the employee's shift has a "latePolicy", we apply it here.
             // This overrides or adds to standard deductions?
@@ -1002,7 +1023,7 @@ export const generatePayroll = async (req, res) => {
 export const getPayrollSummary = async (req, res) => {
 
     try {
-        const { month, year, company, branch, search, page = 1, limit = 50 } = req.query;
+        const { month, year, company, branch, visaCompany, workPermitCompany, search, page = 1, limit = 50 } = req.query;
 
         // 1. Fetch all payroll records for month/year
         let records = await Payroll.find({ month, year })
@@ -1018,6 +1039,16 @@ export const getPayrollSummary = async (req, res) => {
         // 3. Filter by branch
         if (branch) {
             records = records.filter(r => r.employee?.branch === branch);
+        }
+
+        // 3b. Filter by visaCompany
+        if (visaCompany) {
+            records = records.filter(r => r.employee?.visaCompany === visaCompany);
+        }
+
+        // 3c. Filter by workPermitCompany (Location)
+        if (workPermitCompany) {
+            records = records.filter(r => r.employee?.workPermitCompany === workPermitCompany);
         }
 
         // 4. Filter by search (name or code)
@@ -1279,7 +1310,7 @@ export const finalizePayroll = async (req, res) => {
 // --- API: Export Payroll to Excel ---
 export const exportPayroll = async (req, res) => {
     try {
-        const { month, year, reportType } = req.query;
+        const { month, year, reportType, visaCompany, workPermitCompany, company, branch } = req.query;
 
         // Populate fields needed for the report
         // ✅ ADDED: Specialized filtering for Work Permit / Visa reports
@@ -1292,12 +1323,26 @@ export const exportPayroll = async (req, res) => {
 
         let records = await Payroll.find({ month, year }).populate({
             path: "employee",
-            select: "name code designation department company bankAccount iban bankName laborCardNumber personalId workPermitCompany visaCompany",
+            select: "name code designation department company branch bankAccount iban bankName laborCardNumber personalId workPermitCompany visaCompany",
             match
         });
 
         // Filter out records where employee didn't match the specific report criteria
         records = records.filter(r => r.employee !== null);
+
+        // ✅ Apply additional filters (company, branch, visaCompany, workPermitCompany)
+        if (company) {
+            records = records.filter(r => r.employee?.company === company);
+        }
+        if (branch) {
+            records = records.filter(r => r.employee?.branch === branch);
+        }
+        if (visaCompany) {
+            records = records.filter(r => r.employee?.visaCompany === visaCompany);
+        }
+        if (workPermitCompany) {
+            records = records.filter(r => r.employee?.workPermitCompany === workPermitCompany);
+        }
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: `No ${reportType || ''} payroll records found for this month.` });

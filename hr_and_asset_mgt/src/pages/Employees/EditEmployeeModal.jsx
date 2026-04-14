@@ -42,6 +42,20 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
     }));
   }, [employee]);
 
+  // Handle auto-calculation of Total Salary
+  useEffect(() => {
+    const basic = Number(form.basicSalary) || 0;
+    const allowance = Number(form.allowance) || 0;
+    const hra = Number(form.hra) || 0;
+    const accommodation = Number(form.accommodationAllowance) || 0;
+    const vehicle = Number(form.vehicleAllowance) || 0;
+    
+    setForm(prev => ({
+      ...prev,
+      totalSalary: basic + allowance + hra + accommodation + vehicle
+    }));
+  }, [form.basicSalary, form.allowance, form.hra, form.accommodationAllowance, form.vehicleAllowance]);
+
   const fetchMasters = async () => {
     try {
       const [rolesData, typesData, desigData, branchesData, companiesData, employeesData] = await Promise.all([
@@ -606,6 +620,31 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 <div className="form-group">
                   <label>Basic Salary</label>
                   <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
+                </div>
+
+                <div className="form-group">
+                  <label>Allowance</label>
+                  <input name="allowance" type="number" value={form.allowance || ''} onChange={handleChange} placeholder="e.g. 500" />
+                </div>
+
+                <div className="form-group">
+                  <label>HRA</label>
+                  <input name="hra" type="number" value={form.hra || ''} onChange={handleChange} placeholder="e.g. 300" />
+                </div>
+
+                <div className="form-group">
+                  <label>Accommodation Allowance (AED)</label>
+                  <input name="accommodationAllowance" type="number" value={form.accommodationAllowance || ''} onChange={handleChange} placeholder="e.g. 500" />
+                </div>
+
+                <div className="form-group">
+                  <label>Vehicle Allowance (AED)</label>
+                  <input name="vehicleAllowance" type="number" value={form.vehicleAllowance || ''} onChange={handleChange} placeholder="e.g. 400" />
+                </div>
+
+                <div className="form-group">
+                  <label>Total Salary (AED)</label>
+                  <input name="totalSalary" type="number" value={form.totalSalary || ''} onChange={handleChange} placeholder="Auto calculated" />
                 </div>
 
                 <div className="form-group">

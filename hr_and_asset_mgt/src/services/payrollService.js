@@ -40,9 +40,13 @@ export const payrollService = {
     },
 
     // Export Excel
-    exportExcel: async (month, year, reportType = null) => {
+    exportExcel: async (month, year, reportType = null, filters = {}) => {
         let urlPath = `/payroll/export?month=${month}&year=${year}`;
         if (reportType) urlPath += `&reportType=${reportType}`;
+        if (filters.visaCompany) urlPath += `&visaCompany=${encodeURIComponent(filters.visaCompany)}`;
+        if (filters.workPermitCompany) urlPath += `&workPermitCompany=${encodeURIComponent(filters.workPermitCompany)}`;
+        if (filters.company) urlPath += `&company=${encodeURIComponent(filters.company)}`;
+        if (filters.branch) urlPath += `&branch=${encodeURIComponent(filters.branch)}`;
 
         const response = await api.get(urlPath, {
             responseType: 'blob'

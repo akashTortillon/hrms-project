@@ -35,6 +35,28 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
       </div>
 
       <div className="filter-group">
+        <label>Visa Company</label>
+        <select
+          value={filters.visaCompany || ''}
+          onChange={e => setFilters(f => ({ ...f, visaCompany: e.target.value, page: 1 }))}
+        >
+          <option value="">All Visa Companies</option>
+          {companies.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
+        </select>
+      </div>
+
+      <div className="filter-group">
+        <label>Location</label>
+        <select
+          value={filters.workPermitCompany || ''}
+          onChange={e => setFilters(f => ({ ...f, workPermitCompany: e.target.value, page: 1 }))}
+        >
+          <option value="">All Locations</option>
+          {companies.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
+        </select>
+      </div>
+
+      <div className="filter-group">
         <label>Search name</label>
         <input
           type="text"
@@ -66,7 +88,7 @@ function WorkReportTable({ records, reportType, loading, onExport }) {
                 </div>
                 <button className="export-record-btn" onClick={onExport}>
                     <SvgIcon name="download" size={14} />
-                    Export Excel
+                    Export Record
                 </button>
             </div>
         </div>
@@ -139,7 +161,7 @@ function Payroll() {
   const [pagination, setPagination] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [filters, setFilters] = useState({ company: '', branch: '', search: '', page: 1, limit: 10 });
+  const [filters, setFilters] = useState({ company: '', branch: '', visaCompany: '', workPermitCompany: '', search: '', page: 1, limit: 10 });
 
   // --- MOCK DATA FOR CHARTS (To avoid breaking backend dependencies) ---
   const mockTrends = [
@@ -226,7 +248,7 @@ function Payroll() {
 
   const handleExportExcel = async (reportType = null) => {
     try {
-      await payrollService.exportExcel(month, year, reportType);
+      await payrollService.exportExcel(month, year, reportType, filters);
       toast.success("Export Downloaded!");
     } catch (error) {
       toast.error("Export failed.");
@@ -272,7 +294,7 @@ function Payroll() {
         year={year}
         setMonth={setMonth}
         setYear={setYear}
-        onExportWPS={handleGenerateSIF}
+        onExportWPS={() => handleExportExcel()}
       />
 
       {/* Modern Tabs Switcher (Design only) */}

@@ -28,6 +28,8 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     basicSalary: "",
     allowance: "",
     hra: "",
+    accommodationAllowance: "",
+    vehicleAllowance: "",
     totalSalary: "",
     accommodation: "",
     visaNo: "",
@@ -63,6 +65,19 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
   useEffect(() => {
     fetchMasters();
   }, []);
+
+  useEffect(() => {
+    const basic = Number(form.basicSalary) || 0;
+    const allowance = Number(form.allowance) || 0;
+    const hra = Number(form.hra) || 0;
+    const accommodation = Number(form.accommodationAllowance) || 0;
+    const vehicle = Number(form.vehicleAllowance) || 0;
+    
+    setForm(prev => ({
+      ...prev,
+      totalSalary: basic + allowance + hra + accommodation + vehicle
+    }));
+  }, [form.basicSalary, form.allowance, form.hra, form.accommodationAllowance, form.vehicleAllowance]);
 
   const fetchMasters = async () => {
     try {
@@ -473,6 +488,16 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>HRA (AED)</label>
               <input name="hra" type="number" placeholder="e.g. 300" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Accommodation Allowance (AED)</label>
+              <input name="accommodationAllowance" type="number" placeholder="e.g. 500" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Vehicle Allowance (AED)</label>
+              <input name="vehicleAllowance" type="number" placeholder="e.g. 400" onChange={handleChange} />
             </div>
 
             <div className="form-group">

@@ -66,6 +66,8 @@ const employeeSchema = new mongoose.Schema({
   basicSalary: { type: String },
   allowance: { type: Number, default: 0 },
   hra: { type: Number, default: 0 },
+  accommodationAllowance: { type: Number, default: 0 },
+  vehicleAllowance: { type: Number, default: 0 },
   totalSalary: { type: Number, default: 0 },
   visaBase: { type: Number, default: 0 },
   workBase: { type: Number, default: 0 },
