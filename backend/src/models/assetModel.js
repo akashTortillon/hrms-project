@@ -185,6 +185,10 @@ const assetSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
+  company: {
+    type: String,
+    default: ""
+  },
 
   custodian: {
     type: {

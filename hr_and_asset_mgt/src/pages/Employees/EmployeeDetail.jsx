@@ -37,7 +37,7 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation, resetEmployeePassword } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
 import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
@@ -56,6 +56,7 @@ import { assignAssetToEmployee } from "../../services/assignmentService";
 import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
 import WorkflowTab from "../../components/employee/WorkflowTab";
+import WarningsTab from "../../components/employee/WarningsTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
 
 export default function EmployeeDetail() {
@@ -107,6 +108,10 @@ export default function EmployeeDetail() {
     const [loans, setLoans] = useState([]);
     const [confirmingProbation, setConfirmingProbation] = useState(false);
     const [showSkipLoanModal, setShowSkipLoanModal] = useState(false);
+
+    // Gratuity State
+    const [gratuity, setGratuity] = useState(null);
+    const [gratuityLoading, setGratuityLoading] = useState(false);
     const [selectedLoanForSkip, setSelectedLoanForSkip] = useState(null);
     const [savingLoanSkip, setSavingLoanSkip] = useState(false);
 
@@ -186,6 +191,8 @@ export default function EmployeeDetail() {
             fetchEmployeeAssetsData();
         } else if (activeTab === "Loans") {
             fetchEmployeeLoans();
+        } else if (activeTab === "Salary") {
+            fetchGratuity();
         }
     }, [activeTab, effectiveId]);
 
@@ -245,6 +252,19 @@ export default function EmployeeDetail() {
             }
         } catch (e) {
             console.error("Loans fetch error:", e);
+        }
+    };
+
+    const fetchGratuity = async () => {
+        if (!effectiveId) return;
+        setGratuityLoading(true);
+        try {
+            const res = await getEmployeeGratuity(effectiveId);
+            setGratuity(res.data || null);
+        } catch (e) {
+            console.error("Gratuity fetch error:", e);
+        } finally {
+            setGratuityLoading(false);
         }
     };
 
@@ -363,13 +383,16 @@ export default function EmployeeDetail() {
     const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
     const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary"];
-    // Conditionally add Onboarding/Offboarding based on granular permissions
-    /* if (hasPermission("MANAGE_ONBOARDING")) {
-        tabs.push("Onboarding");
+    // Salary tab — visible only to Finance/HR/Admin roles
+    const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS");
+    if (canViewSalary) {
+        tabs.push("Salary");
     }
-    if (hasPermission("MANAGE_OFFBOARDING")) {
-        tabs.push("Offboarding");
-    } */
+    // Warnings tab — visible to HR/Admin/Manager (can manage) and the employee themselves
+    const canViewWarnings = canEdit || isSelf;
+    if (canViewWarnings) {
+        tabs.push("Warnings");
+    }
 
     return (
         <div className="employee-detail-container">
@@ -639,28 +662,7 @@ export default function EmployeeDetail() {
                                 <label>Probation Status</label>
                                 <div>{employee.probationStatus ? employee.probationStatus.replace(/_/g, " ") : "N/A"}</div>
                             </div>
-                            <div className="info-group">
-                                <label>Fixed Probation Increment</label>
-                                <div>{employee.fixedProbationIncrementAmount ? `${employee.fixedProbationIncrementAmount} AED` : "0 AED"}</div>
-                            </div>
-                            <div className="info-group">
-                                <label>Basic Salary</label>
-                                <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
-                            </div>
-                            <div className="info-group">
-                                <label>Accommodation Allowance</label>
-                                <div>{employee.accommodationAllowance ? `${employee.accommodationAllowance} AED` : "0 AED"}</div>
-                            </div>
-                            <div className="info-group">
-                                <label>Vehicle Allowance</label>
-                                <div>{employee.vehicleAllowance ? `${employee.vehicleAllowance} AED` : "0 AED"}</div>
-                            </div>
-                            <div className="info-group">
-                                <label>Total Salary</label>
-                                <div style={{ fontWeight: '700', color: '#111827' }}>
-                                    {employee.totalSalary ? `${employee.totalSalary} AED` : "N/A"}
-                                </div>
-                            </div>
+                            {/* Salary fields moved to the restricted Salary tab */}
                             <div className="info-group">
                                 <label>Accommodation</label>
                                 <div>{employee.accommodation || "N/A"}</div>
@@ -933,12 +935,146 @@ export default function EmployeeDetail() {
 
 
 
+                {/* Onboarding and Offboarding tabs temporarily disabled
                 {activeTab === "Onboarding" && (
                     <WorkflowTab employeeId={effectiveId} type="Onboarding" />
                 )}
 
                 {activeTab === "Offboarding" && (
                     <WorkflowTab employeeId={effectiveId} type="Offboarding" />
+                )}
+                */}
+
+                {/* ===== SALARY TAB (Finance / HR / Admin only) ===== */}
+                {activeTab === "Salary" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Salary & Compensation</h3>
+                            {canEdit && (
+                                <button
+                                    onClick={() => { setEditMode("employment"); setShowEditModal(true); }}
+                                    style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    <EditIcon /> Edit
+                                </button>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                            {/* Left column — salary breakdown */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                    Salary Breakdown
+                                </div>
+
+                                {[
+                                    { label: 'Fixed Probation Increment', value: employee.fixedProbationIncrementAmount, fallback: '0 AED' },
+                                    { label: 'Basic Salary', value: employee.basicSalary, fallback: 'N/A' },
+                                    { label: 'Accommodation Allowance', value: employee.accommodationAllowance, fallback: '0 AED' },
+                                    { label: 'Vehicle Allowance', value: employee.vehicleAllowance, fallback: '0 AED' },
+                                ].map(({ label, value, fallback }) => (
+                                    <div key={label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{label}</span>
+                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                            {value ? `${Number(value).toLocaleString()} AED` : fallback}
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {/* Total Salary — highlighted */}
+                                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '14px', fontWeight: '700', color: '#1d4ed8' }}>Total Salary</span>
+                                    <span style={{ fontSize: '22px', fontWeight: '800', color: '#1e40af' }}>
+                                        {employee.totalSalary ? `${Number(employee.totalSalary).toLocaleString()} AED` : 'N/A'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Right column — gratuity */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                    UAE Gratuity (End-of-Service Benefit)
+                                </div>
+
+                                {gratuityLoading ? (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '10px' }}>
+                                        Calculating gratuity...
+                                    </div>
+                                ) : gratuity ? (
+                                    <>
+                                        {/* Service duration */}
+                                        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px' }}>
+                                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '600' }}>SERVICE DURATION</div>
+                                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#111827' }}>{gratuity.yearsOfService}</div>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Years</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#111827' }}>{gratuity.monthsOfService}</div>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Months</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#111827' }}>{gratuity.daysOfService}</div>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Days</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Formula breakdown */}
+                                        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px' }}>
+                                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '10px', fontWeight: '600' }}>CALCULATION BASIS</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                    <span style={{ color: '#6b7280' }}>Daily Basic Wage</span>
+                                                    <span style={{ fontWeight: '600', color: '#111827' }}>{gratuity.dailyBasicWage} AED</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                    <span style={{ color: '#6b7280' }}>Formula</span>
+                                                    <span style={{ fontWeight: '600', color: '#111827', fontSize: '12px' }}>
+                                                        {gratuity.yearsOfService <= 5
+                                                            ? `Daily × 21 × ${gratuity.yearsOfService}y`
+                                                            : `(Daily × 21 × 5) + (Daily × 30 × ${(gratuity.yearsOfService - 5).toFixed(2)}y)`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Gratuity amount — highlighted */}
+                                        <div style={{ background: gratuity.gratuityAmount > 0 ? '#f0fdf4' : '#fef9c3', border: `1px solid ${gratuity.gratuityAmount > 0 ? '#bbf7d0' : '#fde68a'}`, borderRadius: '10px', padding: '16px 20px' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '700', color: gratuity.gratuityAmount > 0 ? '#166534' : '#92400e', marginBottom: '6px' }}>
+                                                ESTIMATED GRATUITY
+                                            </div>
+                                            <div style={{ fontSize: '28px', fontWeight: '800', color: gratuity.gratuityAmount > 0 ? '#15803d' : '#92400e' }}>
+                                                {gratuity.gratuityAmount.toLocaleString()} AED
+                                            </div>
+                                            {gratuity.gratuityNote && (
+                                                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>
+                                                    {gratuity.gratuityNote}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div style={{ fontSize: '11px', color: '#9ca3af', padding: '0 4px' }}>
+                                            Based on UAE Federal Decree-Law No. 33 of 2021. Calculated on basic salary only, excluding allowances.
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '10px' }}>
+                                        No gratuity data available.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* ===== WARNINGS TAB ===== */}
+                {activeTab === "Warnings" && (
+                    <WarningsTab
+                        employeeId={effectiveId}
+                        isSelf={isSelf}
+                    />
                 )}
 
                 {activeTab === "Loans" && (

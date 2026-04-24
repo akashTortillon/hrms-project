@@ -14,6 +14,7 @@ export default function AddAssetModal({
   onUpdateAsset,
   asset = null,
   branches = [],
+  companies = [],
 }) {
   const isEditMode = !!asset;
 
@@ -36,6 +37,7 @@ export default function AddAssetModal({
     serviceDueDate: "",
     status: "Available",
     branch: "",
+    company: "",
   });
 
   /* -------------------- LOAD MASTERS & EMPLOYEES -------------------- */
@@ -88,6 +90,7 @@ export default function AddAssetModal({
         : "",
       status: asset.status || "Available",
       branch: asset.branch || "",
+      company: asset.company || "",
     });
   }, [asset]);
 
@@ -132,6 +135,7 @@ export default function AddAssetModal({
       serviceDueDate: form.serviceDueDate || null,
       status: form.status,
       branch: form.branch || null,
+      company: form.company || null,
     };
 
     if (isEditMode) {
@@ -248,6 +252,26 @@ export default function AddAssetModal({
               <option value="">Select Branch (Optional)</option>
               {branches.map(b => (
                 <option key={b._id || b.name} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+
+            <select
+              name="company"
+              value={form.company}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: 'white',
+                fontSize: '14px',
+                height: '42px'
+              }}
+            >
+              <option value="">Select Company (Optional)</option>
+              {companies.map(c => (
+                <option key={c._id || c.name} value={c.name}>{c.name}</option>
               ))}
             </select>
 

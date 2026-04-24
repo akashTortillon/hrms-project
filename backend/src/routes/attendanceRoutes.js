@@ -3,6 +3,7 @@ import express from "express";
 import {
   getDailyAttendance,
   markAttendance,
+  markAttendanceBulk,
   updateAttendance,
   getEmployeeAttendanceStats,
   syncBiometrics,
@@ -20,7 +21,8 @@ router.get("/export", protect, hasPermission("MANAGE_ATTENDANCE"), exportAttenda
 router.get("/", protect, getDailyAttendance); // Viewing daily attendance (role-filtered in controller)
 router.get("/stats/:employeeId", protect, getEmployeeAttendanceStats); // View specific stats
 router.get("/history/:employeeId", protect, getEmployeeAttendanceHistory);
-router.post("/mark", protect, hasPermission("MANAGE_ATTENDANCE"), markAttendance); // Manual mark by Admin/HR
+router.post("/mark", protect, hasPermission("MANAGE_ATTENDANCE"), markAttendance);
+router.post("/mark-bulk", protect, hasPermission("MANAGE_ATTENDANCE"), markAttendanceBulk);
 router.put("/:id", protect, hasPermission("MANAGE_ATTENDANCE"), updateAttendance);
 
 export default router;

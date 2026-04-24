@@ -17,7 +17,9 @@ import {
     updateCustomConfig,
     deleteCustomConfig,
     getReportStats,
-    logManualActivity
+    logManualActivity,
+    getLoanReport,
+    getAppraisalReport
 } from "../controllers/reportController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import { generateSIF, generateMOLReport } from "../controllers/payrollController.js";
@@ -39,6 +41,10 @@ router.get("/asset-depreciation", getAssetDepreciationReport);
 // Payroll Reports
 router.get("/payroll-summary", getPayrollSummaryReport);
 router.get("/employees/branch-wise", getBranchWiseEmployeeReport);
+
+// Loan & Appraisal Reports
+router.get("/loans", getLoanReport);
+router.get("/appraisals", getAppraisalReport);
 
 // Dashboard Stats
 router.get("/stats", getReportStats);

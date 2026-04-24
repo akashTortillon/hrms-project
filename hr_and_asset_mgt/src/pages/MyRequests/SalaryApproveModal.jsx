@@ -85,6 +85,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
 
     const isLoan = request.details?.subType === 'loan' || request.subType === 'loan';
     const typeLabel = isLoan ? "Loan" : "Salary Advance";
+    const isFinanceStage = request.currentApprovalStage === "FINANCE";
+    const stageLabel = isFinanceStage ? "Finance Confirmation (Level 1)" : "HR Final Approval";
 
     // Footer Actions
     const modalFooter = (
@@ -101,7 +103,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     return (
         <CustomModal
             show={show}
-            title={`Approve ${typeLabel}`}
+            title={`${stageLabel} — ${typeLabel}`}
             onClose={onClose}
             footer={modalFooter}
         >
@@ -112,10 +114,26 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                     color: '#055160',
                     padding: '12px',
                     borderRadius: '4px',
-                    marginBottom: '20px',
+                    marginBottom: '12px',
                     border: '1px solid #b6effb'
                 }}>
                     Reviewing request from <strong>{request.userId?.name}</strong> for <strong>{amount} AED</strong>.
+                </div>
+
+                {/* Stage badge */}
+                <div style={{
+                    display: 'inline-block',
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    marginBottom: '16px',
+                    background: isFinanceStage ? '#fef3c7' : '#dcfce7',
+                    color: isFinanceStage ? '#92400e' : '#166534'
+                }}>
+                    {isFinanceStage
+                        ? '⚡ Step 1 of 2 — Finance must confirm before HR final approval'
+                        : '✅ Step 2 of 2 — HR Final Sanction'}
                 </div>
 
                 {/* Form Content */}

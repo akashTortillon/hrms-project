@@ -122,7 +122,10 @@ const AssetsFilters = ({
   setStatus,
   branch,
   setBranch,
+  company,
+  setCompany,
   branches = [],
+  companies = [],
   assetTypes = [],
   assetStatuses = [],
   total = 0,
@@ -135,13 +138,13 @@ const AssetsFilters = ({
           type: type !== "ALL" ? type : undefined,
           status: status !== "ALL" ? status : undefined,
           branch: branch !== "ALL" ? branch : undefined,
+          company: company !== "ALL" ? company : undefined,
           search: search || undefined,
-        }).filter(([_, value]) => value) // Remove empty values
+        }).filter(([_, value]) => value)
       );
 
       const blob = await exportAssets(filters);
 
-      // Download the file
       const downloadLink = document.createElement("a");
       downloadLink.href = window.URL.createObjectURL(blob);
       downloadLink.download = `Assets_${new Date().toISOString().split("T")[0]}.xlsx`;
@@ -202,6 +205,17 @@ const AssetsFilters = ({
           <option value="ALL">All Branches</option>
           {branches.map(b => (
             <option key={b._id || b.name} value={b.name}>{b.name}</option>
+          ))}
+        </select>
+
+        <select
+          className="assets-select"
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+        >
+          <option value="ALL">All Companies</option>
+          {companies.map(c => (
+            <option key={c._id || c.name} value={c.name}>{c.name}</option>
           ))}
         </select>
 

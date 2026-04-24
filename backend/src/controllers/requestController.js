@@ -417,7 +417,7 @@ import { createNotification } from "./notificationController.js";
 import path from "path";
 import fs from "fs";
 import mongoose from "mongoose";
-import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
+import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -1800,6 +1800,13 @@ export const downloadDocument = async (req, res) => {
     }
 
     if (request.uploadedDocumentStorage === "S3") {
+      const exists = await s3ObjectExists(request.uploadedDocument);
+      if (!exists) {
+        return res.status(404).json({
+          success: false,
+          message: "The document file no longer exists. It may have been deleted or moved. Please contact HR to re-upload the document."
+        });
+      }
       return res.redirect(await getSignedFileUrl({
         filePath: request.uploadedDocument,
         fileUrl: request.uploadedDocumentUrl,

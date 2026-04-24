@@ -126,8 +126,9 @@ export default function AdminRequests() {
       // Open modal for document upload
       setSelectedRequest(request);
       setShowApproveModal(true);
-    } else if (request.requestType === "SALARY" && request.currentApprovalStage === "HR") {
-      // Open modal for Salary (Loan/Advance) approval
+    } else if (request.requestType === "SALARY" &&
+      (request.currentApprovalStage === "HR" || request.currentApprovalStage === "FINANCE")) {
+      // Open salary modal for both Finance (level 1) and HR (final sanction)
       setSelectedSalaryReq(request);
       setShowSalaryModal(true);
     } else {

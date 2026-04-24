@@ -9,6 +9,7 @@ import ShiftManagement from "./AttendanceShift";
 import Pagination from "../../components/reusable/Pagination"; // ✅ New
 
 import AttendanceEditModal from "./AttendanceEditModal";
+import BulkAttendanceModal from "./BulkAttendanceModal";
 import {
   getDailyAttendance,
   updateAttendance,
@@ -73,6 +74,7 @@ function Attendance() {
   // Modal State
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   // Setters wrapper
   const updateParams = (updates) => {
@@ -296,6 +298,7 @@ function Attendance() {
         onSync={isEmployee ? null : handleSync}
         loading={loading}
         onExport={isEmployee ? null : handleExport}
+        onBulkMark={hasPermission("MANAGE_ATTENDANCE") ? () => setShowBulkModal(true) : null}
       />
       <AttendanceStats stats={stats} />
 
@@ -365,6 +368,12 @@ function Attendance() {
         date={selectedDate}
         onClose={() => setShowModal(false)}
         onSave={handleSaveAttendance}
+      />
+
+      <BulkAttendanceModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        onSuccess={fetchAttendanceData}
       />
     </div>
   );

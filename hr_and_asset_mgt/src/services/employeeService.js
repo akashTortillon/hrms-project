@@ -87,3 +87,9 @@ export const deleteEmployeeDocument = async (docId) => {
   const res = await api.delete(`${DOC_API}/${docId}`);
   return res.data;
 };
+
+// GET gratuity calculation for an employee
+export const getEmployeeGratuity = async (id) => {
+  const res = await api.get(`${EMPLOYEE_API}/${id}/gratuity`);
+  return res.data;
+};

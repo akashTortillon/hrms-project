@@ -646,6 +646,64 @@ export default function PrebuiltReports() {
           </Card>
         )}
 
+        {/* Loan Report */}
+        {(activeTab === "Payroll" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="dollar" size={22} /></div>
+              <span className="report-tag">Payroll</span>
+            </div>
+            <h4 className="report-title">Loan Report</h4>
+            <p className="report-desc">Complete loan and salary advance report with repayment tracking.</p>
+            <div className="report-actions" style={{ marginTop: 'auto' }}>
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const res = await api.get("/reports/loans?export=true", { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `Loan_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  toast.success("Loan report downloaded");
+                } catch { toast.error("Failed to download loan report"); }
+              }} disabled={loading}>
+                Download Excel
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Appraisal Report */}
+        {(activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="star" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Appraisal Report</h4>
+            <p className="report-desc">Employee appraisal cycles with increment details and approval status.</p>
+            <div className="report-actions" style={{ marginTop: 'auto' }}>
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const res = await api.get("/reports/appraisals?export=true", { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `Appraisal_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  toast.success("Appraisal report downloaded");
+                } catch { toast.error("Failed to download appraisal report"); }
+              }} disabled={loading}>
+                Download Excel
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* WPS Salary File */}
         {(activeTab === "Compliance" || activeTab === "All") && (
           <Card className="report-card">

@@ -43,7 +43,9 @@ import {
   returnAssetToStore,
 } from "../../services/assignmentService.js";
 
-import { assetTypeService, assetStatusService, getBranches } from "../../services/masterService";
+import {
+  assetTypeService, assetStatusService, getBranches, getCompanies
+} from "../../services/masterService";
 import { useRole } from "../../contexts/RoleContext.jsx";
 
 function Assets() {
@@ -80,6 +82,8 @@ function Assets() {
   const [status, setStatus] = useState("ALL");
   const [branch, setBranch] = useState("ALL");
   const [branches, setBranches] = useState([]);
+  const [company, setCompany] = useState("ALL");
+  const [companies, setCompanies] = useState([]);
 
   // Fetch assets
   const fetchAssets = async () => {
@@ -91,6 +95,7 @@ function Assets() {
         type: type !== "ALL" ? type : undefined,
         status: status !== "ALL" ? status : undefined,
         branch: branch !== "ALL" ? branch : undefined,
+        company: company !== "ALL" ? company : undefined,
       };
 
       const response = await getAssets(params);
@@ -145,13 +150,18 @@ function Assets() {
       getBranches()
         .then(res => setBranches(res || []))
         .catch(err => console.error("Failed to load branches", err));
+
+      // Fetch Companies
+      getCompanies()
+        .then(res => setCompanies(res || []))
+        .catch(err => console.error("Failed to load companies", err));
     };
     loadMasters();
   }, []);
   
   useEffect(() => {
     fetchAssets();
-  }, [search, type, status, branch]);
+  }, [search, type, status, branch, company]);
 
   // Filtered assets
   // const filteredAssets = useMemo(() => {
@@ -438,6 +448,9 @@ function Assets() {
         branch={branch}
         setBranch={setBranch}
         branches={branches}
+        company={company}
+        setCompany={setCompany}
+        companies={companies}
         assetTypes={assetTypes}
         assetStatuses={assetStatuses}
         total={assets.length}
@@ -479,6 +492,7 @@ function Assets() {
             onClose={() => setShowAddModal(false)} 
             onAddAsset={handleAddAsset} 
             branches={branches}
+            companies={companies}
         />
       )}
 
@@ -486,6 +500,7 @@ function Assets() {
         <AddAssetModal
           asset={selectedAsset}
           branches={branches}
+          companies={companies}
           onClose={() => {
             setShowEditModal(false);
             setSelectedAsset(null);

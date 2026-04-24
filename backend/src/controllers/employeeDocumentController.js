@@ -1,7 +1,7 @@
 import EmployeeDocument from "../models/employeeDocumentModel.js";
 import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
-import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
+import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
 
 const isDocumentManager = (user = {}) =>
     user.role === "Admin"
@@ -189,6 +189,12 @@ export const downloadEmployeeDocument = async (req, res) => {
         }
 
         if (document.storage === "S3") {
+            const exists = await s3ObjectExists(document.filePath);
+            if (!exists) {
+                return res.status(404).json({
+                    message: "The document file no longer exists in storage. Please contact HR to re-upload it."
+                });
+            }
             return res.redirect(await getSignedFileUrl(document.toObject ? document.toObject() : document));
         }
 

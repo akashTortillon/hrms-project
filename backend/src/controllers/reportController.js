@@ -3,6 +3,11 @@ import * as XLSX from "xlsx";
 import ReportSchedule from "../models/reportScheduleModel.js";
 import CustomReport from "../models/customReportModel.js";
 import ReportActivity from "../models/reportActivityModel.js";
+import Request from "../models/requestModel.js";
+import Appraisal from "../models/appraisalModel.js";
+import AppraisalCycle from "../models/appraisalCycleModel.js";
+import Employee from "../models/employeeModel.js";
+import User from "../models/userModel.js";
 
 const logActivity = async (type, reportName) => {
   try {
@@ -382,5 +387,157 @@ export const logManualActivity = async (req, res) => {
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error logging activity" });
+  }
+};
+
+// ─── LOAN REPORT ────────────────────────────────────────────────────────────
+
+export const getLoanReport = async (req, res) => {
+  try {
+    const { status, subType, startDate, endDate } = req.query;
+    const isExport = req.query.export === "true";
+
+    const filter = { requestType: "SALARY" };
+    if (status) filter.status = status;
+    if (subType) filter["details.subType"] = subType;
+    if (startDate || endDate) {
+      filter.submittedAt = {};
+      if (startDate) filter.submittedAt.$gte = new Date(startDate);
+      if (endDate) filter.submittedAt.$lte = new Date(endDate);
+    }
+
+    const requests = await Request.find(filter)
+      .populate("userId", "name employeeId")
+      .populate("approvedBy", "name")
+      .sort({ submittedAt: -1 });
+
+    // Resolve employee details
+    const employeeIds = requests
+      .map((r) => r.userId?.employeeId)
+      .filter(Boolean);
+    const employees = await Employee.find({ _id: { $in: employeeIds } })
+      .select("_id code department branch");
+    const empMap = {};
+    employees.forEach((e) => { empMap[e._id.toString()] = e; });
+
+    const data = requests.map((r) => {
+      const empId = r.userId?.employeeId?.toString();
+      const emp = empMap[empId] || {};
+      const amount = Number(r.details?.amount) || 0;
+      const repaymentPeriod = Number(r.details?.repaymentPeriod) || 1;
+      const monthlyInstallment = repaymentPeriod > 0 ? (amount / repaymentPeriod) : amount;
+      const totalPaid = (r.payrollDeductions || []).reduce((acc, d) => acc + Number(d.amount || 0), 0);
+      const outstanding = Math.max(0, amount - totalPaid);
+      const loanType = r.details?.subType === "loan" ? "Loan" : "Salary Advance";
+
+      return {
+        employeeId: emp.code || r.userId?.employeeId || "N/A",
+        employeeName: r.userId?.name || "N/A",
+        department: emp.department || "N/A",
+        branch: emp.branch || "N/A",
+        loanId: r.requestId,
+        loanType,
+        loanDate: r.approvedAt ? new Date(r.approvedAt).toLocaleDateString() : "N/A",
+        loanAmount: amount,
+        repaymentPeriod,
+        monthlyInstallment: parseFloat(monthlyInstallment.toFixed(2)),
+        totalPaid: parseFloat(totalPaid.toFixed(2)),
+        outstandingBalance: parseFloat(outstanding.toFixed(2)),
+        status: r.isFullyPaid ? "Paid Off" : r.status,
+        approvedBy: r.approvedBy?.name || "N/A"
+      };
+    });
+
+    if (isExport) {
+      const exportData = data.map((d) => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Loan ID": d.loanId,
+        "Loan Type": d.loanType,
+        "Loan Date": d.loanDate,
+        "Loan Amount (AED)": d.loanAmount,
+        "Repayment Period (Months)": d.repaymentPeriod,
+        "Monthly Installment (AED)": d.monthlyInstallment,
+        "Total Paid (AED)": d.totalPaid,
+        "Outstanding Balance (AED)": d.outstandingBalance,
+        "Status": d.status,
+        "Approved By": d.approvedBy
+      }));
+      await logActivity("Export", "Loan Report");
+      return sendExcelResponse(res, exportData, "Loan_Report", "Loans");
+    }
+
+    await logActivity("Generation", "Loan Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── APPRAISAL REPORT ────────────────────────────────────────────────────────
+
+export const getAppraisalReport = async (req, res) => {
+  try {
+    const { cycleId, status, startDate, endDate } = req.query;
+    const isExport = req.query.export === "true";
+
+    const filter = {};
+    if (cycleId) filter.cycle = cycleId;
+    if (status) filter.status = status;
+    if (startDate || endDate) {
+      filter.effectiveDate = {};
+      if (startDate) filter.effectiveDate.$gte = new Date(startDate);
+      if (endDate) filter.effectiveDate.$lte = new Date(endDate);
+    }
+
+    const appraisals = await Appraisal.find(filter)
+      .populate("employee", "name code department branch")
+      .populate("cycle", "name startDate endDate")
+      .populate("createdBy", "name")
+      .populate("approvedBy", "name")
+      .sort({ effectiveDate: -1 });
+
+    const data = appraisals.map((a) => ({
+      employeeId: a.employee?.code || "N/A",
+      employeeName: a.employee?.name || "N/A",
+      department: a.employee?.department || "N/A",
+      branch: a.employee?.branch || "N/A",
+      cycleName: a.cycle?.name || "N/A",
+      currentSalary: a.currentSalary || 0,
+      recommendedIncrement: a.recommendedIncrement || 0,
+      approvedIncrement: a.approvedIncrement || 0,
+      newSalary: (a.currentSalary || 0) + (a.approvedIncrement || 0),
+      effectiveDate: a.effectiveDate ? new Date(a.effectiveDate).toLocaleDateString() : "N/A",
+      status: a.status,
+      comments: a.comments || "",
+      approvedBy: a.approvedBy?.name || "N/A"
+    }));
+
+    if (isExport) {
+      const exportData = data.map((d) => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Appraisal Cycle": d.cycleName,
+        "Current Salary (AED)": d.currentSalary,
+        "Recommended Increment (AED)": d.recommendedIncrement,
+        "Approved Increment (AED)": d.approvedIncrement,
+        "New Salary (AED)": d.newSalary,
+        "Effective Date": d.effectiveDate,
+        "Status": d.status,
+        "Comments": d.comments,
+        "Approved By": d.approvedBy
+      }));
+      await logActivity("Export", "Appraisal Report");
+      return sendExcelResponse(res, exportData, "Appraisal_Report", "Appraisals");
+    }
+
+    await logActivity("Generation", "Appraisal Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };

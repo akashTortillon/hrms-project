@@ -825,6 +825,88 @@ export const getMonthlyAttendance = async (req, res) => {
 };
 
 /**
+ * BULK mark attendance for a date range (Manager / HR)
+ * Body: { employeeId, fromDate, toDate, checkIn, checkOut, shift, status, reason, skipWeekends }
+ */
+export const markAttendanceBulk = async (req, res) => {
+  try {
+    const { employeeId, fromDate, toDate, checkIn, checkOut, shift, status, reason, skipWeekends } = req.body;
+
+    if (!employeeId || !fromDate || !toDate) {
+      return res.status(400).json({ message: "employeeId, fromDate and toDate are required" });
+    }
+
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    if (end < start) {
+      return res.status(400).json({ message: "toDate must be on or after fromDate" });
+    }
+
+    const rules = await getShiftRules(shift || "Day Shift");
+    const results = [];
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay(); // 0 = Sunday, 6 = Saturday
+      if (skipWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) continue;
+
+      const dateStr = d.toISOString().split("T")[0];
+
+      let resolvedStatus = status || "Absent";
+      let lateTier = 0;
+
+      if (!status) {
+        if (checkIn) {
+          lateTier = calculateLateTier(checkIn, rules);
+          resolvedStatus = lateTier > 0 ? "Late" : "Present";
+        }
+      }
+
+      const workHours = calculateDuration(checkIn, checkOut);
+
+      const updateData = {
+        employee: employeeId,
+        date: dateStr,
+        shift: shift || "Day Shift",
+        checkIn: checkIn || null,
+        checkOut: checkOut || null,
+        status: resolvedStatus,
+        lateTier,
+        workHours
+      };
+
+      if (reason && req.user) {
+        updateData.isManuallyEdited = true;
+        updateData.editedBy = req.user._id;
+        updateData.editedAt = new Date();
+        updateData.editReason = reason;
+      }
+
+      const record = await Attendance.findOneAndUpdate(
+        { employee: employeeId, date: dateStr },
+        updateData,
+        { upsert: true, new: true }
+      );
+
+      results.push(record);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Attendance marked for ${results.length} day(s)`,
+      count: results.length,
+      data: results
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
  * CREATE attendance (mark manually)
  */
 export const markAttendance = async (req, res) => {

@@ -15,10 +15,15 @@ const announcementSchema = new mongoose.Schema({
   },
   branch: { type: String, default: "" },
   company: { type: String, default: "" },
+  department: { type: String, default: "" },
   employeeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Employee" }],
   publishedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   publishedAt: { type: Date, default: Date.now },
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  // Image support
+  imageUrl: { type: String, default: "" },
+  imagePath: { type: String, default: "" },
+  imageStorage: { type: String, enum: ["LOCAL", "S3", ""], default: "" }
 }, { timestamps: true });
 
 export default mongoose.model("Announcement", announcementSchema);

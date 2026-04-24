@@ -967,3 +967,88 @@ export const resetEmployeePassword = async (req, res) => {
     res.status(500).json({ message: "Server error resetting password", error: error.message });
   }
 };
+
+/**
+ * Calculate UAE Gratuity (End-of-Service Benefit) for an employee
+ * Formula (Federal Decree-Law No. 33 of 2021):
+ *   Daily Basic Wage = Monthly Basic Salary / 30
+ *   ≤ 5 years: Daily Wage × 21 × Years of Service
+ *   > 5 years: (Daily Wage × 21 × 5) + (Daily Wage × 30 × (Years − 5))
+ *   Capped at 2 years' total salary
+ */
+export const getEmployeeGratuity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const basicSalary = Number(employee.basicSalary) || 0;
+    const accommodationAllowance = Number(employee.accommodationAllowance) || 0;
+    const vehicleAllowance = Number(employee.vehicleAllowance) || 0;
+    const fixedProbationIncrement = Number(employee.fixedProbationIncrementAmount) || 0;
+    const totalSalary = Number(employee.totalSalary) || (basicSalary + accommodationAllowance + vehicleAllowance);
+
+    // Calculate years of service
+    const joinDate = employee.joinDate ? new Date(employee.joinDate) : null;
+    const today = new Date();
+    let yearsOfService = 0;
+    let monthsOfService = 0;
+    let daysOfService = 0;
+
+    if (joinDate) {
+      const diffMs = today - joinDate;
+      daysOfService = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      monthsOfService = Math.floor(daysOfService / 30.44);
+      yearsOfService = daysOfService / 365.25; // fractional years for calculation
+    }
+
+    // Gratuity is only applicable for employees with > 1 year of service
+    let gratuityAmount = 0;
+    let gratuityNote = "";
+
+    if (yearsOfService < 1) {
+      gratuityNote = "Gratuity not applicable — less than 1 year of service";
+    } else {
+      const dailyBasicWage = basicSalary / 30;
+
+      if (yearsOfService <= 5) {
+        gratuityAmount = dailyBasicWage * 21 * yearsOfService;
+      } else {
+        const first5Years = dailyBasicWage * 21 * 5;
+        const beyond5Years = dailyBasicWage * 30 * (yearsOfService - 5);
+        gratuityAmount = first5Years + beyond5Years;
+      }
+
+      // Cap at 2 years' total salary
+      const cap = totalSalary * 24; // 2 years = 24 months
+      if (gratuityAmount > cap) {
+        gratuityAmount = cap;
+        gratuityNote = "Capped at 2 years' total salary";
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        employeeId: employee._id,
+        employeeName: employee.name,
+        joinDate: employee.joinDate,
+        yearsOfService: parseFloat(yearsOfService.toFixed(2)),
+        monthsOfService,
+        daysOfService,
+        basicSalary,
+        accommodationAllowance,
+        vehicleAllowance,
+        fixedProbationIncrement,
+        totalSalary,
+        dailyBasicWage: parseFloat((basicSalary / 30).toFixed(2)),
+        gratuityAmount: parseFloat(gratuityAmount.toFixed(2)),
+        gratuityNote
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error calculating gratuity" });
+  }
+};

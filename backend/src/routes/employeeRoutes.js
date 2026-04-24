@@ -11,7 +11,8 @@ import {
   transferEmployee,
   getProbationReminders,
   confirmProbation,
-  resetEmployeePassword
+  resetEmployeePassword,
+  getEmployeeGratuity
 } from "../controllers/employeeController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
@@ -33,6 +34,9 @@ router.post("/", protect, hasPermission("MANAGE_EMPLOYEES"), addEmployee);
 
 // GET single employee
 router.get("/:id", protect, getEmployeeById);
+
+// GET gratuity calculation for employee
+router.get("/:id/gratuity", protect, getEmployeeGratuity);
 
 // UPDATE employee
 router.put("/:id", protect, hasPermission("MANAGE_EMPLOYEES"), updateEmployee);

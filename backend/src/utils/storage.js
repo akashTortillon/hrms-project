@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const LOCAL_ROOT = path.resolve("uploads");
@@ -169,6 +169,18 @@ export const deleteStoredFile = (filePath, storage = "LOCAL") => {
   const absolutePath = path.resolve(filePath);
   if (fs.existsSync(absolutePath)) {
     fs.unlinkSync(absolutePath);
+  }
+};
+
+export const s3ObjectExists = async (key) => {
+  const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
+  if (!bucket || !key) return false;
+  try {
+    await getS3Client().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (err) {
+    if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) return false;
+    throw err;
   }
 };
 
