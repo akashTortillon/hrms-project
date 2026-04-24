@@ -3,6 +3,7 @@ import { loginUser } from "../../api/authService";
 import { useNavigate } from "react-router-dom";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
+import ibillLogo from "../../assets/images/ibill-hrm-logo.jpeg";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -55,29 +56,11 @@ export default function Login() {
         <div className="login-brand-panel">
           <div className="login-brand-content">
             <div className="kayzan-logo-wrap">
-              {/* Kayzan Group SVG Logo */}
-              <svg viewBox="0 0 200 200" className="kayzan-logo-svg" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="100" cy="100" r="95" fill="none" stroke="url(#goldGrade)" strokeWidth="5" />
-                <defs>
-                  <linearGradient id="goldGrade" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#c8902a" />
-                    <stop offset="100%" stopColor="#f0c060" />
-                  </linearGradient>
-                </defs>
-                {/* K letter shape */}
-                <path
-                  d="M75 55 L75 145 M75 100 L125 55 M75 100 L125 145"
-                  stroke="url(#goldGrade)"
-                  strokeWidth="16"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
+              <img src={ibillLogo} alt="iBill HRM" style={{ width: "160px", height: "auto", objectFit: "contain" }} />
             </div>
             <div className="kayzan-wordmark">
-              <span className="kayzan-name">KAYZAN</span>
-              <span className="kayzan-group">GROUP</span>
+              <span className="kayzan-name">iBill HRM</span>
+              <span className="kayzan-group">IBILL SOFTWARE FZ-LLC</span>
             </div>
             <p className="login-brand-tagline">Human Resource &amp; Asset Management</p>
 
@@ -126,7 +109,7 @@ export default function Login() {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="you@kayzan.com"
+                    placeholder="you@ibill.com"
                     value={form.email}
                     onChange={handleChange}
                     autoComplete="email"
@@ -185,7 +168,7 @@ export default function Login() {
 
             <div className="login-card-footer">
               <span>Powered by</span>
-              <strong>Kayzan Group HRMS</strong>
+              <strong>iBill Software FZ-LLC HRMS</strong>
             </div>
           </div>
         </div>
