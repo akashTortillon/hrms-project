@@ -418,6 +418,7 @@ import path from "path";
 import fs from "fs";
 import mongoose from "mongoose";
 import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -893,6 +894,11 @@ export const createRequest = async (req, res) => {
       if (details && !details.subType) {
         details.subType = type;
       }
+
+      const requestedAmount = Number(details.amount);
+      if (Number.isFinite(requestedAmount)) {
+        details.requestedAmount = details.requestedAmount ?? requestedAmount;
+      }
     }
 
     const requestId = await generateRequestId();
@@ -1275,6 +1281,25 @@ export const updateRequestStatus = async (req, res) => {
       }
 
       if (isFinanceStage) {
+        const financeAmountProvided = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== "";
+        const financeRepaymentProvided = req.body.repaymentPeriod !== undefined && req.body.repaymentPeriod !== null && req.body.repaymentPeriod !== "";
+
+        if (request.requestType === "SALARY") {
+          const requestedAmount = Number(request.details?.requestedAmount ?? request.details?.amount) || 0;
+          request.details = {
+            ...request.details,
+            requestedAmount,
+            financeApprovedAmount: financeAmountProvided
+              ? Number(req.body.amount)
+              : Number(request.details?.financeApprovedAmount ?? request.details?.amount ?? 0),
+            financeApprovedRepaymentPeriod: financeRepaymentProvided
+              ? Number(req.body.repaymentPeriod)
+              : request.details?.financeApprovedRepaymentPeriod ?? request.details?.repaymentPeriod,
+            financeApprovedAt: new Date(),
+            financeApprovedBy: req.user.id
+          };
+        }
+
         request.financeApproval = {
           status: "APPROVED",
           actedBy: req.user.id,
@@ -1313,9 +1338,11 @@ export const updateRequestStatus = async (req, res) => {
       if (request.requestType === "SALARY") {
         const previousAmount = Number(request.details?.amount) || 0;
         const previousRepaymentPeriod = request.details?.repaymentPeriod;
-        if (req.body.amount) {
-          request.details.amount = Number(req.body.amount);
-        }
+        const approvedAmount = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== ""
+          ? Number(req.body.amount)
+          : Number(request.details?.financeApprovedAmount ?? request.details?.amount ?? 0);
+
+        request.details.amount = approvedAmount;
 
         const principal = Number(request.details.amount) || 0;
         const totalRepayment = principal;
@@ -1326,8 +1353,12 @@ export const updateRequestStatus = async (req, res) => {
           totalRepaymentAmount: totalRepayment
         };
 
-        if (req.body.repaymentPeriod) {
-          request.details.repaymentPeriod = Number(req.body.repaymentPeriod);
+        const approvedRepaymentPeriod = req.body.repaymentPeriod !== undefined && req.body.repaymentPeriod !== null && req.body.repaymentPeriod !== ""
+          ? Number(req.body.repaymentPeriod)
+          : request.details?.financeApprovedRepaymentPeriod;
+
+        if (approvedRepaymentPeriod) {
+          request.details.repaymentPeriod = Number(approvedRepaymentPeriod);
         }
 
         const startCurrentCycle = req.body.startCurrentCycle === true || req.body.startCurrentCycle === "true";
@@ -1468,6 +1499,15 @@ export const updateRequestStatus = async (req, res) => {
       message: `Request ${request.status.toLowerCase()} successfully`,
       data: populatedRequest
     });
+
+    logActivity({
+      req,
+      action: action === "APPROVE" ? "APPROVE" : "REJECT",
+      module: "REQUESTS",
+      description: `${request.requestType} request ${request.requestId} ${request.status.toLowerCase()} by ${req.user?.name}`,
+      targetId: request._id,
+      targetName: request.requestId
+    }).catch(() => {});
   } catch (err) {
     // console.error("❌ Update request error:", err);
     res.status(500).json({ success: false, message: "Server error" });

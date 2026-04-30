@@ -34,7 +34,7 @@ export const getAppraisals = async (req, res) => {
     if (req.query.employee) query.employee = req.query.employee;
 
     const appraisals = await Appraisal.find(query)
-      .populate("employee", "name code company branch designation basicSalary visaBase workBase")
+      .populate("employee", "name code company branch department designation basicSalary visaBase workBase")
       .populate("cycle", "name startDate endDate status")
       .sort({ createdAt: -1 });
 

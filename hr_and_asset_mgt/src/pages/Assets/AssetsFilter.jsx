@@ -116,6 +116,8 @@ import { toast } from "react-toastify";
 const AssetsFilters = ({
   search,
   setSearch,
+  assetClass,
+  setAssetClass,
   type,
   setType,
   status,
@@ -135,6 +137,7 @@ const AssetsFilters = ({
     try {
       const filters = Object.fromEntries(
         Object.entries({
+          assetClass: assetClass !== "ALL" ? assetClass : undefined,
           type: type !== "ALL" ? type : undefined,
           status: status !== "ALL" ? status : undefined,
           branch: branch !== "ALL" ? branch : undefined,
@@ -175,6 +178,16 @@ const AssetsFilters = ({
         </div>
 
         {/* Dropdowns */}
+        <select
+          className="assets-select"
+          value={assetClass}
+          onChange={(e) => setAssetClass(e.target.value)}
+        >
+          <option value="ALL">All Natures</option>
+          <option value="Physical">Physical</option>
+          <option value="Virtual">Virtual</option>
+        </select>
+
         <select
           className="assets-select"
           value={type}

@@ -294,15 +294,29 @@ export default function AdminRequests() {
           </>
         );
 
-      case "SALARY":
+      case "SALARY": {
+        const requestedAmount = details.requestedAmount ?? details.amount;
+        const financeApprovedAmount = details.financeApprovedAmount;
+        const finalApprovedAmount = req.status === "APPROVED" ? details.amount : null;
+
         return (
           <>
             <div className="request-type">
               {details.subType === "loan" ? "Loan Application" : "Salary Advance"}
             </div>
             <div className="request-amount">
-              Amount: {details.amount || "N/A"}
+              Requested Amount: {requestedAmount || "N/A"}
             </div>
+            {financeApprovedAmount !== undefined && financeApprovedAmount !== null && (
+              <div className="request-amount">
+                Finance Approved: {financeApprovedAmount}
+              </div>
+            )}
+            {finalApprovedAmount !== null && (
+              <div className="request-amount">
+                Final Approved: {finalApprovedAmount}
+              </div>
+            )}
             {(details.subType === "loan" || subType === "loan") && details.repaymentPeriod && (
               <div className="request-repayment">
                 Repayment Period: {details.repaymentPeriod} month{Number(details.repaymentPeriod) === 1 ? "" : "s"}
@@ -316,6 +330,7 @@ export default function AdminRequests() {
             )}
           </>
         );
+      }
 
       case "DOCUMENT":
         return (

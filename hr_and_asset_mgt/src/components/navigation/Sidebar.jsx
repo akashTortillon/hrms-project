@@ -20,6 +20,7 @@ const allNavItems = [
   { path: "/app/assets", icon: "cube", label: "Assets", permission: "MANAGE_ASSETS" },
   { path: "/app/requests", icon: "document", label: "My Requests", permission: "VIEW_DASHBOARD" }, // Basic access
   { path: "/app/reports", icon: "reports", label: "Reports", permission: "VIEW_REPORTS" },
+  { path: "/app/activity-log", icon: "document (1)", label: "Activity Log", permission: "MANAGE_MASTERS" },
   { path: "/app/masters", icon: "settings", label: "Masters", permission: "MANAGE_MASTERS" },
 ];
 

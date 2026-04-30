@@ -114,7 +114,15 @@ const employeeSchema = new mongoose.Schema({
   },
   fixedProbationIncrementAmount: { type: Number, default: 0 },
   salaryHistory: { type: [salaryHistorySchema], default: [] },
-  transferHistory: { type: [transferHistorySchema], default: [] }
+  transferHistory: { type: [transferHistorySchema], default: [] },
+  profilePhotoPath: { type: String, default: "" },
+  profilePhotoUrl: { type: String, default: "" },
+  profilePhotoStorage: {
+    type: String,
+    enum: ["LOCAL", "S3"],
+    default: "LOCAL"
+  },
+  profilePhotoUploadedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);

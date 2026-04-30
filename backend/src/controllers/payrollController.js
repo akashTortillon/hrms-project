@@ -14,6 +14,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1316,6 +1317,14 @@ export const finalizePayroll = async (req, res) => {
             year,
             details: `Finalized payroll for ${records.length} records`
         });
+
+        logActivity({
+            req,
+            action: "APPROVE",
+            module: "PAYROLL",
+            description: `Payroll finalized for ${month}/${year} — ${records.length} employees`,
+            targetName: `Payroll ${month}/${year}`
+        }).catch(() => {});
 
     } catch (error) {
         res.status(500).json({ message: error.message });

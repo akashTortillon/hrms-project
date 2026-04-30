@@ -25,6 +25,13 @@ export const updateEmployee = async (id, data) => {
   return res.data.employee;
 };
 
+export const uploadEmployeePhoto = async (id, formData) => {
+  const res = await api.post(`${EMPLOYEE_API}/${id}/photo`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data.employee;
+};
+
 export const transferEmployee = async (id, data) => {
   const res = await api.post(`${EMPLOYEE_API}/${id}/transfer`, data);
   return res.data;

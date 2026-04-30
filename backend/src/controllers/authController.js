@@ -5,9 +5,10 @@ import { generateOtp } from "../utils/generateOtp.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import { jwtConfig } from "../config/jwt.js";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from 'uuid'; // You might need to install uuid or use a custom random string generator
+import { v4 as uuidv4 } from 'uuid';
 import Master from "../models/masterModel.js";
 import Employee from "../models/employeeModel.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 // Helper to set refresh token cookie
 const setRefreshTokenCookie = (res, token) => {
@@ -143,6 +144,17 @@ export const login = async (req, res) => {
         employeeId: finalEmployeeId // Include resolved Employee ID
       }
     });
+
+    // Log login activity (fire and forget)
+    logActivity({
+      req: { ...req, user: { _id: user._id, name: user.name, email: user.email, role: user.role } },
+      action: "LOGIN",
+      module: "AUTH",
+      description: `${user.name} logged in`,
+      targetId: user._id,
+      targetName: user.name
+    }).catch(() => {});
+
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Server error: " + error.message });

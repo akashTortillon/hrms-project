@@ -227,7 +227,8 @@ export default function Employees() {
         joinDate: emp.joinDate
           ? new Date(emp.joinDate).toISOString().split("T")[0]
           : "",
-        status: emp.status
+        status: emp.status,
+        profilePhotoUrl: emp.profilePhotoUrl
       }));
 
       setEmployees(formattedEmployees);

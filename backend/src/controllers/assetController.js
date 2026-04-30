@@ -191,7 +191,8 @@ export const createAsset = async (req, res) => {
       warrantyPeriod,
       serviceDueDate,
       branch,
-      company
+      company,
+      assetClass
     } = req.body;
 
     // Validation
@@ -223,6 +224,7 @@ export const createAsset = async (req, res) => {
       name,
       serialNumber: serialNumber || "",
       type,
+      assetClass: assetClass || "Physical",
       category,
       location,
       subLocation: subLocation || "",
@@ -286,6 +288,11 @@ export const getAssets = async (req, res) => {
     } else {
       // Default: Only active assets (isDeleted: false) unless specifically asked for deleted
       filter.isDeleted = false;
+    }
+
+    // Filter by assetClass
+    if (req.query.assetClass && req.query.assetClass !== "ALL") {
+      filter.assetClass = req.query.assetClass;
     }
 
     // Filter by asset type
@@ -371,7 +378,7 @@ export const getAssetById = async (req, res) => {
 export const updateAsset = async (req, res) => {
   try {
     const { id } = req.params;
-    const { warrantyPeriod, purchaseDate, custodian, branch, company, ...otherFields } = req.body;
+    const { warrantyPeriod, purchaseDate, custodian, branch, company, assetClass, ...otherFields } = req.body;
 
     // Validate custodian if provided
     if (custodian) {
@@ -395,6 +402,7 @@ export const updateAsset = async (req, res) => {
       ...(custodian !== undefined && { custodian: custodian || null }),
       ...(branch !== undefined && { branch: branch || "" }),
       ...(company !== undefined && { company: company || "" }),
+      ...(assetClass && { assetClass }),
       ...(warrantyPeriod && { warrantyPeriod: parseInt(warrantyPeriod) }),
       ...(warrantyExpiryDate && { warrantyExpiryDate })
     };
@@ -765,7 +773,7 @@ export const deleteMaintenanceLog = async (req, res) => {
 
 export const exportAssets = async (req, res) => {
   try {
-    const { department, status, search, category, location, branch, company } = req.query;
+    const { department, status, search, category, location, branch, company, assetClass } = req.query;
     let matchStage = {};
 
     // Filters
@@ -775,6 +783,7 @@ export const exportAssets = async (req, res) => {
     if (location && location !== "All Locations") matchStage.location = location;
     if (branch && branch !== "All Branches") matchStage.branch = branch;
     if (company && company !== "All Companies") matchStage.company = company;
+    if (assetClass && assetClass !== "ALL") matchStage.assetClass = assetClass;
     if (search) {
       matchStage.$or = [
         { name: { $regex: search, $options: "i" } },

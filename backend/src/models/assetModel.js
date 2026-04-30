@@ -161,6 +161,11 @@ const assetSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  assetClass: {
+    type: String,
+    enum: ["Physical", "Virtual"],
+    default: "Physical"
+  },
   serialNumber: {
     type: String,
     default: ""

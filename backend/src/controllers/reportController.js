@@ -541,3 +541,261 @@ export const getAppraisalReport = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+// ─── ATTENDANCE REPORT (per-employee) ────────────────────────────────────────
+export const getAttendanceReport = async (req, res) => {
+  try {
+    const { month, year, branch, department, company, employeeId } = req.query;
+    const isExport = req.query.export === "true";
+
+    if (!month || !year) {
+      return res.status(400).json({ success: false, message: "Month and year are required" });
+    }
+
+    const data = await reportService.getAttendanceReport({ month, year, branch, department, company, employeeId });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Company": d.company,
+        "Present": d.present,
+        "Absent": d.absent,
+        "Late": d.late,
+        "On Leave": d.onLeave,
+        "Total Recorded": d.totalRecorded,
+        "Month": d.month
+      }));
+      await logActivity("Export", "Attendance Report");
+      return sendExcelResponse(res, exportData, `Attendance_Report_${month}_${year}`, "Attendance");
+    }
+
+    await logActivity("Generation", "Attendance Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── SALARY PAID REPORT ───────────────────────────────────────────────────────
+export const getSalaryPaidReport = async (req, res) => {
+  try {
+    const { month, year, branch, department, company, employeeId } = req.query;
+    const isExport = req.query.export === "true";
+
+    if (!month || !year) {
+      return res.status(400).json({ success: false, message: "Month and year are required" });
+    }
+
+    const data = await reportService.getSalaryPaidReport({ month, year, branch, department, company, employeeId });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Company": d.company,
+        "Basic Salary (AED)": d.basicSalary,
+        "Total Allowances (AED)": d.totalAllowances,
+        "Total Deductions (AED)": d.totalDeductions,
+        "Net Salary (AED)": d.netSalary,
+        "Status": d.status,
+        "Allowance Breakdown": d.allowanceBreakdown,
+        "Deduction Breakdown": d.deductionBreakdown,
+        "Month": d.month
+      }));
+      await logActivity("Export", "Salary Paid Report");
+      return sendExcelResponse(res, exportData, `Salary_Paid_${month}_${year}`, "Salary Paid");
+    }
+
+    await logActivity("Generation", "Salary Paid Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── SALARY REVISION HISTORY ──────────────────────────────────────────────────
+export const getSalaryRevisionReport = async (req, res) => {
+  try {
+    const { branch, department, company, employeeId, fromDate, toDate } = req.query;
+    const isExport = req.query.export === "true";
+
+    const data = await reportService.getSalaryRevisionReport({ branch, department, company, employeeId, fromDate, toDate });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Revision Type": d.revisionType,
+        "Previous Salary (AED)": d.previousSalary,
+        "Increment / Change (AED)": d.incrementAmount,
+        "New Salary (AED)": d.newSalary,
+        "Effective Date": d.effectiveDate,
+        "Notes": d.notes
+      }));
+      await logActivity("Export", "Salary Revision Report");
+      return sendExcelResponse(res, exportData, "Salary_Revision_History", "Salary Revisions");
+    }
+
+    await logActivity("Generation", "Salary Revision Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── LEAVE BALANCE REPORT ─────────────────────────────────────────────────────
+export const getLeaveBalanceReport = async (req, res) => {
+  try {
+    const { branch, department, company, year = new Date().getFullYear() } = req.query;
+    const isExport = req.query.export === "true";
+
+    const data = await reportService.getLeaveBalanceReport({ branch, department, company, year });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Sick Leave (Days)": d.sickLeave,
+        "Annual Leave (Days)": d.annualLeave,
+        "Casual Leave (Days)": d.casualLeave,
+        "Unpaid Leave (Days)": d.unpaidLeave,
+        "Maternity Leave (Days)": d.maternityLeave,
+        "Other Leave (Days)": d.otherLeave,
+        "Total Leave Taken": d.totalLeaveTaken,
+        "Year": d.year
+      }));
+      await logActivity("Export", "Leave Balance Report");
+      return sendExcelResponse(res, exportData, `Leave_Balance_${year}`, "Leave Balance");
+    }
+
+    await logActivity("Generation", "Leave Balance Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── HEADCOUNT REPORT ─────────────────────────────────────────────────────────
+export const getHeadcountReport = async (req, res) => {
+  try {
+    const { branch, department, company } = req.query;
+    const isExport = req.query.export === "true";
+
+    const data = await reportService.getHeadcountReport({ branch, department, company });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Company": d.company || "N/A",
+        "Branch": d.branch || "N/A",
+        "Department": d.department || "N/A",
+        "Total": d.total,
+        "Active": d.active,
+        "Inactive": d.inactive,
+        "On Leave": d.onLeave,
+        "Onboarding": d.onboarding
+      }));
+      await logActivity("Export", "Headcount Report");
+      return sendExcelResponse(res, exportData, "Headcount_Report", "Headcount");
+    }
+
+    await logActivity("Generation", "Headcount Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── ASSET ASSIGNMENT REPORT ──────────────────────────────────────────────────
+export const getAssetAssignmentReport = async (req, res) => {
+  try {
+    const { branch, department, company, employeeId } = req.query;
+    const isExport = req.query.export === "true";
+
+    const data = await reportService.getAssetAssignmentReport({ branch, department, company, employeeId });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Asset Code": d.assetCode,
+        "Asset Name": d.assetName,
+        "Type": d.assetType,
+        "Category": d.category,
+        "Serial Number": d.serialNumber,
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Company": d.company,
+        "Status": d.status,
+        "Purchase Cost (AED)": d.purchaseCost,
+        "Purchase Date": d.purchaseDate,
+        "Assigned Since": d.assignedSince
+      }));
+      await logActivity("Export", "Asset Assignment Report");
+      return sendExcelResponse(res, exportData, "Asset_Assignment_Report", "Assets");
+    }
+
+    await logActivity("Generation", "Asset Assignment Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+// ─── OVERTIME & ALLOWANCE REPORT ─────────────────────────────────────────────
+export const getOvertimeAllowanceReport = async (req, res) => {
+  try {
+    const { month, year, branch, department, company, employeeId } = req.query;
+    const isExport = req.query.export === "true";
+
+    if (!month || !year) {
+      return res.status(400).json({ success: false, message: "Month and year are required" });
+    }
+
+    const data = await reportService.getOvertimeAllowanceReport({
+      month, year, branch, department, company, employeeId
+    });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Employee ID": d.employeeId,
+        "Employee Name": d.employeeName,
+        "Department": d.department,
+        "Branch": d.branch,
+        "Company": d.company,
+        "Month": d.month,
+        "Basic Salary (AED)": d.basicSalary,
+        "Overtime Hours": d.overtimeHours,
+        "Overtime Pay (AED)": d.overtimePay,
+        "Accommodation Allowance (AED)": d.accommodationAllowance,
+        "Vehicle Allowance (AED)": d.vehicleAllowance,
+        "Housing Allowance (AED)": d.housingAllowance,
+        "Other Allowances": d.otherAllowances,
+        "Total Allowances (AED)": d.totalAllowances,
+        "Total Deductions (AED)": d.totalDeductions,
+        "Net Salary (AED)": d.netSalary,
+        "Payroll Status": d.payrollStatus
+      }));
+      await logActivity("Export", "Overtime & Allowance Report");
+      return sendExcelResponse(
+        res,
+        exportData,
+        `Overtime_Allowance_${month}_${year}`,
+        "Overtime & Allowances"
+      );
+    }
+
+    await logActivity("Generation", "Overtime & Allowance Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};

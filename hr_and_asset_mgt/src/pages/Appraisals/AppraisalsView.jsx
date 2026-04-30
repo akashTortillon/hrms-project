@@ -49,6 +49,10 @@ export default function AppraisalsView() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [incrementAmount, setIncrementAmount] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("APPROVED");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -75,7 +79,7 @@ export default function AppraisalsView() {
         setSelectedEmployeeId("");
         setEmployeeSearch("");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to load increment data");
     } finally {
       setLoading(false);
@@ -91,15 +95,34 @@ export default function AppraisalsView() {
   const parsedIncrement = Number(String(incrementAmount || 0).replace(/[^0-9.-]+/g, ""));
   const nextSalary = currentBaseSalary + (Number.isFinite(parsedIncrement) ? parsedIncrement : 0);
 
-  const historyRows = appraisals
-    .filter((appraisal) => appraisal.employee?._id === selectedEmployeeId && appraisal.status === "APPROVED")
-    .sort((left, right) => new Date(right.effectiveDate) - new Date(left.effectiveDate));
+  const getUniqueOptions = (items, key) =>
+    Array.from(new Set(items.map((item) => item?.[key]).filter(Boolean))).sort();
 
-  const handleEmployeeSelect = (employeeId) => {
-    setSelectedEmployeeId(employeeId);
-    const employee = employees.find((item) => item._id === employeeId);
-    setEmployeeSearch(getEmployeeLabel(employee));
-  };
+  const companyOptions = getUniqueOptions(employees, "company");
+  const branchOptions = getUniqueOptions(
+    employees.filter((employee) => !companyFilter || employee.company === companyFilter),
+    "branch"
+  );
+  const departmentOptions = getUniqueOptions(
+    employees.filter((employee) =>
+      (!companyFilter || employee.company === companyFilter) &&
+      (!branchFilter || employee.branch === branchFilter)
+    ),
+    "department"
+  );
+
+  const historyRows = appraisals
+    .filter((appraisal) => {
+      const employee = appraisal.employee || {};
+      const matchesEmployee = !selectedEmployeeId || employee._id === selectedEmployeeId;
+      const matchesCompany = !companyFilter || employee.company === companyFilter;
+      const matchesBranch = !branchFilter || employee.branch === branchFilter;
+      const matchesDepartment = !departmentFilter || employee.department === departmentFilter;
+      const matchesStatus = statusFilter === "ALL" || appraisal.status === statusFilter;
+
+      return matchesEmployee && matchesCompany && matchesBranch && matchesDepartment && matchesStatus;
+    })
+    .sort((left, right) => new Date(right.effectiveDate) - new Date(left.effectiveDate));
 
   const applyIncrement = async () => {
     if (!selectedEmployeeId) {
@@ -190,6 +213,17 @@ export default function AppraisalsView() {
                   }}
                   disabled={loading || !employees.length}
                 />
+                <button
+                  type="button"
+                  className="appraisal-search-clear"
+                  onClick={() => {
+                    setSelectedEmployeeId("");
+                    setEmployeeSearch("");
+                  }}
+                  disabled={loading}
+                >
+                  All
+                </button>
               </div>
               <datalist id="appraisal-employee-options">
                 {employees.map((employee) => (
@@ -243,10 +277,62 @@ export default function AppraisalsView() {
             </span>
           </div>
 
+          <div className="appraisal-panel-body" style={{ paddingBottom: 0 }}>
+            <div className="appraisal-filter-grid">
+              <label className="appraisal-field">
+                <span>Company</span>
+                <select value={companyFilter} onChange={(event) => {
+                  setCompanyFilter(event.target.value);
+                  setBranchFilter("");
+                  setDepartmentFilter("");
+                }}>
+                  <option value="">All Companies</option>
+                  {companyOptions.map((company) => (
+                    <option key={company} value={company}>{company}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="appraisal-field">
+                <span>Branch</span>
+                <select value={branchFilter} onChange={(event) => {
+                  setBranchFilter(event.target.value);
+                  setDepartmentFilter("");
+                }}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="appraisal-field">
+                <span>Department</span>
+                <select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
+                  <option value="">All Departments</option>
+                  {departmentOptions.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="appraisal-field">
+                <span>Status</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                  <option value="APPROVED">Approved</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="ALL">All Status</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
           <div className="appraisal-history-table-wrapper">
             <table className="appraisal-history-table">
               <thead>
                 <tr>
+                  <th>Employee</th>
                   <th>Adjustment Date</th>
                   <th>Inc. Amount</th>
                   <th>Previous Salary</th>
@@ -263,6 +349,12 @@ export default function AppraisalsView() {
                     return (
                       <tr key={appraisal._id}>
                         <td>
+                          <div className="appraisal-history-date">{getEmployeeLabel(appraisal.employee)}</div>
+                          <div className="appraisal-history-meta">
+                            {[appraisal.employee?.company, appraisal.employee?.branch, appraisal.employee?.department].filter(Boolean).join(" • ") || "--"}
+                          </div>
+                        </td>
+                        <td>
                           <div className="appraisal-history-date">{formatDate(appraisal.effectiveDate)}</div>
                           <div className="appraisal-history-meta">
                             {appraisal.comments || appraisal.cycle?.name || "Manual Appraisal"}
@@ -276,10 +368,10 @@ export default function AppraisalsView() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="4" className="appraisal-empty-state">
+                    <td colSpan="5" className="appraisal-empty-state">
                       {selectedEmployee
                         ? "No adjustment history found for this employee yet."
-                        : "Select an employee to view adjustment history."}
+                        : "No adjustment history found for the selected filters."}
                     </td>
                   </tr>
                 )}

@@ -102,6 +102,28 @@
   font-size: 15px;
 }
 
+.appraisal-search-clear {
+  border: 0;
+  background: #f1f5f9;
+  color: #334155;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.appraisal-search-clear:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.appraisal-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .appraisal-field select:focus,
 .appraisal-search-box:focus-within,
 .appraisal-currency-input:focus-within {
@@ -112,6 +134,18 @@
 .appraisal-search-results {
   display: grid;
   gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .appraisal-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .appraisal-filter-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .appraisal-search-result {

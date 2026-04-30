@@ -71,6 +71,41 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
+    flex: 0 0 80px;
+    position: relative;
+}
+
+.profile-avatar-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-avatar-uploadable {
+    cursor: pointer;
+}
+
+.profile-avatar-upload-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.profile-avatar-uploadable:hover .profile-avatar-upload-hint,
+.profile-avatar-uploadable:focus-within .profile-avatar-upload-hint {
+    opacity: 1;
 }
 
 .profile-details h2 {

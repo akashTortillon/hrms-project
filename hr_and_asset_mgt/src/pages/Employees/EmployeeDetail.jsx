@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import "../../style/EmployeeDetail.css";
 
@@ -37,7 +37,7 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
 import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
@@ -58,6 +58,15 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import WorkflowTab from "../../components/employee/WorkflowTab";
 import WarningsTab from "../../components/employee/WarningsTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
+
+const resolveUploadedAssetUrl = (url) => {
+    if (!url) return "";
+    if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+
+    const apiBase = import.meta.env.VITE_API_BASE || "";
+    const serverBase = apiBase.replace(/\/api\/?$/, "").replace(/\/$/, "");
+    return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 export default function EmployeeDetail() {
     const { id } = useParams();
@@ -91,6 +100,8 @@ export default function EmployeeDetail() {
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Change Password Modal State
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
+    const [photoUploading, setPhotoUploading] = useState(false);
+    const photoInputRef = useRef(null);
 
     // Document State
     const [documents, setDocuments] = useState([]);
@@ -322,6 +333,32 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handlePhotoUpload = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file || !effectiveId) return;
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Please select an image file");
+            event.target.value = "";
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("photo", file);
+
+        try {
+            setPhotoUploading(true);
+            const updatedEmployee = await uploadEmployeePhoto(effectiveId, formData);
+            setEmployee(updatedEmployee);
+            toast.success("Employee photo updated");
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to upload employee photo");
+        } finally {
+            setPhotoUploading(false);
+            event.target.value = "";
+        }
+    };
+
     const handleConfirmProbation = async (payload) => {
         try {
             setConfirmingProbation(true);
@@ -414,9 +451,33 @@ export default function EmployeeDetail() {
             {/* Profile Card */}
             <div className="employee-profile-card">
                 <div className="profile-main-info">
-                    <div className="profile-avatar-large">
-                        {employee.name ? employee.name.charAt(0) : "U"}
+                    <div
+                        className={`profile-avatar-large ${(canEdit || isSelf) ? "profile-avatar-uploadable" : ""}`}
+                        onClick={() => {
+                            if (canEdit || isSelf) photoInputRef.current?.click();
+                        }}
+                        title={(canEdit || isSelf) ? "Upload photo" : employee.name}
+                    >
+                        {employee.profilePhotoUrl ? (
+                            <img src={resolveUploadedAssetUrl(employee.profilePhotoUrl)} alt={employee.name} />
+                        ) : (
+                            employee.name ? employee.name.charAt(0) : "U"
+                        )}
+                        {(canEdit || isSelf) && (
+                            <span className="profile-avatar-upload-hint">
+                                {photoUploading ? "Uploading..." : "Upload photo"}
+                            </span>
+                        )}
                     </div>
+                    {(canEdit || isSelf) && (
+                        <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePhotoUpload}
+                            style={{ display: "none" }}
+                        />
+                    )}
                     <div className="profile-details">
                         <h2>
                             {employee.name}

@@ -5,6 +5,8 @@ import { createNotification } from "./notificationController.js";
 import User from "../models/userModel.js";
 import bcrypt from "bcryptjs";
 import { sendEmail } from "../utils/sendEmail.js";
+import { logActivity } from "../utils/activityLogger.js";
+import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === "") return 0;
@@ -89,6 +91,16 @@ const resolveFinanceManagerUserId = async (designatedFinanceManager) => {
 
   const linkedUser = await User.findOne({ employeeId: designatedFinanceManager }).select("_id");
   return linkedUser?._id || null;
+};
+
+const attachSignedProfilePhotoUrl = async (employee) => {
+  const item = employee.toObject ? employee.toObject() : { ...employee };
+  item.profilePhotoUrl = await getSignedFileUrl({
+    filePath: item.profilePhotoPath,
+    fileUrl: item.profilePhotoUrl,
+    storage: item.profilePhotoStorage
+  });
+  return item;
 };
 
 export const exportEmployees = async (req, res) => {
@@ -367,6 +379,15 @@ export const addEmployee = async (req, res) => {
         : "Employee added (User account already existed)",
       employee
     });
+
+    logActivity({
+      req,
+      action: "CREATE",
+      module: "EMPLOYEE",
+      description: `Employee ${employee.name} (${employee.code}) created`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
   } catch (error) {
     // console.error("Add Employee Error:", error);
     if (error.name === 'ValidationError') {
@@ -422,7 +443,11 @@ export const getEmployees = async (req, res) => {
     });
 
 
-    res.json(employees);
+    const signedEmployees = await Promise.all(
+      employees.map((employee) => attachSignedProfilePhotoUrl(employee))
+    );
+
+    res.json(signedEmployees);
   } catch (error) {
     console.error("Get employees error:", error);
     res.status(500).json({ message: "Server error" });
@@ -451,7 +476,7 @@ export const getEmployeeById = async (req, res) => {
       return res.status(403).json({ message: "Access Denied: You cannot view this profile" });
     }
 
-    res.json(employee);
+    res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
     // console.error("Get Employee By ID Error:", error);
     res.status(500).json({ message: "Server error" });
@@ -537,6 +562,15 @@ export const updateEmployee = async (req, res) => {
     }
 
     res.json({ employee: updatedEmployee });
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "EMPLOYEE",
+      description: `Employee ${updatedEmployee.name} (${updatedEmployee.code}) updated`,
+      targetId: updatedEmployee._id,
+      targetName: updatedEmployee.name
+    }).catch(() => {});
   } catch (error) {
     // console.error("Update Employee Error:", error);
     if (error.code === 11000) {
@@ -546,6 +580,58 @@ export const updateEmployee = async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
     res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
+export const uploadEmployeePhoto = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions = [], role, employeeId } = req.user;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No photo uploaded" });
+    }
+
+    if (!req.file.mimetype?.startsWith("image/")) {
+      return res.status(400).json({ message: "Only image files are allowed" });
+    }
+
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const canManageEmployees = role === "Admin" || permissions.includes("ALL") || permissions.includes("MANAGE_EMPLOYEES");
+    const isOwnProfile = employeeId && employeeId.toString() === id;
+
+    if (!canManageEmployees && !isOwnProfile) {
+      return res.status(403).json({ message: "Access Denied: You cannot update this profile photo" });
+    }
+
+    const stored = await storeUploadedFile({
+      file: req.file,
+      folder: "employee-photos",
+      preferS3: true
+    });
+
+    employee.profilePhotoPath = stored.filePath;
+    employee.profilePhotoUrl = stored.fileUrl;
+    employee.profilePhotoStorage = stored.storage;
+    employee.profilePhotoUploadedAt = new Date();
+    await employee.save();
+
+    res.json({ success: true, employee: await attachSignedProfilePhotoUrl(employee) });
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "EMPLOYEE",
+      description: `Employee ${employee.name} (${employee.code}) profile photo updated`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
+  } catch (error) {
+    res.status(500).json({ message: "Failed to upload employee photo" });
   }
 };
 
@@ -561,6 +647,15 @@ export const deleteEmployee = async (req, res) => {
     }
 
     res.json({ message: "Employee removed successfully" });
+
+    logActivity({
+      req,
+      action: "DELETE",
+      module: "EMPLOYEE",
+      description: `Employee ${employee.name} (${employee.code}) deleted`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
   } catch (error) {
     // console.error(error);
     res.status(500).json({ message: "Server error" });

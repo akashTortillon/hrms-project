@@ -19,7 +19,14 @@ import {
     getReportStats,
     logManualActivity,
     getLoanReport,
-    getAppraisalReport
+    getAppraisalReport,
+    getAttendanceReport,
+    getSalaryPaidReport,
+    getSalaryRevisionReport,
+    getLeaveBalanceReport,
+    getHeadcountReport,
+    getAssetAssignmentReport,
+    getOvertimeAllowanceReport
 } from "../controllers/reportController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import { generateSIF, generateMOLReport } from "../controllers/payrollController.js";
@@ -45,6 +52,15 @@ router.get("/employees/branch-wise", getBranchWiseEmployeeReport);
 // Loan & Appraisal Reports
 router.get("/loans", getLoanReport);
 router.get("/appraisals", getAppraisalReport);
+
+// New Reports
+router.get("/attendance-employee", getAttendanceReport);
+router.get("/salary-paid", getSalaryPaidReport);
+router.get("/salary-revision", getSalaryRevisionReport);
+router.get("/leave-balance", getLeaveBalanceReport);
+router.get("/headcount", getHeadcountReport);
+router.get("/asset-assignments", getAssetAssignmentReport);
+router.get("/overtime-allowance", getOvertimeAllowanceReport);
 
 // Dashboard Stats
 router.get("/stats", getReportStats);
