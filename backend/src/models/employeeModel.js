@@ -122,7 +122,9 @@ const employeeSchema = new mongoose.Schema({
     enum: ["LOCAL", "S3"],
     default: "LOCAL"
   },
-  profilePhotoUploadedAt: { type: Date, default: null }
+  profilePhotoUploadedAt: { type: Date, default: null },
+  // Biometric Badge Number (from BioCloud device - e.g. R106, P104, D101)
+  badgeNumber: { type: String, default: null, sparse: true, index: true }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);
