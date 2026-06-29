@@ -22,9 +22,11 @@ export default function OnboardingView() {
             if (Array.isArray(res)) {
                 const onboardingList = res.filter(e => e.status === "Onboarding");
                 setEmployees(onboardingList);
-                if (onboardingList.length > 0) {
-                    setSelectedEmployee(onboardingList[0]);
-                }
+                setSelectedEmployee(prev => {
+                    if (!prev) return onboardingList.length > 0 ? onboardingList[0] : null;
+                    const updated = onboardingList.find(e => e._id === prev._id);
+                    return updated || prev;
+                });
             }
         } catch (error) {
             console.error("Failed to fetch onboarding employees", error);
@@ -79,7 +81,11 @@ export default function OnboardingView() {
                         </div>
 
                         <div className="detail-content">
-                            <WorkflowTab employeeId={selectedEmployee._id} type="Onboarding" />
+                            <WorkflowTab 
+                                employeeId={selectedEmployee._id} 
+                                type="Onboarding" 
+                                onWorkflowUpdate={fetchOnboardingEmployees}
+                            />
                         </div>
                     </>
                 ) : (

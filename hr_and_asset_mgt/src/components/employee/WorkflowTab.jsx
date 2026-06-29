@@ -5,7 +5,7 @@ import Button from "../reusable/Button";
 import SvgIcon from "../svgIcon/svgView";
 import "../../style/Workflow.css"; // We will create this style next
 
-const WorkflowTab = ({ employeeId, type }) => {
+const WorkflowTab = ({ employeeId, type, onWorkflowUpdate }) => {
     const [workflow, setWorkflow] = useState(null);
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState(null);
@@ -41,6 +41,7 @@ const WorkflowTab = ({ employeeId, type }) => {
             if (res.success) {
                 setWorkflow(res.data);
                 toast.success("Document uploaded successfully");
+                if (onWorkflowUpdate) onWorkflowUpdate();
             }
         } catch (error) {
             toast.error("Upload failed");
@@ -57,6 +58,7 @@ const WorkflowTab = ({ employeeId, type }) => {
             if (res.success) {
                 setWorkflow(res.data);
                 toast.success("Status updated");
+                if (onWorkflowUpdate) onWorkflowUpdate();
             }
         } catch (error) {
             toast.error("Update failed");

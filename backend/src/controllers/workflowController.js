@@ -1,6 +1,8 @@
 import Workflow from "../models/workflowModel.js";
 import Master from "../models/masterModel.js";
 import Employee from "../models/employeeModel.js";
+import Asset from "../models/assetModel.js";
+import Assignment from "../models/assignmentModel.js";
 import path from "path";
 import fs from "fs";
 
@@ -145,8 +147,8 @@ export const updateWorkflowItem = async (req, res) => {
         item.updatedBy = req.user._id;
         item.updatedAt = new Date();
 
-        // Check if all items completed
-        const allCompleted = workflow.items.every(i => i.status === "Completed");
+        // Check if all items completed (ignoring optional items that are not required)
+        const allCompleted = workflow.items.every(i => !i.required || i.status === "Completed");
         if (allCompleted) {
             workflow.status = "Completed";
             workflow.completedAt = new Date();
@@ -154,6 +156,48 @@ export const updateWorkflowItem = async (req, res) => {
             // AUTOMATION: Update Employee Status based on Workflow Type
             if (workflow.type === 'Offboarding') {
                 await Employee.findByIdAndUpdate(workflow.employee, { status: 'Inactive' });
+
+                // AUTOMATION: Return all assigned assets
+                const assignedAssets = await Asset.find({ 
+                    "custodian.employee": workflow.employee,
+                    status: "In Use"
+                });
+
+                if (assignedAssets.length > 0) {
+                    const assetIds = assignedAssets.map(a => a._id);
+                    
+                    // Close active assignments
+                    await Assignment.updateMany(
+                        { 
+                            assetId: { $in: assetIds }, 
+                            toEmployee: workflow.employee,
+                            returnedAt: null 
+                        },
+                        { 
+                            $set: { 
+                                returnedAt: new Date(), 
+                                remarks: "Auto-returned via Offboarding Workflow" 
+                            } 
+                        }
+                    );
+
+                    // Reset assets to Available
+                    await Asset.updateMany(
+                        { _id: { $in: assetIds } },
+                        {
+                            $set: {
+                                status: "Available",
+                                "custodian.type": null,
+                                "custodian.employee": null,
+                                "custodian.department": null,
+                                "currentLocation.type": "STORE",
+                                "currentLocation.employee": null,
+                                "currentLocation.shop": null
+                            }
+                        }
+                    );
+                    console.log(`Auto-returned ${assignedAssets.length} assets for employee ${workflow.employee}`);
+                }
             } else if (workflow.type === 'Onboarding') {
                 await Employee.findByIdAndUpdate(workflow.employee, { status: 'Active' });
             }

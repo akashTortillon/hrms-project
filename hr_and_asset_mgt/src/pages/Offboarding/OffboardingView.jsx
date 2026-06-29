@@ -36,6 +36,13 @@ export default function OffboardingView() {
                 const list = res.filter(e => e.status !== "Onboarding");
                 setEmployees(list);
                 setFilteredEmployees(list);
+                
+                // Update selected employee reference so the badge updates immediately
+                setSelectedEmployee(prev => {
+                    if (!prev) return null;
+                    const updated = list.find(e => e._id === prev._id);
+                    return updated || prev;
+                });
             }
         } catch (error) {
             console.error("Failed to fetch employees", error);
@@ -98,7 +105,11 @@ export default function OffboardingView() {
                         </div>
 
                         <div className="detail-content">
-                            <WorkflowTab employeeId={selectedEmployee._id} type="Offboarding" />
+                            <WorkflowTab 
+                                employeeId={selectedEmployee._id} 
+                                type="Offboarding" 
+                                onWorkflowUpdate={fetchEmployees}
+                            />
                         </div>
                     </>
                 ) : (
