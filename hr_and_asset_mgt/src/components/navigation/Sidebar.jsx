@@ -1,5 +1,5 @@
 import { Nav, Button } from "react-bootstrap";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import SvgView from "../svgIcon/svgView.jsx";
 import { useState, useMemo } from "react";
 import { useRole } from "../../contexts/RoleContext.jsx";
@@ -81,8 +81,14 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
       <Nav className="flex-column sidebar-nav">
         {navItems.map((item) => (
           <Nav.Link
+            as={Link}
+            to={item.path}
             key={item.path}
-            onClick={() => handleNavClick(item.path)}
+            onClick={() => {
+              if (window.innerWidth < 768) {
+                setMobileOpen(false);
+              }
+            }}
             active={location.pathname === item.path}
             className={`sidebar-link ${location.pathname === item.path ? "active" : ""
               }`}

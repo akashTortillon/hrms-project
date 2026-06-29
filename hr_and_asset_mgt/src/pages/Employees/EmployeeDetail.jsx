@@ -703,12 +703,12 @@ export default function EmployeeDetail() {
 
 
 
-                {activeTab === "Onboarding" && (
-                    <WorkflowTab employeeId={effectiveId} type="Onboarding" />
+                {activeTab === "Onboarding" && hasPermission("MANAGE_ONBOARDING") && (
+                    <WorkflowTab employeeId={effectiveId} type="Onboarding" onWorkflowUpdate={fetchEmployee} />
                 )}
 
-                {activeTab === "Offboarding" && (
-                    <WorkflowTab employeeId={effectiveId} type="Offboarding" />
+                {activeTab === "Offboarding" && hasPermission("MANAGE_OFFBOARDING") && (
+                    <WorkflowTab employeeId={effectiveId} type="Offboarding" onWorkflowUpdate={fetchEmployee} />
                 )}
 
                 {activeTab === "Loans" && (
