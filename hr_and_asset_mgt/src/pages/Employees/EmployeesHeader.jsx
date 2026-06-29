@@ -120,6 +120,7 @@ export default function EmployeesHeader({
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
               <option value="On Leave">On Leave</option>
+              <option value="Onboarding">Onboarding</option>
             </select>
           </div>
 

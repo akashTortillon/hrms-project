@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import SvgIcon from "../../components/svgIcon/svgView";
+import DocumentViewerModal from "../../components/reusable/DocumentViewerModal";
 import "../../style/Assets.css";
 
 export default function AssetDetailsModal({ onClose, asset }) {
   const [activeTab, setActiveTab] = useState("overview");
+  const [viewingDoc, setViewingDoc] = useState(null);
 
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -264,6 +266,13 @@ export default function AssetDetailsModal({ onClose, asset }) {
                           </div>
                         </div>
                       </div>
+                      <button 
+                        className="btn-secondary" 
+                        onClick={() => setViewingDoc(doc)}
+                        style={{ padding: "4px 12px", fontSize: "12px" }}
+                      >
+                        View
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -363,6 +372,14 @@ export default function AssetDetailsModal({ onClose, asset }) {
           <button className="btn-secondary" onClick={onClose}>Close</button>
         </div>
       </div>
+      
+      {viewingDoc && (
+        <DocumentViewerModal 
+          documentUrl={viewingDoc.filePath} 
+          fileName={viewingDoc.fileName} 
+          onClose={() => setViewingDoc(null)} 
+        />
+      )}
     </div>
   );
 }

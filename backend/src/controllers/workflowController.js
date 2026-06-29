@@ -145,8 +145,8 @@ export const updateWorkflowItem = async (req, res) => {
         item.updatedBy = req.user._id;
         item.updatedAt = new Date();
 
-        // Check if all items completed
-        const allCompleted = workflow.items.every(i => i.status === "Completed");
+        // Check if all items completed (ignoring optional items that are not required)
+        const allCompleted = workflow.items.every(i => !i.required || i.status === "Completed");
         if (allCompleted) {
             workflow.status = "Completed";
             workflow.completedAt = new Date();
