@@ -832,13 +832,13 @@ export const importEmployees = async (req, res) => {
       let errorMsg = null;
 
       // 1. Basic Validation
-      if (!row["Full Name"] || !row["Email"] || !row["Role"] || !row["Department"]) {
-        errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Role, Department)" });
+      if (!row["Full Name"] || !row["Email"] || !row["Department"]) {
+        errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Department)" });
         continue;
       }
 
       const email = row["Email"].trim();
-      const phone = row["Phone"] ? String(row["Phone"]).trim() : "";
+      const phone = (row["Contact Number"] || row["Phone"]) ? String(row["Contact Number"] || row["Phone"]).trim() : "";
 
       // Email Validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -858,13 +858,13 @@ export const importEmployees = async (req, res) => {
       }
 
       // 3. Strict Master Validation
-      const role = row["Role"].trim();
+      const role = row["Role"] ? row["Role"].trim() : "Employee";
       const department = row["Department"].trim();
       const branch = row["Branch"] ? row["Branch"].trim() : "";
       const designation = row["Designation"] ? row["Designation"].trim() : "";
       const contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
 
-      if (!validRoles.has(role.toLowerCase())) {
+      if (row["Role"] && !validRoles.has(role.toLowerCase())) {
         errors.push({ row: rowNum, email, message: `Invalid Role: '${role}'. Exact spelling must match Master list.` });
         continue;
       }
@@ -926,29 +926,40 @@ export const importEmployees = async (req, res) => {
         let emiratesIdExpiry = parseExcelDate(row["Emirates ID Expiry"]);
         let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
+        const basicSalaryVal = row["Basic Salary (AED)"] ?? row["Basic Salary"];
+        const ctcVal = row["MONTHLY CTC"] ?? row["CTC"] ?? row["Work Base"] ?? basicSalaryVal;
+
         await Employee.create({
           name: row["Full Name"],
           code: nextCode,
           role: row["Role"],
           department: row["Department"],
           branch: row["Branch"] || "",
-          company: row["Company"] || "",
+          company: row["COMPANY / BRANCH"] || row["Company"] || "",
           email: email,
           phone: phone,
           joinDate: joinDate,
           status: row["Status"] || "Onboarding",
+          dob: parseExcelDate(row["Date of Birth"]),
           designation: row["Designation"] || row["Role"],
-          shift: row["Shift"] || "Day Shift", // Default
+          shift: row["Shift"] || "Day Shift",
           nationality: row["Nationality"] || "",
           address: row["UAE Address"] || "",
           contractType: row["Employee Type"] || "",
-          basicSalary: row["Basic Salary"] ? String(row["Basic Salary"]) : "",
-          visaBase: toNumber(row["Visa Base"] || row["Basic Salary"]),
-          workBase: toNumber(row["Work Base"] || row["Basic Salary"]),
-          ctc: toNumber(row["CTC"] || row["Work Base"] || row["Basic Salary"]),
+          passportNo: row["Passport No"] || "",
+          emiratesIdNo: row["Emirates ID No"] || "",
+          basicSalary: basicSalaryVal != null ? String(basicSalaryVal) : "",
+          allowance: toNumber(row["Allowance (AED)"]),
+          hra: toNumber(row["HRA (AED)"]),
+          totalSalary: toNumber(row["Total Salary (AED)"] ?? ctcVal),
+          accommodationAllowance: toNumber(row["ACCOMODATION ALLOWANCE"]),
+          vehicleAllowance: toNumber(row["VEHICHLE ALLOWANCE"]),
+          visaBase: toNumber(row["Visa Base"] ?? basicSalaryVal),
+          workBase: toNumber(row["Work Base"] ?? basicSalaryVal),
+          ctc: toNumber(ctcVal),
           accommodation: row["Accommodation"] || "",
           visaCompany: row["Visa Company"] || "",
-          workPermitCompany: row["Work Permit Company"] || "",
+          workPermitCompany: row["work permit"] || row["Work Permit Company"] || "",
           visaNo: row["Visa No"] || "",
           visaFileNo: row["Visa File No"] || "",
           laborCardNumber: row["Labor Card No"] || "",
@@ -966,10 +977,10 @@ export const importEmployees = async (req, res) => {
           probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
           fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"]),
           salaryHistory: buildInitialSalaryHistory({
-            basicSalary: row["Basic Salary"],
-            visaBase: row["Visa Base"] || row["Basic Salary"],
-            workBase: row["Work Base"] || row["Basic Salary"],
-            ctc: row["CTC"] || row["Work Base"] || row["Basic Salary"],
+            basicSalary: basicSalaryVal,
+            visaBase: row["Visa Base"] ?? basicSalaryVal,
+            workBase: row["Work Base"] ?? basicSalaryVal,
+            ctc: ctcVal,
             joinDate
           })
         });
