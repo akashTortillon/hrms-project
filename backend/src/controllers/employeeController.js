@@ -205,7 +205,8 @@ export const addEmployee = async (req, res) => {
       dob, nationality, address, passportExpiry, emiratesIdExpiry,
       designation, contractType, basicSalary, accommodation, visaExpiry, shift,
       weeklyOffDays: rawWeeklyOff,
-      workingDayType: rawWdt
+      workingDayType: rawWdt,
+      allowances
     } = req.body;
 
     const parseWeeklyOffDays = (val) => {
@@ -232,7 +233,8 @@ export const addEmployee = async (req, res) => {
       designation, contractType, basicSalary, accommodation, visaExpiry,
       shift: shift || "Day Shift",
       weeklyOffDays: weeklyOffDays ?? [],
-      workingDayType
+      workingDayType,
+      allowances: Array.isArray(allowances) ? allowances : []
     });
 
     res.status(201).json({

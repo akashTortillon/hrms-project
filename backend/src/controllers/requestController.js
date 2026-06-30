@@ -1018,7 +1018,7 @@ export const approveDocumentRequest = async (req, res) => {
 
     // Update request with document info
     request.status = "COMPLETED";
-    request.uploadedDocument = req.file.path;
+    request.uploadedDocument = req.file.location || req.file.path.replace(/\\/g, "/");
     request.uploadedAt = new Date();
     request.actionBy = req.user.id;
     request.actionDate = new Date();

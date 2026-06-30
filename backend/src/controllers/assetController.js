@@ -158,6 +158,7 @@ import Employee from "../models/employeeModel.js";
 import fs from "fs";
 import path from "path";
 import XLSX from "xlsx";
+import { deleteFile } from "../utils/fileUtils.js";
 
 // Generate next asset code (AST001, AST002, etc.)
 const generateAssetCode = async () => {
@@ -901,10 +902,12 @@ export const uploadDocument = async (req, res) => {
       return res.status(404).json({ message: "Asset not found" });
     }
 
+    const filePath = req.file.location || req.file.path.replace(/\\/g, "/");
+
     const document = {
       type,
       fileName: req.file.originalname,
-      filePath: req.file.path,
+      filePath: filePath,
       uploadedBy: req.user.id,
       uploadedAt: new Date()
     };
@@ -940,9 +943,9 @@ export const deleteDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Delete file from filesystem
-    if (fs.existsSync(document.filePath)) {
-      fs.unlinkSync(document.filePath);
+    // Delete file from S3 or filesystem
+    if (document.filePath) {
+      await deleteFile(document.filePath);
     }
 
     asset.documents.pull(documentId);
@@ -972,13 +975,19 @@ export const downloadDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
+    // Check if it's an S3 URL
+    if (document.filePath && (document.filePath.startsWith('http://') || document.filePath.startsWith('https://'))) {
+      return res.redirect(document.filePath);
+    }
+
+    // Local file handling
     if (!fs.existsSync(document.filePath)) {
       return res.status(404).json({ message: "Document file not found on server" });
     }
 
     res.download(document.filePath, document.fileName);
   } catch (error) {
-    console.error("Download document error:", error);
+    // console.error("Download document error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

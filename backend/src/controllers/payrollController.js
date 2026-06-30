@@ -589,7 +589,12 @@ export const generatePayroll = async (req, res) => {
             // 3. Dynamic Rule Engine
             for (const rule of rules) {
                 const meta = rule.metadata || {};
-                if (!meta.isAutomatic) continue;
+                
+                // Check if this rule is explicitly assigned to this employee
+                const isExplicitlyAssigned = emp.allowances && emp.allowances.some(a => a.name === rule.name);
+                
+                // If it's not automatic and not explicitly assigned, skip it
+                if (!meta.isAutomatic && !isExplicitlyAssigned) continue;
 
                 let amount = 0;
                 let description = "";
@@ -743,6 +748,7 @@ export const generatePayroll = async (req, res) => {
                     }
                 }
             }
+
 
             // 3.5. SALARY ADVANCE & LOAN DEDUCTIONS
             // Find User for this employee to get Requests

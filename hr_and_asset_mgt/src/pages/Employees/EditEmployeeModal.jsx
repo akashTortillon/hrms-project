@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, payrollRuleService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css";
 import {
   WORKING_DAY_TYPE_OPTIONS,
@@ -17,6 +17,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const [shifts, setShifts] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
+  const [allowanceOptions, setAllowanceOptions] = useState([]);
 
   useEffect(() => {
     fetchMasters();
@@ -54,6 +55,10 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
       setBranchesList(branchesData);
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
+      
+      const rulesData = await payrollRuleService.getAll();
+      const allowanceRules = rulesData.filter(r => r.metadata?.category === "ALLOWANCE").map(r => r.name);
+      setAllowanceOptions(allowanceRules);
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -81,6 +86,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
     setPhoneSuffix(val);
     setForm({ ...form, phone: `+971${val}` });
   };
+
 
   const handleSubmit = () => {
     // Sanitize Payload: Convert "N/A" or empty dates to null
@@ -479,7 +485,33 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
                 </div>
 
-                <div className="form-group full-width" style={{ gridColumn: '1 / -1' }}>
+                <div className="form-group full-width" style={{ gridColumn: '1 / -1', marginTop: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
+                  <label>Special Allowances</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '8px' }}>
+                    {allowanceOptions.map(opt => (
+                      <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={(form.allowances || []).some(a => a.name === opt)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            let newAllowances = [...(form.allowances || [])];
+                            if (checked) {
+                              newAllowances.push({ name: opt });
+                            } else {
+                              newAllowances = newAllowances.filter(a => a.name !== opt);
+                            }
+                            setForm({ ...form, allowances: newAllowances });
+                          }}
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                    {allowanceOptions.length === 0 && <span style={{ fontSize: '13px', color: '#6b7280' }}>No allowances found in Master data.</span>}
+                  </div>
+                </div>
+
+                <div className="form-group full-width" style={{ gridColumn: '1 / -1', marginTop: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
                   <label>Working day type (preset)</label>
                   <select
                     value={form.workingDayType ?? 4}

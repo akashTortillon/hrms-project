@@ -26,7 +26,7 @@ import {
    getCurrentAssignment
 } from "../controllers/assignmentController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
-import upload from "../config/multer.js";
+import upload, { uploadLocal } from "../config/multer.js";
 
 const router = express.Router();
 
@@ -34,7 +34,7 @@ const router = express.Router();
    IMPORT/EXPORT ROUTES
 ========================= */
 router.post("/import", protect, hasPermission("MANAGE_ASSETS"), (req, res, next) => {
-   upload.single("file")(req, res, (err) => {
+   uploadLocal.single("file")(req, res, (err) => {
       if (err) {
          console.error("Multer Error:", err);
          return res.status(400).json({ message: "File Upload Error: " + err.message });
