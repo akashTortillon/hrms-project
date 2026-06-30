@@ -1,5 +1,6 @@
 import EmployeeDocument from "../models/employeeDocumentModel.js";
 import Employee from "../models/employeeModel.js";
+import { deleteFile } from "../utils/fileUtils.js";
 import fs from "fs";
 import path from "path";
 
@@ -15,7 +16,11 @@ export const addDocument = async (req, res) => {
 
         if (!employeeId || !documentType) {
             // Clean up file if validation fails
-            fs.unlinkSync(file.path);
+            if (file.location) {
+                await deleteFile(file.location);
+            } else if (file.path && fs.existsSync(file.path)) {
+                fs.unlinkSync(file.path);
+            }
             return res.status(400).json({ message: "Employee ID and Document Type are required" });
         }
 
@@ -34,12 +39,14 @@ export const addDocument = async (req, res) => {
             }
         }
 
+        const filePath = file.location || file.path;
+
         const newDoc = await EmployeeDocument.create({
             employeeId,
             documentType,
             documentNumber,
             expiryDate,
-            filePath: file.path,
+            filePath: filePath,
             status
         });
 
@@ -110,9 +117,9 @@ export const deleteDocument = async (req, res) => {
             return res.status(404).json({ message: "Document not found" });
         }
 
-        // Delete file from filesystem
-        if (fs.existsSync(doc.filePath)) {
-            fs.unlinkSync(doc.filePath);
+        // Delete file from S3 or filesystem
+        if (doc.filePath) {
+            await deleteFile(doc.filePath);
         }
 
         await EmployeeDocument.findByIdAndDelete(id);

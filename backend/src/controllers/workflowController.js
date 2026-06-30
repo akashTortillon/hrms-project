@@ -135,7 +135,7 @@ export const updateWorkflowItem = async (req, res) => {
 
         // Handle File Upload
         if (file) {
-            item.documentUrl = `/uploads/workflows/${file.filename}`;
+            item.documentUrl = file.location || `/uploads/workflows/${file.filename}`;
             item.status = "Completed"; // Auto-complete on upload logic? User preference: Maybe yes for now.
         }
 

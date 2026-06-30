@@ -1,28 +1,57 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { S3Client } from '@aws-sdk/client-s3';
+import multerS3 from 'multer-s3';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Ensure upload directory exists
+// Ensure upload directory exists for local fallback
 const uploadDir = "uploads/";
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+    fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Storage Engine
-const storage = multer.diskStorage({
+// Fallback/Local storage explicitly for imports or local mode
+const localStorage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, "uploads/");
     },
     filename: function (req, file, cb) {
-        // Rename: doc-TIMESTAMP-ORIGINALNAME
         const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
         cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
     },
 });
 
+let storage = localStorage;
+
+if (process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY && process.env.S3_BUCKET_NAME) {
+    const s3Config = new S3Client({
+        region: process.env.S3_REGION || 'us-east-1',
+        credentials: {
+            accessKeyId: process.env.S3_ACCESS_KEY,
+            secretAccessKey: process.env.S3_SECRET_KEY
+        },
+        endpoint: process.env.S3_ENDPOINT || undefined,
+        forcePathStyle: !!process.env.S3_ENDPOINT
+    });
+
+    storage = multerS3({
+        s3: s3Config,
+        bucket: process.env.S3_BUCKET_NAME,
+        acl: 'public-read', // Depends on bucket config, adjust if needed
+        metadata: function (req, file, cb) {
+            cb(null, { fieldName: file.fieldname });
+        },
+        key: function (req, file, cb) {
+            const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+            cb(null, `uploads/${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+        }
+    });
+}
+
 // File Filter (Docs, Images, Excel)
 const fileFilter = (req, file, cb) => {
-    // console.log("Incoming File MimeType:", file.mimetype); // Debugging
     const allowedMimeTypes = [
         "application/pdf",
         "image/jpeg",
@@ -36,7 +65,6 @@ const fileFilter = (req, file, cb) => {
     if (allowedMimeTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        // Fallback: If extension is valid, allow it (Mime-type spoofing/inconsistency check)
         const ext = path.extname(file.originalname).toLowerCase();
         if (['.xlsx', '.xls', '.csv'].includes(ext)) {
             return cb(null, true);
@@ -47,6 +75,12 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
     storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: fileFilter
+});
+
+export const uploadLocal = multer({
+    storage: localStorage,
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: fileFilter
 });

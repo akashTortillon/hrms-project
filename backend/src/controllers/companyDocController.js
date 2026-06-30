@@ -1,4 +1,5 @@
 import CompanyDocument from "../models/companyDocModel.js";
+import { deleteFile } from "../utils/fileUtils.js";
 
 // GET all docs with Filters & Search
 export const getDocs = async (req, res) => {
@@ -53,6 +54,9 @@ export const uploadDoc = async (req, res) => {
             else if (diffDays <= 10) status = "Critical";
             else if (diffDays <= 30) status = "Expiring Soon";
         }
+        
+        // Handle both S3 and local file paths
+        const filePath = req.file.location || req.file.path.replace(/\\/g, "/");
 
         const newDoc = new CompanyDocument({
             name,
@@ -63,7 +67,7 @@ export const uploadDoc = async (req, res) => {
             status, // Save calculated status
             uploadedBy: uploaderId,
             uploaderRole: uploaderRole,
-            filePath: req.file.path.replace(/\\/g, "/"), // normalize path
+            filePath: filePath, // save normalize path or S3 URL
         });
 
         const savedDoc = await newDoc.save();
@@ -79,7 +83,11 @@ export const deleteDoc = async (req, res) => {
         const doc = await CompanyDocument.findById(req.params.id);
         if (!doc) return res.status(404).json({ message: "Document not found" });
 
-        // TODO: Ideally delete file from disk here too using fs.unlink
+        // Delete file from disk or S3
+        if (doc.filePath) {
+            await deleteFile(doc.filePath);
+        }
+
         await CompanyDocument.findByIdAndDelete(req.params.id);
         res.json({ message: "Document deleted" });
     } catch (error) {
