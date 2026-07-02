@@ -45,7 +45,7 @@ export function compareCursor(a, b) {
 function toTimeZoneParts(isoTimestamp, timeZone) {
   if (!isoTimestamp) return null;
   
-  if (typeof isoTimestamp === 'string' && !/(Z|[+-]\d{2}:?\d{2})$/.test(isoTimestamp)) {
+  if (typeof isoTimestamp === 'string') {
     const match = isoTimestamp.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
     if (match) {
       return {
