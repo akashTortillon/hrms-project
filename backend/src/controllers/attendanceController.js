@@ -339,6 +339,32 @@ export const syncBiometrics = async (req, res) => {
       (await BiometricSyncState.findOne({ provider })) ||
       (await BiometricSyncState.create({ provider }));
 
+    if (cursor.lastRunStatus === "in_progress") {
+      const tenMinsAgo = new Date(Date.now() - 10 * 60000);
+      if (cursor.lastRunAt && cursor.lastRunAt > tenMinsAgo) {
+        return res.status(400).json({ message: "Sync is already running in the background. Please wait a few minutes." });
+      }
+    }
+
+    cursor.lastRunStatus = "in_progress";
+    cursor.lastRunAt = new Date();
+    await cursor.save();
+
+    res.json({ message: "Sync started in the background. It may take a few minutes for a full backfill." });
+
+    // Run in background without awaiting
+    runSyncProcess(provider).catch(console.error);
+  } catch (error) {
+    console.error("Biometric sync trigger error:", error);
+    res.status(500).json({ message: "Server error starting sync." });
+  }
+};
+
+async function runSyncProcess(provider) {
+  try {
+    const cursor = await BiometricSyncState.findOne({ provider });
+    if (!cursor) return;
+
     const cursorBefore = {
       lastAuthDateTime: cursor.lastAuthDateTime,
       lastUidOrSlno: cursor.lastUidOrSlno
@@ -497,48 +523,24 @@ export const syncBiometrics = async (req, res) => {
     cursor.lastError = null;
     await cursor.save();
 
-    res.json({
-      message: "Sync successful",
-      fetchedRecords,
-      punchesProcessed: punches.length,
-      upserted,
-      skipped: {
-        leave: skippedLeave,
-        onLeaveStatus: skippedOnLeaveStatus,
-        manualEdited: skippedManual
-      },
-      errors,
-      cursor: {
-        before: cursorBefore,
-        after: {
-          lastAuthDateTime: cursor.lastAuthDateTime,
-          lastUidOrSlno: cursor.lastUidOrSlno
-        }
-      }
-    });
+    console.log("Background sync successful:", { fetchedRecords, upserted });
   } catch (error) {
-    console.error("Biometric sync error:", error);
+    console.error("Biometric background sync error:", error);
     try {
       const provider = "leptis_attendance_api";
       await BiometricSyncState.findOneAndUpdate(
         { provider },
         {
-          provider,
-          lastRunAt: new Date(),
-          lastRunStatus: "fail",
-          lastError: String(error?.message || error)
-        },
-        { upsert: true }
+          $set: {
+            lastRunAt: new Date(),
+            lastRunStatus: "fail",
+            lastError: String(error?.message || error)
+          }
+        }
       );
-    } catch (_) {
-      // Swallow cursor write failures
-    }
-    res.status(500).json({
-      message: "Server error during sync",
-      error: String(error?.message || error)
-    });
+    } catch (_) {}
   }
-};
+}
 
 /**
  * GET daily attendance
