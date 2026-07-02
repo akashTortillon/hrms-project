@@ -22,7 +22,7 @@ const biometricSyncStateSchema = new mongoose.Schema(
     },
     lastRunStatus: {
       type: String,
-      enum: ["success", "fail"],
+      enum: ["success", "fail", "in_progress"],
       default: null
     },
     lastError: {
