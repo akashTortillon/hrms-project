@@ -309,6 +309,24 @@ const calculateLateTier = (checkInTime, rules) => {
 };
 
 /**
+ * RESET Biometric Sync Cursor
+ */
+export const resetBiometricSync = async (req, res) => {
+  try {
+    const provider = "leptis_attendance_api";
+    await BiometricSyncState.findOneAndUpdate(
+      { provider },
+      { $set: { lastAuthDateTime: null, lastUidOrSlno: null, lastRunStatus: null, lastError: null } },
+      { new: true }
+    );
+    res.json({ success: true, message: "Sync cursor reset. Next sync will perform a full backfill." });
+  } catch (error) {
+    console.error("Reset sync error:", error);
+    res.status(500).json({ message: "Server error resetting sync cursor." });
+  }
+};
+
+/**
  * SYNC Biometrics
  * Reads mock data and processes attendance
  */

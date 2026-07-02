@@ -43,6 +43,18 @@ export function compareCursor(a, b) {
  * Input punch: { employeeCode, timestamp (ISO), type: IN|OUT }
  */
 function toTimeZoneParts(isoTimestamp, timeZone) {
+  if (!isoTimestamp) return null;
+  
+  if (typeof isoTimestamp === 'string' && !/(Z|[+-]\d{2}:?\d{2})$/.test(isoTimestamp)) {
+    const match = isoTimestamp.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+    if (match) {
+      return {
+        date: match[1],
+        time: match[2]
+      };
+    }
+  }
+
   const d = new Date(isoTimestamp);
   if (Number.isNaN(d.getTime())) return null;
 
@@ -67,9 +79,11 @@ function toTimeZoneParts(isoTimestamp, timeZone) {
 
   if (!year || !month || !day || !hour || !minute) return null;
 
+  const safeHour = hour === "24" ? "00" : hour;
+
   return {
     date: `${year}-${month}-${day}`, // YYYY-MM-DD
-    time: `${hour}:${minute}` // HH:MM
+    time: `${safeHour}:${minute}` // HH:MM
   };
 }
 

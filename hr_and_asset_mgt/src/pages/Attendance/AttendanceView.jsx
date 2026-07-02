@@ -14,6 +14,7 @@ import {
   updateAttendance,
   markAttendance,
   syncBiometrics,
+  resetBiometrics,
   getMonthlyAttendance,
   exportAttendanceReport
 } from "../../services/attendanceService.js";
@@ -228,6 +229,20 @@ function Attendance() {
     }
   };
 
+  const handleResetSync = async () => {
+    if (!window.confirm("Are you sure you want to reset the sync cursor? This will trigger a full backfill on the next sync.")) return;
+    try {
+      setLoading(true);
+      const res = await resetBiometrics();
+      toast.success(res.message || "Sync cursor reset successfully.");
+    } catch (error) {
+      console.error("Reset sync failed", error);
+      toast.error("Failed to reset sync cursor");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExport = async () => {
     try {
       const filters = {
@@ -294,6 +309,7 @@ function Attendance() {
         viewMode={viewMode}
         setViewMode={(m) => updateParams({ view: m })}
         onSync={isEmployee ? null : handleSync}
+        onResetSync={isEmployee ? null : handleResetSync}
         loading={loading}
         onExport={isEmployee ? null : handleExport}
       />

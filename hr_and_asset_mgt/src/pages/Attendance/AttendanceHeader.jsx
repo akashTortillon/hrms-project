@@ -3,7 +3,7 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import AppButton from "../../components/reusable/Button";
 import "../../style/Attendance.css";
 
-export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading, onExport }) {
+export default function AttendanceHeader({ viewMode, setViewMode, onSync, onResetSync, loading, onExport }) {
   return (
     <div className="attendance-header">
       <div className="attendance-header-left">
@@ -30,6 +30,17 @@ export default function AttendanceHeader({ viewMode, setViewMode, onSync, loadin
       </div>
 
       <div className="attendance-header-actions">
+        {onResetSync && (
+          <AppButton
+            variant="danger"
+            className="btn-outline-custom"
+            onClick={onResetSync}
+            disabled={loading}
+          >
+            Reset Sync
+          </AppButton>
+        )}
+
         {onSync && (
           <AppButton
             variant="primary"

@@ -37,6 +37,11 @@ export const syncBiometrics = async () => {
   return res.data;
 };
 
+export const resetBiometrics = async () => {
+  const res = await api.post(`${ATTENDANCE_API}/sync/reset`);
+  return res.data;
+};
+
 // ✅ Get Monthly Attendance
 export const getMonthlyAttendance = async (month, year) => {
   const res = await api.get(`${ATTENDANCE_API}/monthly`, {
