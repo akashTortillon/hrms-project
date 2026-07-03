@@ -4,22 +4,36 @@ import "../../style/Employees.css";
 
 
 
+const FILTER_FIELD_LABELS = {
+  company: "Company",
+  department: "Department",
+  branch: "Branch",
+  designation: "Designation"
+};
+
+const FILTER_FIELD_LABELS_PLURAL = {
+  company: "Companies",
+  department: "Departments",
+  branch: "Branches",
+  designation: "Designations"
+};
+
 export default function EmployeesHeader({
   onAddEmployee,
-  department,
-  setDepartment,
-  branch,
-  setBranch,
+  filterField,
+  setFilterField,
+  filterValue,
+  setFilterValue,
+  filterOptionsByField = {},
   status,
   setStatus,
   search,
   setSearch,
-  deptOptions = [],
-  branchOptions = [],
   onExport,
   onImport,
   count = 0
 }) {
+  const currentOptions = filterOptionsByField[filterField] || [];
   return (
     <div className="employees-header">
       {/* Page Title */}
@@ -69,12 +83,12 @@ export default function EmployeesHeader({
             />
           </div>
 
-          {/* Department */}
+          {/* Filter dimension: pick what to filter by, then pick the value */}
           <div style={{ width: '100%' }}>
             <select
               className="employees-select"
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
+              value={filterField}
+              onChange={(e) => setFilterField(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -85,19 +99,17 @@ export default function EmployeesHeader({
                 height: "42px"
               }}
             >
-              <option value="All Departments">All Departments</option>
-              {deptOptions.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
+              {Object.entries(FILTER_FIELD_LABELS).map(([field, label]) => (
+                <option key={field} value={field}>Filter by {label}</option>
               ))}
             </select>
           </div>
 
-          {/* Branch */}
           <div style={{ width: '100%' }}>
             <select
               className="employees-select"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
+              value={filterValue}
+              onChange={(e) => setFilterValue(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -108,9 +120,9 @@ export default function EmployeesHeader({
                 height: "42px"
               }}
             >
-              <option value="All Branches">All Branches</option>
-              {branchOptions.map(b => (
-                <option key={b} value={b}>{b}</option>
+              <option value="">All {FILTER_FIELD_LABELS_PLURAL[filterField]}</option>
+              {currentOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
           </div>

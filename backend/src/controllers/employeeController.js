@@ -105,13 +105,23 @@ const attachSignedProfilePhotoUrl = async (employee) => {
 
 export const exportEmployees = async (req, res) => {
   try {
-    const { department, status, search, branch } = req.query;
+    const { department, status, search, branch, company, designation } = req.query;
 
     let matchStage = {};
 
     // Filter by Branch
     if (branch && branch !== "All Branches") {
       matchStage.branch = branch;
+    }
+
+    // Filter by Company
+    if (company && company !== "All Companies") {
+      matchStage.company = company;
+    }
+
+    // Filter by Designation
+    if (designation && designation !== "All Designations") {
+      matchStage.designation = designation;
     }
 
     // Filter by Department
@@ -402,13 +412,23 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const { department, status, search, branch } = req.query;
+    const { department, status, search, branch, company, designation } = req.query;
 
     let matchStage = {};
 
     // Filter by Branch
     if (branch && branch !== "All Branches") {
       matchStage.branch = branch;
+    }
+
+    // Filter by Company
+    if (company && company !== "All Companies") {
+      matchStage.company = company;
+    }
+
+    // Filter by Designation
+    if (designation && designation !== "All Designations") {
+      matchStage.designation = designation;
     }
 
     // Filter by Department
@@ -811,13 +831,62 @@ export const importEmployees = async (req, res) => {
     const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
 
-    // Pre-fetch Master Data for Strict Validation
+    // Pre-fetch Master Data for Strict Validation.
+    // Maps are keyed by lowercase name -> canonical Master name, so imported rows get
+    // normalized to the Master's exact casing (avoids "Sales & Operations" vs "SALES & OPERATIONS"
+    // breaking exact-match filters elsewhere in the app).
     const masters = await Master.find({ isActive: true });
-    const validRoles = new Set(masters.filter(m => m.type === 'ROLE').map(m => m.name.toLowerCase()));
-    const validDepartments = new Set(masters.filter(m => m.type === 'DEPARTMENT').map(m => m.name.toLowerCase()));
-    const validBranches = new Set(masters.filter(m => m.type === 'BRANCH').map(m => m.name.toLowerCase()));
-    const validDesignations = new Set(masters.filter(m => m.type === 'DESIGNATION').map(m => m.name.toLowerCase()));
-    const validContractTypes = new Set(masters.filter(m => m.type === 'EMPLOYEE_TYPE').map(m => m.name.toLowerCase()));
+    const canonicalMap = (type) => new Map(masters.filter(m => m.type === type).map(m => [m.name.toLowerCase(), m.name]));
+    const validRoles = canonicalMap('ROLE');
+    const validDepartments = canonicalMap('DEPARTMENT');
+    const validBranches = canonicalMap('BRANCH');
+    const validDesignations = canonicalMap('DESIGNATION');
+    const validContractTypes = canonicalMap('EMPLOYEE_TYPE');
+    const validCompanies = canonicalMap('COMPANY');
+
+    // Companies map by their "Code ID" (Masters > Company Structure > Companies > Code ID field)
+    // WORK LOCATION / VISA LOCATION columns in the import sheet hold this code, not a name.
+    const companyByCode = new Map();
+    masters.filter(m => m.type === 'COMPANY' && m.code).forEach(m => {
+        companyByCode.set(String(m.code).trim(), m.name);
+    });
+
+    // The sheet's "COMPANY / BRANCH" column is a single merged field (e.g. "RIZAN HEAD OFFICE").
+    // Split it by matching the longest known Company name as a prefix; the remainder is the Branch.
+    const companyNamesByLengthDesc = masters
+      .filter(m => m.type === 'COMPANY')
+      .map(m => m.name)
+      .sort((a, b) => b.length - a.length);
+
+    // Excel forces text-formatting on numeric-looking strings with a leading apostrophe
+    // (e.g. '784198974152963) - strip it before saving so the stored value is clean.
+    const stripExcelTextMarker = (val) => {
+      const text = (val ?? "").toString();
+      return text.startsWith("'") ? text.slice(1) : text;
+    };
+
+    const splitCompanyBranch = (combined) => {
+      const text = (combined || "").toString().trim();
+      if (!text) return { company: "", branch: "" };
+      const match = companyNamesByLengthDesc.find(name =>
+        text.toLowerCase() === name.toLowerCase() ||
+        text.toLowerCase().startsWith(name.toLowerCase() + " ")
+      );
+      if (!match) return { company: text, branch: "" };
+      return { company: match, branch: text.slice(match.length).trim() };
+    };
+
+    // Distinct missing values seen across the whole file, for the summary block
+    const missing = {
+        departments: new Set(),
+        designations: new Set(),
+        branches: new Set(),
+        companies: new Set(),
+        roles: new Set(),
+        contractTypes: new Set(),
+        workLocationCodes: new Set(),
+        visaLocationCodes: new Set()
+    };
 
     // Get last employee code
     const lastEmployee = await Employee.findOne().sort({ code: -1 });
@@ -858,31 +927,82 @@ export const importEmployees = async (req, res) => {
       }
 
       // 3. Strict Master Validation
-      const role = row["Role"] ? row["Role"].trim() : "Employee";
-      const department = row["Department"].trim();
-      const branch = row["Branch"] ? row["Branch"].trim() : "";
-      const designation = row["Designation"] ? row["Designation"].trim() : "";
-      const contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+      let role = row["Role"] ? row["Role"].trim() : "Employee";
+      let department = row["Department"].trim();
+      // If the sheet has explicit "Company"/"Branch" columns, use them directly.
+      // Otherwise split the merged "COMPANY / BRANCH" column against known Company names.
+      let company, branch;
+      if (row["Company"] || row["Branch"]) {
+        company = (row["Company"] || "").toString().trim();
+        branch = (row["Branch"] || "").toString().trim();
+      } else {
+        ({ company, branch } = splitCompanyBranch(row["COMPANY / BRANCH"]));
+      }
+      let designation = row["Designation"] ? row["Designation"].trim() : "";
+      let contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+      const workLocationCode = row["WORK LOCATION"] != null ? String(row["WORK LOCATION"]).trim() : "";
+      const visaLocationCode = row["VISA LOCATION"] != null ? String(row["VISA LOCATION"]).trim() : "";
 
       if (row["Role"] && !validRoles.has(role.toLowerCase())) {
+        missing.roles.add(role);
         errors.push({ row: rowNum, email, message: `Invalid Role: '${role}'. Exact spelling must match Master list.` });
         continue;
       }
+      role = validRoles.get(role.toLowerCase()) || role;
+
       if (!validDepartments.has(department.toLowerCase())) {
+        missing.departments.add(department);
         errors.push({ row: rowNum, email, message: `Invalid Department: '${department}'. Exact spelling must match Master list.` });
         continue;
       }
+      department = validDepartments.get(department.toLowerCase());
+
       if (branch && !validBranches.has(branch.toLowerCase())) {
+        missing.branches.add(branch);
         errors.push({ row: rowNum, email, message: `Invalid Branch: '${branch}'. Exact spelling must match Master list.` });
         continue;
       }
+      if (branch) branch = validBranches.get(branch.toLowerCase());
+
+      if (company && !validCompanies.has(company.toLowerCase())) {
+        missing.companies.add(company);
+        errors.push({ row: rowNum, email, message: `Invalid Company: '${company}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (company) company = validCompanies.get(company.toLowerCase());
+
       if (designation && !validDesignations.has(designation.toLowerCase())) {
+        missing.designations.add(designation);
         errors.push({ row: rowNum, email, message: `Invalid Designation: '${designation}'. Exact spelling must match Master list.` });
         continue;
       }
+      if (designation) designation = validDesignations.get(designation.toLowerCase());
+
       if (contractType && !validContractTypes.has(contractType.toLowerCase())) {
+        missing.contractTypes.add(contractType);
         errors.push({ row: rowNum, email, message: `Invalid Employee Type: '${contractType}'. Exact spelling must match Master list.` });
         continue;
+      }
+      if (contractType) contractType = validContractTypes.get(contractType.toLowerCase());
+
+      let workPermitCompanyName = "";
+      if (workLocationCode) {
+        workPermitCompanyName = companyByCode.get(workLocationCode) || "";
+        if (!workPermitCompanyName) {
+          missing.workLocationCodes.add(workLocationCode);
+          errors.push({ row: rowNum, email, message: `Invalid Work Location code: '${workLocationCode}'. No Company master has this Code ID.` });
+          continue;
+        }
+      }
+
+      let visaCompanyName = "";
+      if (visaLocationCode) {
+        visaCompanyName = companyByCode.get(visaLocationCode) || "";
+        if (!visaCompanyName) {
+          missing.visaLocationCodes.add(visaLocationCode);
+          errors.push({ row: rowNum, email, message: `Invalid Visa Location code: '${visaLocationCode}'. No Company master has this Code ID.` });
+          continue;
+        }
       }
 
       // 4. User Account Creation
@@ -899,7 +1019,7 @@ export const importEmployees = async (req, res) => {
             email: email,
             phone: userPhone,
             password: hashedPassword,
-            role: row["Role"]
+            role: role
           });
         }
       } catch (uErr) {
@@ -932,22 +1052,22 @@ export const importEmployees = async (req, res) => {
         await Employee.create({
           name: row["Full Name"],
           code: nextCode,
-          role: row["Role"],
-          department: row["Department"],
-          branch: row["Branch"] || "",
-          company: row["COMPANY / BRANCH"] || row["Company"] || "",
+          role: role,
+          department: department,
+          branch: branch,
+          company: company,
           email: email,
           phone: phone,
           joinDate: joinDate,
           status: row["Status"] || "Onboarding",
           dob: parseExcelDate(row["Date of Birth"]),
-          designation: row["Designation"] || row["Role"],
+          designation: designation || role,
           shift: row["Shift"] || "Day Shift",
           nationality: row["Nationality"] || "",
           address: row["UAE Address"] || "",
-          contractType: row["Employee Type"] || "",
-          passportNo: row["Passport No"] || "",
-          emiratesIdNo: row["Emirates ID No"] || "",
+          contractType: contractType || "",
+          passportNo: stripExcelTextMarker(row["Passport No"]),
+          emiratesIdNo: stripExcelTextMarker(row["Emirates ID No"]),
           basicSalary: basicSalaryVal != null ? String(basicSalaryVal) : "",
           allowance: toNumber(row["Allowance (AED)"]),
           hra: toNumber(row["HRA (AED)"]),
@@ -958,16 +1078,16 @@ export const importEmployees = async (req, res) => {
           workBase: toNumber(row["Work Base"] ?? basicSalaryVal),
           ctc: toNumber(ctcVal),
           accommodation: row["Accommodation"] || "",
-          visaCompany: row["Visa Company"] || "",
-          workPermitCompany: row["work permit"] || row["Work Permit Company"] || "",
-          visaNo: row["Visa No"] || "",
+          visaCompany: visaCompanyName || row["Visa Company"] || "",
+          workPermitCompany: workPermitCompanyName || row["work permit"] || row["Work Permit Company"] || "",
+          visaNo: stripExcelTextMarker(row["Visa No"]),
           visaFileNo: row["Visa File No"] || "",
           laborCardNumber: row["Labor Card No"] || "",
           laborCards: buildLaborCards({ laborCardNumber: row["Labor Card No"] || "" }),
-          personalId: row["Personal ID (14 Digit)"] || "",
+          personalId: stripExcelTextMarker(row["Personal ID (14 Digit)"]),
           bankName: row["Bank Name"] || "",
-          iban: row["IBAN"] || "",
-          bankAccount: row["Account Number"] || "",
+          iban: stripExcelTextMarker(row["IBAN"]),
+          bankAccount: stripExcelTextMarker(row["Account Number"]),
           agentId: row["Agent ID (WPS)"] || "",
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
@@ -996,10 +1116,28 @@ export const importEmployees = async (req, res) => {
       }
     }
 
+    // Batch summary: distinct missing master values across the whole file,
+    // so the user knows exactly what to add to Masters before re-uploading.
+    const summary = [];
+    const summarize = (label, set, hint) => {
+      if (set.size > 0) {
+        summary.push(`${label} not found in master data: ${[...set].join(", ")}. ${hint}`);
+      }
+    };
+    summarize("Companies", missing.companies, "Add these under Masters → Company Structure → Companies, then re-upload.");
+    summarize("Branches", missing.branches, "Add these under Masters → Company Structure → Branches, then re-upload.");
+    summarize("Departments", missing.departments, "Add these under Masters → Company Structure → Departments, then re-upload.");
+    summarize("Designations", missing.designations, "Add these under Masters → HR Management → Designations, then re-upload.");
+    summarize("Roles", missing.roles, "Add these under Masters → HR Management → Roles, then re-upload.");
+    summarize("Employee Types", missing.contractTypes, "Add these under Masters → HR Management → Employee Types, then re-upload.");
+    summarize("Work Location codes", missing.workLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
+    summarize("Visa Location codes", missing.visaLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
+
     res.json({
       message: "Import processing processed",
       successCount,
       failureCount: errors.length,
+      summary,
       errors
     });
 

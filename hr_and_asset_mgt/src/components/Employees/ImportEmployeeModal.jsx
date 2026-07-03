@@ -50,42 +50,42 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
     const handleDownloadTemplate = () => {
         const templateData = [
             {
-                "Full Name": "John Smith",
+                "Full Name": "Ahmed Al Mansoori",
                 "COMPANY / BRANCH": "RIZAN HEAD OFFICE",
                 "WORK LOCATION": "",
                 "VISA LOCATION": "",
                 "work permit": "",
                 "Role": "Employee",
-                "Department": "IT",
-                "Designation": "Software Engineer",
-                "Email": "john.smith@example.com",
-                "Contact Number": "+971501111111",
+                "Department": "Sales & Operations",
+                "Designation": "Sales Executive",
+                "Email": "ahmed.almansoori@company.com",
+                "Contact Number": "971501234567",
                 "Status": "Active",
                 "Shift": "Morning",
-                "Joining Date": "2024-01-10",
+                "Joining Date": "2024-03-01",
                 "Employee Type": "Full-Time",
-                "Agent ID (WPS)": "AGT123",
-                "Basic Salary (AED)": 8000,
-                "Allowance (AED)": 2000,
-                "HRA (AED)": 1000,
-                "Total Salary (AED)": 11000,
+                "Agent ID (WPS)": "",
+                "Basic Salary (AED)": 5000,
+                "Allowance (AED)": 1500,
+                "HRA (AED)": 500,
+                "Total Salary (AED)": 7000,
                 "ACCOMODATION ALLOWANCE": 0,
                 "VEHICHLE ALLOWANCE": 0,
-                "MONTHLY CTC": 11000,
-                "Date of Birth": "1990-01-15",
-                "Personal ID (14 Digit)": "78412345678901",
-                "Nationality": "Indian",
+                "MONTHLY CTC": 7000,
+                "Date of Birth": "1992-06-15",
+                "Personal ID (14 Digit)": "78419921234567",
+                "Nationality": "UAE",
                 "Accommodation": "Self",
-                "UAE Address": "Dubai Silicon Oasis, UAE",
+                "UAE Address": "Al Nahda, Dubai, UAE",
                 "Passport No": "A1234567",
-                "Passport Expiry": "2030-05-15",
-                "Emirates ID No": "784-1990-1234567-1",
-                "Emirates ID Expiry": "2026-05-15",
+                "Passport Expiry": "2029-06-15",
+                "Emirates ID No": "784-1992-1234567-1",
+                "Emirates ID Expiry": "2027-06-15",
                 "Visa No": "201/2024/1234567",
                 "Visa File No": "202/2024/1234",
                 "Bank Name": "Emirates NBD",
                 "IBAN": "AE070260001015779902601",
-                "Account Number": "1234567890"
+                "Account Number": "1012345678"
             }
         ];
         const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -145,6 +145,11 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                             <div>
                                 <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', color: '#1f2937' }}>Step 1: Get the Template</h4>
                                 <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Download formatted Excel file</p>
+                                <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                                    COMPANY / BRANCH (e.g. "RIZAN HEAD OFFICE") is split by matching a known Company name.
+                                    Department/Designation/Role/Employee Type must match Masters exactly.
+                                    WORK LOCATION and VISA LOCATION are the Company's Code ID (set under Masters → Companies).
+                                </p>
                             </div>
                             <button
                                 className="btn-secondary btn-sm"
@@ -230,6 +235,17 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                                     </div>
                                 </div>
                             </div>
+
+                            {result.summary?.length > 0 && (
+                                <div className="error-list" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                                    <h5 style={{ margin: '0 0 8px 0' }}>Fix these master data gaps, then re-upload</h5>
+                                    <ul>
+                                        {result.summary.map((msg, idx) => (
+                                            <li key={idx}>{msg}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
 
                             {result.failureCount > 0 && (
                                 <div className="error-list">

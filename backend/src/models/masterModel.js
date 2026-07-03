@@ -29,6 +29,11 @@ const unifiedMasterSchema = new mongoose.Schema({
         ref: 'Master',
         index: true
     },
+    parentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Master',
+        index: true
+    },
     permissions: {
         type: [String],
         default: []
