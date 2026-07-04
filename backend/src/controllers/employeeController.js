@@ -872,6 +872,13 @@ export const importEmployees = async (req, res) => {
     const companyIdByName = new Map(masters.filter(m => m.type === 'COMPANY').map(m => [m.name.toLowerCase(), String(m._id)]));
     const branchParentIdByName = new Map(masters.filter(m => m.type === 'BRANCH').map(m => [m.name.toLowerCase(), m.parentId ? String(m.parentId) : null]));
 
+    // WORK LOCATION / VISA LOCATION sometimes hold a Branch name (e.g. "MAIN") scoped to the
+    // row's Company, rather than a numeric Company Code ID - keyed by companyId::branchNameLower.
+    const branchNameByCompanyIdAndName = new Map();
+    masters.filter(m => m.type === 'BRANCH' && m.parentId).forEach(m => {
+        branchNameByCompanyIdAndName.set(`${String(m.parentId)}::${m.name.toLowerCase()}`, m.name);
+    });
+
     // Companies map by their "Code ID" (Masters > Company Structure > Companies > Code ID field)
     // WORK LOCATION / VISA LOCATION columns in the import sheet hold this code, not a name.
     const companyByCode = new Map();
@@ -1029,29 +1036,55 @@ export const importEmployees = async (req, res) => {
       }
       if (contractType) contractType = validContractTypes.get(contractType.toLowerCase());
 
+      // Resolves a WORK/VISA LOCATION value either as a Company Code ID, or as the name of a
+      // Branch nested under the row's Company (e.g. "MAIN"). Returns the owning company's name,
+      // and fills in `branch` from the match when the row didn't already specify one.
+      const resolveLocationCode = (code) => {
+        const byCompanyCode = companyByCode.get(code);
+        if (byCompanyCode) return { companyName: byCompanyCode };
+
+        if (company) {
+          const companyId = companyIdByName.get(company.toLowerCase());
+          const matchedBranch = companyId ? branchNameByCompanyIdAndName.get(`${companyId}::${code.toLowerCase()}`) : null;
+          if (matchedBranch) {
+            if (!branch) branch = matchedBranch;
+            return { companyName: company };
+          }
+        }
+        return null;
+      };
+
       let workPermitCompanyName = "";
       if (workLocationCode) {
-        workPermitCompanyName = companyByCode.get(workLocationCode) || "";
+        const resolved = resolveLocationCode(workLocationCode);
+        workPermitCompanyName = resolved?.companyName || "";
         if (!workPermitCompanyName) {
           missing.workLocationCodes.add(workLocationCode);
-          errors.push({ row: rowNum, email, message: `Invalid Work Location code: '${workLocationCode}'. No Company master has this Code ID.` });
+          errors.push({ row: rowNum, email, message: `Invalid Work Location: '${workLocationCode}'. No Company Code ID or Branch with this name under '${company || "the row's company"}' was found.` });
           continue;
         }
       }
 
       let visaCompanyName = "";
       if (visaLocationCode) {
-        visaCompanyName = companyByCode.get(visaLocationCode) || "";
+        const resolved = resolveLocationCode(visaLocationCode);
+        visaCompanyName = resolved?.companyName || "";
         if (!visaCompanyName) {
           missing.visaLocationCodes.add(visaLocationCode);
-          errors.push({ row: rowNum, email, message: `Invalid Visa Location code: '${visaLocationCode}'. No Company master has this Code ID.` });
+          errors.push({ row: rowNum, email, message: `Invalid Visa Location: '${visaLocationCode}'. No Company Code ID or Branch with this name under '${company || "the row's company"}' was found.` });
           continue;
         }
       }
 
       // 4. User Account Creation
       let userPhone = phone.replace(/\s+/g, "");
-      // Simple normalization for UAE if needed, or just keep as is
+      if (userPhone.startsWith("0")) {
+        userPhone = "+971" + userPhone.substring(1);
+      } else if (userPhone.startsWith("971")) {
+        userPhone = "+" + userPhone;
+      } else if (!userPhone.startsWith("+")) {
+        userPhone = "+971" + userPhone;
+      }
 
       const hashedPassword = await bcrypt.hash("Password@123", 10);
       try {
