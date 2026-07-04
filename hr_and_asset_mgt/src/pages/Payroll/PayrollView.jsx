@@ -7,6 +7,8 @@ import PayrollEmployeesTable from "./PayrollTable";
 import { EmployeePayrollOverviewChart, LoansAdvancesChart } from "./PayrollCharts";
 import { payrollService } from "../../services/payrollService";
 import { getCompanies, getBranches } from "../../services/masterService.js";
+import CustomModal from "../../components/reusable/CustomModal.jsx";
+import CustomButton from "../../components/reusable/Button.jsx";
 
 // Reusable filter section (Original logic + New Style)
 function PayrollFilters({ filters, setFilters, companies, branches }) {
@@ -131,6 +133,8 @@ function Payroll() {
   const [companies, setCompanies] = useState([]);
   const [branches, setBranches] = useState([]);
   const [filters, setFilters] = useState({ company: '', branch: '', visaCompany: '', workPermitCompany: '', search: '', page: 1, limit: 10 });
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+  const [finalizeConfirmText, setFinalizeConfirmText] = useState("");
 
   // --- MOCK DATA FOR CHARTS (To avoid breaking backend dependencies) ---
   const mockTrends = [
@@ -214,6 +218,12 @@ function Payroll() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmFinalize = () => {
+    setShowFinalizeConfirm(false);
+    setFinalizeConfirmText("");
+    handleFinalize();
   };
 
   const handleExportExcel = async (reportType = null) => {
@@ -317,9 +327,9 @@ function Payroll() {
                     >
                         {loading ? 'Processing...' : isGenerated ? 'Regenerate' : 'Generate Payroll'}
                     </button>
-                    <button 
-                      className="final-btn" 
-                      onClick={handleFinalize} 
+                    <button
+                      className="final-btn"
+                      onClick={() => setShowFinalizeConfirm(true)}
                       disabled={loading || !isGenerated || isFinalized}
                     >
                         {isFinalized ? 'Finalized' : 'Finalize Payroll'}
@@ -436,14 +446,50 @@ function Payroll() {
                 branches={branches}
             />
 
-            <WorkReportTable 
-                records={allRecords} 
-                reportType="visa" 
-                loading={loading} 
-                onExport={() => handleExportExcel('visa')} 
+            <WorkReportTable
+                records={allRecords}
+                reportType="visa"
+                loading={loading}
+                onExport={() => handleExportExcel('visa')}
             />
         </div>
       )}
+
+      <CustomModal
+        show={showFinalizeConfirm}
+        title="Finalize Payroll"
+        onClose={() => { setShowFinalizeConfirm(false); setFinalizeConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setShowFinalizeConfirm(false); setFinalizeConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton onClick={handleConfirmFinalize} disabled={finalizeConfirmText.trim().toLowerCase() !== "yes"}>
+              Finalize Payroll
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>
+          This locks payroll for {month}/{year}. It cannot be undone from here — loan and advance
+          requests will be updated and no further edits will be possible.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={finalizeConfirmText}
+          onChange={(e) => setFinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
     </div>
   );
 }

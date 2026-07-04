@@ -115,6 +115,37 @@ export const getDocumentExpiryForecast = async (days = 30) => {
     expiryDate: { $lte: thresholdDate, $gte: new Date() }
   });
 
+  // Employee-level expiry fields (Passport/Emirates ID/Visa) live directly on the
+  // Employee record and show on the profile even when no scan was ever uploaded
+  // to EmployeeDocument - without this, those expiries never surfaced here.
+  const now = new Date();
+  const employeesWithFieldExpiries = await Employee.find({
+    $or: [
+      { passportExpiry: { $lte: thresholdDate, $gte: now } },
+      { emiratesIdExpiry: { $lte: thresholdDate, $gte: now } },
+      { visaExpiry: { $lte: thresholdDate, $gte: now } }
+    ]
+  }).select("name code passportExpiry emiratesIdExpiry visaExpiry");
+
+  const fieldExpiries = [];
+  employeesWithFieldExpiries.forEach(e => {
+    [
+      { label: "Passport", date: e.passportExpiry },
+      { label: "Emirates ID", date: e.emiratesIdExpiry },
+      { label: "Visa", date: e.visaExpiry }
+    ].forEach(({ label, date }) => {
+      if (date && date <= thresholdDate && date >= now) {
+        fieldExpiries.push({
+          type: "Employee",
+          owner: e.name,
+          docType: label,
+          expiryDate: date,
+          daysRemaining: Math.ceil((date - now) / (1000 * 60 * 60 * 24))
+        });
+      }
+    });
+  });
+
   const results = [
     ...empDocs.map(d => ({
       type: "Employee",
@@ -129,7 +160,8 @@ export const getDocumentExpiryForecast = async (days = 30) => {
       docType: d.type,
       expiryDate: d.expiryDate,
       daysRemaining: Math.ceil((d.expiryDate - new Date()) / (1000 * 60 * 60 * 24))
-    }))
+    })),
+    ...fieldExpiries
   ];
 
   return results.sort((a, b) => a.expiryDate - b.expiryDate);

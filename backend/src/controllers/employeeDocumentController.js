@@ -2,6 +2,7 @@ import EmployeeDocument from "../models/employeeDocumentModel.js";
 import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
 import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
+import { computeExpiryStatus } from "../utils/expiryStatus.js";
 
 const isDocumentManager = (user = {}) =>
     user.role === "Admin"
@@ -37,6 +38,9 @@ const canAccessDocument = async (user, document) => {
 const attachSignedFileUrl = async (document) => {
     const item = document.toObject ? document.toObject() : { ...document };
     item.fileUrl = await getSignedFileUrl(item);
+    // Recompute status from expiryDate - the stored value is only set once at
+    // upload time and goes stale as the expiry date approaches/passes.
+    item.status = computeExpiryStatus(item.expiryDate);
     return item;
 };
 

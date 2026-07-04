@@ -39,6 +39,9 @@ const transferHistorySchema = new mongoose.Schema({
 const employeeSchema = new mongoose.Schema({
   name: { type: String, required: true },
   code: { type: String, required: true, unique: true },
+  // Always auto-generated (EMP001, EMP002...), immutable, kept as an internal reference
+  // even after `code` is edited by a user.
+  systemCode: { type: String, unique: true, sparse: true },
   role: { type: String, required: true },
   department: { type: String, required: true },
   branch: { type: String },

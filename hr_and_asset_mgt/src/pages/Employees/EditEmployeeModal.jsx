@@ -168,7 +168,12 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
                 <div className="form-group">
                   <label>Employee Code</label>
-                  <input name="code" value={form.code} disabled style={{ background: '#f3f4f6', cursor: 'not-allowed' }} />
+                  <input name="code" value={form.code || ''} onChange={handleChange} />
+                </div>
+
+                <div className="form-group">
+                  <label>System Reference No.</label>
+                  <input value={form.systemCode || ''} disabled style={{ background: '#f3f4f6', cursor: 'not-allowed' }} />
                 </div>
 
                 <div className="form-group">
@@ -222,21 +227,6 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   <select
                     name="company"
                     value={form.company || ''}
-                    onChange={handleChange}
-                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
-                  >
-                    <option value="">Select Company</option>
-                    {companies.map(c => (
-                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Visa Company</label>
-                  <select
-                    name="visaCompany"
-                    value={form.visaCompany || ''}
                     onChange={(e) => {
                       const nextCompany = companies.find(c => c.name === e.target.value);
                       const nextBranches = nextCompany
@@ -245,13 +235,13 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       const branchStillValid = nextBranches.some(b => b.name === form.branch);
                       setForm(prev => ({
                         ...prev,
-                        visaCompany: e.target.value,
+                        company: e.target.value,
                         branch: branchStillValid ? prev.branch : ""
                       }));
                     }}
                     style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
                   >
-                    <option value="">Select Company on Visa</option>
+                    <option value="">Select Company</option>
                     {companies.map(c => (
                       <option key={c._id || c.name} value={c.name}>{c.name}</option>
                     ))}
@@ -264,7 +254,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     name="branch"
                     value={form.branch || ''}
                     onChange={handleChange}
-                    disabled={!form.visaCompany}
+                    disabled={!form.company}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -275,15 +265,30 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       height: "42px"
                     }}
                   >
-                    <option value="">{form.visaCompany ? "Select Branch" : "Select Visa Company first"}</option>
+                    <option value="">{form.company ? "Select Branch" : "Select Company first"}</option>
                     {branchesList
                       .filter(b => {
-                        const selectedCompany = companies.find(c => c.name === form.visaCompany);
+                        const selectedCompany = companies.find(c => c.name === form.company);
                         return selectedCompany && b.parentId === selectedCompany._id;
                       })
                       .map(b => (
                         <option key={b._id || b.name} value={b.name}>{b.name}</option>
                       ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Visa Company</label>
+                  <select
+                    name="visaCompany"
+                    value={form.visaCompany || ''}
+                    onChange={handleChange}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+                  >
+                    <option value="">Select Company on Visa</option>
+                    {companies.map(c => (
+                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    ))}
                   </select>
                 </div>
 

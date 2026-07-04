@@ -210,6 +210,7 @@ export const addEmployee = async (req, res) => {
   try {
     const {
       name,
+      code,
       role,
       department,
       branch,
@@ -252,9 +253,13 @@ export const addEmployee = async (req, res) => {
 
     // 1. Strict Validation
     if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
+    if (!code || !code.trim()) return res.status(400).json({ message: "Employee Code is required" });
     if (!role) return res.status(400).json({ message: "Role is required" });
     if (!department) return res.status(400).json({ message: "Department is required" });
     if (!joinDate) return res.status(400).json({ message: "Joining Date is required" });
+
+    const existingCode = await Employee.findOne({ code: code.trim() });
+    if (existingCode) return res.status(409).json({ message: `Employee Code '${code.trim()}' is already in use` });
 
     // Email Validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -287,14 +292,16 @@ export const addEmployee = async (req, res) => {
     const resolvedDesignatedManager = await resolveManagerUserId(designatedManager);
     const resolvedDesignatedFinanceManager = await resolveFinanceManagerUserId(designatedFinanceManager);
 
-    // 3. Generate Auto Incremented EMP Code
-    const lastEmployee = await Employee.findOne().sort({ code: -1 });
-    let nextCode = "EMP001";
+    // 3. Generate the internal auto-incremented reference number (independent of the
+    // user-supplied, editable `code`). Sorts on systemCode itself so manual `code` edits
+    // elsewhere never disturb this sequence.
+    const lastSystemCoded = await Employee.findOne({ systemCode: { $exists: true, $ne: null } }).sort({ systemCode: -1 });
+    let nextSystemCode = "EMP001";
 
-    if (lastEmployee && lastEmployee.code) {
-      const lastNumber = parseInt(lastEmployee.code.replace("EMP", ""), 10);
+    if (lastSystemCoded && lastSystemCoded.systemCode) {
+      const lastNumber = parseInt(lastSystemCoded.systemCode.replace("EMP", ""), 10);
       if (!isNaN(lastNumber)) {
-        nextCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
+        nextSystemCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
       }
     }
 
@@ -332,7 +339,8 @@ export const addEmployee = async (req, res) => {
     // 5. Create Employee (Only if User valid)
     const employee = await Employee.create({
       name,
-      code: nextCode,
+      code: code.trim(),
+      systemCode: nextSystemCode,
       role,
       department,
       branch,
@@ -507,7 +515,7 @@ export const getEmployeeById = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
-    const { role, email, phone } = req.body;
+    const { role, email, phone, code } = req.body;
 
     // Check for duplicate email/phone excluding current user
     if (email || phone) {
@@ -524,7 +532,14 @@ export const updateEmployee = async (req, res) => {
       }
     }
 
+    if (code !== undefined) {
+      if (!code || !code.trim()) return res.status(400).json({ message: "Employee Code is required" });
+      const existingCode = await Employee.findOne({ _id: { $ne: id }, code: code.trim() });
+      if (existingCode) return res.status(409).json({ message: `Employee Code '${code.trim()}' is already in use` });
+    }
+
     const payload = { ...req.body };
+    delete payload.systemCode; // internal reference number, never client-editable
 
     if (payload.designatedManager !== undefined) {
       payload.designatedManager = await resolveManagerUserId(payload.designatedManager);
@@ -724,10 +739,18 @@ export const getProbationReminders = async (req, res) => {
     const inSevenDays = new Date();
     inSevenDays.setDate(today.getDate() + 7);
 
+    // Don't filter on the stored `probationStatus` field - it's only recalculated
+    // when the employee record is saved, so an employee whose probation quietly
+    // lapsed without any other edit stays stuck as "ACTIVE" and would be missed.
+    // Instead: anyone not yet confirmed, due within 7 days OR already overdue.
     const employees = await Employee.find({
-      probationEndDate: { $gte: today, $lte: inSevenDays },
-      probationStatus: { $in: ["ACTIVE", "PENDING_CONFIRMATION"] }
+      probationEndDate: { $exists: true, $ne: null, $lte: inSevenDays },
+      probationConfirmedAt: null
     }).sort({ probationEndDate: 1 });
+
+    employees.forEach((employee) => {
+      employee.probationStatus = getProbationStatus(employee);
+    });
 
     const toNotify = employees.filter((employee) => !employee.probationReminderSentAt);
 
@@ -830,6 +853,7 @@ export const importEmployees = async (req, res) => {
     const existingEmployees = await Employee.find({}, { email: 1, phone: 1, code: 1 });
     const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
+    const existingCodes = new Set(existingEmployees.map(e => e.code));
 
     // Pre-fetch Master Data for Strict Validation.
     // Maps are keyed by lowercase name -> canonical Master name, so imported rows get
@@ -843,6 +867,10 @@ export const importEmployees = async (req, res) => {
     const validDesignations = canonicalMap('DESIGNATION');
     const validContractTypes = canonicalMap('EMPLOYEE_TYPE');
     const validCompanies = canonicalMap('COMPANY');
+
+    // Branch must belong to the row's Company (Branch.parentId === Company._id), not just exist anywhere.
+    const companyIdByName = new Map(masters.filter(m => m.type === 'COMPANY').map(m => [m.name.toLowerCase(), String(m._id)]));
+    const branchParentIdByName = new Map(masters.filter(m => m.type === 'BRANCH').map(m => [m.name.toLowerCase(), m.parentId ? String(m.parentId) : null]));
 
     // Companies map by their "Code ID" (Masters > Company Structure > Companies > Code ID field)
     // WORK LOCATION / VISA LOCATION columns in the import sheet hold this code, not a name.
@@ -888,11 +916,12 @@ export const importEmployees = async (req, res) => {
         visaLocationCodes: new Set()
     };
 
-    // Get last employee code
-    const lastEmployee = await Employee.findOne().sort({ code: -1 });
+    // Internal auto-incremented reference number (systemCode), independent of the
+    // sheet's optional "Employee Code" column.
+    const lastSystemCoded = await Employee.findOne({ systemCode: { $exists: true, $ne: null } }).sort({ systemCode: -1 });
     let lastCodeNum = 0;
-    if (lastEmployee && lastEmployee.code) {
-      lastCodeNum = parseInt(lastEmployee.code.replace("EMP", ""), 10) || 0;
+    if (lastSystemCoded && lastSystemCoded.systemCode) {
+      lastCodeNum = parseInt(lastSystemCoded.systemCode.replace("EMP", ""), 10) || 0;
     }
 
     for (let i = 0; i < data.length; i++) {
@@ -923,6 +952,12 @@ export const importEmployees = async (req, res) => {
       }
       if (phone && existingPhones.has(phone)) {
         errors.push({ row: rowNum, email, message: "Phone number already exists" });
+        continue;
+      }
+
+      const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
+      if (employeeCode && existingCodes.has(employeeCode)) {
+        errors.push({ row: rowNum, email, message: `Employee Code '${employeeCode}' already exists` });
         continue;
       }
 
@@ -957,19 +992,28 @@ export const importEmployees = async (req, res) => {
       }
       department = validDepartments.get(department.toLowerCase());
 
-      if (branch && !validBranches.has(branch.toLowerCase())) {
-        missing.branches.add(branch);
-        errors.push({ row: rowNum, email, message: `Invalid Branch: '${branch}'. Exact spelling must match Master list.` });
-        continue;
-      }
-      if (branch) branch = validBranches.get(branch.toLowerCase());
-
       if (company && !validCompanies.has(company.toLowerCase())) {
         missing.companies.add(company);
         errors.push({ row: rowNum, email, message: `Invalid Company: '${company}'. Exact spelling must match Master list.` });
         continue;
       }
       if (company) company = validCompanies.get(company.toLowerCase());
+
+      if (branch && !validBranches.has(branch.toLowerCase())) {
+        missing.branches.add(branch);
+        errors.push({ row: rowNum, email, message: `Invalid Branch: '${branch}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (branch) {
+        branch = validBranches.get(branch.toLowerCase());
+        const branchParentId = branchParentIdByName.get(branch.toLowerCase());
+        const companyId = company ? companyIdByName.get(company.toLowerCase()) : null;
+        if (company && branchParentId !== companyId) {
+          missing.branches.add(`${branch} (not under ${company})`);
+          errors.push({ row: rowNum, email, message: `Branch '${branch}' does not belong to Company '${company}'. Nest it under that company under Masters, then re-upload.` });
+          continue;
+        }
+      }
 
       if (designation && !validDesignations.has(designation.toLowerCase())) {
         missing.designations.add(designation);
@@ -1030,7 +1074,8 @@ export const importEmployees = async (req, res) => {
       // 4. Employee Creation
       try {
         lastCodeNum++;
-        const nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        const nextSystemCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        const finalCode = employeeCode || nextSystemCode;
 
         // Date parsing helper
         const parseExcelDate = (val) => {
@@ -1051,7 +1096,8 @@ export const importEmployees = async (req, res) => {
 
         await Employee.create({
           name: row["Full Name"],
-          code: nextCode,
+          code: finalCode,
+          systemCode: nextSystemCode,
           role: role,
           department: department,
           branch: branch,
@@ -1108,6 +1154,7 @@ export const importEmployees = async (req, res) => {
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
         if (phone) existingPhones.add(phone);
+        existingCodes.add(finalCode);
 
         successCount++;
 

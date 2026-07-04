@@ -101,6 +101,7 @@ export default function EmployeeDetail() {
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
     const [photoUploading, setPhotoUploading] = useState(false);
+    const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
     const photoInputRef = useRef(null);
 
     // Document State
@@ -166,6 +167,15 @@ export default function EmployeeDetail() {
         fetchEmployee();
         loadDepartments();
     }, [effectiveId]);
+
+    useEffect(() => {
+        if (!showPhotoLightbox) return;
+        const handleEscape = (e) => {
+            if (e.key === "Escape") setShowPhotoLightbox(false);
+        };
+        window.addEventListener("keydown", handleEscape);
+        return () => window.removeEventListener("keydown", handleEscape);
+    }, [showPhotoLightbox]);
 
     const loadDepartments = async () => {
         try {
@@ -453,10 +463,12 @@ export default function EmployeeDetail() {
                 <div className="profile-main-info">
                     <div
                         className={`profile-avatar-large ${(canEdit || isSelf) ? "profile-avatar-uploadable" : ""}`}
+                        style={{ position: "relative", cursor: employee.profilePhotoUrl ? "zoom-in" : undefined }}
                         onClick={() => {
-                            if (canEdit || isSelf) photoInputRef.current?.click();
+                            if (employee.profilePhotoUrl) setShowPhotoLightbox(true);
+                            else if (canEdit || isSelf) photoInputRef.current?.click();
                         }}
-                        title={(canEdit || isSelf) ? "Upload photo" : employee.name}
+                        title={employee.profilePhotoUrl ? "Click to enlarge" : ((canEdit || isSelf) ? "Upload photo" : employee.name)}
                     >
                         {employee.profilePhotoUrl ? (
                             <img src={resolveUploadedAssetUrl(employee.profilePhotoUrl)} alt={employee.name} />
@@ -464,9 +476,27 @@ export default function EmployeeDetail() {
                             employee.name ? employee.name.charAt(0) : "U"
                         )}
                         {(canEdit || isSelf) && (
-                            <span className="profile-avatar-upload-hint">
-                                {photoUploading ? "Uploading..." : "Upload photo"}
-                            </span>
+                            <button
+                                type="button"
+                                className="profile-avatar-camera-btn"
+                                title="Upload photo"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    photoInputRef.current?.click();
+                                }}
+                                style={{
+                                    position: "absolute", bottom: "4px", right: "4px",
+                                    width: "28px", height: "28px", borderRadius: "50%",
+                                    background: "#1f2937", border: "2px solid white",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", padding: 0
+                                }}
+                            >
+                                <SvgIcon name="edit" size={14} className="svg-icon-white" />
+                            </button>
+                        )}
+                        {(canEdit || isSelf) && photoUploading && (
+                            <span className="profile-avatar-upload-hint">Uploading...</span>
                         )}
                     </div>
                     {(canEdit || isSelf) && (
@@ -478,6 +508,35 @@ export default function EmployeeDetail() {
                             style={{ display: "none" }}
                         />
                     )}
+                    {showPhotoLightbox && employee.profilePhotoUrl && (
+                        <div
+                            className="photo-lightbox-overlay"
+                            onClick={() => setShowPhotoLightbox(false)}
+                            style={{
+                                position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                zIndex: 2000, cursor: "zoom-out"
+                            }}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setShowPhotoLightbox(false)}
+                                style={{
+                                    position: "absolute", top: "20px", right: "24px",
+                                    background: "none", border: "none", cursor: "pointer",
+                                    color: "white", fontSize: "28px", lineHeight: 1
+                                }}
+                            >
+                                ✕
+                            </button>
+                            <img
+                                src={resolveUploadedAssetUrl(employee.profilePhotoUrl)}
+                                alt={employee.name}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "8px", cursor: "default" }}
+                            />
+                        </div>
+                    )}
                     <div className="profile-details">
                         <h2>
                             {employee.name}
@@ -485,6 +544,11 @@ export default function EmployeeDetail() {
                         </h2>
                         <div className="profile-role-id">
                             {employee.role} • {employee.code}
+                            {employee.systemCode && (
+                                <span title="Internal system reference number" style={{ marginLeft: '8px', color: '#9ca3af', fontSize: '12px' }}>
+                                    (Ref: {employee.systemCode})
+                                </span>
+                            )}
                         </div>
                         <div className="profile-contact">
                             <div className="contact-item">
