@@ -348,7 +348,7 @@ function Dashboard() {
             colorVariant="orange"
             actionLabel="View All"
             onActionClick={() => navigate("/app/employees")}
-            onRowClick={(item) => navigate(`/app/employees/${item._id}`)}
+            onRowClick={(item) => navigate(`/app/employees/${item._id}?tab=Employment`)}
             items={normalizedEmployeeVisas}
           />
         </Col>
