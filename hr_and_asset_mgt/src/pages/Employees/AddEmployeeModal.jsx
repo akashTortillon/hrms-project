@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
 import { getEmployees } from "../../services/employeeService";
+import { COUNTRY_CODES } from "../../constants/countryCodes.js";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -54,6 +55,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     probationEndDate: "",
     fixedProbationIncrementAmount: ""
   });
+  const [countryCode, setCountryCode] = useState("+971");
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
@@ -316,9 +318,9 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 onChange={handleChange}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
               >
-                <option value="">Select Company on Visa</option>
-                {companies.map(c => (
-                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                <option value="">Select Branch on Visa</option>
+                {branchesList.map(b => (
+                  <option key={b._id || b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -354,13 +356,25 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Phone Number</label>
               <div className="phone-input-wrapper" style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb' }}>
-                <span style={{ padding: '0 12px', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '44px', display: 'flex', alignItems: 'center' }}>+971</span>
+                <select
+                  value={countryCode}
+                  onChange={(e) => {
+                    setCountryCode(e.target.value);
+                    const val = form.phone ? form.phone.replace(/^\+\d+/, '') : '';
+                    setForm(prev => ({ ...prev, phone: `${e.target.value}${val}` }));
+                  }}
+                  style={{ border: 'none', boxShadow: 'none', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '44px', padding: '0 6px' }}
+                >
+                  {COUNTRY_CODES.map(c => (
+                    <option key={`${c.country}-${c.dial}`} value={c.dial}>{c.dial} {c.country}</option>
+                  ))}
+                </select>
                 <input
                   name="phoneSuffix"
                   placeholder="50 123 4567"
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, '');
-                    setForm(prev => ({ ...prev, phone: `+971${val}` }));
+                    setForm(prev => ({ ...prev, phone: `${countryCode}${val}` }));
                   }}
                   style={{ border: 'none', boxShadow: 'none', background: 'transparent', height: '44px' }}
                 />
@@ -619,9 +633,9 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 onChange={handleChange}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
               >
-                <option value="">Select Work Permit Company</option>
-                {companies.map(c => (
-                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                <option value="">Select Work Permit Branch</option>
+                {branchesList.map(b => (
+                  <option key={b._id || b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
             </div>

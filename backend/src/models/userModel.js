@@ -9,8 +9,8 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
     match: [
-      /^\+971\d{7,12}$/,
-      "Phone number must be a valid UAE number starting with +971"
+      /^\+[1-9]\d{6,14}$/,
+      "Phone number must include a valid country code (e.g. +971501234567)"
     ]
   },
   password: { type: String, required: true },

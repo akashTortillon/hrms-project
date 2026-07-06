@@ -50,10 +50,11 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
     const handleDownloadTemplate = () => {
         const templateData = [
             {
+                "Employee Code": "EMP-SAMPLE-01",
                 "Full Name": "Ahmed Al Mansoori",
-                "COMPANY / BRANCH": "RIZAN HEAD OFFICE",
-                "WORK LOCATION": "",
-                "VISA LOCATION": "",
+                "COMPANY / BRANCH": "RIZAN",
+                "WORK LOCATION": "MAIN",
+                "VISA LOCATION": "MAIN",
                 "work permit": "",
                 "Role": "Employee",
                 "Department": "Sales & Operations",
@@ -146,9 +147,11 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                                 <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', color: '#1f2937' }}>Step 1: Get the Template</h4>
                                 <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Download formatted Excel file</p>
                                 <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                                    Employee Code is optional — leave blank to auto-generate one.
                                     COMPANY / BRANCH (e.g. "RIZAN HEAD OFFICE") is split by matching a known Company name.
                                     Department/Designation/Role/Employee Type must match Masters exactly.
-                                    WORK LOCATION and VISA LOCATION are the Company's Code ID (set under Masters → Companies).
+                                    WORK LOCATION and VISA LOCATION can be the Company's Code ID (Masters → Companies)
+                                    or the name of a Branch nested under that Company (e.g. "MAIN").
                                 </p>
                             </div>
                             <button

@@ -267,16 +267,17 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Valid Email is required" });
     }
 
-    // Phone Validation (UAE Format)
-    // Relaxed to support various lengths (landline, mobile, potential extra prefixing)
-    // Checks for UAE prefix (+971, 00971, 971, 0) followed by 7-12 digits
-    const uaePhoneRegex = /^(?:\+971|00971|971|0)?\d{7,12}$/;
+    // Phone Validation - any country code (frontend has a country-code selector), not UAE-only.
+    // Accepts +<country code><7-14 digits>, or a bare UAE-style number as a fallback for callers
+    // that don't send a country code at all.
+    const internationalPhoneRegex = /^\+[1-9]\d{6,14}$/;
+    const uaeFallbackRegex = /^(?:00971|971|0)?\d{7,12}$/;
 
     // Sanitize spaces/dashes before check
     const cleanPhone = phone ? phone.replace(/[\s-]/g, '') : '';
 
-    if (!cleanPhone || !uaePhoneRegex.test(cleanPhone)) {
-      return res.status(400).json({ message: "Valid UAE Phone Number is required" });
+    if (!cleanPhone || !(internationalPhoneRegex.test(cleanPhone) || uaeFallbackRegex.test(cleanPhone))) {
+      return res.status(400).json({ message: "Valid Phone Number (with country code) is required" });
     }
 
     // 2. Check for Duplicates (Email or Phone)
@@ -1036,31 +1037,33 @@ export const importEmployees = async (req, res) => {
       }
       if (contractType) contractType = validContractTypes.get(contractType.toLowerCase());
 
-      // Resolves a WORK/VISA LOCATION value either as a Company Code ID, or as the name of a
-      // Branch nested under the row's Company (e.g. "MAIN"). Returns the owning company's name,
-      // and fills in `branch` from the match when the row didn't already specify one.
+      // Resolves a WORK/VISA LOCATION value either as the name of a Branch nested under the
+      // row's Company (e.g. "MAIN" - the primary, current convention), or as a legacy Company
+      // Code ID. visaCompany/workPermitCompany store a Branch name, so a Branch match is
+      // preferred; a bare Company Code match falls back to the Company name since no specific
+      // Branch can be determined from it. Fills in `branch` from a Branch match when the row
+      // didn't already specify one.
       const resolveLocationCode = (code) => {
-        const byCompanyCode = companyByCode.get(code);
-        if (byCompanyCode) return { companyName: byCompanyCode };
-
         if (company) {
           const companyId = companyIdByName.get(company.toLowerCase());
           const matchedBranch = companyId ? branchNameByCompanyIdAndName.get(`${companyId}::${code.toLowerCase()}`) : null;
           if (matchedBranch) {
             if (!branch) branch = matchedBranch;
-            return { companyName: company };
+            return { value: matchedBranch };
           }
         }
+        const byCompanyCode = companyByCode.get(code);
+        if (byCompanyCode) return { value: byCompanyCode };
         return null;
       };
 
       let workPermitCompanyName = "";
       if (workLocationCode) {
         const resolved = resolveLocationCode(workLocationCode);
-        workPermitCompanyName = resolved?.companyName || "";
+        workPermitCompanyName = resolved?.value || "";
         if (!workPermitCompanyName) {
           missing.workLocationCodes.add(workLocationCode);
-          errors.push({ row: rowNum, email, message: `Invalid Work Location: '${workLocationCode}'. No Company Code ID or Branch with this name under '${company || "the row's company"}' was found.` });
+          errors.push({ row: rowNum, email, message: `Invalid Work Location: '${workLocationCode}'. No Branch with this name under '${company || "the row's company"}' (or Company Code ID) was found.` });
           continue;
         }
       }
@@ -1068,10 +1071,10 @@ export const importEmployees = async (req, res) => {
       let visaCompanyName = "";
       if (visaLocationCode) {
         const resolved = resolveLocationCode(visaLocationCode);
-        visaCompanyName = resolved?.companyName || "";
+        visaCompanyName = resolved?.value || "";
         if (!visaCompanyName) {
           missing.visaLocationCodes.add(visaLocationCode);
-          errors.push({ row: rowNum, email, message: `Invalid Visa Location: '${visaLocationCode}'. No Company Code ID or Branch with this name under '${company || "the row's company"}' was found.` });
+          errors.push({ row: rowNum, email, message: `Invalid Visa Location: '${visaLocationCode}'. No Branch with this name under '${company || "the row's company"}' (or Company Code ID) was found.` });
           continue;
         }
       }

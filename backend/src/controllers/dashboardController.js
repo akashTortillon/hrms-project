@@ -6,6 +6,8 @@ import Request from "../models/requestModel.js";
 import Asset from "../models/assetModel.js";
 import CompanyDocument from "../models/companyDocModel.js";
 import Attendance from "../models/attendanceModel.js";
+import EmployeeDocument from "../models/employeeDocumentModel.js";
+import { computeExpiryStatus } from "../utils/expiryStatus.js";
 
 /**
  * DASHBOARD SUMMARY (TOP CARDS)
@@ -65,21 +67,80 @@ export const getCompanyDocumentExpiries = async (req, res) => {
 };
 
 /**
- * EMPLOYEE VISA EXPIRIES
+ * EMPLOYEE VISA / ID EXPIRIES
+ * Was visaExpiry-only, which almost never had data (passport/EID expiry is what's actually
+ * used) — broadened to cover all three plain Employee fields, AND uploaded EmployeeDocument
+ * records (passport/visa/Emirates ID/labour card scans etc). An expired uploaded document
+ * was invisible here before, since only the three bare fields on Employee were checked.
+ * Flattens to one row per expiring document so the dashboard/modal can show "Passport
+ * expiring" and "Emirates ID expiring" as distinct entries even for the same employee.
+ * Excludes documents that are still comfortably "Valid" (not due for 30+ days) since this is
+ * a reminder list, not a full directory.
+ * Pass ?all=true for the full list (View All modal); default is top 5 soonest.
  */
 export const getEmployeeVisaExpiries = async (req, res) => {
   try {
-    let query = { visaExpiry: { $ne: null } };
+    const restrictToSelf = !req.user.permissions.includes("VIEW_ALL_EMPLOYEES") && req.user.role !== "Admin";
 
-    // If user DOES NOT have VIEW_ALL_EMPLOYEES permission, only show their own expiry
-    if (!req.user.permissions.includes("VIEW_ALL_EMPLOYEES") && req.user.role !== "Admin") {
-      query._id = req.user.employeeId;
-    }
+    let employeeQuery = {
+      $or: [
+        { visaExpiry: { $ne: null } },
+        { passportExpiry: { $ne: null } },
+        { emiratesIdExpiry: { $ne: null } }
+      ]
+    };
+    if (restrictToSelf) employeeQuery._id = req.user.employeeId;
 
-    const employees = await Employee.find(query)
-      .sort({ visaExpiry: 1 })
-      .limit(5);
-    res.json(employees);
+    const employees = await Employee.find(employeeQuery)
+      .select("name designation code visaExpiry passportExpiry emiratesIdExpiry");
+
+    const rows = [];
+    employees.forEach((emp) => {
+      [
+        { documentType: "Visa", expiryDate: emp.visaExpiry },
+        { documentType: "Passport", expiryDate: emp.passportExpiry },
+        { documentType: "Emirates ID", expiryDate: emp.emiratesIdExpiry }
+      ].forEach(({ documentType, expiryDate }) => {
+        if (!expiryDate) return;
+        const status = computeExpiryStatus(expiryDate);
+        if (status === "Valid") return;
+        rows.push({
+          _id: emp._id,
+          name: emp.name,
+          designation: emp.designation,
+          code: emp.code,
+          documentType,
+          expiryDate,
+          status
+        });
+      });
+    });
+
+    const docQuery = { expiryDate: { $ne: null } };
+    if (restrictToSelf) docQuery.employeeId = req.user.employeeId;
+
+    const uploadedDocs = await EmployeeDocument.find(docQuery)
+      .populate("employeeId", "name designation code");
+
+    uploadedDocs.forEach((doc) => {
+      if (!doc.employeeId) return; // employee since deleted
+      const status = computeExpiryStatus(doc.expiryDate);
+      if (status === "Valid") return;
+      rows.push({
+        _id: doc.employeeId._id,
+        name: doc.employeeId.name,
+        designation: doc.employeeId.designation,
+        code: doc.employeeId.code,
+        documentType: doc.documentType,
+        expiryDate: doc.expiryDate,
+        status
+      });
+    });
+
+    rows.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+    const isAll = req.query.all === "true";
+    res.json(isAll ? rows : rows.slice(0, 5));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

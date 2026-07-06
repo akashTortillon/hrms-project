@@ -33,10 +33,10 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: "Passwords do not match" });
     }
 
-    // Phone validation (normalized format)
-    if (!/^\+971\d{9}$/.test(phone)) {
+    // Phone validation - any country code, not UAE-only
+    if (!/^\+[1-9]\d{6,14}$/.test(phone)) {
       return res.status(400).json({
-        message: "Invalid UAE phone number format"
+        message: "Invalid phone number format (must include country code, e.g. +971501234567)"
       });
     }
 

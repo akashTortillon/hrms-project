@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { getDocumentStats } from "../../services/documentService.js";
 import { useRole } from "../../contexts/RoleContext.jsx";
 import EmployeeDashboard from "./EmployeeDashboard";
+import CustomModal from "../../components/reusable/CustomModal.jsx";
 
 import {
   fetchMetrics,
@@ -49,6 +50,19 @@ function Dashboard() {
   const [employeeVisaExpiries, setEmployeeVisaExpiries] = useState([]);
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [todaysAttendance, setTodaysAttendance] = useState([]);
+
+  const [showVisaModal, setShowVisaModal] = useState(false);
+  const [allVisaExpiries, setAllVisaExpiries] = useState([]);
+  const [visaModalLoading, setVisaModalLoading] = useState(false);
+
+  const openVisaModal = () => {
+    setShowVisaModal(true);
+    setVisaModalLoading(true);
+    fetchEmployeeVisas(true)
+      .then((res) => setAllVisaExpiries(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setAllVisaExpiries([]))
+      .finally(() => setVisaModalLoading(false));
+  };
 
 
 
@@ -220,9 +234,9 @@ function Dashboard() {
     };
   });
 
-  const normalizedEmployeeVisas = employeeVisaExpiries.map((emp) => {
-    const daysLeft = emp.visaExpiry
-      ? Math.ceil((new Date(emp.visaExpiry) - new Date()) / (1000 * 60 * 60 * 24))
+  const normalizeVisaRow = (row) => {
+    const daysLeft = row.expiryDate
+      ? Math.ceil((new Date(row.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
       : null;
 
     let variant = "success";
@@ -230,14 +244,16 @@ function Dashboard() {
     else if (daysLeft <= 45) variant = "warning";
 
     return {
-      id: emp._id,
-      primaryText: emp.name,
-      secondaryText: emp.designation || "Employment Visa",
-      dateText: emp.visaExpiry?.split("T")[0],
+      id: `${row._id}-${row.documentType}`,
+      primaryText: row.name,
+      secondaryText: `${row.designation || "Employee"} — ${row.documentType} expiry`,
+      dateText: row.expiryDate?.split("T")[0],
       badge: daysLeft !== null ? { text: `${daysLeft} days`, variant } : null,
-      ...emp,
+      ...row,
     };
-  });
+  };
+
+  const normalizedEmployeeVisas = employeeVisaExpiries.map(normalizeVisaRow);
 
   const normalizedPendingApprovals = pendingApprovals.map((approval) => ({
     id: approval._id,
@@ -270,6 +286,7 @@ function Dashboard() {
   }));
 
   return (
+    <>
     <Container fluid className="dashboard-page">
       {/* 🔝 TOP METRICS */}
       {/* import StatCard from "../../components/reusable/StatCard";
@@ -347,7 +364,7 @@ function Dashboard() {
             icon="exclamation"
             colorVariant="orange"
             actionLabel="View All"
-            onActionClick={() => navigate("/app/employees")}
+            onActionClick={openVisaModal}
             onRowClick={(item) => navigate(`/app/employees/${item._id}?tab=Employment`)}
             items={normalizedEmployeeVisas}
           />
@@ -381,6 +398,69 @@ function Dashboard() {
         </Col>
       </Row>
     </Container>
+
+    <CustomModal
+      show={showVisaModal}
+      title="Employee Visa / ID Expiries"
+      onClose={() => setShowVisaModal(false)}
+      width="700px"
+    >
+      {visaModalLoading ? (
+        <p style={{ textAlign: "center", color: "#6b7280", padding: "20px 0" }}>Loading...</p>
+      ) : allVisaExpiries.length === 0 ? (
+        <p style={{ textAlign: "center", color: "#6b7280", padding: "20px 0" }}>No expiring visas, passports, or Emirates IDs found.</p>
+      ) : (
+        <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
+                <th style={{ padding: "8px" }}>Employee</th>
+                <th style={{ padding: "8px" }}>Document</th>
+                <th style={{ padding: "8px" }}>Expiry Date</th>
+                <th style={{ padding: "8px" }}>Status</th>
+                <th style={{ padding: "8px" }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {allVisaExpiries.map((row) => (
+                <tr
+                  key={`${row._id}-${row.documentType}`}
+                  style={{ borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}
+                  onClick={() => {
+                    setShowVisaModal(false);
+                    navigate(`/app/employees/${row._id}?tab=Employment`);
+                  }}
+                >
+                  <td style={{ padding: "8px" }}>{row.name}</td>
+                  <td style={{ padding: "8px" }}>{row.documentType}</td>
+                  <td style={{ padding: "8px" }}>{row.expiryDate?.split("T")[0]}</td>
+                  <td style={{ padding: "8px" }}>{row.status}</td>
+                  <td style={{ padding: "8px", textAlign: "right" }}>
+                    <button
+                      type="button"
+                      title={`Open ${row.name}'s ${row.documentType} details`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowVisaModal(false);
+                        navigate(`/app/employees/${row._id}?tab=Employment`);
+                      }}
+                      style={{
+                        background: "#eff6ff", border: "none", borderRadius: "6px",
+                        width: "28px", height: "28px", display: "inline-flex",
+                        alignItems: "center", justifyContent: "center", cursor: "pointer"
+                      }}
+                    >
+                      <SvgIcon name="eye" size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </CustomModal>
+    </>
   );
 }
 

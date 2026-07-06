@@ -109,10 +109,11 @@ export const deleteDoc = async (req, res) => {
     }
 };
 // GET Doc Stats
-// Unifies three expiry sources so the dashboard card matches the Document Expiry
-// report exactly: Company documents, per-employee uploaded documents (passport/visa/EID
-// scans etc via EmployeeDocument), and the expiry fields stored directly on Employee
+// Default scope unifies three expiry sources so the Dashboard card reflects the whole
+// org: Company documents, per-employee uploaded documents (passport/visa/EID scans via
+// EmployeeDocument), and the expiry fields stored directly on Employee
 // (passportExpiry/emiratesIdExpiry/visaExpiry) for employees who never uploaded a scan.
+// Pass ?scope=company (used by the Document Library page) to count Company documents only.
 // Status is recomputed from expiryDate at request time, not read from the stored
 // `status` field, which is only set once at upload time and goes stale.
 export const getDocStats = async (req, res) => {
@@ -130,18 +131,20 @@ export const getDocStats = async (req, res) => {
         const companyDocs = await CompanyDocument.find({}, { expiryDate: 1 });
         companyDocs.forEach(d => bump(d.expiryDate));
 
-        const employeeDocs = await EmployeeDocument.find({}, { expiryDate: 1 });
-        employeeDocs.forEach(d => bump(d.expiryDate));
+        if (req.query.scope !== "company") {
+            const employeeDocs = await EmployeeDocument.find({}, { expiryDate: 1 });
+            employeeDocs.forEach(d => bump(d.expiryDate));
 
-        const employees = await Employee.find(
-            { $or: [{ passportExpiry: { $ne: null } }, { emiratesIdExpiry: { $ne: null } }, { visaExpiry: { $ne: null } }] },
-            { passportExpiry: 1, emiratesIdExpiry: 1, visaExpiry: 1 }
-        );
-        employees.forEach(e => {
-            if (e.passportExpiry) bump(e.passportExpiry);
-            if (e.emiratesIdExpiry) bump(e.emiratesIdExpiry);
-            if (e.visaExpiry) bump(e.visaExpiry);
-        });
+            const employees = await Employee.find(
+                { $or: [{ passportExpiry: { $ne: null } }, { emiratesIdExpiry: { $ne: null } }, { visaExpiry: { $ne: null } }] },
+                { passportExpiry: 1, emiratesIdExpiry: 1, visaExpiry: 1 }
+            );
+            employees.forEach(e => {
+                if (e.passportExpiry) bump(e.passportExpiry);
+                if (e.emiratesIdExpiry) bump(e.emiratesIdExpiry);
+                if (e.visaExpiry) bump(e.visaExpiry);
+            });
+        }
 
         res.json(counts);
     } catch (error) {

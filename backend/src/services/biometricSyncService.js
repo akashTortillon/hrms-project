@@ -121,7 +121,11 @@ class BiometricSyncService {
       let highestTransactionId = lastSyncedTransactionId;
       const newTransactions = [];
 
-      // 4. Save new transactions to the database, skipping duplicates
+      // 4. Save new transactions to the database, skipping duplicates.
+      // The `exists` check is not race-safe (BioCloud can return the same transaction across
+      // overlapping scheduled/manual syncs), so a duplicate-key error on the unique
+      // `transactionId` index is expected and treated as "already synced" rather than a
+      // fatal error that aborts the whole sync with a 500.
       for (const txn of transactions) {
         if (!txn.Id) continue;
 
@@ -133,19 +137,27 @@ class BiometricSyncService {
         const exists = await BiometricTransaction.findOne({ transactionId: txn.Id });
         if (exists) continue;
 
-        // Map API fields to database schema
-        // API uses: VerifyTime, Status, DeviceSerialNumber
-        const storedTxn = await BiometricTransaction.create({
-          transactionId: txn.Id,
-          badgeNumber: txn.BadgeNumber,
-          timestamp: new Date(txn.VerifyTime),  // Changed from txn.Timestamp
-          transactionType: txn.Status === "Check-In" ? "IN" : "OUT",  // Map Status to IN/OUT
-          deviceId: txn.DeviceSerialNumber || null,  // Changed from txn.DeviceId
-          rawData: txn
-        });
+        try {
+          // Map API fields to database schema
+          // API uses: VerifyTime, Status, DeviceSerialNumber
+          const storedTxn = await BiometricTransaction.create({
+            transactionId: txn.Id,
+            badgeNumber: txn.BadgeNumber,
+            timestamp: new Date(txn.VerifyTime),  // Changed from txn.Timestamp
+            transactionType: txn.Status === "Check-In" ? "IN" : "OUT",  // Map Status to IN/OUT
+            deviceId: txn.DeviceSerialNumber || null,  // Changed from txn.DeviceId
+            rawData: txn
+          });
 
-        newTransactions.push(storedTxn);
-        transactionsStored++;
+          newTransactions.push(storedTxn);
+          transactionsStored++;
+        } catch (createError) {
+          if (createError.code === 11000) {
+            console.log(`[BiometricSyncService] Transaction ${txn.Id} already stored by a concurrent sync - skipping.`);
+            continue;
+          }
+          throw createError;
+        }
       }
 
       console.log(`[BiometricSyncService] Stored ${transactionsStored} new unique transactions in database.`);

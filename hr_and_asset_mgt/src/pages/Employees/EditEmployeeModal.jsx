@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
 import { getEmployees } from "../../services/employeeService";
+import { COUNTRY_CODES, splitPhone } from "../../constants/countryCodes.js";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -14,18 +15,16 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const [companies, setCompanies] = useState([]);
   const [managers, setManagers] = useState([]);
   const [phoneSuffix, setPhoneSuffix] = useState("");
+  const [countryCode, setCountryCode] = useState("+971");
 
   useEffect(() => {
     fetchMasters();
 
     // Parse phone for display
     if (employee.phone) {
-      // Remove +971, 00971, 971, or leading 0 if standardizing
-      let raw = employee.phone.toString();
-      if (raw.startsWith("+971")) raw = raw.replace("+971", "");
-      else if (raw.startsWith("00971")) raw = raw.replace("00971", "");
-      else if (raw.startsWith("971")) raw = raw.replace("971", "");
-      setPhoneSuffix(raw);
+      const { dial, rest } = splitPhone(employee.phone);
+      setCountryCode(dial);
+      setPhoneSuffix(rest);
     }
 
     setForm((prev) => ({
@@ -120,7 +119,12 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const handlePhoneChange = (e) => {
     const val = e.target.value.replace(/\D/g, '');
     setPhoneSuffix(val);
-    setForm({ ...form, phone: `+971${val}` });
+    setForm({ ...form, phone: `${countryCode}${val}` });
+  };
+
+  const handleCountryCodeChange = (e) => {
+    setCountryCode(e.target.value);
+    setForm({ ...form, phone: `${e.target.value}${phoneSuffix}` });
   };
 
   const handleSubmit = () => {
@@ -285,9 +289,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     onChange={handleChange}
                     style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
                   >
-                    <option value="">Select Company on Visa</option>
-                    {companies.map(c => (
-                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    <option value="">Select Branch on Visa</option>
+                    {branchesList.map(b => (
+                      <option key={b._id || b.name} value={b.name}>{b.name}</option>
                     ))}
                   </select>
                 </div>
@@ -300,7 +304,15 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 <div className="form-group">
                   <label>Phone Number</label>
                   <div className="phone-input-wrapper" style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb' }}>
-                    <span style={{ padding: '0 12px', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '40px', display: 'flex', alignItems: 'center' }}>+971</span>
+                    <select
+                      value={countryCode}
+                      onChange={handleCountryCodeChange}
+                      style={{ border: 'none', boxShadow: 'none', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '40px', padding: '0 6px' }}
+                    >
+                      {COUNTRY_CODES.map(c => (
+                        <option key={`${c.country}-${c.dial}`} value={c.dial}>{c.dial} {c.country}</option>
+                      ))}
+                    </select>
                     <input
                       value={phoneSuffix}
                       placeholder="50 123 4567"
@@ -560,7 +572,18 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   <select
                     name="company"
                     value={form.company || ''}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      const nextCompany = companies.find(c => c.name === e.target.value);
+                      const nextBranches = nextCompany
+                        ? branchesList.filter(b => b.parentId === nextCompany._id)
+                        : [];
+                      const branchStillValid = nextBranches.some(b => b.name === form.branch);
+                      setForm(prev => ({
+                        ...prev,
+                        company: e.target.value,
+                        branch: branchStillValid ? prev.branch : ""
+                      }));
+                    }}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -583,18 +606,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   <select
                     name="visaCompany"
                     value={form.visaCompany || ''}
-                    onChange={(e) => {
-                      const nextCompany = companies.find(c => c.name === e.target.value);
-                      const nextBranches = nextCompany
-                        ? branchesList.filter(b => b.parentId === nextCompany._id)
-                        : [];
-                      const branchStillValid = nextBranches.some(b => b.name === form.branch);
-                      setForm(prev => ({
-                        ...prev,
-                        visaCompany: e.target.value,
-                        branch: branchStillValid ? prev.branch : ""
-                      }));
-                    }}
+                    onChange={handleChange}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -605,9 +617,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       height: "42px"
                     }}
                   >
-                    <option value="">Select Company on Visa</option>
-                    {companies.map(c => (
-                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    <option value="">Select Branch on Visa</option>
+                    {branchesList.map(b => (
+                      <option key={b._id || b.name} value={b.name}>{b.name}</option>
                     ))}
                   </select>
                 </div>
@@ -618,7 +630,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     name="branch"
                     value={form.branch || ''}
                     onChange={handleChange}
-                    disabled={!form.visaCompany}
+                    disabled={!form.company}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -629,10 +641,10 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       height: "42px"
                     }}
                   >
-                    <option value="">{form.visaCompany ? "Select Branch" : "Select Visa Company first"}</option>
+                    <option value="">{form.company ? "Select Branch" : "Select Company first"}</option>
                     {branchesList
                       .filter(b => {
-                        const selectedCompany = companies.find(c => c.name === form.visaCompany);
+                        const selectedCompany = companies.find(c => c.name === form.company);
                         return selectedCompany && b.parentId === selectedCompany._id;
                       })
                       .map(b => (
@@ -792,9 +804,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     onChange={handleChange}
                     style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
                   >
-                    <option value="">Select Company on Work Permit</option>
-                    {companies.map(c => (
-                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    <option value="">Select Work Permit Branch</option>
+                    {branchesList.map(b => (
+                      <option key={b._id || b.name} value={b.name}>{b.name}</option>
                     ))}
                   </select>
                 </div>
