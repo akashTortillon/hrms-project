@@ -33,8 +33,14 @@ export default function PoliciesView() {
       setForm({ title: "", category: "COMPANY_POLICY", description: "", file: null });
       loadData();
       toast.success("Policy uploaded");
-    } catch {
-      toast.error("Failed to upload policy");
+    } catch (err) {
+      // Surface the real reason (403 permission, 413 file too large, 500, etc.) instead of
+      // a generic message, so upload failures are diagnosable.
+      const msg = err?.response?.data?.message
+        || (err?.response?.status === 403 ? "You don't have permission to upload policies" : "")
+        || (err?.response?.status === 413 ? "File is too large" : "")
+        || "Failed to upload policy";
+      toast.error(msg);
     }
   };
 

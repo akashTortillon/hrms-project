@@ -2,10 +2,22 @@ import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
 import { getEmployees } from "../../services/employeeService";
 import { COUNTRY_CODES, splitPhone } from "../../constants/countryCodes.js";
+import { useRole } from "../../contexts/RoleContext";
 import "../../style/AddEmployeeModal.css";
 
 
 export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOptions = [], editMode = "all" }) {
+  const { hasPermission, role } = useRole();
+  // Mirror the backend field-level guard in updateEmployee: salary needs MANAGE_PAYROLL,
+  // and nobody but Admin may edit their OWN salary/manager fields.
+  const currentUser = (() => {
+    try { return JSON.parse(localStorage.getItem("user")) || {}; } catch { return {}; }
+  })();
+  const isAdmin = role === "Admin" || hasPermission("ALL");
+  const isSelf = currentUser?.employeeId && String(currentUser.employeeId) === String(employee?._id);
+  const showSalaryFields = (isAdmin || hasPermission("MANAGE_PAYROLL")) && !(isSelf && !isAdmin);
+  const showManagerFields = !(isSelf && !isAdmin);
+
   const [form, setForm] = useState({ ...employee });
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
@@ -387,6 +399,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   </select>
                 </div>
 
+                {showManagerFields && (
                 <div className="form-group">
                   <label>Designated Manager</label>
                   <select
@@ -409,7 +422,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     ))}
                   </select>
                 </div>
+                )}
 
+                {showManagerFields && (
                 <div className="form-group">
                   <label>Finance Manager</label>
                   <select
@@ -424,6 +439,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     ))}
                   </select>
                 </div>
+                )}
               </>
             )}
 
@@ -729,6 +745,8 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   <input name="agentId" value={form.agentId || ''} onChange={handleChange} placeholder="e.g. AGENT001" />
                 </div>
 
+                {showSalaryFields && (
+                <>
                 <div className="form-group">
                   <label>Basic Salary</label>
                   <input name="basicSalary" value={form.basicSalary || ''} onChange={handleChange} placeholder="e.g. 15000" />
@@ -773,6 +791,8 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   <label>CTC</label>
                   <input name="ctc" value={form.ctc || ''} onChange={handleChange} placeholder="Optional CTC" />
                 </div>
+                </>
+                )}
 
                 <div className="form-group">
                   <label>Accommodation</label>
@@ -839,6 +859,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   />
                 </div>
 
+                {showManagerFields && (
                 <div className="form-group">
                   <label>Designated Manager</label>
                   <select
@@ -853,7 +874,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     ))}
                   </select>
                 </div>
+                )}
 
+                {showManagerFields && (
                 <div className="form-group">
                   <label>Finance Manager</label>
                   <select
@@ -868,6 +891,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     ))}
                   </select>
                 </div>
+                )}
 
                 <div className="form-group">
                   <label>Probation Start Date</label>

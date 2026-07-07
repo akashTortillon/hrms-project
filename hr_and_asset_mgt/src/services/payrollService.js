@@ -127,5 +127,11 @@ export const payrollService = {
         link.click();
         link.parentNode.removeChild(link);
         window.URL.revokeObjectURL(url);
+    },
+
+    // Self-service: employee's own processed payslips
+    getMyPayslips: async () => {
+        const response = await api.get("/payroll/my-payslips");
+        return response.data;
     }
 };

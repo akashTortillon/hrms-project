@@ -3,6 +3,9 @@ import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
 import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
 import { computeExpiryStatus } from "../utils/expiryStatus.js";
+import { logActivity } from "../utils/activityLogger.js";
+import fs from "fs";
+import path from "path";
 
 const isDocumentManager = (user = {}) =>
     user.role === "Admin"
@@ -47,7 +50,7 @@ const attachSignedFileUrl = async (document) => {
 // Add Document
 export const addDocument = async (req, res) => {
     try {
-        const { employeeId, documentType, documentNumber, expiryDate } = req.body;
+        const { employeeId, documentType, label, documentNumber, expiryDate } = req.body;
         const file = req.file;
 
         if (!file) {
@@ -82,6 +85,7 @@ export const addDocument = async (req, res) => {
         const newDoc = await EmployeeDocument.create({
             employeeId,
             documentType,
+            label: label || "",
             documentNumber,
             expiryDate,
             filePath: storedFile.filePath,
@@ -92,6 +96,16 @@ export const addDocument = async (req, res) => {
         });
 
         res.status(201).json(newDoc);
+
+        logActivity({
+            req,
+            action: "CREATE",
+            module: "DOCUMENTS",
+            description: `Document "${documentType}" uploaded for employee ${employeeId}`,
+            targetId: newDoc._id,
+            targetName: documentType,
+            metadata: { employeeId, documentType, documentNumber, expiryDate }
+        }).catch(() => {});
     } catch (error) {
         // console.error("Add Employee Doc Error:", error);
         res.status(500).json({ message: "Server error" });
@@ -101,7 +115,7 @@ export const addDocument = async (req, res) => {
 export const uploadMyDocument = async (req, res) => {
     try {
         const user = req.user;
-        const { documentType, documentNumber, expiryDate } = req.body;
+        const { documentType, label, documentNumber, expiryDate } = req.body;
 
         if (!req.file) {
             return res.status(400).json({ message: "File is required" });
@@ -139,6 +153,7 @@ export const uploadMyDocument = async (req, res) => {
         const document = await EmployeeDocument.create({
             employeeId,
             documentType,
+            label: label || "",
             documentNumber,
             expiryDate,
             filePath: storedFile.filePath,
@@ -153,6 +168,16 @@ export const uploadMyDocument = async (req, res) => {
         }
 
         res.status(201).json(document);
+
+        logActivity({
+            req,
+            action: "CREATE",
+            module: "DOCUMENTS",
+            description: `Employee ${user.name || ""} uploaded own document "${documentType}"`,
+            targetId: document._id,
+            targetName: documentType,
+            metadata: { employeeId: String(employeeId), documentType, self: true }
+        }).catch(() => {});
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
@@ -202,7 +227,16 @@ export const downloadEmployeeDocument = async (req, res) => {
             return res.redirect(await getSignedFileUrl(document.toObject ? document.toObject() : document));
         }
 
-        return res.status(404).json({ message: "Document URL is not available" });
+        // LOCAL storage: stream the file off disk (previously this returned 404, so employees
+        // could never download documents an admin had uploaded for them locally).
+        const absolutePath = path.resolve(document.filePath);
+        if (!fs.existsSync(absolutePath)) {
+            return res.status(404).json({
+                message: "The document file no longer exists on the server. Please contact HR to re-upload it."
+            });
+        }
+        const downloadName = `${document.documentType || "document"}${path.extname(absolutePath) || ""}`.replace(/[^a-z0-9._-]+/gi, "_");
+        return res.download(absolutePath, downloadName);
     } catch (error) {
         res.status(500).json({ message: "Failed to download document" });
     }
@@ -257,6 +291,16 @@ export const deleteDocument = async (req, res) => {
 
         await EmployeeDocument.findByIdAndDelete(id);
         res.json({ message: "Document deleted successfully" });
+
+        logActivity({
+            req,
+            action: "DELETE",
+            module: "DOCUMENTS",
+            description: `Document "${doc.documentType}" deleted for employee ${doc.employeeId}`,
+            targetId: doc._id,
+            targetName: doc.documentType,
+            metadata: { employeeId: String(doc.employeeId), documentType: doc.documentType }
+        }).catch(() => {});
     } catch (error) {
         // console.error("Delete Employee Doc Error:", error);
         res.status(500).json({ message: "Server error" });

@@ -33,6 +33,12 @@ const transferHistorySchema = new mongoose.Schema({
   effectiveDate: { type: Date, required: true },
   reason: { type: String, default: "" },
   transferredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // Whether the company/branch change has actually been applied to the employee.
+  // Immediate transfers (effectiveDate <= today) are applied on creation. Future-dated
+  // transfers stay pending (applied:false) until their effectiveDate arrives, at which
+  // point applyDuePendingTransfers() promotes them. Existing history predates this field
+  // and was always applied instantly, so the default is true.
+  applied: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });
 
@@ -91,14 +97,19 @@ const employeeSchema = new mongoose.Schema({
   iban: { type: String },
   bankAccount: { type: String },
   agentId: { type: String },
+  // Stores the manager/finance-manager's Employee._id (matches what the Add/Edit Employee
+  // dropdowns display and submit). Approval routing (requestController.js) already resolves
+  // this to the linked User account via User.findOne({ employeeId: ... }), so this stays in
+  // "Employee space" end-to-end instead of being silently converted to a User._id, which used
+  // to break dropdown pre-selection on Edit (stored value could never match the option list).
   designatedManager: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "Employee",
     default: null
   },
   designatedFinanceManager: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "Employee",
     default: null
   },
   probationStartDate: { type: Date, default: null },

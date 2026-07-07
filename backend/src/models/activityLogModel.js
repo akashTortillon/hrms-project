@@ -15,7 +15,7 @@ const activityLogSchema = new mongoose.Schema({
       "LOGIN", "LOGOUT",
       "CREATE", "UPDATE", "DELETE", "VIEW",
       "APPROVE", "REJECT", "EXPORT", "IMPORT",
-      "PASSWORD_RESET", "FILE_UPLOAD", "FILE_DOWNLOAD"
+      "PASSWORD_RESET", "FILE_UPLOAD", "FILE_DOWNLOAD", "TRANSFER"
     ],
     required: true
   },

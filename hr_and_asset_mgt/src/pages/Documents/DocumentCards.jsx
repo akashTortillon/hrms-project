@@ -24,7 +24,9 @@ export default function DocumentLibraryHeader({ stats = { total: 0, valid: 0, ex
     },
     {
       title: "Expiring Soon",
-      value: expiring,
+      // Include Critical (≤10 days) too — otherwise a doc expiring imminently only shows
+      // in Total, never in this box. Matches the main dashboard card.
+      value: (expiring || 0) + (critical || 0),
       icon: "exclamation",
       variant: "orange",
     },

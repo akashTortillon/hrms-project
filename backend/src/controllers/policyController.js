@@ -1,5 +1,7 @@
 import PolicyDocument from "../models/policyDocumentModel.js";
+import Announcement from "../models/announcementModel.js";
 import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 export const getPolicies = async (req, res) => {
   try {
@@ -40,6 +42,27 @@ export const uploadPolicy = async (req, res) => {
     });
 
     res.status(201).json(policy);
+
+    // Auto-announce the new/updated policy so staff are notified of the change.
+    Announcement.create({
+      title: `New policy: ${policy.title}`,
+      message: policy.description
+        ? `A policy document "${policy.title}" has been published/updated. ${policy.description}`
+        : `A policy document "${policy.title}" has been published/updated. Please review it in the Policies section.`,
+      category: "HR_NOTIFICATION",
+      audience: "ALL",
+      publishedBy: req.user._id
+    }).catch((e) => console.error("Policy announcement failed:", e.message));
+
+    logActivity({
+      req,
+      action: "CREATE",
+      module: "ANNOUNCEMENTS",
+      description: `Policy "${policy.title}" published`,
+      targetId: policy._id,
+      targetName: policy.title,
+      metadata: { category: policy.category }
+    }).catch(() => {});
   } catch (error) {
     res.status(500).json({ message: "Failed to upload policy" });
   }

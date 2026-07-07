@@ -540,6 +540,10 @@ const resolveFinanceRecipient = async (employee) => {
     if (linkedUser) return linkedUser;
   }
 
+  // No explicit designatedFinanceManager - fall back to a role holder. Prefer roles that are
+  // actually named for finance ("Finance Manager", "Finance") over generic roles (Admin, HR
+  // Manager) that merely happen to also carry APPROVE_FINANCE_REQUESTS - otherwise the request
+  // can land on an arbitrary admin account nobody is watching for loan approvals.
   const financeRoles = await Master.find({
     type: "ROLE",
     permissions: { $in: ["APPROVE_FINANCE_REQUESTS", "ALL"] }
@@ -549,7 +553,10 @@ const resolveFinanceRecipient = async (employee) => {
     roleNames.push("Finance Manager");
   }
 
-  return User.findOne({ role: { $in: roleNames } }).select("_id name role employeeId");
+  const dedicatedFinanceRoleNames = roleNames.filter((name) => /^finance/i.test(name));
+  const preferredRoleNames = dedicatedFinanceRoleNames.length ? dedicatedFinanceRoleNames : roleNames;
+
+  return User.findOne({ role: { $in: preferredRoleNames } }).select("_id name role employeeId");
 };
 
 /**
@@ -1988,7 +1995,7 @@ export const getEmployeeRequests = async (req, res) => {
  */
 export const getLeaveSummary = async (req, res) => {
   try {
-    const { userId: queryUserId, employeeId, year } = req.query;
+    const { userId: queryUserId, employeeId, year, month } = req.query;
 
     let targetUserId = req.user._id;
 
@@ -2044,11 +2051,18 @@ export const getLeaveSummary = async (req, res) => {
       status: "APPROVED"
     };
 
-    // Filter by year if provided
+    // Filter by year, and optionally by a specific month within that year.
     if (year) {
-      const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
-      const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
-      matchQuery.createdAt = { $gte: startOfYear, $lte: endOfYear };
+      const monthNum = month ? parseInt(month, 10) : null;
+      if (monthNum && monthNum >= 1 && monthNum <= 12) {
+        const startOfMonth = new Date(Date.UTC(Number(year), monthNum - 1, 1, 0, 0, 0, 0));
+        const endOfMonth = new Date(Date.UTC(Number(year), monthNum, 0, 23, 59, 59, 999));
+        matchQuery.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
+      } else {
+        const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
+        const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
+        matchQuery.createdAt = { $gte: startOfYear, $lte: endOfYear };
+      }
     }
 
     const leaveRequests = await Request.find(matchQuery);

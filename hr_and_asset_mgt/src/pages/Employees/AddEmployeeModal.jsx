@@ -169,12 +169,23 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     });
   };
 
+  // Guard against losing a half-filled form to an accidental outside click.
+  const hasFormData = Object.entries(form || {}).some(([k, v]) => {
+    if (["laborCards"].includes(k)) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== "" && v !== null && v !== undefined;
+  });
+  const requestClose = () => {
+    if (hasFormData && !window.confirm("Discard this employee? Your entered details will be lost.")) return;
+    onClose();
+  };
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={requestClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Add Employee</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={requestClose}>✕</button>
         </div>
 
         <div className="modal-body">

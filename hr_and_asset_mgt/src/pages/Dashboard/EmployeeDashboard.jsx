@@ -4,15 +4,28 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import "../../style/Dashboard.css";
 import { useNavigate } from "react-router-dom";
 import { useRole } from "../../contexts/RoleContext.jsx";
-import { getEmployeeDocuments } from "../../services/employeeService.js";
+import { getEmployeeDocuments, getEmployeeById } from "../../services/employeeService.js";
+import { payrollService } from "../../services/payrollService.js";
+import { toast } from "react-toastify";
 import { getEmployeeRequests } from "../../services/requestService.js";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService.js";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
+
+const resolveUploadedAssetUrl = (url) => {
+    if (!url) return "";
+    if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+    const apiBase = import.meta.env.VITE_API_BASE || "";
+    const serverBase = apiBase.replace(/\/api\/?$/, "").replace(/\/$/, "");
+    return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 export default function EmployeeDashboard() {
     const navigate = useNavigate();
     const { role } = useRole();
     const [user, setUser] = useState(null);
+    const [profilePhoto, setProfilePhoto] = useState("");
+    const [payslips, setPayslips] = useState([]);
+    const [downloadingSlip, setDownloadingSlip] = useState(null);
 
     // Stats State
     const [docStats, setDocStats] = useState({ valid: 0, expiring: 0, expired: 0, total: 0 });
@@ -40,6 +53,19 @@ export default function EmployeeDashboard() {
 
     const fetchDashboardStats = async (employeeId) => {
         try {
+            // 0. Profile photo (login payload doesn't include it)
+            try {
+                const emp = await getEmployeeById(employeeId);
+                const empData = emp?.employee || emp;
+                if (empData?.profilePhotoUrl) setProfilePhoto(resolveUploadedAssetUrl(empData.profilePhotoUrl));
+            } catch { /* non-fatal */ }
+
+            // 0b. Payslips (self-service)
+            try {
+                const slips = await payrollService.getMyPayslips();
+                setPayslips(Array.isArray(slips) ? slips : []);
+            } catch { /* non-fatal */ }
+
             // 1. Documents
             const docs = await getEmployeeDocuments(employeeId);
             const now = new Date();
@@ -184,11 +210,13 @@ export default function EmployeeDashboard() {
                     }}>
                         <div style={{
                             width: '80px', height: '80px', borderRadius: '50%',
-                            background: 'white', color: '#4f46e5',
+                            background: 'white', color: '#4f46e5', overflow: 'hidden',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '32px', fontWeight: 'bold'
+                            fontSize: '32px', fontWeight: 'bold', flexShrink: 0
                         }}>
-                            {user?.name?.charAt(0) || "U"}
+                            {profilePhoto
+                                ? <img src={profilePhoto} alt={user?.name || "Profile"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                : (user?.name?.charAt(0) || "U")}
                         </div>
                         <div style={{ flex: 1 }}>
                             <h3 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>{user?.name}</h3>
@@ -315,6 +343,50 @@ export default function EmployeeDashboard() {
                             </div>
                         </div>
                     </WidgetCard>
+                </Col>
+            </Row>
+
+            {/* My Payslips — self-service download */}
+            <Row>
+                <Col md={12} className="mb-4">
+                    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
+                        <h5 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 700, color: '#1f2937' }}>My Payslips</h5>
+                        {payslips.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {payslips.map((slip) => {
+                                    const monthName = new Date(slip.year, (slip.month || 1) - 1).toLocaleString('default', { month: 'long' });
+                                    return (
+                                        <div key={slip._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f3f4f6', borderRadius: '8px', padding: '12px 16px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <div>
+                                                <div style={{ fontWeight: 600, color: '#111827' }}>{monthName} {slip.year}</div>
+                                                <div style={{ fontSize: '13px', color: '#6b7280' }}>Net: {Number(slip.netSalary || 0).toLocaleString()} AED</div>
+                                            </div>
+                                            <button
+                                                disabled={downloadingSlip === slip._id}
+                                                onClick={async () => {
+                                                    setDownloadingSlip(slip._id);
+                                                    try {
+                                                        await payrollService.downloadPayslipPdf(slip._id, user?.name);
+                                                    } catch {
+                                                        toast.error("Failed to download payslip");
+                                                    } finally {
+                                                        setDownloadingSlip(null);
+                                                    }
+                                                }}
+                                                style={{ background: '#2563eb', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
+                                            >
+                                                {downloadingSlip === slip._id ? 'Downloading…' : 'Download PDF'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div style={{ padding: '16px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '8px', fontSize: '13px' }}>
+                                No payslips available yet. They appear here once payroll is processed.
+                            </div>
+                        )}
+                    </div>
                 </Col>
             </Row>
 

@@ -69,28 +69,20 @@ const getProbationStatus = (payload = {}) => {
   return probationEnd <= today ? "PENDING_CONFIRMATION" : "ACTIVE";
 };
 
-const resolveManagerUserId = async (designatedManager) => {
+// designatedManager/designatedFinanceManager are stored as the manager's Employee._id (what
+// the Add/Edit Employee dropdowns actually send and display) - not a User._id. This just
+// validates the referenced Employee exists; approval routing (requestController.js) resolves
+// the linked User account separately via User.findOne({ employeeId }).
+const resolveManagerEmployeeId = async (designatedManager) => {
   if (!designatedManager) return null;
-
-  const directUser = await User.findById(designatedManager).select("_id");
-  if (directUser) {
-    return directUser._id;
-  }
-
-  const linkedUser = await User.findOne({ employeeId: designatedManager }).select("_id");
-  return linkedUser?._id || null;
+  const exists = await Employee.exists({ _id: designatedManager });
+  return exists ? designatedManager : null;
 };
 
-const resolveFinanceManagerUserId = async (designatedFinanceManager) => {
+const resolveFinanceManagerEmployeeId = async (designatedFinanceManager) => {
   if (!designatedFinanceManager) return null;
-
-  const directUser = await User.findById(designatedFinanceManager).select("_id");
-  if (directUser) {
-    return directUser._id;
-  }
-
-  const linkedUser = await User.findOne({ employeeId: designatedFinanceManager }).select("_id");
-  return linkedUser?._id || null;
+  const exists = await Employee.exists({ _id: designatedFinanceManager });
+  return exists ? designatedFinanceManager : null;
 };
 
 const attachSignedProfilePhotoUrl = async (employee) => {
@@ -290,8 +282,8 @@ export const addEmployee = async (req, res) => {
       if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
     }
 
-    const resolvedDesignatedManager = await resolveManagerUserId(designatedManager);
-    const resolvedDesignatedFinanceManager = await resolveFinanceManagerUserId(designatedFinanceManager);
+    const resolvedDesignatedManager = await resolveManagerEmployeeId(designatedManager);
+    const resolvedDesignatedFinanceManager = await resolveFinanceManagerEmployeeId(designatedFinanceManager);
 
     // 3. Generate the internal auto-incremented reference number (independent of the
     // user-supplied, editable `code`). Sorts on systemCode itself so manual `code` edits
@@ -505,6 +497,9 @@ export const getEmployeeById = async (req, res) => {
       return res.status(403).json({ message: "Access Denied: You cannot view this profile" });
     }
 
+    // Promote any future-dated transfer whose effective date has now arrived.
+    await applyDuePendingTransfers(employee);
+
     res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
     // console.error("Get Employee By ID Error:", error);
@@ -542,11 +537,36 @@ export const updateEmployee = async (req, res) => {
     const payload = { ...req.body };
     delete payload.systemCode; // internal reference number, never client-editable
 
+    // ---- Field-level permission guard ----------------------------------------
+    // The route only checks MANAGE_EMPLOYEES, so any HR/manager user reaching here can
+    // otherwise rewrite salary or their own reporting line. Two rules:
+    //   1. Salary fields require MANAGE_PAYROLL (else silently stripped).
+    //   2. Nobody (except Admin) may edit their OWN salary or manager fields.
+    const perms = req.user.permissions || [];
+    const isAdmin = req.user.role === "Admin" || perms.includes("ALL");
+    const canEditSalary = isAdmin || perms.includes("MANAGE_PAYROLL");
+    const isSelf = req.user.employeeId && String(req.user.employeeId) === String(id);
+
+    const SALARY_FIELDS = [
+      "basicSalary", "allowance", "hra", "accommodationAllowance", "vehicleAllowance",
+      "totalSalary", "visaBase", "workBase", "ctc", "fixedProbationIncrementAmount",
+      "salaryHistory"
+    ];
+    const MANAGER_FIELDS = ["designatedManager", "designatedFinanceManager"];
+
+    let salaryEditAllowed = canEditSalary;
+    if (!canEditSalary) SALARY_FIELDS.forEach((f) => delete payload[f]);
+    if (isSelf && !isAdmin) {
+      [...SALARY_FIELDS, ...MANAGER_FIELDS].forEach((f) => delete payload[f]);
+      salaryEditAllowed = false;
+    }
+    // --------------------------------------------------------------------------
+
     if (payload.designatedManager !== undefined) {
-      payload.designatedManager = await resolveManagerUserId(payload.designatedManager);
+      payload.designatedManager = await resolveManagerEmployeeId(payload.designatedManager);
     }
     if (payload.designatedFinanceManager !== undefined) {
-      payload.designatedFinanceManager = await resolveFinanceManagerUserId(payload.designatedFinanceManager);
+      payload.designatedFinanceManager = await resolveFinanceManagerEmployeeId(payload.designatedFinanceManager);
     }
 
     if (payload.laborCards || payload.laborCardNumber) {
@@ -563,6 +583,9 @@ export const updateEmployee = async (req, res) => {
     if (payload.probationEndDate || payload.probationConfirmedAt) {
       payload.probationStatus = getProbationStatus(payload);
     }
+
+    // Snapshot before update so the activity log can record a field-level diff.
+    const before = await Employee.findById(id).lean();
 
     const updatedEmployee = await Employee.findByIdAndUpdate(id, payload, {
       new: true,
@@ -582,7 +605,7 @@ export const updateEmployee = async (req, res) => {
       );
     }
 
-    if (req.body.appendSalaryHistory) {
+    if (req.body.appendSalaryHistory && salaryEditAllowed) {
       updatedEmployee.salaryHistory.push({
         salaryType: req.body.salaryType || "MANUAL_ADJUSTMENT",
         basicSalary: toNumber(updatedEmployee.basicSalary),
@@ -599,13 +622,38 @@ export const updateEmployee = async (req, res) => {
 
     res.json({ employee: updatedEmployee });
 
+    // Build a field-level diff for the activity log. Skip internal/array/helper keys that
+    // don't read as clean before/after scalars.
+    const SKIP_DIFF = new Set([
+      "systemCode", "salaryHistory", "transferHistory", "laborCards",
+      "appendSalaryHistory", "salaryType", "incrementAmount", "effectiveSalaryDate",
+      "salaryNotes", "profilePhotoPath", "profilePhotoUrl", "_id", "__v",
+      "createdAt", "updatedAt"
+    ]);
+    const changes = {};
+    if (before) {
+      for (const key of Object.keys(payload)) {
+        if (SKIP_DIFF.has(key)) continue;
+        const fromVal = before[key];
+        const toVal = updatedEmployee[key];
+        const norm = (v) => (v === undefined || v === null ? "" : String(v));
+        if (norm(fromVal) !== norm(toVal)) {
+          changes[key] = { from: fromVal ?? null, to: toVal ?? null };
+        }
+      }
+    }
+    const changedFields = Object.keys(changes);
+
     logActivity({
       req,
       action: "UPDATE",
       module: "EMPLOYEE",
-      description: `Employee ${updatedEmployee.name} (${updatedEmployee.code}) updated`,
+      description: changedFields.length
+        ? `Employee ${updatedEmployee.name} (${updatedEmployee.code}) updated: ${changedFields.join(", ")}`
+        : `Employee ${updatedEmployee.name} (${updatedEmployee.code}) updated`,
       targetId: updatedEmployee._id,
-      targetName: updatedEmployee.name
+      targetName: updatedEmployee.name,
+      metadata: { changes }
     }).catch(() => {});
   } catch (error) {
     // console.error("Update Employee Error:", error);
@@ -698,6 +746,35 @@ export const deleteEmployee = async (req, res) => {
   }
 };
 
+/**
+ * Applies any pending (future-dated) transfers whose effectiveDate has now arrived.
+ * Mutates the employee in place and persists if anything changed. Called lazily on the
+ * main employee read paths so a scheduled transfer takes effect the moment its date passes,
+ * without needing a dedicated cron job. Returns true if the employee was changed.
+ */
+export const applyDuePendingTransfers = async (employee) => {
+  if (!employee?.transferHistory?.length) return false;
+
+  const now = new Date();
+  // Apply due transfers in chronological order so the latest one wins on company/branch.
+  // Only entries explicitly marked applied:false are pending — legacy history predates the
+  // field (applied === undefined) and was already applied, so it must NOT be re-applied.
+  const due = employee.transferHistory
+    .filter((t) => t.applied === false && t.effectiveDate && new Date(t.effectiveDate) <= now)
+    .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+
+  if (!due.length) return false;
+
+  for (const t of due) {
+    if (t.newCompany) employee.company = t.newCompany;
+    if (t.newBranch) employee.branch = t.newBranch;
+    t.applied = true;
+  }
+
+  await employee.save();
+  return true;
+};
+
 export const transferEmployee = async (req, res) => {
   try {
     const { id } = req.params;
@@ -713,22 +790,62 @@ export const transferEmployee = async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    const previousCompany = employee.company || "";
+    const previousBranch = employee.branch || "";
+    const targetCompany = company !== undefined ? company : previousCompany;
+    const targetBranch = branch !== undefined ? branch : previousBranch;
+
+    // Only apply immediately when the effective date is today or in the past. Future-dated
+    // transfers are recorded but left pending until their date arrives (see
+    // applyDuePendingTransfers), instead of taking effect the instant they're created.
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const isImmediate = new Date(effectiveDate) <= endOfToday;
+
     employee.transferHistory.push({
-      previousCompany: employee.company || "",
-      newCompany: company || employee.company || "",
-      previousBranch: employee.branch || "",
-      newBranch: branch || employee.branch || "",
+      previousCompany,
+      newCompany: targetCompany,
+      previousBranch,
+      newBranch: targetBranch,
       effectiveDate,
       reason: reason || "",
-      transferredBy: req.user._id
+      transferredBy: req.user._id,
+      applied: isImmediate
     });
 
-    if (company !== undefined) employee.company = company;
-    if (branch !== undefined) employee.branch = branch;
+    if (isImmediate) {
+      if (company !== undefined) employee.company = company;
+      if (branch !== undefined) employee.branch = branch;
+    }
 
     await employee.save();
 
-    res.json({ success: true, employee });
+    res.json({
+      success: true,
+      employee,
+      scheduled: !isImmediate,
+      message: isImmediate
+        ? "Transfer applied."
+        : `Transfer scheduled for ${new Date(effectiveDate).toISOString().split("T")[0]}. It will take effect on that date.`
+    });
+
+    logActivity({
+      req,
+      action: "TRANSFER",
+      module: "EMPLOYEE",
+      description: isImmediate
+        ? `Employee ${employee.name} (${employee.code}) transferred: ${previousCompany || "—"}/${previousBranch || "—"} → ${targetCompany || "—"}/${targetBranch || "—"}`
+        : `Employee ${employee.name} (${employee.code}) transfer scheduled for ${new Date(effectiveDate).toISOString().split("T")[0]}: ${previousCompany || "—"}/${previousBranch || "—"} → ${targetCompany || "—"}/${targetBranch || "—"}`,
+      targetId: employee._id,
+      targetName: employee.name,
+      metadata: {
+        effectiveDate,
+        applied: isImmediate,
+        reason: reason || "",
+        from: { company: previousCompany, branch: previousBranch },
+        to: { company: targetCompany, branch: targetBranch }
+      }
+    }).catch(() => {});
   } catch (error) {
     res.status(500).json({ message: "Failed to transfer employee" });
   }

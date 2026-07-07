@@ -6,6 +6,7 @@ import "../../style/AddEmployeeModal.css"; // Reuse existing styles
 export default function UploadEmployeeDocumentModal({ onClose, onUpload, employeeId }) {
     const [form, setForm] = useState({
         documentType: "",
+        label: "",
         documentNumber: "",
         expiryDate: "",
         file: null
@@ -44,6 +45,7 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
         const formData = new FormData();
         formData.append("employeeId", employeeId);
         formData.append("documentType", form.documentType);
+        formData.append("label", form.label);
         formData.append("documentNumber", form.documentNumber);
         if (form.expiryDate) formData.append("expiryDate", form.expiryDate);
         formData.append("file", form.file);
@@ -82,6 +84,11 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
                                     <option key={dt.name} value={dt.name}>{dt.name}</option>
                                 ))}
                             </select>
+                        </div>
+
+                        <div className="form-group">
+                            <label>Label (Optional)</label>
+                            <input name="label" value={form.label} placeholder="e.g. Old passport, Renewed copy" onChange={handleChange} />
                         </div>
 
                         <div className="form-group">
