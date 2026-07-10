@@ -259,7 +259,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                         border: '1px solid #e5e7eb',
                         borderRadius: '10px',
                         padding: '14px 16px',
-                        background: '#fffaf0'
+                        background: '#eef4fc'
                     }}>
                         <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
                             <input

@@ -164,15 +164,15 @@
 }
 
 .transfer-profile-btn {
-    background: linear-gradient(135deg, #d5b34d 0%, #b8861f 100%);
-    border-color: #b8861f;
+    background: linear-gradient(135deg, #1c4f9e 0%, #163e80 100%);
+    border-color: #163e80;
     color: #ffffff;
-    box-shadow: 0 14px 28px rgba(184, 134, 31, 0.22);
+    box-shadow: 0 14px 28px rgba(28, 79, 158, 0.22);
 }
 
 .transfer-profile-btn:hover {
-    background: linear-gradient(135deg, #ddb955 0%, #c19025 100%);
-    border-color: #c19025;
+    background: linear-gradient(135deg, #2a63bc 0%, #1c4f9e 100%);
+    border-color: #1c4f9e;
 }
 
 .probation-profile-btn {
@@ -276,7 +276,7 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #9a7a2f;
+    color: #3562a6;
 }
 
 .transfer-history-list {
@@ -289,11 +289,11 @@
     grid-template-columns: 150px 1fr;
     gap: 18px;
     padding: 18px;
-    border: 1px solid #ede7d8;
+    border: 1px solid #dbe7fa;
     border-radius: 16px;
     background:
-        radial-gradient(circle at top right, rgba(212, 178, 74, 0.08), transparent 28%),
-        linear-gradient(180deg, #ffffff 0%, #fbf8f2 100%);
+        radial-gradient(circle at top right, rgba(28, 79, 158, 0.08), transparent 28%),
+        linear-gradient(180deg, #ffffff 0%, #eef4fc 100%);
 }
 
 .transfer-history-date {

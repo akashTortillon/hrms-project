@@ -66,14 +66,14 @@ export default function ProbationRemindersView() {
           gap: "14px",
           padding: "18px",
           borderRadius: "18px",
-          border: "1px solid #ece6d8",
-          background: "radial-gradient(circle at top right, rgba(212, 178, 74, 0.08), transparent 30%), #fff",
+          border: "1px solid #dbe7fa",
+          background: "radial-gradient(circle at top right, rgba(28, 79, 158, 0.08), transparent 30%), #fff",
           boxShadow: "0 18px 40px rgba(15, 23, 42, 0.05)"
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
           <div style={{ fontWeight: 700, color: "#1f2937" }}>Pending confirmations</div>
-          <div style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#9a7a2f" }}>
+          <div style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#3562a6" }}>
             {employees.length} employees
           </div>
         </div>
@@ -92,8 +92,8 @@ export default function ProbationRemindersView() {
                   alignItems: "center",
                   padding: "16px",
                   borderRadius: "16px",
-                  border: "1px solid #ede7d8",
-                  background: "linear-gradient(180deg, #ffffff 0%, #fbf8f2 100%)"
+                  border: "1px solid #dbe7fa",
+                  background: "linear-gradient(180deg, #ffffff 0%, #eef4fc 100%)"
                 }}
               >
                 <div>

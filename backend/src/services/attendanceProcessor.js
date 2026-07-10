@@ -44,7 +44,7 @@ class AttendanceProcessor {
       if (!grouped[key]) {
         grouped[key] = {
           badgeNumber: code,
-          employeeName: txn.rawData?.EmployeeName || null, // Capture name from BioCloud
+          employeeName: txn.rawData?.personName || null, // Capture name from Attendance API
           date: dateStr,
           checkIn: null,
           checkOut: null

@@ -162,15 +162,15 @@
 }
 
 .appraisal-search-result:hover {
-  border-color: #d1b15d;
+  border-color: #4c7fd6;
   transform: translateY(-1px);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
 .appraisal-search-result.active {
-  border-color: #c39a32;
-  background: linear-gradient(180deg, #fffaf0 0%, #f8f1dc 100%);
-  box-shadow: 0 10px 24px rgba(195, 154, 50, 0.16);
+  border-color: #1c4f9e;
+  background: linear-gradient(180deg, #f5f9ff 0%, #eef4fc 100%);
+  box-shadow: 0 10px 24px rgba(28, 79, 158, 0.16);
 }
 
 .appraisal-search-result-name {
@@ -235,10 +235,10 @@
 .appraisal-next-salary {
   position: relative;
   overflow: hidden;
-  border-color: rgba(212, 178, 74, 0.38);
+  border-color: rgba(28, 79, 158, 0.38);
   background:
-    radial-gradient(circle at top right, rgba(212, 178, 74, 0.14), transparent 42%),
-    linear-gradient(180deg, rgba(255, 252, 245, 0.98) 0%, rgba(248, 244, 231, 0.96) 100%);
+    radial-gradient(circle at top right, rgba(28, 79, 158, 0.14), transparent 42%),
+    linear-gradient(180deg, rgba(251, 253, 255, 0.98) 0%, rgba(238, 244, 252, 0.96) 100%);
 }
 
 .appraisal-salary-box::after,

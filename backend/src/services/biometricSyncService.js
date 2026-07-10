@@ -72,31 +72,41 @@ class BiometricSyncService {
 
     let lastSyncedTransactionId = 0;
     try {
-      // 1. Get the last successfully synced transaction ID
-      const syncState = await SyncState.findOne({ key: "biocloud_sync" });
+      // 1. Get the last synced cursor (highest SLNO seen + the auth timestamp to resume from)
+      let lastSyncedAuthDateTime = null;
+      const syncState = await SyncState.findOne({ key: "attendance_sync" });
       if (syncState) {
         lastSyncedTransactionId = syncState.lastSyncedTransactionId;
+        lastSyncedAuthDateTime = syncState.lastSyncedAuthDateTime;
       } else {
-        await SyncState.create({ key: "biocloud_sync", lastSyncedTransactionId: 0 });
+        await SyncState.create({ key: "attendance_sync", lastSyncedTransactionId: 0 });
       }
 
-      // 2. Determine date range (default to current day for scheduled runs to keep it fast and precise)
-      const formatYYYYMMDD = (d) => {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
+      // 2. Determine the `from` cursor for the /api/attendance/since endpoint.
+      // Manual syncs use the requested startDate; scheduled syncs resume from the last
+      // processed record's authDateTime (falling back to the start of today on first run).
+      const formatDDMMYYYY = (d) => {
         const dd = String(d.getDate()).padStart(2, "0");
-        return `${yyyy}-${mm}-${dd}`;
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mi = String(d.getMinutes()).padStart(2, "0");
+        const ss = String(d.getSeconds()).padStart(2, "0");
+        return `${dd}-${mm}-${yyyy} ${hh}:${mi}:${ss}`;
       };
-      
-      const todayStr = formatYYYYMMDD(new Date());
-      const finalStartDate = `${startDate || todayStr} 00:00:00`;
-      const finalEndDate = `${endDate || todayStr} 23:59:59`;
 
-      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | Starting from Transaction ID: ${lastSyncedTransactionId}`);
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
 
-      // 3. Fetch from BioCloud API with retry logic
-      const apiResponse = await this._fetchFromApiWithRetries(lastSyncedTransactionId, finalStartDate, finalEndDate);
-      
+      const fromDate = startDate ? new Date(`${startDate}T00:00:00`) : (lastSyncedAuthDateTime || startOfToday);
+      const finalFrom = formatDDMMYYYY(fromDate);
+      const endBoundary = endDate ? new Date(`${endDate}T23:59:59`) : null;
+
+      console.log(`[BiometricSyncService] Sync cursor: from="${finalFrom}"${endBoundary ? `, capped at ${endDate} 23:59:59` : ""}`);
+
+      // 3. Fetch from the Attendance API with retry logic
+      const apiResponse = await this._fetchFromApiWithRetries(finalFrom);
+
       console.log(`[BiometricSyncService] Raw API response parsed. Type: ${typeof apiResponse}, IsArray: ${Array.isArray(apiResponse)}`);
 
       let transactions = null;
@@ -104,48 +114,55 @@ class BiometricSyncService {
         transactions = apiResponse;
       } else if (apiResponse && Array.isArray(apiResponse.data)) {
         transactions = apiResponse.data;
-      } else if (apiResponse && Array.isArray(apiResponse.message)) {
-        transactions = apiResponse.message;
-      } else if (apiResponse && Array.isArray(apiResponse.transactions)) {
-        transactions = apiResponse.transactions;
       }
 
       if (!transactions || !Array.isArray(transactions)) {
-        throw new Error(`Could not find transactions array in BioCloud API response. Response received: ${JSON.stringify(apiResponse)}`);
+        throw new Error(`Could not find transactions array in Attendance API response. Response received: ${JSON.stringify(apiResponse)}`);
+      }
+
+      // A manual sync with an endDate has no server-side upper bound (the API only
+      // supports a `from` cursor), so cap the window client-side.
+      if (endBoundary) {
+        transactions = transactions.filter((txn) => txn.authDateTime && new Date(txn.authDateTime) <= endBoundary);
       }
 
       const transactionsFetched = transactions.length;
-      console.log(`[BiometricSyncService] Extracted ${transactionsFetched} transactions from BioCloud API response.`);
+      console.log(`[BiometricSyncService] Extracted ${transactionsFetched} transactions from Attendance API response.`);
 
       let transactionsStored = 0;
       let highestTransactionId = lastSyncedTransactionId;
+      let highestAuthDateTime = lastSyncedAuthDateTime;
       const newTransactions = [];
 
       // 4. Save new transactions to the database, skipping duplicates.
-      // The `exists` check is not race-safe (BioCloud can return the same transaction across
+      // The `exists` check is not race-safe (the API can return the same transaction across
       // overlapping scheduled/manual syncs), so a duplicate-key error on the unique
       // `transactionId` index is expected and treated as "already synced" rather than a
       // fatal error that aborts the whole sync with a 500.
       for (const txn of transactions) {
-        if (!txn.Id) continue;
+        if (!txn.SLNO || !txn.authDateTime) continue;
 
-        // Track highest ID
-        if (txn.Id > highestTransactionId) {
-          highestTransactionId = txn.Id;
+        // Track highest ID and cursor timestamp
+        if (txn.SLNO > highestTransactionId) {
+          highestTransactionId = txn.SLNO;
+        }
+        const authDateTime = new Date(txn.authDateTime);
+        if (!highestAuthDateTime || authDateTime > highestAuthDateTime) {
+          highestAuthDateTime = authDateTime;
         }
 
-        const exists = await BiometricTransaction.findOne({ transactionId: txn.Id });
+        const exists = await BiometricTransaction.findOne({ transactionId: txn.SLNO });
         if (exists) continue;
 
         try {
           // Map API fields to database schema
-          // API uses: VerifyTime, Status, DeviceSerialNumber
+          // API uses: employeeID, authDateTime, direction, deviceSN
           const storedTxn = await BiometricTransaction.create({
-            transactionId: txn.Id,
-            badgeNumber: txn.BadgeNumber,
-            timestamp: new Date(txn.VerifyTime),  // Changed from txn.Timestamp
-            transactionType: txn.Status === "Check-In" ? "IN" : "OUT",  // Map Status to IN/OUT
-            deviceId: txn.DeviceSerialNumber || null,  // Changed from txn.DeviceId
+            transactionId: txn.SLNO,
+            badgeNumber: txn.employeeID,
+            timestamp: authDateTime,
+            transactionType: txn.direction === "IN" ? "IN" : "OUT",
+            deviceId: txn.deviceSN || txn.deviceName || null,
             rawData: txn
           });
 
@@ -153,7 +170,7 @@ class BiometricSyncService {
           transactionsStored++;
         } catch (createError) {
           if (createError.code === 11000) {
-            console.log(`[BiometricSyncService] Transaction ${txn.Id} already stored by a concurrent sync - skipping.`);
+            console.log(`[BiometricSyncService] Transaction ${txn.SLNO} already stored by a concurrent sync - skipping.`);
             continue;
           }
           throw createError;
@@ -174,9 +191,10 @@ class BiometricSyncService {
 
       // 7. Update Sync State atomically
       await SyncState.findOneAndUpdate(
-        { key: "biocloud_sync" },
+        { key: "attendance_sync" },
         {
           lastSyncedTransactionId: highestTransactionId,
+          lastSyncedAuthDateTime: highestAuthDateTime,
           lastSyncTimestamp: new Date(),
           lastSuccessfulSync: new Date(),
           consecutiveFailures: 0
@@ -213,7 +231,7 @@ class BiometricSyncService {
       
       // Update SyncState failure counts
       await SyncState.findOneAndUpdate(
-        { key: "biocloud_sync" },
+        { key: "attendance_sync" },
         {
           $inc: { consecutiveFailures: 1 },
           lastSyncTimestamp: new Date()
@@ -235,32 +253,22 @@ class BiometricSyncService {
   /**
    * Helper: Performs API fetch with exponential backoff retries and error handling
    */
-  async _fetchFromApiWithRetries(idFrom, startDate, endDate) {
-    const apiUrl = process.env.BIOCLOUD_API_URL || "https://15.biocloud.me:8205";
-    const apiToken = process.env.BIOCLOUD_API_TOKEN || "d168b9ea529a4b44a8419e499fe16f3e";
-    const maxRetries = parseInt(process.env.BIOCLOUD_RETRY_ATTEMPTS) || 3;
+  async _fetchFromApiWithRetries(from) {
+    const apiUrl = process.env.ATTENDANCE_API_URL || "http://leptisgroup.fortiddns.com:3111";
+    const apiToken = process.env.ATTENDANCE_API_TOKEN || "98asgd-90ab-cde12345678";
+    const maxRetries = parseInt(process.env.ATTENDANCE_RETRY_ATTEMPTS) || 3;
     const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s
 
-    const fullUrl = `${apiUrl}/api_gettransctions`;
-    console.log(`[BiometricSyncService] Requesting BioCloud API (POST): ${fullUrl}`);
-    console.log(`[BiometricSyncService] Payload: StartDate="${startDate}", EndDate="${endDate}", IdFrom=${idFrom}`);
-
-    const payload = {
-      BadgeNumber: null,
-      StartDate: startDate,
-      EndDate: endDate,
-      IdFrom: idFrom
-    };
+    const fullUrl = `${apiUrl}/api/attendance/since?from=${encodeURIComponent(from)}`;
+    console.log(`[BiometricSyncService] Requesting Attendance API (GET): ${fullUrl}`);
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
       try {
         const response = await fetch(fullUrl, {
-          method: "POST",
+          method: "GET",
           headers: {
-            "token": apiToken,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
+            "Authorization": `Bearer ${apiToken}`
+          }
         });
 
         // Handle Rate Limiting (429)
@@ -272,7 +280,12 @@ class BiometricSyncService {
 
         // Handle Authentication Errors (401/403)
         if (response.status === 401 || response.status === 403) {
-          throw new Error(`Authentication failed with BioCloud API (HTTP ${response.status}). Check credentials.`);
+          throw new Error(`Authentication failed with Attendance API (HTTP ${response.status}). Check credentials.`);
+        }
+
+        // Handle Bad Request (400) - e.g. malformed date on /since
+        if (response.status === 400) {
+          throw new Error(`Attendance API rejected the request (HTTP 400). Check date format.`);
         }
 
         // Handle Server Errors (500/503)
@@ -289,14 +302,18 @@ class BiometricSyncService {
         try {
           data = await response.json();
         } catch (parseError) {
-          throw new Error(`Malformed JSON response from BioCloud API: ${parseError.message}`);
+          throw new Error(`Malformed JSON response from Attendance API: ${parseError.message}`);
+        }
+
+        if (data && data.success === false) {
+          throw new Error(`Attendance API returned an error: ${data.error || "Unknown error"}`);
         }
 
         return data;
 
       } catch (error) {
         console.error(`[BiometricSyncService] Request attempt ${attempt} failed: ${error.message}`);
-        
+
         // If it was an authentication error, do not retry
         if (error.message.includes("Authentication failed")) {
           throw error;

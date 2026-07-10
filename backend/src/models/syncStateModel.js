@@ -6,12 +6,16 @@ const syncStateSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      default: "biocloud_sync"
+      default: "attendance_sync"
     },
     lastSyncedTransactionId: {
       type: Number,
       required: true,
       default: 0
+    },
+    lastSyncedAuthDateTime: {
+      type: Date,
+      default: null
     },
     lastSyncTimestamp: {
       type: Date,
