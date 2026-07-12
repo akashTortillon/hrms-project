@@ -15,6 +15,12 @@ export const payrollService = {
         return response.data;
     },
 
+    // Latest finalized period — used to lock out already-finalized (and earlier) periods
+    getLatestFinalizedPeriod: async () => {
+        const response = await api.get("/payroll/latest-finalized");
+        return response.data.latestFinalized; // { month, year, key, finalizedAt } or null
+    },
+
     // Add Manual Adjustment
     addAdjustment: async (payload) => {
         const response = await api.post("/payroll/adjust", payload);

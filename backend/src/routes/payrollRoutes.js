@@ -1,6 +1,6 @@
 
 import express from "express";
-import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, getPayrollAuditLogs, getMyPayslips, downloadPayslip } from "../controllers/payrollController.js";
+import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, getPayrollAuditLogs, getMyPayslips, downloadPayslip, getLatestFinalizedPeriod } from "../controllers/payrollController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -15,6 +15,7 @@ router.get("/download/:id", downloadPayslip); // ✅ NEW: Download Payslip PDF
 router.use(hasPermission("MANAGE_PAYROLL"));
 
 router.post("/generate", generatePayroll);
+router.get("/latest-finalized", getLatestFinalizedPeriod);
 router.get("/summary", getPayrollSummary);
 router.post("/adjust", addAdjustment);
 router.post("/remove-item", removePayrollItem);
