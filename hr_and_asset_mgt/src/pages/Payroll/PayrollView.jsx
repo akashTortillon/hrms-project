@@ -135,6 +135,7 @@ function Payroll() {
   const [filters, setFilters] = useState({ company: '', branch: '', visaCompany: '', workPermitCompany: '', search: '', page: 1, limit: 10 });
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [finalizeConfirmText, setFinalizeConfirmText] = useState("");
+  const [latestFinalized, setLatestFinalized] = useState(null); // { month, year, key, finalizedAt } | null
 
   // --- MOCK DATA FOR CHARTS (To avoid breaking backend dependencies) ---
   const mockTrends = [
@@ -154,7 +155,29 @@ function Payroll() {
   useEffect(() => {
     getCompanies().then(setCompanies).catch(console.error);
     getBranches().then(setBranches).catch(console.error);
+    fetchLatestFinalized();
   }, []);
+
+  const fetchLatestFinalized = async () => {
+    try {
+      const latest = await payrollService.getLatestFinalizedPeriod();
+      setLatestFinalized(latest);
+
+      // If the default/current selection is already finalized (or earlier), jump
+      // forward to the first open period instead of landing on a locked one.
+      if (latest) {
+        const lockedKey = (latest.year * 100) + latest.month;
+        if (((year * 100) + month) <= lockedKey) {
+          const nextMonth = latest.month === 12 ? 1 : latest.month + 1;
+          const nextYear = latest.month === 12 ? latest.year + 1 : latest.year;
+          setMonth(nextMonth);
+          setYear(nextYear);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   useEffect(() => {
     fetchPayroll();
@@ -201,7 +224,7 @@ function Payroll() {
       toast.success("Payroll Generated Successfully!");
       fetchPayroll();
     } catch (error) {
-      toast.error("Failed to generate payroll");
+      toast.error(error.response?.data?.message || "Failed to generate payroll");
     } finally {
       setLoading(false);
     }
@@ -213,6 +236,7 @@ function Payroll() {
       await payrollService.finalize(month, year);
       toast.success("Payroll Finalized & Locked!");
       fetchPayroll();
+      fetchLatestFinalized();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to finalize");
     } finally {
@@ -274,6 +298,7 @@ function Payroll() {
         year={year}
         setMonth={setMonth}
         setYear={setYear}
+        latestFinalized={latestFinalized}
         onExportWPS={() => handleExportExcel()}
       />
 

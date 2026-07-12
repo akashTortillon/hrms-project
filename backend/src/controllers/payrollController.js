@@ -41,6 +41,25 @@ const resolveCompanyLogoPath = (companyImage) => {
 
 const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month);
 
+// Finds the furthest-out finalized payroll period (by year/month, not by when the
+// finalize action was logged — periods can be finalized out of order) so the
+// lockout always reflects the actual latest locked period, not a hardcoded cutoff day.
+const getLatestFinalizedCycle = async () => {
+    const finalized = await PayrollAudit
+        .find({ action: "FINALIZED" })
+        .select("month year createdAt");
+
+    if (!finalized.length) return null;
+
+    return finalized.reduce((latest, entry) => {
+        const key = getPayrollCycleKey(entry.month, entry.year);
+        if (!latest || key > latest.key) {
+            return { month: Number(entry.month), year: Number(entry.year), key, finalizedAt: entry.createdAt };
+        }
+        return latest;
+    }, null);
+};
+
 const hasScheduledSkip = (details = {}, month, year) => {
     const overrides = Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
     return overrides.some((entry) =>
@@ -556,10 +575,32 @@ export const validatePayrollGeneration = async (req, res) => {
     }
 };
 
+// --- API: Latest Finalized Payroll Period ---
+// Used by the period picker to lock out any month/year at or before the last
+// finalized cycle. Derived from the audit trail so it moves with whenever
+// finalize actually happens, instead of a fixed day-of-month cutoff.
+export const getLatestFinalizedPeriod = async (req, res) => {
+    try {
+        const latest = await getLatestFinalizedCycle();
+        res.json({ success: true, latestFinalized: latest });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch latest finalized payroll period" });
+    }
+};
+
 // --- API: Generate Payroll for a Month ---
 export const generatePayroll = async (req, res) => {
     try {
         const { month, year } = req.body;
+
+        // Block (re)generating a period that's already been finalized, or anything
+        // before it — once finalized, that period and every earlier one is locked.
+        const latestFinalized = await getLatestFinalizedCycle();
+        if (latestFinalized && getPayrollCycleKey(month, year) <= latestFinalized.key) {
+            return res.status(400).json({
+                message: `Payroll up to ${latestFinalized.month}/${latestFinalized.year} is already finalized and locked. Select a later period.`
+            });
+        }
 
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
