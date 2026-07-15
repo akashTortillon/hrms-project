@@ -43,6 +43,15 @@ export default function useHRManagement() {
     });
     const [tempStepName, setTempStepName] = useState("");
 
+    const [leaveTypeState, setLeaveTypeState] = useState({
+        name: '',
+        isPaid: true,
+        allocationType: 'YEARLY', // YEARLY | SERVICE_ANNIVERSARY | POLICY_BASED
+        daysPerCycle: '',
+        carryForward: true,
+        tiers: [] // [{ afterYears, days }] — optional service-year step-up, overrides daysPerCycle once met
+    });
+
     const [shifts, setShifts] = useState([]);
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
@@ -106,6 +115,14 @@ export default function useHRManagement() {
         });
         setWorkflowState({ steps: [] });
         setTempStepName("");
+        setLeaveTypeState({
+            name: '',
+            isPaid: true,
+            allocationType: 'YEARLY',
+            daysPerCycle: '',
+            carryForward: true,
+            tiers: []
+        });
         setShowModal(true);
     };
 
@@ -160,6 +177,17 @@ export default function useHRManagement() {
                 steps: meta.steps || []
             });
             setInputValue(item.name);
+        } else if (type === "Leave Type") {
+            const meta = item.metadata || {};
+            setLeaveTypeState({
+                name: item.name,
+                isPaid: meta.isPaid ?? true,
+                allocationType: meta.allocationType || 'YEARLY',
+                daysPerCycle: meta.daysPerCycle ?? '',
+                carryForward: meta.carryForward ?? true,
+                tiers: Array.isArray(meta.tiers) ? meta.tiers : []
+            });
+            setInputValue(item.name);
         } else {
             setInputValue(item.name);
         }
@@ -167,8 +195,9 @@ export default function useHRManagement() {
     };
 
     const handleSave = async () => {
-        // Validation: For standard masters check inputValue, for Payroll Rule skip this check
-        if (modalType !== "Payroll Rule" && !inputValue.trim()) return toast.warning("Please enter a name");
+        // Validation: For standard masters check inputValue, for Payroll Rule / Leave Type skip this check
+        if (modalType === "Leave Type" && !leaveTypeState.name.trim()) return toast.warning("Please enter a name");
+        if (modalType !== "Payroll Rule" && modalType !== "Leave Type" && !inputValue.trim()) return toast.warning("Please enter a name");
 
         setLoading(true);
 
@@ -178,8 +207,22 @@ export default function useHRManagement() {
                 else await employeeTypeService.add(inputValue);
                 setEmployeeTypes(await employeeTypeService.getAll());
             } else if (modalType === "Leave Type") {
-                if (editId) await leaveTypeService.update(editId, inputValue);
-                else await leaveTypeService.add(inputValue);
+                const cleanTiers = (leaveTypeState.tiers || [])
+                    .filter(t => t.afterYears !== '' && t.days !== '' && t.afterYears != null && t.days != null)
+                    .map(t => ({ afterYears: Number(t.afterYears), days: Number(t.days) }))
+                    .filter(t => Number.isFinite(t.afterYears) && Number.isFinite(t.days));
+                const payload = {
+                    name: leaveTypeState.name,
+                    metadata: {
+                        isPaid: leaveTypeState.isPaid,
+                        allocationType: leaveTypeState.allocationType,
+                        daysPerCycle: Number(leaveTypeState.daysPerCycle) || 0,
+                        carryForward: leaveTypeState.carryForward,
+                        tiers: cleanTiers
+                    }
+                };
+                if (editId) await leaveTypeService.update(editId, payload);
+                else await leaveTypeService.add(payload);
                 setLeaveTypes(await leaveTypeService.getAll());
             } else if (modalType === "Employee Document Type") {
                 if (editId) await documentTypeService.update(editId, inputValue);
@@ -368,6 +411,8 @@ export default function useHRManagement() {
         workflowState,
         setWorkflowState,
         tempStepName,
-        setTempStepName
+        setTempStepName,
+        leaveTypeState,
+        setLeaveTypeState
     };
 }

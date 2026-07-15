@@ -58,6 +58,7 @@ import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
 import WorkflowTab from "../../components/employee/WorkflowTab";
 import WarningsTab from "../../components/employee/WarningsTab.jsx";
+import LeaveWalletTab from "../../components/employee/LeaveWalletTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
 
 const resolveUploadedAssetUrl = (url) => {
@@ -467,7 +468,7 @@ export default function EmployeeDetail() {
 
     const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary"];
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary", "Leave Wallet"];
     // Salary tab — Finance/HR/Admin, OR the employee viewing their OWN profile (read-only).
     const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS") || isSelf;
     if (canViewSalary) {
@@ -1521,7 +1522,11 @@ export default function EmployeeDetail() {
                     </div>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && (
+                {activeTab === "Leave Wallet" && (
+                    <LeaveWalletTab employeeId={effectiveId} />
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && activeTab !== "Leave Wallet" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>

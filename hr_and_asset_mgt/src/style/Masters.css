@@ -1350,3 +1350,113 @@ system settings
     width: 100%;
   }
 }
+
+/* =========================
+   Leave Type — Service-Year Tiers
+========================= */
+
+.tier-editor {
+  padding: 16px 18px;
+  border: 1px solid #e7ecf5;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(199, 161, 78, 0.06), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.tier-editor-hint {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0 0 12px 0;
+}
+
+.tier-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid #ebf0f7;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.tier-row:hover {
+  transform: translateY(-1px);
+  border-color: #dde6f4;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.tier-row-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #eef4ff 0%, #f5f8ff 100%);
+  color: #2d5fe4;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tier-row-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tier-row-input {
+  width: 64px;
+  padding: 7px 10px;
+  border: 1px solid #dbe5f5;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+  text-align: center;
+  background: #fff;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.tier-row-input:focus {
+  border-color: #2d5fe4;
+  box-shadow: 0 0 0 3px rgba(45, 95, 228, 0.12);
+}
+
+.tier-row-remove {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.tier-row-remove:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.tier-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 10px 0;
+}

@@ -47,6 +47,10 @@ app.use("/api/requests", requestRoutes);
 // 🔹 Payroll APIs
 app.use("/api/payroll", payrollRoutes);
 // console.log("✅ Payroll routes registered at /api/payroll");
+
+// 🔹 Leave Wallet APIs
+import leaveWalletRoutes from "./routes/leaveWalletRoutes.js";
+app.use("/api/leave-wallet", leaveWalletRoutes);
 // 🔹 Unified Master API
 import masterRoutes from "./routes/masterRoutes.js";
 app.use("/api/masters", masterRoutes);
