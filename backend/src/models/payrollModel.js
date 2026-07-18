@@ -7,8 +7,19 @@ const payrollSchema = new mongoose.Schema({
         ref: "Employee",
         required: true
     },
+    // month/year are DERIVED from periodEnd (its calendar month/year) — kept for
+    // backward-compat with every existing report/export endpoint that buckets by
+    // month/year (SIF, MOL, payment history, payslips). The real period identity
+    // is periodStart/periodEnd; month/year are just a display/query bucket.
     month: { type: Number, required: true }, // 1-12
     year: { type: Number, required: true },  // 2026
+
+    // The actual pay period — force-contiguous rolling window (HR picks the `to`
+    // date each cycle; `from` is always locked to the day after the previous
+    // period's `to`). Whole calendar months are just the special case where
+    // periodStart is the 1st and periodEnd is the last day of that month.
+    periodStart: { type: Date, required: true },
+    periodEnd: { type: Date, required: true },
 
     // Status Flow
     status: {
@@ -65,7 +76,10 @@ const payrollSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-// Prevent duplicate payroll for same month/employee
-payrollSchema.index({ employee: 1, month: 1, year: 1 }, { unique: true });
+// Prevent duplicate payroll for the same employee + exact period. month/year are
+// derived (from periodEnd) and aren't guaranteed unique on their own once periods
+// are rolling windows instead of calendar months, so the real identity is the
+// period dates themselves.
+payrollSchema.index({ employee: 1, periodStart: 1, periodEnd: 1 }, { unique: true });
 
 export default mongoose.model("Payroll", payrollSchema);

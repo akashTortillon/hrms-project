@@ -2,9 +2,9 @@
 import api from "../api/apiClient";
 
 export const payrollService = {
-    // Generate Payroll for a Month
-    generate: async (month, year) => {
-        const response = await api.post("/payroll/generate", { month, year });
+    // Generate Payroll for a rolling period — periodStart/periodEnd are "YYYY-MM-DD" strings
+    generate: async (periodStart, periodEnd) => {
+        const response = await api.post("/payroll/generate", { periodStart, periodEnd });
         return response.data;
     },
 
@@ -18,7 +18,7 @@ export const payrollService = {
     // Latest finalized period — used to lock out already-finalized (and earlier) periods
     getLatestFinalizedPeriod: async () => {
         const response = await api.get("/payroll/latest-finalized");
-        return response.data.latestFinalized; // { month, year, key, finalizedAt } or null
+        return response.data.latestFinalized; // { month, year, periodStart, periodEnd, finalizedAt } or null
     },
 
     // Add Manual Adjustment
@@ -39,9 +39,24 @@ export const payrollService = {
         return response.data;
     },
 
-    // Finalize Payroll
-    finalize: async (month, year) => {
-        const response = await api.post("/payroll/finalize", { month, year });
+    // Finalize Payroll — same periodStart/periodEnd identity as generate
+    finalize: async (periodStart, periodEnd) => {
+        const response = await api.post("/payroll/finalize", { periodStart, periodEnd });
+        return response.data;
+    },
+
+    // Un-finalize Payroll — undo a mistaken Finalize. Only the most recently
+    // finalized period is allowed (server enforces this).
+    unfinalize: async (periodStart, periodEnd) => {
+        const response = await api.post("/payroll/unfinalize", { periodStart, periodEnd });
+        return response.data;
+    },
+
+    // Set Payroll Period Anchor (Masters > System Settings) — moves the rolling
+    // -period lockout cursor without touching any real payroll data. `force: true`
+    // overrides the conflict warning if the anchor predates an already-finalized period.
+    setAnchor: async (anchorDate, force = false) => {
+        const response = await api.post("/payroll/set-anchor", { anchorDate, force });
         return response.data;
     },
 

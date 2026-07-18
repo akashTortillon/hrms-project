@@ -2,38 +2,11 @@ import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
 
-const pad2 = (n) => String(n).padStart(2, "0");
-const toDateValue = (y, m, d) => `${y}-${pad2(m)}-${pad2(d)}`;
-const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
-
-export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, latestFinalized, onExportWPS }) {
-  const lockedKey = latestFinalized ? (latestFinalized.year * 100) + latestFinalized.month : null;
-  const isMonthLocked = (m) => lockedKey !== null && ((year * 100) + m) <= lockedKey;
-  // A year is fully locked only once every one of its months (up to December) is finalized-or-earlier.
-  const isYearLocked = (y) => lockedKey !== null && ((y * 100) + 12) <= lockedKey;
-
-  // From/To always mirror the selected month's full span — there's no separate
-  // "day" state to track, so picking either end just re-derives month/year from
-  // whichever date was picked (and the other end follows automatically on re-render).
-  const fromDate = toDateValue(year, month, 1);
-  const toDate = toDateValue(year, month, lastDayOf(year, month));
-
-  const applyPickedDate = (value) => {
-    if (!value) return;
-    const [y, m] = value.split("-").map(Number);
-    setYear(y);
-    setMonth(m);
-  };
-
-  // Earliest selectable date: first day of the month right after the last
-  // finalized period. Everything at or before that is locked.
-  const minSelectableDate = latestFinalized
-    ? (() => {
-        const nextMonth = latestFinalized.month === 12 ? 1 : latestFinalized.month + 1;
-        const nextYear = latestFinalized.month === 12 ? latestFinalized.year + 1 : latestFinalized.year;
-        return toDateValue(nextYear, nextMonth, 1);
-      })()
-    : undefined;
+export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS }) {
+  // Rolling pay period, force-contiguous: "From" is always locked/auto-computed by
+  // the parent (day after the last finalized period's end) — HR only picks "To".
+  // Picking "To" is what defines the period; the actual attendance-day count
+  // (29, 30, 31, whatever) just falls out of whatever range gets picked.
   const cards = [
     {
       title: "Most recent payroll",
@@ -81,35 +54,20 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
                 <input
                   type="date"
                   className="period-select period-date-input"
-                  value={fromDate}
-                  min={minSelectableDate}
-                  max={toDate}
-                  onChange={(e) => applyPickedDate(e.target.value)}
-                  title="Payroll period start date"
+                  value={periodStart}
+                  disabled
+                  title="Period start — locked to the day after the last finalized period ended"
                 />
                 <span className="period-date-range-sep">to</span>
                 <input
                   type="date"
                   className="period-select period-date-input"
-                  value={toDate}
-                  min={fromDate}
-                  max="2026-12-31"
-                  onChange={(e) => applyPickedDate(e.target.value)}
-                  title="Payroll period end date"
+                  value={periodEnd}
+                  min={periodStart}
+                  onChange={(e) => e.target.value && setPeriodEnd(e.target.value)}
+                  title="Period end — pick the date this payroll cycle should close on"
                 />
               </div>
-              <select className="period-select" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
-                  <option key={m} value={i + 1} disabled={isMonthLocked(i + 1)}>
-                    {m}{isMonthLocked(i + 1) ? " (Finalized)" : ""}
-                  </option>
-                ))}
-              </select>
-              <select className="period-select" value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {[2024, 2025, 2026].map(y => (
-                  <option key={y} value={y} disabled={isYearLocked(y)}>{y}</option>
-                ))}
-              </select>
            </div>
            <button className="export-record-btn" onClick={onExportWPS}>
               <SvgIcon name="download" size={14} />

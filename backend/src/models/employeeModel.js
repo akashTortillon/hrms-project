@@ -17,6 +17,14 @@ const salaryHistorySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });
 
+const allowanceSchema = new mongoose.Schema({
+  typeName: { type: String, required: true },
+  amount: { type: Number, required: true, default: 0 },
+  effectiveDate: { type: Date, required: true },
+  addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  createdAt: { type: Date, default: Date.now }
+}, { _id: true });
+
 const laborCardSchema = new mongoose.Schema({
   number: { type: String, required: true },
   issueDate: { type: Date, default: null },
@@ -128,6 +136,10 @@ const employeeSchema = new mongoose.Schema({
   },
   fixedProbationIncrementAmount: { type: Number, default: 0 },
   salaryHistory: { type: [salaryHistorySchema], default: [] },
+  // Ad-hoc allowances layered on top of the fixed allowance/hra/accommodation/vehicle
+  // fields above — added or increased via Appraisals > Add Allowance. typeName comes
+  // from the "Allowance Types" master list.
+  allowances: { type: [allowanceSchema], default: [] },
   transferHistory: { type: [transferHistorySchema], default: [] },
   profilePhotoPath: { type: String, default: "" },
   profilePhotoUrl: { type: String, default: "" },

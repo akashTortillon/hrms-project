@@ -39,6 +39,7 @@ const getSettingsDoc = async () => {
     } else {
         // Ensure arrays exist and are valid
         if (!settings.holidays) settings.holidays = [];
+        if (!settings.allowanceTypes) settings.allowanceTypes = [];
 
         // Fix: Check for corrupted notifications (e.g. missing required fields) which cause validation errors on save
         const isNotificationsInvalid = !settings.notifications ||
@@ -124,6 +125,52 @@ export const deleteHoliday = async (req, res) => {
         const { id } = req.params;
         const settings = await getSettingsDoc();
         settings.holidays.pull(id);
+        await settings.save();
+        res.status(200).json(settings);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// Allowance Types
+export const addAllowanceType = async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name) {
+            return res.status(400).json({ message: "Name is required" });
+        }
+
+        const settings = await getSettingsDoc();
+        settings.allowanceTypes.push({ name });
+        await settings.save();
+        res.status(200).json(settings);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const updateAllowanceType = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        const settings = await getSettingsDoc();
+
+        const allowanceType = settings.allowanceTypes.id(id);
+        if (allowanceType) {
+            allowanceType.name = name;
+            await settings.save();
+        }
+        res.status(200).json(settings);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const deleteAllowanceType = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const settings = await getSettingsDoc();
+        settings.allowanceTypes.pull(id);
         await settings.save();
         res.status(200).json(settings);
     } catch (error) {

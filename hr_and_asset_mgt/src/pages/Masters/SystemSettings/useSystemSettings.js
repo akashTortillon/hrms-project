@@ -6,12 +6,17 @@ import {
     addHoliday,
     updateHoliday,
     deleteHoliday,
+    addAllowanceType,
+    updateAllowanceType,
+    deleteAllowanceType,
     toggleNotification as toggleNotificationApi
 } from "../../../services/systemSettingsService";
+import { payrollService } from "../../../services/payrollService";
 
 export default function useSystemSettings() {
     const [loading, setLoading] = useState(false);
     const [holidays, setHolidays] = useState([]);
+    const [allowanceTypes, setAllowanceTypes] = useState([]);
 
     // Default structure to avoid undefined errors before fetch
     const [notificationSettings, setNotificationSettings] = useState([]);
@@ -38,9 +43,65 @@ export default function useSystemSettings() {
         fiscalYearStart: "January"
     });
 
+    /* --- Payroll Period Anchor --- */
+    const [currentAnchorEnd, setCurrentAnchorEnd] = useState(null); // "YYYY-MM-DD" | null
+    const [showAnchorModal, setShowAnchorModal] = useState(false);
+    const [anchorDateInput, setAnchorDateInput] = useState("");
+    const [anchorConfirmText, setAnchorConfirmText] = useState("");
+    const [anchorConflict, setAnchorConflict] = useState(null); // { message } | null
+    const [anchorSaving, setAnchorSaving] = useState(false);
+
     useEffect(() => {
         fetchData();
+        fetchCurrentAnchor();
     }, []);
+
+    const fetchCurrentAnchor = async () => {
+        try {
+            const latest = await payrollService.getLatestFinalizedPeriod();
+            setCurrentAnchorEnd(latest?.periodEndStr || null);
+        } catch (error) {
+            console.error("Failed to fetch payroll anchor", error);
+        }
+    };
+
+    const openAnchorModal = () => {
+        setAnchorDateInput("");
+        setAnchorConfirmText("");
+        setAnchorConflict(null);
+        setShowAnchorModal(true);
+    };
+
+    const closeAnchorModal = () => {
+        setShowAnchorModal(false);
+        setAnchorDateInput("");
+        setAnchorConfirmText("");
+        setAnchorConflict(null);
+    };
+
+    const handleSetAnchor = async (force = false) => {
+        if (!anchorDateInput) return toast.warning("Pick a date first");
+
+        setAnchorSaving(true);
+        try {
+            const result = await payrollService.setAnchor(anchorDateInput, force);
+            toast.success(result.message);
+            setCurrentAnchorEnd(result.anchorPeriodEnd);
+            closeAnchorModal();
+        } catch (error) {
+            const status = error.response?.status;
+            const message = error.response?.data?.message || "Failed to set payroll anchor";
+            if (status === 409) {
+                // Conflict with an already-finalized period — surface it and let the
+                // user explicitly override instead of silently retrying with force.
+                setAnchorConflict({ message });
+            } else {
+                toast.error(message);
+            }
+        } finally {
+            setAnchorSaving(false);
+        }
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -54,6 +115,7 @@ export default function useSystemSettings() {
                     fiscalYearStart: data.fiscalYearStart
                 });
                 setHolidays(data.holidays || []);
+                setAllowanceTypes(data.allowanceTypes || []);
                 setNotificationSettings(data.notifications || []);
             }
         } catch (error) {
@@ -135,6 +197,21 @@ export default function useSystemSettings() {
                 }
                 setHolidays(data.holidays);
             }
+
+            // ALLOWANCE TYPES
+            if (modalType === "Allowance Type") {
+                const payload = { name: inputValue };
+
+                let data;
+                if (editId) {
+                    data = await updateAllowanceType(editId, payload);
+                    toast.success("Allowance type updated");
+                } else {
+                    data = await addAllowanceType(payload);
+                    toast.success("Allowance type added");
+                }
+                setAllowanceTypes(data.allowanceTypes);
+            }
             setShowModal(false);
         } catch (error) {
             console.error(error);
@@ -149,6 +226,7 @@ export default function useSystemSettings() {
     const handleDelete = (type, id) => {
         let item = null;
         if (type === "Holiday") item = holidays.find(h => h._id === id);
+        if (type === "Allowance Type") item = allowanceTypes.find(a => a._id === id);
 
         setDeleteConfig({
             show: true,
@@ -168,6 +246,10 @@ export default function useSystemSettings() {
                 const data = await deleteHoliday(id);
                 setHolidays(data.holidays);
             }
+            if (type === "Allowance Type") {
+                const data = await deleteAllowanceType(id);
+                setAllowanceTypes(data.allowanceTypes);
+            }
             toast.success("Deleted successfully");
             setDeleteConfig({ ...deleteConfig, show: false });
         } catch (error) {
@@ -186,10 +268,24 @@ export default function useSystemSettings() {
     return {
         loading,
         holidays,
+        allowanceTypes,
         notificationSettings,
         settings,
         handleSettingsChange,
         toggleNotification,
+
+        // Payroll Period Anchor
+        currentAnchorEnd,
+        showAnchorModal,
+        openAnchorModal,
+        closeAnchorModal,
+        anchorDateInput,
+        setAnchorDateInput,
+        anchorConfirmText,
+        setAnchorConfirmText,
+        anchorConflict,
+        anchorSaving,
+        handleSetAnchor,
 
         // Modal State & Handlers
         showModal,

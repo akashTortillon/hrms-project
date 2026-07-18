@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext.jsx";
 import { getEmployees } from "../../services/employeeService";
 import { appraisalService } from "../../services/appraisalService";
+import { getSettings } from "../../services/systemSettingsService";
 import "../../style/Appraisals.css";
 
 const formatCurrency = (value) => {
@@ -28,18 +29,6 @@ const getEmployeeLabel = (employee) => {
     : employee.name;
 };
 
-const createCycleName = () => {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const min = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-
-  return `Increment Adjustment ${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
-};
-
 export default function AppraisalsView() {
   const { hasPermission } = useRole();
   const canManageAppraisals = hasPermission("MANAGE_APPRAISALS");
@@ -49,6 +38,9 @@ export default function AppraisalsView() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [incrementAmount, setIncrementAmount] = useState("");
+  const [adjustmentMode, setAdjustmentMode] = useState("SALARY"); // "SALARY" | "ALLOWANCE"
+  const [allowanceTypes, setAllowanceTypes] = useState([]);
+  const [selectedAllowanceType, setSelectedAllowanceType] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -59,13 +51,15 @@ export default function AppraisalsView() {
   const loadData = async (preferredEmployeeId = "") => {
     try {
       setLoading(true);
-      const [employeeData, appraisalData] = await Promise.all([
+      const [employeeData, appraisalData, settingsData] = await Promise.all([
         getEmployees(),
-        appraisalService.getAll()
+        appraisalService.getAll(),
+        getSettings()
       ]);
 
       setEmployees(employeeData);
       setAppraisals(appraisalData);
+      setAllowanceTypes(settingsData?.allowanceTypes || []);
 
       const employeeExists = employeeData.some((employee) => employee._id === preferredEmployeeId);
       if (employeeExists) {
@@ -91,7 +85,11 @@ export default function AppraisalsView() {
   }, []);
 
   const selectedEmployee = employees.find((employee) => employee._id === selectedEmployeeId) || null;
-  const currentBaseSalary = getBaseSalary(selectedEmployee);
+  const isAllowanceMode = adjustmentMode === "ALLOWANCE";
+  const currentAllowanceAmount = selectedEmployee
+    ? Number((selectedEmployee.allowances || []).find((item) => item.typeName === selectedAllowanceType)?.amount || 0)
+    : 0;
+  const currentBaseSalary = isAllowanceMode ? currentAllowanceAmount : getBaseSalary(selectedEmployee);
   const parsedIncrement = Number(String(incrementAmount || 0).replace(/[^0-9.-]+/g, ""));
   const nextSalary = currentBaseSalary + (Number.isFinite(parsedIncrement) ? parsedIncrement : 0);
 
@@ -130,8 +128,13 @@ export default function AppraisalsView() {
       return;
     }
 
+    if (isAllowanceMode && !selectedAllowanceType) {
+      toast.error("Please select an allowance type");
+      return;
+    }
+
     if (!Number.isFinite(parsedIncrement) || parsedIncrement <= 0) {
-      toast.error("Please enter a valid increment amount");
+      toast.error("Please enter a valid amount");
       return;
     }
 
@@ -139,32 +142,19 @@ export default function AppraisalsView() {
       setSubmitting(true);
 
       const today = new Date().toISOString().slice(0, 10);
-      const cycle = await appraisalService.createCycle({
-        name: createCycleName(),
-        startDate: today,
-        endDate: today,
-        status: "ACTIVE"
-      });
-
-      const appraisal = await appraisalService.create({
+      await appraisalService.applyAdjustment({
         employee: selectedEmployeeId,
-        cycle: cycle._id,
-        recommendedIncrement: parsedIncrement,
-        effectiveDate: today,
-        comments: "Manual appraisal adjustment"
-      });
-
-      await appraisalService.approve(appraisal._id, {
-        approvedIncrement: parsedIncrement,
-        effectiveDate: today,
-        notes: "Applied from Salary Increment & Appraisal screen"
+        type: isAllowanceMode ? "ALLOWANCE" : "SALARY",
+        allowanceTypeName: isAllowanceMode ? selectedAllowanceType : "",
+        amount: parsedIncrement,
+        effectiveDate: today
       });
 
       setIncrementAmount("");
       await loadData(selectedEmployeeId);
-      toast.success("Increment applied successfully");
+      toast.success(isAllowanceMode ? "Allowance applied successfully" : "Increment applied successfully");
     } catch (error) {
-      const message = error?.response?.data?.message || "Failed to apply increment";
+      const message = error?.response?.data?.message || "Failed to apply adjustment";
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -187,10 +177,27 @@ export default function AppraisalsView() {
       <div className="appraisal-prototype-grid">
         <section className="appraisal-panel appraisal-apply-panel">
           <div className="appraisal-panel-header">
-            <span>Apply Increment</span>
+            <span>{isAllowanceMode ? "Add / Increase Allowance" : "Apply Increment"}</span>
           </div>
 
           <div className="appraisal-panel-body">
+            <div className="appraisal-mode-toggle">
+              <button
+                type="button"
+                className={!isAllowanceMode ? "active" : ""}
+                onClick={() => { setAdjustmentMode("SALARY"); setIncrementAmount(""); }}
+              >
+                Salary Increment
+              </button>
+              <button
+                type="button"
+                className={isAllowanceMode ? "active" : ""}
+                onClick={() => { setAdjustmentMode("ALLOWANCE"); setIncrementAmount(""); }}
+              >
+                Allowance
+              </button>
+            </div>
+
             <label className="appraisal-field">
               <span>Search Employee</span>
               <div className="appraisal-search-box">
@@ -234,13 +241,33 @@ export default function AppraisalsView() {
               </datalist>
             </label>
 
+            {isAllowanceMode && (
+              <label className="appraisal-field">
+                <span>Allowance Type</span>
+                <select
+                  value={selectedAllowanceType}
+                  onChange={(event) => setSelectedAllowanceType(event.target.value)}
+                  disabled={!canManageAppraisals || submitting}
+                >
+                  <option value="">Select allowance type</option>
+                  {allowanceTypes.map((allowanceType) => (
+                    <option key={allowanceType._id} value={allowanceType.name}>
+                      {allowanceType.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <div className="appraisal-salary-box">
-              <span className="appraisal-salary-label">Current Base Salary</span>
+              <span className="appraisal-salary-label">
+                {isAllowanceMode ? "Current Allowance Amount" : "Current Base Salary"}
+              </span>
               <strong>{selectedEmployee ? formatCurrency(currentBaseSalary) : "--"}</strong>
             </div>
 
             <label className="appraisal-field">
-              <span>Increment Amount</span>
+              <span>{isAllowanceMode ? "Increase Amount" : "Increment Amount"}</span>
               <div className="appraisal-currency-input">
                 <span>AED</span>
                 <input
@@ -256,7 +283,7 @@ export default function AppraisalsView() {
             </label>
 
             <div className="appraisal-next-salary">
-              <span>New Salary</span>
+              <span>{isAllowanceMode ? "New Allowance Amount" : "New Salary"}</span>
               <strong>{selectedEmployee ? formatCurrency(nextSalary) : "--"}</strong>
             </div>
 
