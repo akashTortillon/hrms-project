@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const employeeDocumentSchema = new mongoose.Schema({
     employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", required: true },
     documentType: { type: String, required: true }, // e.g., "Passport", "Emirates ID"
+    label: { type: String, default: "" }, // Optional distinct name to tell same-type re-uploads apart
     documentNumber: { type: String }, // Optional reference number
     expiryDate: { type: Date },
     filePath: { type: String, required: true }, // Path to stored file

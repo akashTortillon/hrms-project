@@ -17,6 +17,14 @@ const salaryHistorySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });
 
+const allowanceSchema = new mongoose.Schema({
+  typeName: { type: String, required: true },
+  amount: { type: Number, required: true, default: 0 },
+  effectiveDate: { type: Date, required: true },
+  addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  createdAt: { type: Date, default: Date.now }
+}, { _id: true });
+
 const laborCardSchema = new mongoose.Schema({
   number: { type: String, required: true },
   issueDate: { type: Date, default: null },
@@ -33,12 +41,21 @@ const transferHistorySchema = new mongoose.Schema({
   effectiveDate: { type: Date, required: true },
   reason: { type: String, default: "" },
   transferredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // Whether the company/branch change has actually been applied to the employee.
+  // Immediate transfers (effectiveDate <= today) are applied on creation. Future-dated
+  // transfers stay pending (applied:false) until their effectiveDate arrives, at which
+  // point applyDuePendingTransfers() promotes them. Existing history predates this field
+  // and was always applied instantly, so the default is true.
+  applied: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });
 
 const employeeSchema = new mongoose.Schema({
   name: { type: String, required: true },
   code: { type: String, required: true, unique: true },
+  // Always auto-generated (EMP001, EMP002...), immutable, kept as an internal reference
+  // even after `code` is edited by a user.
+  systemCode: { type: String, unique: true, sparse: true },
   role: { type: String, required: true },
   department: { type: String, required: true },
   branch: { type: String },
@@ -88,14 +105,19 @@ const employeeSchema = new mongoose.Schema({
   iban: { type: String },
   bankAccount: { type: String },
   agentId: { type: String },
+  // Stores the manager/finance-manager's Employee._id (matches what the Add/Edit Employee
+  // dropdowns display and submit). Approval routing (requestController.js) already resolves
+  // this to the linked User account via User.findOne({ employeeId: ... }), so this stays in
+  // "Employee space" end-to-end instead of being silently converted to a User._id, which used
+  // to break dropdown pre-selection on Edit (stored value could never match the option list).
   designatedManager: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "Employee",
     default: null
   },
   designatedFinanceManager: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "Employee",
     default: null
   },
   probationStartDate: { type: Date, default: null },
@@ -114,7 +136,21 @@ const employeeSchema = new mongoose.Schema({
   },
   fixedProbationIncrementAmount: { type: Number, default: 0 },
   salaryHistory: { type: [salaryHistorySchema], default: [] },
-  transferHistory: { type: [transferHistorySchema], default: [] }
+  // Ad-hoc allowances layered on top of the fixed allowance/hra/accommodation/vehicle
+  // fields above — added or increased via Appraisals > Add Allowance. typeName comes
+  // from the "Allowance Types" master list.
+  allowances: { type: [allowanceSchema], default: [] },
+  transferHistory: { type: [transferHistorySchema], default: [] },
+  profilePhotoPath: { type: String, default: "" },
+  profilePhotoUrl: { type: String, default: "" },
+  profilePhotoStorage: {
+    type: String,
+    enum: ["LOCAL", "S3"],
+    default: "LOCAL"
+  },
+  profilePhotoUploadedAt: { type: Date, default: null },
+  // Biometric Badge Number (from BioCloud device - e.g. R106, P104, D101)
+  badgeNumber: { type: String, default: null, sparse: true, index: true }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);

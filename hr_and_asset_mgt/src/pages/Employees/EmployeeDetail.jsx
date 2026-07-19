@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import "../../style/EmployeeDetail.css";
 
@@ -37,7 +37,8 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
 import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
@@ -47,6 +48,8 @@ import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
 import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
+import AddAllowanceModal from "./AddAllowanceModal.jsx";
+import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
@@ -57,7 +60,17 @@ import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
 import WorkflowTab from "../../components/employee/WorkflowTab";
 import WarningsTab from "../../components/employee/WarningsTab.jsx";
+import LeaveWalletTab from "../../components/employee/LeaveWalletTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
+
+const resolveUploadedAssetUrl = (url) => {
+    if (!url) return "";
+    if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+
+    const apiBase = import.meta.env.VITE_API_BASE || "";
+    const serverBase = apiBase.replace(/\/api\/?$/, "").replace(/\/$/, "");
+    return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 export default function EmployeeDetail() {
     const { id } = useParams();
@@ -89,11 +102,17 @@ export default function EmployeeDetail() {
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [showConfirmProbationModal, setShowConfirmProbationModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Change Password Modal State
+    const [showAddAllowanceModal, setShowAddAllowanceModal] = useState(false);
+    const [allowanceSubmitting, setAllowanceSubmitting] = useState(false);
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
+    const [photoUploading, setPhotoUploading] = useState(false);
+    const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
+    const photoInputRef = useRef(null);
 
     // Document State
     const [documents, setDocuments] = useState([]);
+    const [workflowDocs, setWorkflowDocs] = useState([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
 
     // Attendance & Training State
@@ -127,6 +146,7 @@ export default function EmployeeDetail() {
     });
     const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
     const [leaveSummaryYear, setLeaveSummaryYear] = useState(new Date().getFullYear());
+    const [leaveSummaryMonth, setLeaveSummaryMonth] = useState(0); // 0 = whole year
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
@@ -155,6 +175,36 @@ export default function EmployeeDetail() {
         fetchEmployee();
         loadDepartments();
     }, [effectiveId]);
+
+    const handleAddAllowance = async ({ typeName, amount }) => {
+        setAllowanceSubmitting(true);
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            await appraisalService.applyAdjustment({
+                employee: effectiveId,
+                type: "ALLOWANCE",
+                allowanceTypeName: typeName,
+                amount,
+                effectiveDate: today
+            });
+            await fetchEmployee();
+            setShowAddAllowanceModal(false);
+            toast.success("Allowance applied successfully");
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to apply allowance");
+        } finally {
+            setAllowanceSubmitting(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!showPhotoLightbox) return;
+        const handleEscape = (e) => {
+            if (e.key === "Escape") setShowPhotoLightbox(false);
+        };
+        window.addEventListener("keydown", handleEscape);
+        return () => window.removeEventListener("keydown", handleEscape);
+    }, [showPhotoLightbox]);
 
     const loadDepartments = async () => {
         try {
@@ -204,6 +254,28 @@ export default function EmployeeDetail() {
         } catch (e) {
             console.error(e);
         }
+        fetchWorkflowDocuments();
+    };
+
+    // Onboarding/offboarding checklist uploads live in the Workflow collection, not
+    // EmployeeDocument. Surface them (read-only) so they're visible alongside regular docs.
+    // Requires workflow permission; silently skipped for users without it.
+    const fetchWorkflowDocuments = async () => {
+        if (!effectiveId) return;
+        const collected = [];
+        for (const type of ["Onboarding", "Offboarding"]) {
+            try {
+                const wf = await getEmployeeWorkflow(effectiveId, type);
+                (wf?.items || []).forEach((item) => {
+                    if (item.documentUrl) {
+                        collected.push({ _id: item._id, name: item.name, type, documentUrl: item.documentUrl });
+                    }
+                });
+            } catch {
+                // no workflow / no permission — ignore
+            }
+        }
+        setWorkflowDocs(collected);
     };
 
     const handleUploadDocument = async (formData) => {
@@ -269,11 +341,12 @@ export default function EmployeeDetail() {
     };
 
     // Fetch leave summary when tab becomes active
-    const fetchLeaveSummary = async (year = leaveSummaryYear) => {
+    const fetchLeaveSummary = async (year = leaveSummaryYear, month = leaveSummaryMonth) => {
         if (!effectiveId) return;
         setLeaveSummaryLoading(true);
         try {
             const params = { year };
+            if (month) params.month = month;
             if (!isSelf) params.employeeId = effectiveId;
             const res = await getLeaveSummary(params);
             setLeaveSummary(res.data || []);
@@ -294,9 +367,9 @@ export default function EmployeeDetail() {
 
     useEffect(() => {
         if (activeTab === "Leave Summary") {
-            fetchLeaveSummary(leaveSummaryYear);
+            fetchLeaveSummary(leaveSummaryYear, leaveSummaryMonth);
         }
-    }, [activeTab, leaveSummaryYear]);
+    }, [activeTab, leaveSummaryYear, leaveSummaryMonth]);
 
     const handleAssignAsset = async (data) => {
         try {
@@ -319,6 +392,32 @@ export default function EmployeeDetail() {
         } catch (error) {
             console.error("Transfer failed", error);
             toast.error(error.response?.data?.message || "Failed to transfer employee");
+        }
+    };
+
+    const handlePhotoUpload = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file || !effectiveId) return;
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Please select an image file");
+            event.target.value = "";
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("photo", file);
+
+        try {
+            setPhotoUploading(true);
+            const updatedEmployee = await uploadEmployeePhoto(effectiveId, formData);
+            setEmployee(updatedEmployee);
+            toast.success("Employee photo updated");
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to upload employee photo");
+        } finally {
+            setPhotoUploading(false);
+            event.target.value = "";
         }
     };
 
@@ -374,6 +473,18 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handleDeleteEmployeeDocument = async (document) => {
+        if (!window.confirm(`Delete "${document.documentType}"? This cannot be undone.`)) return;
+        try {
+            await deleteEmployeeDocument(document._id);
+            toast.success("Document deleted");
+            fetchDocuments();
+        } catch (error) {
+            console.error("Document delete failed", error);
+            toast.error(error.response?.data?.message || "Failed to delete document");
+        }
+    };
+
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
@@ -382,9 +493,9 @@ export default function EmployeeDetail() {
 
     const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary"];
-    // Salary tab — visible only to Finance/HR/Admin roles
-    const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS");
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary", "Leave Wallet"];
+    // Salary tab — Finance/HR/Admin, OR the employee viewing their OWN profile (read-only).
+    const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS") || isSelf;
     if (canViewSalary) {
         tabs.push("Salary");
     }
@@ -414,9 +525,82 @@ export default function EmployeeDetail() {
             {/* Profile Card */}
             <div className="employee-profile-card">
                 <div className="profile-main-info">
-                    <div className="profile-avatar-large">
-                        {employee.name ? employee.name.charAt(0) : "U"}
+                    <div
+                        className={`profile-avatar-large ${(canEdit || isSelf) ? "profile-avatar-uploadable" : ""}`}
+                        style={{ position: "relative", cursor: employee.profilePhotoUrl ? "zoom-in" : undefined }}
+                        onClick={() => {
+                            if (employee.profilePhotoUrl) setShowPhotoLightbox(true);
+                            else if (canEdit || isSelf) photoInputRef.current?.click();
+                        }}
+                        title={employee.profilePhotoUrl ? "Click to enlarge" : ((canEdit || isSelf) ? "Upload photo" : employee.name)}
+                    >
+                        {employee.profilePhotoUrl ? (
+                            <img src={resolveUploadedAssetUrl(employee.profilePhotoUrl)} alt={employee.name} />
+                        ) : (
+                            employee.name ? employee.name.charAt(0) : "U"
+                        )}
+                        {(canEdit || isSelf) && (
+                            <button
+                                type="button"
+                                className="profile-avatar-camera-btn"
+                                title="Upload photo"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    photoInputRef.current?.click();
+                                }}
+                                style={{
+                                    position: "absolute", bottom: "4px", right: "4px",
+                                    width: "28px", height: "28px", borderRadius: "50%",
+                                    background: "#1f2937", border: "2px solid white",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", padding: 0
+                                }}
+                            >
+                                <SvgIcon name="edit" size={14} className="svg-icon-white" />
+                            </button>
+                        )}
+                        {(canEdit || isSelf) && photoUploading && (
+                            <span className="profile-avatar-upload-hint">Uploading...</span>
+                        )}
                     </div>
+                    {(canEdit || isSelf) && (
+                        <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePhotoUpload}
+                            style={{ display: "none" }}
+                        />
+                    )}
+                    {showPhotoLightbox && employee.profilePhotoUrl && (
+                        <div
+                            className="photo-lightbox-overlay"
+                            onClick={() => setShowPhotoLightbox(false)}
+                            style={{
+                                position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                zIndex: 2000, cursor: "zoom-out"
+                            }}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setShowPhotoLightbox(false)}
+                                style={{
+                                    position: "absolute", top: "20px", right: "24px",
+                                    background: "none", border: "none", cursor: "pointer",
+                                    color: "white", fontSize: "28px", lineHeight: 1
+                                }}
+                            >
+                                ✕
+                            </button>
+                            <img
+                                src={resolveUploadedAssetUrl(employee.profilePhotoUrl)}
+                                alt={employee.name}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "8px", cursor: "default" }}
+                            />
+                        </div>
+                    )}
                     <div className="profile-details">
                         <h2>
                             {employee.name}
@@ -424,6 +608,11 @@ export default function EmployeeDetail() {
                         </h2>
                         <div className="profile-role-id">
                             {employee.role} • {employee.code}
+                            {employee.systemCode && (
+                                <span title="Internal system reference number" style={{ marginLeft: '8px', color: '#9ca3af', fontSize: '12px' }}>
+                                    (Ref: {employee.systemCode})
+                                </span>
+                            )}
                         </div>
                         <div className="profile-contact">
                             <div className="contact-item">
@@ -776,7 +965,7 @@ export default function EmployeeDetail() {
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                                 }}>
                                     <div>
-                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}</div>
+                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}{doc.label ? ` — ${doc.label}` : ''}</div>
                                         <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
                                             {doc.documentNumber || 'No Ref'} • Expires: {doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : 'N/A'}
                                         </div>
@@ -796,7 +985,15 @@ export default function EmployeeDetail() {
                                         >
                                             View
                                         </button>
-                                        {/* Optional Delete Button */}
+                                        {canManageDocs && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteEmployeeDocument(doc)}
+                                                style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -806,6 +1003,33 @@ export default function EmployeeDetail() {
                                 </div>
                             )}
                         </div>
+
+                        {workflowDocs.length > 0 && (
+                            <div style={{ marginTop: '30px' }}>
+                                <h3 style={{ margin: '0 0 15px', fontSize: '16px', color: '#1f2937' }}>Onboarding / Offboarding Documents</h3>
+                                <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    {workflowDocs.map(doc => (
+                                        <div key={doc._id} style={{
+                                            background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px',
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontWeight: '600', color: '#111827' }}>{doc.name}</div>
+                                                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>{doc.type}</div>
+                                            </div>
+                                            <a
+                                                href={resolveUploadedAssetUrl(doc.documentUrl)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none' }}
+                                            >
+                                                View
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
 
@@ -951,12 +1175,20 @@ export default function EmployeeDetail() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Salary & Compensation</h3>
                             {canEdit && (
-                                <button
-                                    onClick={() => { setEditMode("employment"); setShowEditModal(true); }}
-                                    style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                >
-                                    <EditIcon /> Edit
-                                </button>
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => setShowAddAllowanceModal(true)}
+                                        style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        + Add Allowance
+                                    </button>
+                                    <button
+                                        onClick={() => { setEditMode("employment"); setShowEditModal(true); }}
+                                        style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        <EditIcon /> Edit
+                                    </button>
+                                </div>
                             )}
                         </div>
 
@@ -977,6 +1209,15 @@ export default function EmployeeDetail() {
                                         <span style={{ fontSize: '13px', color: '#6b7280' }}>{label}</span>
                                         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
                                             {value ? `${Number(value).toLocaleString()} AED` : fallback}
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {(employee.allowances || []).map((item) => (
+                                    <div key={item._id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{item.typeName}</span>
+                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                            {Number(item.amount).toLocaleString()} AED
                                         </span>
                                     </div>
                                 ))}
@@ -1065,6 +1306,54 @@ export default function EmployeeDetail() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Salary history / increments — shows probation increments, appraisals, etc. with effective dates */}
+                        <div style={{ marginTop: '28px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+                                Salary History & Increments
+                            </div>
+                            {(employee.salaryHistory && employee.salaryHistory.length > 0) ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {[...employee.salaryHistory]
+                                        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                                        .map((entry, index) => {
+                                            const typeLabels = {
+                                                JOINING: 'Joining Salary',
+                                                APPRAISAL: 'Appraisal',
+                                                PROBATION_INCREMENT: 'Probation Increment',
+                                                MANUAL_ADJUSTMENT: 'Manual Adjustment'
+                                            };
+                                            return (
+                                                <div key={`${entry.effectiveDate}-${index}`} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>
+                                                            {typeLabels[entry.salaryType] || entry.salaryType || 'Adjustment'}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                                                            Effective: {entry.effectiveDate ? new Date(entry.effectiveDate).toISOString().split('T')[0] : 'N/A'}
+                                                            {entry.notes ? ` • ${entry.notes}` : ''}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        {Number(entry.incrementAmount) > 0 && (
+                                                            <div style={{ fontSize: '13px', fontWeight: '700', color: '#15803d' }}>
+                                                                +{Number(entry.incrementAmount).toLocaleString()} AED
+                                                            </div>
+                                                        )}
+                                                        <div style={{ fontSize: '13px', color: '#374151' }}>
+                                                            Basic: {Number(entry.basicSalary || 0).toLocaleString()} AED
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            ) : (
+                                <div style={{ padding: '18px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '10px', fontSize: '13px' }}>
+                                    No salary history recorded yet.
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
@@ -1212,32 +1501,25 @@ export default function EmployeeDetail() {
                         {/* Year filter */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937', fontWeight: '700' }}>📅 Leave Summary</h3>
-                            <select
-                                value={leaveSummaryYear}
-                                onChange={async (e) => {
-                                    const yr = Number(e.target.value);
-                                    setLeaveSummaryYear(yr);
-                                    setLeaveSummaryLoading(true);
-                                    try {
-                                        const params = { year: yr };
-                                        if (!isSelf && effectiveId) params.employeeId = effectiveId;
-                                        const res = await getLeaveSummary(params);
-                                        setLeaveSummary(res.data || []);
-                                        setLeaveSummaryTotals(res.totals || {
-                                            sick: 0,
-                                            casual: 0,
-                                            annual: 0,
-                                            unpaid: 0,
-                                            approvedDays: 0,
-                                            pendingRequests: 0
-                                        });
-                                    } catch (err) { console.error(err); }
-                                    finally { setLeaveSummaryLoading(false); }
-                                }}
-                                style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', background: 'white', cursor: 'pointer' }}
-                            >
-                                {[2026, 2025, 2024, 2023].map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <select
+                                    value={leaveSummaryMonth}
+                                    onChange={(e) => setLeaveSummaryMonth(Number(e.target.value))}
+                                    style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', background: 'white', cursor: 'pointer' }}
+                                >
+                                    <option value={0}>Whole Year</option>
+                                    {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
+                                        <option key={m} value={i + 1}>{m}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={leaveSummaryYear}
+                                    onChange={(e) => setLeaveSummaryYear(Number(e.target.value))}
+                                    style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', background: 'white', cursor: 'pointer' }}
+                                >
+                                    {[2026, 2025, 2024, 2023].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '18px' }}>
@@ -1282,7 +1564,11 @@ export default function EmployeeDetail() {
                     </div>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && (
+                {activeTab === "Leave Wallet" && (
+                    <LeaveWalletTab employeeId={effectiveId} />
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && activeTab !== "Leave Wallet" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
@@ -1323,6 +1609,15 @@ export default function EmployeeDetail() {
                     onClose={() => setShowConfirmProbationModal(false)}
                     onConfirm={handleConfirmProbation}
                     submitting={confirmingProbation}
+                />
+            )}
+
+            {showAddAllowanceModal && (
+                <AddAllowanceModal
+                    employee={employee}
+                    onClose={() => setShowAddAllowanceModal(false)}
+                    onConfirm={handleAddAllowance}
+                    submitting={allowanceSubmitting}
                 />
             )}
 

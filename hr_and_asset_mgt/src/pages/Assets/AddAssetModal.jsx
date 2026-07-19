@@ -21,9 +21,9 @@ export default function AddAssetModal({
   const [employees, setEmployees] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
   const [categories, setCategories] = useState([]);
-
   const [form, setForm] = useState({
     name: "",
+    assetClass: "Physical",
     serialNumber: "",
     type: "",
     category: "",
@@ -73,6 +73,7 @@ export default function AddAssetModal({
 
     setForm({
       name: asset.name || "",
+      assetClass: asset.assetClass || "Physical",
       serialNumber: asset.serialNumber || "",
       type: asset.type?._id || asset.type || "",
       category: asset.category?._id || asset.category || "",
@@ -104,7 +105,7 @@ export default function AddAssetModal({
   };
 
   const handleSubmit = () => {
-    const { name, type, category, location, purchaseCost, purchaseDate } = form;
+    const { name, assetClass, type, category, location, purchaseCost, purchaseDate } = form;
 
     if (!name || !type || !category || !location || !purchaseCost || !purchaseDate) {
       alert("Please fill all required fields");
@@ -123,6 +124,7 @@ export default function AddAssetModal({
 
     const submitData = {
       name: form.name,
+      assetClass: form.assetClass,
       serialNumber: form.serialNumber || null,
       type: form.type,           // Master ID
       category: form.category,   // Master ID
@@ -159,6 +161,27 @@ export default function AddAssetModal({
 
             <input name="name" placeholder="Asset Name *" value={form.name} onChange={handleChange} />
             <input name="serialNumber" placeholder="Serial Number" value={form.serialNumber} onChange={handleChange} />
+
+            {/* Asset Class */}
+            <div style={{ gridColumn: 'span 1' }}>
+              <select
+                name="assetClass"
+                value={form.assetClass}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              >
+                <option value="Physical">Physical Asset</option>
+                <option value="Virtual">Virtual Asset (Email, Software, etc.)</option>
+              </select>
+            </div>
 
             {/* Asset Type (MASTER) */}
             {/* Asset Type (MASTER) */}

@@ -175,6 +175,28 @@
   margin-right: 12px;
 }
 
+.period-date-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-date-range-sep {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.period-date-input {
+  padding: 8px 12px;
+}
+
+.period-date-input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
 .period-select {
   padding: 8px 16px;
   border-radius: 10px;

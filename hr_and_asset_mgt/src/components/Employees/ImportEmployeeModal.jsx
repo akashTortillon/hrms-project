@@ -50,30 +50,43 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
     const handleDownloadTemplate = () => {
         const templateData = [
             {
-                "Full Name": "Reny",
-                "Email": "reny@tortilon.com",
-                "Phone": "+971501111111",
-                "Personal ID (14 Digit)": "12345678901234",
-                "Nationality": "Indian",
-                "UAE Address": "Dubai Silicon Oasis, UAE",
+                "Employee Code": "EMP-SAMPLE-01",
+                "Full Name": "Ahmed Al Mansoori",
+                "COMPANY / BRANCH": "RIZAN",
+                "WORK LOCATION": "MAIN",
+                "VISA LOCATION": "MAIN",
+                "work permit": "",
                 "Role": "Employee",
-                "Department": "IT",
-                "Branch": "HQ Dubai",
-                "Joining Date": "2024-01-10",
-                "Employee Type": "Full-Time",
-                "Designation": "Software Engineer",
-                "Shift": "Day Shift",
+                "Department": "Sales & Operations",
+                "Designation": "Sales Executive",
+                "Email": "ahmed.almansoori@company.com",
+                "Contact Number": "971501234567",
                 "Status": "Active",
-                "Labor Card No": "LB987654",
-                "Agent ID (WPS)": "AGT123",
-                "Basic Salary": 8000,
-                "Accommodation": "Provided",
-                "Passport Expiry": "2030-05-15",
-                "Emirates ID Expiry": "2026-05-15",
-                "Visa Expiry": "2026-05-15",
+                "Shift": "Morning",
+                "Joining Date": "2024-03-01",
+                "Employee Type": "Full-Time",
+                "Agent ID (WPS)": "",
+                "Basic Salary (AED)": 5000,
+                "Allowance (AED)": 1500,
+                "HRA (AED)": 500,
+                "Total Salary (AED)": 7000,
+                "ACCOMODATION ALLOWANCE": 0,
+                "VEHICHLE ALLOWANCE": 0,
+                "MONTHLY CTC": 7000,
+                "Date of Birth": "1992-06-15",
+                "Personal ID (14 Digit)": "78419921234567",
+                "Nationality": "UAE",
+                "Accommodation": "Self",
+                "UAE Address": "Al Nahda, Dubai, UAE",
+                "Passport No": "A1234567",
+                "Passport Expiry": "2029-06-15",
+                "Emirates ID No": "784-1992-1234567-1",
+                "Emirates ID Expiry": "2027-06-15",
+                "Visa No": "201/2024/1234567",
+                "Visa File No": "202/2024/1234",
                 "Bank Name": "Emirates NBD",
-                "IBAN": "AE12000012341234123412",
-                "Account Number": "1234567890"
+                "IBAN": "AE070260001015779902601",
+                "Account Number": "1012345678"
             }
         ];
         const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -133,6 +146,13 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                             <div>
                                 <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', color: '#1f2937' }}>Step 1: Get the Template</h4>
                                 <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Download formatted Excel file</p>
+                                <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                                    Employee Code is optional — leave blank to auto-generate one.
+                                    COMPANY / BRANCH (e.g. "RIZAN HEAD OFFICE") is split by matching a known Company name.
+                                    Department/Designation/Role/Employee Type must match Masters exactly.
+                                    WORK LOCATION and VISA LOCATION can be the Company's Code ID (Masters → Companies)
+                                    or the name of a Branch nested under that Company (e.g. "MAIN").
+                                </p>
                             </div>
                             <button
                                 className="btn-secondary btn-sm"
@@ -218,6 +238,17 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                                     </div>
                                 </div>
                             </div>
+
+                            {result.summary?.length > 0 && (
+                                <div className="error-list" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                                    <h5 style={{ margin: '0 0 8px 0' }}>Fix these master data gaps, then re-upload</h5>
+                                    <ul>
+                                        {result.summary.map((msg, idx) => (
+                                            <li key={idx}>{msg}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
 
                             {result.failureCount > 0 && (
                                 <div className="error-list">

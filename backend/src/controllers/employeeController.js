@@ -5,6 +5,8 @@ import { createNotification } from "./notificationController.js";
 import User from "../models/userModel.js";
 import bcrypt from "bcryptjs";
 import { sendEmail } from "../utils/sendEmail.js";
+import { logActivity } from "../utils/activityLogger.js";
+import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === "") return 0;
@@ -67,39 +69,51 @@ const getProbationStatus = (payload = {}) => {
   return probationEnd <= today ? "PENDING_CONFIRMATION" : "ACTIVE";
 };
 
-const resolveManagerUserId = async (designatedManager) => {
+// designatedManager/designatedFinanceManager are stored as the manager's Employee._id (what
+// the Add/Edit Employee dropdowns actually send and display) - not a User._id. This just
+// validates the referenced Employee exists; approval routing (requestController.js) resolves
+// the linked User account separately via User.findOne({ employeeId }).
+const resolveManagerEmployeeId = async (designatedManager) => {
   if (!designatedManager) return null;
-
-  const directUser = await User.findById(designatedManager).select("_id");
-  if (directUser) {
-    return directUser._id;
-  }
-
-  const linkedUser = await User.findOne({ employeeId: designatedManager }).select("_id");
-  return linkedUser?._id || null;
+  const exists = await Employee.exists({ _id: designatedManager });
+  return exists ? designatedManager : null;
 };
 
-const resolveFinanceManagerUserId = async (designatedFinanceManager) => {
+const resolveFinanceManagerEmployeeId = async (designatedFinanceManager) => {
   if (!designatedFinanceManager) return null;
+  const exists = await Employee.exists({ _id: designatedFinanceManager });
+  return exists ? designatedFinanceManager : null;
+};
 
-  const directUser = await User.findById(designatedFinanceManager).select("_id");
-  if (directUser) {
-    return directUser._id;
-  }
-
-  const linkedUser = await User.findOne({ employeeId: designatedFinanceManager }).select("_id");
-  return linkedUser?._id || null;
+const attachSignedProfilePhotoUrl = async (employee) => {
+  const item = employee.toObject ? employee.toObject() : { ...employee };
+  item.profilePhotoUrl = await getSignedFileUrl({
+    filePath: item.profilePhotoPath,
+    fileUrl: item.profilePhotoUrl,
+    storage: item.profilePhotoStorage
+  });
+  return item;
 };
 
 export const exportEmployees = async (req, res) => {
   try {
-    const { department, status, search, branch } = req.query;
+    const { department, status, search, branch, company, designation } = req.query;
 
     let matchStage = {};
 
     // Filter by Branch
     if (branch && branch !== "All Branches") {
       matchStage.branch = branch;
+    }
+
+    // Filter by Company
+    if (company && company !== "All Companies") {
+      matchStage.company = company;
+    }
+
+    // Filter by Designation
+    if (designation && designation !== "All Designations") {
+      matchStage.designation = designation;
     }
 
     // Filter by Department
@@ -188,6 +202,7 @@ export const addEmployee = async (req, res) => {
   try {
     const {
       name,
+      code,
       role,
       department,
       branch,
@@ -230,9 +245,13 @@ export const addEmployee = async (req, res) => {
 
     // 1. Strict Validation
     if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
+    if (!code || !code.trim()) return res.status(400).json({ message: "Employee Code is required" });
     if (!role) return res.status(400).json({ message: "Role is required" });
     if (!department) return res.status(400).json({ message: "Department is required" });
     if (!joinDate) return res.status(400).json({ message: "Joining Date is required" });
+
+    const existingCode = await Employee.findOne({ code: code.trim() });
+    if (existingCode) return res.status(409).json({ message: `Employee Code '${code.trim()}' is already in use` });
 
     // Email Validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -240,16 +259,17 @@ export const addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Valid Email is required" });
     }
 
-    // Phone Validation (UAE Format)
-    // Relaxed to support various lengths (landline, mobile, potential extra prefixing)
-    // Checks for UAE prefix (+971, 00971, 971, 0) followed by 7-12 digits
-    const uaePhoneRegex = /^(?:\+971|00971|971|0)?\d{7,12}$/;
+    // Phone Validation - any country code (frontend has a country-code selector), not UAE-only.
+    // Accepts +<country code><7-14 digits>, or a bare UAE-style number as a fallback for callers
+    // that don't send a country code at all.
+    const internationalPhoneRegex = /^\+[1-9]\d{6,14}$/;
+    const uaeFallbackRegex = /^(?:00971|971|0)?\d{7,12}$/;
 
     // Sanitize spaces/dashes before check
     const cleanPhone = phone ? phone.replace(/[\s-]/g, '') : '';
 
-    if (!cleanPhone || !uaePhoneRegex.test(cleanPhone)) {
-      return res.status(400).json({ message: "Valid UAE Phone Number is required" });
+    if (!cleanPhone || !(internationalPhoneRegex.test(cleanPhone) || uaeFallbackRegex.test(cleanPhone))) {
+      return res.status(400).json({ message: "Valid Phone Number (with country code) is required" });
     }
 
     // 2. Check for Duplicates (Email or Phone)
@@ -262,17 +282,19 @@ export const addEmployee = async (req, res) => {
       if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
     }
 
-    const resolvedDesignatedManager = await resolveManagerUserId(designatedManager);
-    const resolvedDesignatedFinanceManager = await resolveFinanceManagerUserId(designatedFinanceManager);
+    const resolvedDesignatedManager = await resolveManagerEmployeeId(designatedManager);
+    const resolvedDesignatedFinanceManager = await resolveFinanceManagerEmployeeId(designatedFinanceManager);
 
-    // 3. Generate Auto Incremented EMP Code
-    const lastEmployee = await Employee.findOne().sort({ code: -1 });
-    let nextCode = "EMP001";
+    // 3. Generate the internal auto-incremented reference number (independent of the
+    // user-supplied, editable `code`). Sorts on systemCode itself so manual `code` edits
+    // elsewhere never disturb this sequence.
+    const lastSystemCoded = await Employee.findOne({ systemCode: { $exists: true, $ne: null } }).sort({ systemCode: -1 });
+    let nextSystemCode = "EMP001";
 
-    if (lastEmployee && lastEmployee.code) {
-      const lastNumber = parseInt(lastEmployee.code.replace("EMP", ""), 10);
+    if (lastSystemCoded && lastSystemCoded.systemCode) {
+      const lastNumber = parseInt(lastSystemCoded.systemCode.replace("EMP", ""), 10);
       if (!isNaN(lastNumber)) {
-        nextCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
+        nextSystemCode = `EMP${String(lastNumber + 1).padStart(3, "0")}`;
       }
     }
 
@@ -310,7 +332,8 @@ export const addEmployee = async (req, res) => {
     // 5. Create Employee (Only if User valid)
     const employee = await Employee.create({
       name,
-      code: nextCode,
+      code: code.trim(),
+      systemCode: nextSystemCode,
       role,
       department,
       branch,
@@ -367,6 +390,15 @@ export const addEmployee = async (req, res) => {
         : "Employee added (User account already existed)",
       employee
     });
+
+    logActivity({
+      req,
+      action: "CREATE",
+      module: "EMPLOYEE",
+      description: `Employee ${employee.name} (${employee.code}) created`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
   } catch (error) {
     // console.error("Add Employee Error:", error);
     if (error.name === 'ValidationError') {
@@ -381,13 +413,23 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const { department, status, search, branch } = req.query;
+    const { department, status, search, branch, company, designation } = req.query;
 
     let matchStage = {};
 
     // Filter by Branch
     if (branch && branch !== "All Branches") {
       matchStage.branch = branch;
+    }
+
+    // Filter by Company
+    if (company && company !== "All Companies") {
+      matchStage.company = company;
+    }
+
+    // Filter by Designation
+    if (designation && designation !== "All Designations") {
+      matchStage.designation = designation;
     }
 
     // Filter by Department
@@ -422,7 +464,11 @@ export const getEmployees = async (req, res) => {
     });
 
 
-    res.json(employees);
+    const signedEmployees = await Promise.all(
+      employees.map((employee) => attachSignedProfilePhotoUrl(employee))
+    );
+
+    res.json(signedEmployees);
   } catch (error) {
     console.error("Get employees error:", error);
     res.status(500).json({ message: "Server error" });
@@ -451,7 +497,10 @@ export const getEmployeeById = async (req, res) => {
       return res.status(403).json({ message: "Access Denied: You cannot view this profile" });
     }
 
-    res.json(employee);
+    // Promote any future-dated transfer whose effective date has now arrived.
+    await applyDuePendingTransfers(employee);
+
+    res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
     // console.error("Get Employee By ID Error:", error);
     res.status(500).json({ message: "Server error" });
@@ -462,7 +511,7 @@ export const getEmployeeById = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
-    const { role, email, phone } = req.body;
+    const { role, email, phone, code } = req.body;
 
     // Check for duplicate email/phone excluding current user
     if (email || phone) {
@@ -479,13 +528,45 @@ export const updateEmployee = async (req, res) => {
       }
     }
 
+    if (code !== undefined) {
+      if (!code || !code.trim()) return res.status(400).json({ message: "Employee Code is required" });
+      const existingCode = await Employee.findOne({ _id: { $ne: id }, code: code.trim() });
+      if (existingCode) return res.status(409).json({ message: `Employee Code '${code.trim()}' is already in use` });
+    }
+
     const payload = { ...req.body };
+    delete payload.systemCode; // internal reference number, never client-editable
+
+    // ---- Field-level permission guard ----------------------------------------
+    // The route only checks MANAGE_EMPLOYEES, so any HR/manager user reaching here can
+    // otherwise rewrite salary or their own reporting line. Two rules:
+    //   1. Salary fields require MANAGE_PAYROLL (else silently stripped).
+    //   2. Nobody (except Admin) may edit their OWN salary or manager fields.
+    const perms = req.user.permissions || [];
+    const isAdmin = req.user.role === "Admin" || perms.includes("ALL");
+    const canEditSalary = isAdmin || perms.includes("MANAGE_PAYROLL");
+    const isSelf = req.user.employeeId && String(req.user.employeeId) === String(id);
+
+    const SALARY_FIELDS = [
+      "basicSalary", "allowance", "hra", "accommodationAllowance", "vehicleAllowance",
+      "totalSalary", "visaBase", "workBase", "ctc", "fixedProbationIncrementAmount",
+      "salaryHistory"
+    ];
+    const MANAGER_FIELDS = ["designatedManager", "designatedFinanceManager"];
+
+    let salaryEditAllowed = canEditSalary;
+    if (!canEditSalary) SALARY_FIELDS.forEach((f) => delete payload[f]);
+    if (isSelf && !isAdmin) {
+      [...SALARY_FIELDS, ...MANAGER_FIELDS].forEach((f) => delete payload[f]);
+      salaryEditAllowed = false;
+    }
+    // --------------------------------------------------------------------------
 
     if (payload.designatedManager !== undefined) {
-      payload.designatedManager = await resolveManagerUserId(payload.designatedManager);
+      payload.designatedManager = await resolveManagerEmployeeId(payload.designatedManager);
     }
     if (payload.designatedFinanceManager !== undefined) {
-      payload.designatedFinanceManager = await resolveFinanceManagerUserId(payload.designatedFinanceManager);
+      payload.designatedFinanceManager = await resolveFinanceManagerEmployeeId(payload.designatedFinanceManager);
     }
 
     if (payload.laborCards || payload.laborCardNumber) {
@@ -502,6 +583,9 @@ export const updateEmployee = async (req, res) => {
     if (payload.probationEndDate || payload.probationConfirmedAt) {
       payload.probationStatus = getProbationStatus(payload);
     }
+
+    // Snapshot before update so the activity log can record a field-level diff.
+    const before = await Employee.findById(id).lean();
 
     const updatedEmployee = await Employee.findByIdAndUpdate(id, payload, {
       new: true,
@@ -521,7 +605,7 @@ export const updateEmployee = async (req, res) => {
       );
     }
 
-    if (req.body.appendSalaryHistory) {
+    if (req.body.appendSalaryHistory && salaryEditAllowed) {
       updatedEmployee.salaryHistory.push({
         salaryType: req.body.salaryType || "MANUAL_ADJUSTMENT",
         basicSalary: toNumber(updatedEmployee.basicSalary),
@@ -537,6 +621,40 @@ export const updateEmployee = async (req, res) => {
     }
 
     res.json({ employee: updatedEmployee });
+
+    // Build a field-level diff for the activity log. Skip internal/array/helper keys that
+    // don't read as clean before/after scalars.
+    const SKIP_DIFF = new Set([
+      "systemCode", "salaryHistory", "transferHistory", "laborCards",
+      "appendSalaryHistory", "salaryType", "incrementAmount", "effectiveSalaryDate",
+      "salaryNotes", "profilePhotoPath", "profilePhotoUrl", "_id", "__v",
+      "createdAt", "updatedAt"
+    ]);
+    const changes = {};
+    if (before) {
+      for (const key of Object.keys(payload)) {
+        if (SKIP_DIFF.has(key)) continue;
+        const fromVal = before[key];
+        const toVal = updatedEmployee[key];
+        const norm = (v) => (v === undefined || v === null ? "" : String(v));
+        if (norm(fromVal) !== norm(toVal)) {
+          changes[key] = { from: fromVal ?? null, to: toVal ?? null };
+        }
+      }
+    }
+    const changedFields = Object.keys(changes);
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "EMPLOYEE",
+      description: changedFields.length
+        ? `Employee ${updatedEmployee.name} (${updatedEmployee.code}) updated: ${changedFields.join(", ")}`
+        : `Employee ${updatedEmployee.name} (${updatedEmployee.code}) updated`,
+      targetId: updatedEmployee._id,
+      targetName: updatedEmployee.name,
+      metadata: { changes }
+    }).catch(() => {});
   } catch (error) {
     // console.error("Update Employee Error:", error);
     if (error.code === 11000) {
@@ -546,6 +664,58 @@ export const updateEmployee = async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
     res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
+export const uploadEmployeePhoto = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions = [], role, employeeId } = req.user;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No photo uploaded" });
+    }
+
+    if (!req.file.mimetype?.startsWith("image/")) {
+      return res.status(400).json({ message: "Only image files are allowed" });
+    }
+
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const canManageEmployees = role === "Admin" || permissions.includes("ALL") || permissions.includes("MANAGE_EMPLOYEES");
+    const isOwnProfile = employeeId && employeeId.toString() === id;
+
+    if (!canManageEmployees && !isOwnProfile) {
+      return res.status(403).json({ message: "Access Denied: You cannot update this profile photo" });
+    }
+
+    const stored = await storeUploadedFile({
+      file: req.file,
+      folder: "employee-photos",
+      preferS3: true
+    });
+
+    employee.profilePhotoPath = stored.filePath;
+    employee.profilePhotoUrl = stored.fileUrl;
+    employee.profilePhotoStorage = stored.storage;
+    employee.profilePhotoUploadedAt = new Date();
+    await employee.save();
+
+    res.json({ success: true, employee: await attachSignedProfilePhotoUrl(employee) });
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "EMPLOYEE",
+      description: `Employee ${employee.name} (${employee.code}) profile photo updated`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
+  } catch (error) {
+    res.status(500).json({ message: "Failed to upload employee photo" });
   }
 };
 
@@ -561,10 +731,48 @@ export const deleteEmployee = async (req, res) => {
     }
 
     res.json({ message: "Employee removed successfully" });
+
+    logActivity({
+      req,
+      action: "DELETE",
+      module: "EMPLOYEE",
+      description: `Employee ${employee.name} (${employee.code}) deleted`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
   } catch (error) {
     // console.error(error);
     res.status(500).json({ message: "Server error" });
   }
+};
+
+/**
+ * Applies any pending (future-dated) transfers whose effectiveDate has now arrived.
+ * Mutates the employee in place and persists if anything changed. Called lazily on the
+ * main employee read paths so a scheduled transfer takes effect the moment its date passes,
+ * without needing a dedicated cron job. Returns true if the employee was changed.
+ */
+export const applyDuePendingTransfers = async (employee) => {
+  if (!employee?.transferHistory?.length) return false;
+
+  const now = new Date();
+  // Apply due transfers in chronological order so the latest one wins on company/branch.
+  // Only entries explicitly marked applied:false are pending — legacy history predates the
+  // field (applied === undefined) and was already applied, so it must NOT be re-applied.
+  const due = employee.transferHistory
+    .filter((t) => t.applied === false && t.effectiveDate && new Date(t.effectiveDate) <= now)
+    .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+
+  if (!due.length) return false;
+
+  for (const t of due) {
+    if (t.newCompany) employee.company = t.newCompany;
+    if (t.newBranch) employee.branch = t.newBranch;
+    t.applied = true;
+  }
+
+  await employee.save();
+  return true;
 };
 
 export const transferEmployee = async (req, res) => {
@@ -582,22 +790,62 @@ export const transferEmployee = async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    const previousCompany = employee.company || "";
+    const previousBranch = employee.branch || "";
+    const targetCompany = company !== undefined ? company : previousCompany;
+    const targetBranch = branch !== undefined ? branch : previousBranch;
+
+    // Only apply immediately when the effective date is today or in the past. Future-dated
+    // transfers are recorded but left pending until their date arrives (see
+    // applyDuePendingTransfers), instead of taking effect the instant they're created.
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const isImmediate = new Date(effectiveDate) <= endOfToday;
+
     employee.transferHistory.push({
-      previousCompany: employee.company || "",
-      newCompany: company || employee.company || "",
-      previousBranch: employee.branch || "",
-      newBranch: branch || employee.branch || "",
+      previousCompany,
+      newCompany: targetCompany,
+      previousBranch,
+      newBranch: targetBranch,
       effectiveDate,
       reason: reason || "",
-      transferredBy: req.user._id
+      transferredBy: req.user._id,
+      applied: isImmediate
     });
 
-    if (company !== undefined) employee.company = company;
-    if (branch !== undefined) employee.branch = branch;
+    if (isImmediate) {
+      if (company !== undefined) employee.company = company;
+      if (branch !== undefined) employee.branch = branch;
+    }
 
     await employee.save();
 
-    res.json({ success: true, employee });
+    res.json({
+      success: true,
+      employee,
+      scheduled: !isImmediate,
+      message: isImmediate
+        ? "Transfer applied."
+        : `Transfer scheduled for ${new Date(effectiveDate).toISOString().split("T")[0]}. It will take effect on that date.`
+    });
+
+    logActivity({
+      req,
+      action: "TRANSFER",
+      module: "EMPLOYEE",
+      description: isImmediate
+        ? `Employee ${employee.name} (${employee.code}) transferred: ${previousCompany || "—"}/${previousBranch || "—"} → ${targetCompany || "—"}/${targetBranch || "—"}`
+        : `Employee ${employee.name} (${employee.code}) transfer scheduled for ${new Date(effectiveDate).toISOString().split("T")[0]}: ${previousCompany || "—"}/${previousBranch || "—"} → ${targetCompany || "—"}/${targetBranch || "—"}`,
+      targetId: employee._id,
+      targetName: employee.name,
+      metadata: {
+        effectiveDate,
+        applied: isImmediate,
+        reason: reason || "",
+        from: { company: previousCompany, branch: previousBranch },
+        to: { company: targetCompany, branch: targetBranch }
+      }
+    }).catch(() => {});
   } catch (error) {
     res.status(500).json({ message: "Failed to transfer employee" });
   }
@@ -609,10 +857,18 @@ export const getProbationReminders = async (req, res) => {
     const inSevenDays = new Date();
     inSevenDays.setDate(today.getDate() + 7);
 
+    // Don't filter on the stored `probationStatus` field - it's only recalculated
+    // when the employee record is saved, so an employee whose probation quietly
+    // lapsed without any other edit stays stuck as "ACTIVE" and would be missed.
+    // Instead: anyone not yet confirmed, due within 7 days OR already overdue.
     const employees = await Employee.find({
-      probationEndDate: { $gte: today, $lte: inSevenDays },
-      probationStatus: { $in: ["ACTIVE", "PENDING_CONFIRMATION"] }
+      probationEndDate: { $exists: true, $ne: null, $lte: inSevenDays },
+      probationConfirmedAt: null
     }).sort({ probationEndDate: 1 });
+
+    employees.forEach((employee) => {
+      employee.probationStatus = getProbationStatus(employee);
+    });
 
     const toNotify = employees.filter((employee) => !employee.probationReminderSentAt);
 
@@ -715,20 +971,82 @@ export const importEmployees = async (req, res) => {
     const existingEmployees = await Employee.find({}, { email: 1, phone: 1, code: 1 });
     const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
+    const existingCodes = new Set(existingEmployees.map(e => e.code));
 
-    // Pre-fetch Master Data for Strict Validation
+    // Pre-fetch Master Data for Strict Validation.
+    // Maps are keyed by lowercase name -> canonical Master name, so imported rows get
+    // normalized to the Master's exact casing (avoids "Sales & Operations" vs "SALES & OPERATIONS"
+    // breaking exact-match filters elsewhere in the app).
     const masters = await Master.find({ isActive: true });
-    const validRoles = new Set(masters.filter(m => m.type === 'ROLE').map(m => m.name.toLowerCase()));
-    const validDepartments = new Set(masters.filter(m => m.type === 'DEPARTMENT').map(m => m.name.toLowerCase()));
-    const validBranches = new Set(masters.filter(m => m.type === 'BRANCH').map(m => m.name.toLowerCase()));
-    const validDesignations = new Set(masters.filter(m => m.type === 'DESIGNATION').map(m => m.name.toLowerCase()));
-    const validContractTypes = new Set(masters.filter(m => m.type === 'EMPLOYEE_TYPE').map(m => m.name.toLowerCase()));
+    const canonicalMap = (type) => new Map(masters.filter(m => m.type === type).map(m => [m.name.toLowerCase(), m.name]));
+    const validRoles = canonicalMap('ROLE');
+    const validDepartments = canonicalMap('DEPARTMENT');
+    const validBranches = canonicalMap('BRANCH');
+    const validDesignations = canonicalMap('DESIGNATION');
+    const validContractTypes = canonicalMap('EMPLOYEE_TYPE');
+    const validCompanies = canonicalMap('COMPANY');
 
-    // Get last employee code
-    const lastEmployee = await Employee.findOne().sort({ code: -1 });
+    // Branch must belong to the row's Company (Branch.parentId === Company._id), not just exist anywhere.
+    const companyIdByName = new Map(masters.filter(m => m.type === 'COMPANY').map(m => [m.name.toLowerCase(), String(m._id)]));
+    const branchParentIdByName = new Map(masters.filter(m => m.type === 'BRANCH').map(m => [m.name.toLowerCase(), m.parentId ? String(m.parentId) : null]));
+
+    // WORK LOCATION / VISA LOCATION sometimes hold a Branch name (e.g. "MAIN") scoped to the
+    // row's Company, rather than a numeric Company Code ID - keyed by companyId::branchNameLower.
+    const branchNameByCompanyIdAndName = new Map();
+    masters.filter(m => m.type === 'BRANCH' && m.parentId).forEach(m => {
+        branchNameByCompanyIdAndName.set(`${String(m.parentId)}::${m.name.toLowerCase()}`, m.name);
+    });
+
+    // Companies map by their "Code ID" (Masters > Company Structure > Companies > Code ID field)
+    // WORK LOCATION / VISA LOCATION columns in the import sheet hold this code, not a name.
+    const companyByCode = new Map();
+    masters.filter(m => m.type === 'COMPANY' && m.code).forEach(m => {
+        companyByCode.set(String(m.code).trim(), m.name);
+    });
+
+    // The sheet's "COMPANY / BRANCH" column is a single merged field (e.g. "RIZAN HEAD OFFICE").
+    // Split it by matching the longest known Company name as a prefix; the remainder is the Branch.
+    const companyNamesByLengthDesc = masters
+      .filter(m => m.type === 'COMPANY')
+      .map(m => m.name)
+      .sort((a, b) => b.length - a.length);
+
+    // Excel forces text-formatting on numeric-looking strings with a leading apostrophe
+    // (e.g. '784198974152963) - strip it before saving so the stored value is clean.
+    const stripExcelTextMarker = (val) => {
+      const text = (val ?? "").toString();
+      return text.startsWith("'") ? text.slice(1) : text;
+    };
+
+    const splitCompanyBranch = (combined) => {
+      const text = (combined || "").toString().trim();
+      if (!text) return { company: "", branch: "" };
+      const match = companyNamesByLengthDesc.find(name =>
+        text.toLowerCase() === name.toLowerCase() ||
+        text.toLowerCase().startsWith(name.toLowerCase() + " ")
+      );
+      if (!match) return { company: text, branch: "" };
+      return { company: match, branch: text.slice(match.length).trim() };
+    };
+
+    // Distinct missing values seen across the whole file, for the summary block
+    const missing = {
+        departments: new Set(),
+        designations: new Set(),
+        branches: new Set(),
+        companies: new Set(),
+        roles: new Set(),
+        contractTypes: new Set(),
+        workLocationCodes: new Set(),
+        visaLocationCodes: new Set()
+    };
+
+    // Internal auto-incremented reference number (systemCode), independent of the
+    // sheet's optional "Employee Code" column.
+    const lastSystemCoded = await Employee.findOne({ systemCode: { $exists: true, $ne: null } }).sort({ systemCode: -1 });
     let lastCodeNum = 0;
-    if (lastEmployee && lastEmployee.code) {
-      lastCodeNum = parseInt(lastEmployee.code.replace("EMP", ""), 10) || 0;
+    if (lastSystemCoded && lastSystemCoded.systemCode) {
+      lastCodeNum = parseInt(lastSystemCoded.systemCode.replace("EMP", ""), 10) || 0;
     }
 
     for (let i = 0; i < data.length; i++) {
@@ -737,13 +1055,13 @@ export const importEmployees = async (req, res) => {
       let errorMsg = null;
 
       // 1. Basic Validation
-      if (!row["Full Name"] || !row["Email"] || !row["Role"] || !row["Department"]) {
-        errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Role, Department)" });
+      if (!row["Full Name"] || !row["Email"] || !row["Department"]) {
+        errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Department)" });
         continue;
       }
 
       const email = row["Email"].trim();
-      const phone = row["Phone"] ? String(row["Phone"]).trim() : "";
+      const phone = (row["Contact Number"] || row["Phone"]) ? String(row["Contact Number"] || row["Phone"]).trim() : "";
 
       // Email Validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -762,37 +1080,131 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 3. Strict Master Validation
-      const role = row["Role"].trim();
-      const department = row["Department"].trim();
-      const branch = row["Branch"] ? row["Branch"].trim() : "";
-      const designation = row["Designation"] ? row["Designation"].trim() : "";
-      const contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+      const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
+      if (employeeCode && existingCodes.has(employeeCode)) {
+        errors.push({ row: rowNum, email, message: `Employee Code '${employeeCode}' already exists` });
+        continue;
+      }
 
-      if (!validRoles.has(role.toLowerCase())) {
+      // 3. Strict Master Validation
+      let role = row["Role"] ? row["Role"].trim() : "Employee";
+      let department = row["Department"].trim();
+      // If the sheet has explicit "Company"/"Branch" columns, use them directly.
+      // Otherwise split the merged "COMPANY / BRANCH" column against known Company names.
+      let company, branch;
+      if (row["Company"] || row["Branch"]) {
+        company = (row["Company"] || "").toString().trim();
+        branch = (row["Branch"] || "").toString().trim();
+      } else {
+        ({ company, branch } = splitCompanyBranch(row["COMPANY / BRANCH"]));
+      }
+      let designation = row["Designation"] ? row["Designation"].trim() : "";
+      let contractType = row["Employee Type"] ? row["Employee Type"].trim() : "";
+      const workLocationCode = row["WORK LOCATION"] != null ? String(row["WORK LOCATION"]).trim() : "";
+      const visaLocationCode = row["VISA LOCATION"] != null ? String(row["VISA LOCATION"]).trim() : "";
+
+      if (row["Role"] && !validRoles.has(role.toLowerCase())) {
+        missing.roles.add(role);
         errors.push({ row: rowNum, email, message: `Invalid Role: '${role}'. Exact spelling must match Master list.` });
         continue;
       }
+      role = validRoles.get(role.toLowerCase()) || role;
+
       if (!validDepartments.has(department.toLowerCase())) {
+        missing.departments.add(department);
         errors.push({ row: rowNum, email, message: `Invalid Department: '${department}'. Exact spelling must match Master list.` });
         continue;
       }
+      department = validDepartments.get(department.toLowerCase());
+
+      if (company && !validCompanies.has(company.toLowerCase())) {
+        missing.companies.add(company);
+        errors.push({ row: rowNum, email, message: `Invalid Company: '${company}'. Exact spelling must match Master list.` });
+        continue;
+      }
+      if (company) company = validCompanies.get(company.toLowerCase());
+
       if (branch && !validBranches.has(branch.toLowerCase())) {
+        missing.branches.add(branch);
         errors.push({ row: rowNum, email, message: `Invalid Branch: '${branch}'. Exact spelling must match Master list.` });
         continue;
       }
+      if (branch) {
+        branch = validBranches.get(branch.toLowerCase());
+        const branchParentId = branchParentIdByName.get(branch.toLowerCase());
+        const companyId = company ? companyIdByName.get(company.toLowerCase()) : null;
+        if (company && branchParentId !== companyId) {
+          missing.branches.add(`${branch} (not under ${company})`);
+          errors.push({ row: rowNum, email, message: `Branch '${branch}' does not belong to Company '${company}'. Nest it under that company under Masters, then re-upload.` });
+          continue;
+        }
+      }
+
       if (designation && !validDesignations.has(designation.toLowerCase())) {
+        missing.designations.add(designation);
         errors.push({ row: rowNum, email, message: `Invalid Designation: '${designation}'. Exact spelling must match Master list.` });
         continue;
       }
+      if (designation) designation = validDesignations.get(designation.toLowerCase());
+
       if (contractType && !validContractTypes.has(contractType.toLowerCase())) {
+        missing.contractTypes.add(contractType);
         errors.push({ row: rowNum, email, message: `Invalid Employee Type: '${contractType}'. Exact spelling must match Master list.` });
         continue;
+      }
+      if (contractType) contractType = validContractTypes.get(contractType.toLowerCase());
+
+      // Resolves a WORK/VISA LOCATION value either as the name of a Branch nested under the
+      // row's Company (e.g. "MAIN" - the primary, current convention), or as a legacy Company
+      // Code ID. visaCompany/workPermitCompany store a Branch name, so a Branch match is
+      // preferred; a bare Company Code match falls back to the Company name since no specific
+      // Branch can be determined from it. Fills in `branch` from a Branch match when the row
+      // didn't already specify one.
+      const resolveLocationCode = (code) => {
+        if (company) {
+          const companyId = companyIdByName.get(company.toLowerCase());
+          const matchedBranch = companyId ? branchNameByCompanyIdAndName.get(`${companyId}::${code.toLowerCase()}`) : null;
+          if (matchedBranch) {
+            if (!branch) branch = matchedBranch;
+            return { value: matchedBranch };
+          }
+        }
+        const byCompanyCode = companyByCode.get(code);
+        if (byCompanyCode) return { value: byCompanyCode };
+        return null;
+      };
+
+      let workPermitCompanyName = "";
+      if (workLocationCode) {
+        const resolved = resolveLocationCode(workLocationCode);
+        workPermitCompanyName = resolved?.value || "";
+        if (!workPermitCompanyName) {
+          missing.workLocationCodes.add(workLocationCode);
+          errors.push({ row: rowNum, email, message: `Invalid Work Location: '${workLocationCode}'. No Branch with this name under '${company || "the row's company"}' (or Company Code ID) was found.` });
+          continue;
+        }
+      }
+
+      let visaCompanyName = "";
+      if (visaLocationCode) {
+        const resolved = resolveLocationCode(visaLocationCode);
+        visaCompanyName = resolved?.value || "";
+        if (!visaCompanyName) {
+          missing.visaLocationCodes.add(visaLocationCode);
+          errors.push({ row: rowNum, email, message: `Invalid Visa Location: '${visaLocationCode}'. No Branch with this name under '${company || "the row's company"}' (or Company Code ID) was found.` });
+          continue;
+        }
       }
 
       // 4. User Account Creation
       let userPhone = phone.replace(/\s+/g, "");
-      // Simple normalization for UAE if needed, or just keep as is
+      if (userPhone.startsWith("0")) {
+        userPhone = "+971" + userPhone.substring(1);
+      } else if (userPhone.startsWith("971")) {
+        userPhone = "+" + userPhone;
+      } else if (!userPhone.startsWith("+")) {
+        userPhone = "+971" + userPhone;
+      }
 
       const hashedPassword = await bcrypt.hash("Password@123", 10);
       try {
@@ -804,7 +1216,7 @@ export const importEmployees = async (req, res) => {
             email: email,
             phone: userPhone,
             password: hashedPassword,
-            role: row["Role"]
+            role: role
           });
         }
       } catch (uErr) {
@@ -815,7 +1227,8 @@ export const importEmployees = async (req, res) => {
       // 4. Employee Creation
       try {
         lastCodeNum++;
-        const nextCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        const nextSystemCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
+        const finalCode = employeeCode || nextSystemCode;
 
         // Date parsing helper
         const parseExcelDate = (val) => {
@@ -831,37 +1244,49 @@ export const importEmployees = async (req, res) => {
         let emiratesIdExpiry = parseExcelDate(row["Emirates ID Expiry"]);
         let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
+        const basicSalaryVal = row["Basic Salary (AED)"] ?? row["Basic Salary"];
+        const ctcVal = row["MONTHLY CTC"] ?? row["CTC"] ?? row["Work Base"] ?? basicSalaryVal;
+
         await Employee.create({
           name: row["Full Name"],
-          code: nextCode,
-          role: row["Role"],
-          department: row["Department"],
-          branch: row["Branch"] || "",
-          company: row["Company"] || "",
+          code: finalCode,
+          systemCode: nextSystemCode,
+          role: role,
+          department: department,
+          branch: branch,
+          company: company,
           email: email,
           phone: phone,
           joinDate: joinDate,
           status: row["Status"] || "Onboarding",
-          designation: row["Designation"] || row["Role"],
-          shift: row["Shift"] || "Day Shift", // Default
+          dob: parseExcelDate(row["Date of Birth"]),
+          designation: designation || role,
+          shift: row["Shift"] || "Day Shift",
           nationality: row["Nationality"] || "",
           address: row["UAE Address"] || "",
-          contractType: row["Employee Type"] || "",
-          basicSalary: row["Basic Salary"] ? String(row["Basic Salary"]) : "",
-          visaBase: toNumber(row["Visa Base"] || row["Basic Salary"]),
-          workBase: toNumber(row["Work Base"] || row["Basic Salary"]),
-          ctc: toNumber(row["CTC"] || row["Work Base"] || row["Basic Salary"]),
+          contractType: contractType || "",
+          passportNo: stripExcelTextMarker(row["Passport No"]),
+          emiratesIdNo: stripExcelTextMarker(row["Emirates ID No"]),
+          basicSalary: basicSalaryVal != null ? String(basicSalaryVal) : "",
+          allowance: toNumber(row["Allowance (AED)"]),
+          hra: toNumber(row["HRA (AED)"]),
+          totalSalary: toNumber(row["Total Salary (AED)"] ?? ctcVal),
+          accommodationAllowance: toNumber(row["ACCOMODATION ALLOWANCE"]),
+          vehicleAllowance: toNumber(row["VEHICHLE ALLOWANCE"]),
+          visaBase: toNumber(row["Visa Base"] ?? basicSalaryVal),
+          workBase: toNumber(row["Work Base"] ?? basicSalaryVal),
+          ctc: toNumber(ctcVal),
           accommodation: row["Accommodation"] || "",
-          visaCompany: row["Visa Company"] || "",
-          workPermitCompany: row["Work Permit Company"] || "",
-          visaNo: row["Visa No"] || "",
+          visaCompany: visaCompanyName || row["Visa Company"] || "",
+          workPermitCompany: workPermitCompanyName || row["work permit"] || row["Work Permit Company"] || "",
+          visaNo: stripExcelTextMarker(row["Visa No"]),
           visaFileNo: row["Visa File No"] || "",
           laborCardNumber: row["Labor Card No"] || "",
           laborCards: buildLaborCards({ laborCardNumber: row["Labor Card No"] || "" }),
-          personalId: row["Personal ID (14 Digit)"] || "",
+          personalId: stripExcelTextMarker(row["Personal ID (14 Digit)"]),
           bankName: row["Bank Name"] || "",
-          iban: row["IBAN"] || "",
-          bankAccount: row["Account Number"] || "",
+          iban: stripExcelTextMarker(row["IBAN"]),
+          bankAccount: stripExcelTextMarker(row["Account Number"]),
           agentId: row["Agent ID (WPS)"] || "",
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
@@ -871,10 +1296,10 @@ export const importEmployees = async (req, res) => {
           probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
           fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"]),
           salaryHistory: buildInitialSalaryHistory({
-            basicSalary: row["Basic Salary"],
-            visaBase: row["Visa Base"] || row["Basic Salary"],
-            workBase: row["Work Base"] || row["Basic Salary"],
-            ctc: row["CTC"] || row["Work Base"] || row["Basic Salary"],
+            basicSalary: basicSalaryVal,
+            visaBase: row["Visa Base"] ?? basicSalaryVal,
+            workBase: row["Work Base"] ?? basicSalaryVal,
+            ctc: ctcVal,
             joinDate
           })
         });
@@ -882,6 +1307,7 @@ export const importEmployees = async (req, res) => {
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
         if (phone) existingPhones.add(phone);
+        existingCodes.add(finalCode);
 
         successCount++;
 
@@ -890,10 +1316,28 @@ export const importEmployees = async (req, res) => {
       }
     }
 
+    // Batch summary: distinct missing master values across the whole file,
+    // so the user knows exactly what to add to Masters before re-uploading.
+    const summary = [];
+    const summarize = (label, set, hint) => {
+      if (set.size > 0) {
+        summary.push(`${label} not found in master data: ${[...set].join(", ")}. ${hint}`);
+      }
+    };
+    summarize("Companies", missing.companies, "Add these under Masters → Company Structure → Companies, then re-upload.");
+    summarize("Branches", missing.branches, "Add these under Masters → Company Structure → Branches, then re-upload.");
+    summarize("Departments", missing.departments, "Add these under Masters → Company Structure → Departments, then re-upload.");
+    summarize("Designations", missing.designations, "Add these under Masters → HR Management → Designations, then re-upload.");
+    summarize("Roles", missing.roles, "Add these under Masters → HR Management → Roles, then re-upload.");
+    summarize("Employee Types", missing.contractTypes, "Add these under Masters → HR Management → Employee Types, then re-upload.");
+    summarize("Work Location codes", missing.workLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
+    summarize("Visa Location codes", missing.visaLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
+
     res.json({
       message: "Import processing processed",
       successCount,
       failureCount: errors.length,
+      summary,
       errors
     });
 

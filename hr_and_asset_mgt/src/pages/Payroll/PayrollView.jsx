@@ -7,6 +7,8 @@ import PayrollEmployeesTable from "./PayrollTable";
 import { EmployeePayrollOverviewChart, LoansAdvancesChart } from "./PayrollCharts";
 import { payrollService } from "../../services/payrollService";
 import { getCompanies, getBranches } from "../../services/masterService.js";
+import CustomModal from "../../components/reusable/CustomModal.jsx";
+import CustomButton from "../../components/reusable/Button.jsx";
 
 // Reusable filter section (Original logic + New Style)
 function PayrollFilters({ filters, setFilters, companies, branches }) {
@@ -119,9 +121,21 @@ function PayrollPagination({ pagination, onPageChange }) {
   );
 }
 
+const pad2 = (n) => String(n).padStart(2, "0");
+const toDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
 function Payroll() {
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [year, setYear] = useState(new Date().getFullYear());
+  // Rolling pay period — force-contiguous. periodStart is always auto-computed
+  // (locked to the day after the last finalized period's end) and periodEnd is
+  // the only date HR actually picks. month/year below are DERIVED from periodEnd
+  // purely for the existing month/year-based read endpoints (summary, exports,
+  // SIF, MOL) — the real period identity lives in periodStart/periodEnd.
+  const today = new Date();
+  const [periodStart, setPeriodStart] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)));
+  const [periodEnd, setPeriodEnd] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
+  const periodEndDate = new Date(`${periodEnd}T00:00:00`);
+  const month = periodEndDate.getMonth() + 1;
+  const year = periodEndDate.getFullYear();
   const [activeTab, setActiveTab] = useState('Payroll');
   const [records, setRecords] = useState([]);
   const [allRecords, setAllRecords] = useState([]); // unfiltered for report tabs
@@ -131,6 +145,12 @@ function Payroll() {
   const [companies, setCompanies] = useState([]);
   const [branches, setBranches] = useState([]);
   const [filters, setFilters] = useState({ company: '', branch: '', visaCompany: '', workPermitCompany: '', search: '', page: 1, limit: 10 });
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+  const [finalizeConfirmText, setFinalizeConfirmText] = useState("");
+  const [showUnfinalizeConfirm, setShowUnfinalizeConfirm] = useState(false);
+  const [unfinalizeConfirmText, setUnfinalizeConfirmText] = useState("");
+  // { month, year, periodStart, periodEnd, finalizedAt } | null
+  const [latestFinalized, setLatestFinalized] = useState(null);
 
   // --- MOCK DATA FOR CHARTS (To avoid breaking backend dependencies) ---
   const mockTrends = [
@@ -150,17 +170,48 @@ function Payroll() {
   useEffect(() => {
     getCompanies().then(setCompanies).catch(console.error);
     getBranches().then(setBranches).catch(console.error);
+    fetchLatestFinalized();
   }, []);
+
+  const fetchLatestFinalized = async () => {
+    try {
+      const latest = await payrollService.getLatestFinalizedPeriod();
+      setLatestFinalized(latest);
+
+      // periodStart is always locked to the day after the last finalized period's
+      // end (force-contiguous — no gaps, no overlaps). If the current periodEnd
+      // selection is already covered by that lock, bump it forward to a sensible
+      // ~1-month default instead of landing on an already-locked period.
+      // Comparing plain "YYYY-MM-DD" strings (from the server) — avoids any
+      // browser/server timezone drift that reconstructing Date objects here would risk.
+      if (latest) {
+        const lockedEndStr = latest.periodEndStr;
+        const lockedEnd = new Date(`${lockedEndStr}T00:00:00`);
+        const requiredStart = new Date(lockedEnd);
+        requiredStart.setDate(requiredStart.getDate() + 1);
+        setPeriodStart(toDateStr(requiredStart));
+
+        if (periodEnd <= lockedEndStr) {
+          const suggestedEnd = new Date(requiredStart);
+          suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
+          suggestedEnd.setDate(suggestedEnd.getDate() - 1);
+          setPeriodEnd(toDateStr(suggestedEnd));
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   useEffect(() => {
     fetchPayroll();
-  }, [month, year, filters]);
+  }, [periodEnd, filters]);
 
   useEffect(() => {
     if (activeTab !== 'Payroll') {
       fetchAllRecords();
     }
-  }, [activeTab, month, year, filters]);
+  }, [activeTab, periodEnd, filters]);
 
   const fetchPayroll = async () => {
     try {
@@ -193,11 +244,11 @@ function Payroll() {
   const handleGenerate = async () => {
     try {
       setLoading(true);
-      await payrollService.generate(month, year);
+      await payrollService.generate(periodStart, periodEnd);
       toast.success("Payroll Generated Successfully!");
       fetchPayroll();
     } catch (error) {
-      toast.error("Failed to generate payroll");
+      toast.error(error.response?.data?.message || "Failed to generate payroll");
     } finally {
       setLoading(false);
     }
@@ -206,14 +257,41 @@ function Payroll() {
   const handleFinalize = async () => {
     try {
       setLoading(true);
-      await payrollService.finalize(month, year);
+      await payrollService.finalize(periodStart, periodEnd);
       toast.success("Payroll Finalized & Locked!");
       fetchPayroll();
+      fetchLatestFinalized();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to finalize");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmFinalize = () => {
+    setShowFinalizeConfirm(false);
+    setFinalizeConfirmText("");
+    handleFinalize();
+  };
+
+  const handleUnfinalize = async () => {
+    try {
+      setLoading(true);
+      await payrollService.unfinalize(periodStart, periodEnd);
+      toast.success("Payroll un-finalized — period is editable again.");
+      fetchPayroll();
+      fetchLatestFinalized();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to un-finalize");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmUnfinalize = () => {
+    setShowUnfinalizeConfirm(false);
+    setUnfinalizeConfirmText("");
+    handleUnfinalize();
   };
 
   const handleExportExcel = async (reportType = null) => {
@@ -255,15 +333,19 @@ function Payroll() {
   // Derive state guards
   const isGenerated = records.length > 0;
   const isFinalized = isGenerated && records.every(r => r.status === 'PROCESSED' || r.status === 'PAID');
+  // Un-finalize is only allowed on the exact period the server considers "latest
+  // finalized" — matches the backend's own restriction (undoing an older locked
+  // period while a later one stays locked would desync the force-contiguous chain).
+  // String comparison against the server's own formatted date — no timezone risk.
+  const canUnfinalize = isFinalized && latestFinalized?.periodEndStr === periodEnd;
 
   return (
     <div className="payroll-dashboard-wrapper">
       <PayrollSummaryCards
         stats={stats}
-        month={month}
-        year={year}
-        setMonth={setMonth}
-        setYear={setYear}
+        periodStart={periodStart}
+        periodEnd={periodEnd}
+        setPeriodEnd={setPeriodEnd}
         onExportWPS={() => handleExportExcel()}
       />
 
@@ -317,13 +399,24 @@ function Payroll() {
                     >
                         {loading ? 'Processing...' : isGenerated ? 'Regenerate' : 'Generate Payroll'}
                     </button>
-                    <button 
-                      className="final-btn" 
-                      onClick={handleFinalize} 
+                    <button
+                      className="final-btn"
+                      onClick={() => setShowFinalizeConfirm(true)}
                       disabled={loading || !isGenerated || isFinalized}
                     >
                         {isFinalized ? 'Finalized' : 'Finalize Payroll'}
                     </button>
+                    {isFinalized && (
+                      <button
+                        className="final-btn"
+                        style={{ background: '#fff', color: '#b91c1c', border: '1px solid #b91c1c' }}
+                        onClick={() => setShowUnfinalizeConfirm(true)}
+                        disabled={loading || !canUnfinalize}
+                        title={canUnfinalize ? "Undo finalize for this period" : "Only the most recently finalized period can be un-finalized"}
+                      >
+                          Un-finalize
+                      </button>
+                    )}
                  </div>
             </div>
 
@@ -436,14 +529,87 @@ function Payroll() {
                 branches={branches}
             />
 
-            <WorkReportTable 
-                records={allRecords} 
-                reportType="visa" 
-                loading={loading} 
-                onExport={() => handleExportExcel('visa')} 
+            <WorkReportTable
+                records={allRecords}
+                reportType="visa"
+                loading={loading}
+                onExport={() => handleExportExcel('visa')}
             />
         </div>
       )}
+
+      <CustomModal
+        show={showFinalizeConfirm}
+        title="Finalize Payroll"
+        onClose={() => { setShowFinalizeConfirm(false); setFinalizeConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setShowFinalizeConfirm(false); setFinalizeConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton onClick={handleConfirmFinalize} disabled={finalizeConfirmText.trim().toLowerCase() !== "yes"}>
+              Finalize Payroll
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>
+          This locks payroll for {periodStart} to {periodEnd}. It cannot be undone from here — loan and advance
+          requests will be updated and no further edits will be possible.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={finalizeConfirmText}
+          onChange={(e) => setFinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
+
+      <CustomModal
+        show={showUnfinalizeConfirm}
+        title="Un-finalize Payroll"
+        onClose={() => { setShowUnfinalizeConfirm(false); setUnfinalizeConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setShowUnfinalizeConfirm(false); setUnfinalizeConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton onClick={handleConfirmUnfinalize} disabled={unfinalizeConfirmText.trim().toLowerCase() !== "yes"}>
+              Un-finalize Payroll
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>
+          This unlocks payroll for {periodStart} to {periodEnd} back to a draft — it also reverses any loan/salary-advance
+          repayments that this finalize recorded. Only use this to correct a mistake; a new Finalize will be
+          needed once the period is fixed.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={unfinalizeConfirmText}
+          onChange={(e) => setUnfinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
     </div>
   );
 }

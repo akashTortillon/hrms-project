@@ -418,6 +418,9 @@ import path from "path";
 import fs from "fs";
 import mongoose from "mongoose";
 import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
+import { logActivity } from "../utils/activityLogger.js";
+import LeaveWallet from "../models/leaveWalletModel.js";
+import leaveWalletService from "../services/leaveWalletService.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -539,6 +542,10 @@ const resolveFinanceRecipient = async (employee) => {
     if (linkedUser) return linkedUser;
   }
 
+  // No explicit designatedFinanceManager - fall back to a role holder. Prefer roles that are
+  // actually named for finance ("Finance Manager", "Finance") over generic roles (Admin, HR
+  // Manager) that merely happen to also carry APPROVE_FINANCE_REQUESTS - otherwise the request
+  // can land on an arbitrary admin account nobody is watching for loan approvals.
   const financeRoles = await Master.find({
     type: "ROLE",
     permissions: { $in: ["APPROVE_FINANCE_REQUESTS", "ALL"] }
@@ -548,7 +555,10 @@ const resolveFinanceRecipient = async (employee) => {
     roleNames.push("Finance Manager");
   }
 
-  return User.findOne({ role: { $in: roleNames } }).select("_id name role employeeId");
+  const dedicatedFinanceRoleNames = roleNames.filter((name) => /^finance/i.test(name));
+  const preferredRoleNames = dedicatedFinanceRoleNames.length ? dedicatedFinanceRoleNames : roleNames;
+
+  return User.findOne({ role: { $in: preferredRoleNames } }).select("_id name role employeeId");
 };
 
 /**
@@ -855,6 +865,21 @@ export const createRequest = async (req, res) => {
           message: "Unable to calculate leave days for the selected dates"
         });
       }
+
+      // Wallet balance check — employees can't self-submit past their balance.
+      // Advance leave (going negative before eligibility) is an HR-only action
+      // via a separate endpoint, not this self-service submission.
+      if (details.leaveTypeId && employee) {
+        const wallet = await LeaveWallet.findOne({ employee: employee._id, leaveType: details.leaveTypeId });
+        const balance = wallet?.balanceDays ?? 0;
+        if (numberOfDays > balance) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient leave balance. Available: ${balance} day(s), requested: ${numberOfDays}. Contact HR for an advance leave request.`
+          });
+        }
+      }
+
       const sickLeave = isSickLeave(details);
       let storedMedicalDoc = null;
 
@@ -892,6 +917,11 @@ export const createRequest = async (req, res) => {
       // Ensure details has subType set (if it came from root body)
       if (details && !details.subType) {
         details.subType = type;
+      }
+
+      const requestedAmount = Number(details.amount);
+      if (Number.isFinite(requestedAmount)) {
+        details.requestedAmount = details.requestedAmount ?? requestedAmount;
       }
     }
 
@@ -1275,6 +1305,25 @@ export const updateRequestStatus = async (req, res) => {
       }
 
       if (isFinanceStage) {
+        const financeAmountProvided = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== "";
+        const financeRepaymentProvided = req.body.repaymentPeriod !== undefined && req.body.repaymentPeriod !== null && req.body.repaymentPeriod !== "";
+
+        if (request.requestType === "SALARY") {
+          const requestedAmount = Number(request.details?.requestedAmount ?? request.details?.amount) || 0;
+          request.details = {
+            ...request.details,
+            requestedAmount,
+            financeApprovedAmount: financeAmountProvided
+              ? Number(req.body.amount)
+              : Number(request.details?.financeApprovedAmount ?? request.details?.amount ?? 0),
+            financeApprovedRepaymentPeriod: financeRepaymentProvided
+              ? Number(req.body.repaymentPeriod)
+              : request.details?.financeApprovedRepaymentPeriod ?? request.details?.repaymentPeriod,
+            financeApprovedAt: new Date(),
+            financeApprovedBy: req.user.id
+          };
+        }
+
         request.financeApproval = {
           status: "APPROVED",
           actedBy: req.user.id,
@@ -1313,9 +1362,11 @@ export const updateRequestStatus = async (req, res) => {
       if (request.requestType === "SALARY") {
         const previousAmount = Number(request.details?.amount) || 0;
         const previousRepaymentPeriod = request.details?.repaymentPeriod;
-        if (req.body.amount) {
-          request.details.amount = Number(req.body.amount);
-        }
+        const approvedAmount = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== ""
+          ? Number(req.body.amount)
+          : Number(request.details?.financeApprovedAmount ?? request.details?.amount ?? 0);
+
+        request.details.amount = approvedAmount;
 
         const principal = Number(request.details.amount) || 0;
         const totalRepayment = principal;
@@ -1326,8 +1377,12 @@ export const updateRequestStatus = async (req, res) => {
           totalRepaymentAmount: totalRepayment
         };
 
-        if (req.body.repaymentPeriod) {
-          request.details.repaymentPeriod = Number(req.body.repaymentPeriod);
+        const approvedRepaymentPeriod = req.body.repaymentPeriod !== undefined && req.body.repaymentPeriod !== null && req.body.repaymentPeriod !== ""
+          ? Number(req.body.repaymentPeriod)
+          : request.details?.financeApprovedRepaymentPeriod;
+
+        if (approvedRepaymentPeriod) {
+          request.details.repaymentPeriod = Number(approvedRepaymentPeriod);
         }
 
         const startCurrentCycle = req.body.startCurrentCycle === true || req.body.startCurrentCycle === "true";
@@ -1367,7 +1422,7 @@ export const updateRequestStatus = async (req, res) => {
       request.approvedAt = new Date();
 
       if (request.requestType === "LEAVE") {
-        const { fromDate, toDate, leaveType, isPaid, isHalfDay, leavePayStatus } = request.details;
+        const { fromDate, toDate, leaveType, leaveTypeId, numberOfDays, isPaid, isHalfDay, leavePayStatus } = request.details;
         if (fromDate && toDate) {
           await markLeaveAttendance(
             request.userId,
@@ -1378,6 +1433,24 @@ export const updateRequestStatus = async (req, res) => {
             isHalfDay,
             leavePayStatus === "HALF_PAID" ? "HALF_PAID" : (leavePayStatus === "UNPAID" ? "UNPAID" : "FULLY_PAID")
           );
+        }
+
+        if (leaveTypeId && numberOfDays) {
+          const employeeUserForWallet = await User.findById(request.userId);
+          const employeeForWallet = employeeUserForWallet?.employeeId
+            ? await Employee.findById(employeeUserForWallet.employeeId)
+            : null;
+          if (employeeForWallet) {
+            await leaveWalletService.debitWallet({
+              employeeId: employeeForWallet._id,
+              leaveTypeId,
+              days: numberOfDays,
+              transactionType: "LEAVE_TAKEN",
+              remarks: `Leave request ${request.requestId} approved`,
+              requestId: request._id,
+              createdBy: req.user.id
+            });
+          }
         }
       }
     } else if (action === "REJECT") {
@@ -1468,6 +1541,15 @@ export const updateRequestStatus = async (req, res) => {
       message: `Request ${request.status.toLowerCase()} successfully`,
       data: populatedRequest
     });
+
+    logActivity({
+      req,
+      action: action === "APPROVE" ? "APPROVE" : "REJECT",
+      module: "REQUESTS",
+      description: `${request.requestType} request ${request.requestId} ${request.status.toLowerCase()} by ${req.user?.name}`,
+      targetId: request._id,
+      targetName: request.requestId
+    }).catch(() => {});
   } catch (err) {
     // console.error("❌ Update request error:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -1948,7 +2030,7 @@ export const getEmployeeRequests = async (req, res) => {
  */
 export const getLeaveSummary = async (req, res) => {
   try {
-    const { userId: queryUserId, employeeId, year } = req.query;
+    const { userId: queryUserId, employeeId, year, month } = req.query;
 
     let targetUserId = req.user._id;
 
@@ -2004,11 +2086,18 @@ export const getLeaveSummary = async (req, res) => {
       status: "APPROVED"
     };
 
-    // Filter by year if provided
+    // Filter by year, and optionally by a specific month within that year.
     if (year) {
-      const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
-      const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
-      matchQuery.createdAt = { $gte: startOfYear, $lte: endOfYear };
+      const monthNum = month ? parseInt(month, 10) : null;
+      if (monthNum && monthNum >= 1 && monthNum <= 12) {
+        const startOfMonth = new Date(Date.UTC(Number(year), monthNum - 1, 1, 0, 0, 0, 0));
+        const endOfMonth = new Date(Date.UTC(Number(year), monthNum, 0, 23, 59, 59, 999));
+        matchQuery.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
+      } else {
+        const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
+        const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
+        matchQuery.createdAt = { $gte: startOfYear, $lte: endOfYear };
+      }
     }
 
     const leaveRequests = await Request.find(matchQuery);

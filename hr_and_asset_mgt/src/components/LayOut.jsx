@@ -21,6 +21,7 @@ import Masters from "../pages/Masters/MastersView.jsx";
 import AppraisalsView from "../pages/Appraisals/AppraisalsView.jsx";
 import AnnouncementsView from "../pages/Announcements/AnnouncementsView.jsx";
 import PoliciesView from "../pages/Policies/PoliciesView.jsx";
+import ActivityLogView from "../pages/ActivityLog/ActivityLogView.jsx";
 
 export default function Layout() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -69,6 +70,7 @@ export default function Layout() {
               <Route path="policies" element={<PoliciesView />} />
               <Route path="reports" element={<Reports />} />
               <Route path="reports/builder" element={<CustomReportBuilder />} />
+              <Route path="activity-log" element={<ActivityLogView />} />
               <Route path="masters" element={<Masters />} />
             </Routes>
           </div>

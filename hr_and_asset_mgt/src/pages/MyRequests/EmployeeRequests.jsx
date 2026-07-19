@@ -224,7 +224,20 @@ export default function EmployeeRequests() {
       return `${request.details.fromDate} to ${request.details.toDate}${days}`;
     }
     if (request.requestType === "SALARY") {
-      return `Amount: AED ${request.details.amount}`;
+      const requestedAmount = request.details?.requestedAmount ?? request.details?.amount;
+      const financeApprovedAmount = request.details?.financeApprovedAmount;
+      const finalApprovedAmount = request.status === "APPROVED" ? request.details?.amount : null;
+      const parts = [`Requested: AED ${requestedAmount}`];
+
+      if (financeApprovedAmount !== undefined && financeApprovedAmount !== null) {
+        parts.push(`Finance approved: AED ${financeApprovedAmount}`);
+      }
+
+      if (finalApprovedAmount !== null) {
+        parts.push(`Final approved: AED ${finalApprovedAmount}`);
+      }
+
+      return parts.join(" • ");
     }
     if (request.requestType === "DOCUMENT") {
       return `Document: ${request.details.documentType}`;

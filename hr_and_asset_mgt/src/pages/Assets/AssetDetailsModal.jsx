@@ -96,6 +96,7 @@ export default function AssetDetailsModal({ onClose, asset }) {
                   <DetailRow label="Asset Code" value={asset.assetCode || asset.code} />
                   <DetailRow label="Serial Number" value={asset.serialNumber || "N/A"} />
                   <DetailRow label="Type" value={asset.type || "N/A"} />
+                  <DetailRow label="Nature" value={asset.assetClass || "Physical"} />
                   <DetailRow label="Category" value={asset.category} />
                   <DetailRow
                     label="Status"

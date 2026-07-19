@@ -16,6 +16,7 @@ import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 const router = express.Router();
 
 router.post("/sync", protect, hasPermission("MANAGE_ATTENDANCE"), syncBiometrics);
+router.post("/sync-biometrics", protect, hasPermission("MANAGE_ATTENDANCE"), syncBiometrics);
 router.get("/monthly", protect, getMonthlyAttendance); // View own or all? Assuming all/manager view for now or handled in controller.
 router.get("/export", protect, hasPermission("MANAGE_ATTENDANCE"), exportAttendance);
 router.get("/", protect, getDailyAttendance); // Viewing daily attendance (role-filtered in controller)

@@ -12,7 +12,8 @@ import {
   getProbationReminders,
   confirmProbation,
   resetEmployeePassword,
-  getEmployeeGratuity
+  getEmployeeGratuity,
+  uploadEmployeePhoto
 } from "../controllers/employeeController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
@@ -40,6 +41,7 @@ router.get("/:id/gratuity", protect, getEmployeeGratuity);
 
 // UPDATE employee
 router.put("/:id", protect, hasPermission("MANAGE_EMPLOYEES"), updateEmployee);
+router.post("/:id/photo", protect, upload.single("photo"), uploadEmployeePhoto);
 router.post("/:id/transfer", protect, hasPermission("MANAGE_EMPLOYEES"), transferEmployee);
 router.post("/:id/confirm-probation", protect, hasPermission("MANAGE_EMPLOYEES"), confirmProbation);
 router.put("/:id/reset-password", protect, hasPermission("MANAGE_EMPLOYEES"), resetEmployeePassword);

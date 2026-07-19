@@ -1,5 +1,8 @@
 import CompanyDocument from "../models/companyDocModel.js";
+import EmployeeDocument from "../models/employeeDocumentModel.js";
+import Employee from "../models/employeeModel.js";
 import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
+import { computeExpiryStatus } from "../utils/expiryStatus.js";
 
 // GET all docs with Filters & Search
 export const getDocs = async (req, res) => {
@@ -18,19 +21,22 @@ export const getDocs = async (req, res) => {
             query.type = type;
         }
 
-        // Filter by Status
-        if (status && status !== "All Status") {
-            query.status = status;
-        }
-
+        // Status is recomputed from expiryDate below (the stored field goes stale as
+        // time passes), so filter on it after fetching rather than in the DB query.
         const docs = await CompanyDocument.find(query).sort({ expiryDate: 1 });
-        const signedDocs = await Promise.all(
+        let signedDocs = await Promise.all(
             docs.map(async (doc) => {
                 const item = doc.toObject();
+                item.status = computeExpiryStatus(item.expiryDate);
                 item.fileUrl = await getSignedFileUrl(item);
                 return item;
             })
         );
+
+        if (status && status !== "All Status") {
+            signedDocs = signedDocs.filter(d => d.status === status);
+        }
+
         res.json(signedDocs);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -103,21 +109,44 @@ export const deleteDoc = async (req, res) => {
     }
 };
 // GET Doc Stats
+// Default scope unifies three expiry sources so the Dashboard card reflects the whole
+// org: Company documents, per-employee uploaded documents (passport/visa/EID scans via
+// EmployeeDocument), and the expiry fields stored directly on Employee
+// (passportExpiry/emiratesIdExpiry/visaExpiry) for employees who never uploaded a scan.
+// Pass ?scope=company (used by the Document Library page) to count Company documents only.
+// Status is recomputed from expiryDate at request time, not read from the stored
+// `status` field, which is only set once at upload time and goes stale.
 export const getDocStats = async (req, res) => {
     try {
-        const total = await CompanyDocument.countDocuments();
-        const valid = await CompanyDocument.countDocuments({ status: "Valid" });
-        const expiring = await CompanyDocument.countDocuments({ status: "Expiring Soon" });
-        const expired = await CompanyDocument.countDocuments({ status: "Expired" });
-        const critical = await CompanyDocument.countDocuments({ status: "Critical" });
+        const counts = { total: 0, valid: 0, expiring: 0, expired: 0, critical: 0 };
+        const bump = (expiryDate) => {
+            counts.total++;
+            const status = computeExpiryStatus(expiryDate);
+            if (status === "Valid") counts.valid++;
+            else if (status === "Expiring Soon") counts.expiring++;
+            else if (status === "Expired") counts.expired++;
+            else if (status === "Critical") counts.critical++;
+        };
 
-        res.json({
-            total,
-            valid,
-            expiring,
-            expired,
-            critical
-        });
+        const companyDocs = await CompanyDocument.find({}, { expiryDate: 1 });
+        companyDocs.forEach(d => bump(d.expiryDate));
+
+        if (req.query.scope !== "company") {
+            const employeeDocs = await EmployeeDocument.find({}, { expiryDate: 1 });
+            employeeDocs.forEach(d => bump(d.expiryDate));
+
+            const employees = await Employee.find(
+                { $or: [{ passportExpiry: { $ne: null } }, { emiratesIdExpiry: { $ne: null } }, { visaExpiry: { $ne: null } }] },
+                { passportExpiry: 1, emiratesIdExpiry: 1, visaExpiry: 1 }
+            );
+            employees.forEach(e => {
+                if (e.passportExpiry) bump(e.passportExpiry);
+                if (e.emiratesIdExpiry) bump(e.emiratesIdExpiry);
+                if (e.visaExpiry) bump(e.visaExpiry);
+            });
+        }
+
+        res.json(counts);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

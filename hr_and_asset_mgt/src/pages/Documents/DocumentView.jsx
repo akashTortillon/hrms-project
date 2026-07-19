@@ -71,7 +71,7 @@ function Documents() {
     // Only fetch global stats if manager
     if (!isManager) return;
     try {
-      const data = await getDocumentStats();
+      const data = await getDocumentStats({ scope: "company" });
       setStats(data);
     } catch (err) {
       console.error("Stats failed", err);

@@ -11,6 +11,7 @@ export default function SystemSettings() {
   const {
     loading,
     holidays,
+    allowanceTypes,
     notificationSettings,
     settings,
     handleSettingsChange,
@@ -18,6 +19,18 @@ export default function SystemSettings() {
     handleImport,
     handleBackup,
     handleRestore,
+    // Payroll Period Anchor
+    currentAnchorEnd,
+    showAnchorModal,
+    openAnchorModal,
+    closeAnchorModal,
+    anchorDateInput,
+    setAnchorDateInput,
+    anchorConfirmText,
+    setAnchorConfirmText,
+    anchorConflict,
+    anchorSaving,
+    handleSetAnchor,
     // Modal & Handlers
     showModal,
     setShowModal,
@@ -109,6 +122,20 @@ export default function SystemSettings() {
         />
       </MastersCard>
 
+      {/* Allowance Types */}
+      <MastersCard
+        title="Allowance Types"
+        description="Master list of allowance names available when adding/increasing an employee's allowance in Appraisals"
+        onAdd={() => handleOpenAdd("Allowance Type")}
+      >
+        <RenderList
+          items={allowanceTypes}
+          type="Allowance Type"
+          handleDelete={handleDelete}
+          handleEdit={handleOpenEdit}
+        />
+      </MastersCard>
+
       {/* Notification Engine */}
       <MastersCard
         title="Notification Engine"
@@ -160,6 +187,89 @@ export default function SystemSettings() {
           </div>
         </div>
       </MastersCard>
+
+      {/* Payroll Period Anchor */}
+      <MastersCard title="Payroll Period Anchor">
+        <div className="data-actions">
+          <div className="data-action bg-red-50 border-red-100">
+            <div>
+              <div className="data-title text-red-900">Set Starting Anchor</div>
+              <div className="data-desc text-red-500">
+                Moves the payroll "From" date lockout to a date you choose, without
+                creating, editing, or finalizing any real payroll or employee records.
+                Use this only to correct or set up where the rolling payroll period
+                should start counting from (e.g. locking "From" to June 26 instead of
+                the 1st of the month). It does not run payroll and does not affect
+                anything already paid.
+                {currentAnchorEnd && (
+                  <> Current anchor: next period starts after <strong>{currentAnchorEnd}</strong>.</>
+                )}
+              </div>
+            </div>
+            <CustomButton onClick={openAnchorModal} variant="danger" size="sm" className="bg-red-600 text-white hover:bg-red-700">
+              Set Anchor
+            </CustomButton>
+          </div>
+        </div>
+      </MastersCard>
+
+      <CustomModal
+        show={showAnchorModal}
+        title="Set Payroll Starting Anchor"
+        onClose={closeAnchorModal}
+        footer={
+          <>
+            <CustomButton variant="secondary" onClick={closeAnchorModal} className="bg-gray-200 text-gray-700 hover:bg-gray-300">
+              Cancel
+            </CustomButton>
+            <CustomButton
+              onClick={() => handleSetAnchor(!!anchorConflict)}
+              disabled={anchorSaving || anchorConfirmText.trim().toLowerCase() !== "yes" || !anchorDateInput}
+              variant="danger"
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {anchorSaving ? "Saving..." : anchorConflict ? "Override & Set Anchor" : "Set Anchor"}
+            </CustomButton>
+          </>
+        }
+      >
+        <div className="form-group flex flex-col gap-4">
+          <div className="data-desc">
+            Pick the last day of the period that should count as already covered.
+            The next payroll "From" date will lock to the day right after it.
+            This does not touch any Payroll or Employee data — it only moves the marker.
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Anchor End Date</label>
+            <input
+              type="date"
+              value={anchorDateInput}
+              onChange={(e) => setAnchorDateInput(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+          </div>
+
+          {anchorConflict && (
+            <div className="data-desc text-red-600 bg-red-50 border border-red-100 rounded-md p-2">
+              {anchorConflict.message}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Type "Yes" to confirm
+            </label>
+            <input
+              type="text"
+              value={anchorConfirmText}
+              onChange={(e) => setAnchorConfirmText(e.target.value)}
+              placeholder="Yes"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </CustomModal>
 
       <CustomModal
         show={showModal}

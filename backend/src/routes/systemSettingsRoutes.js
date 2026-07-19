@@ -5,6 +5,9 @@ import {
     addHoliday,
     updateHoliday,
     deleteHoliday,
+    addAllowanceType,
+    updateAllowanceType,
+    deleteAllowanceType,
     toggleNotification
 } from '../controllers/systemSettingsController.js';
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
@@ -22,6 +25,11 @@ router.put('/global', updateGlobalSettings);
 router.post('/holidays', addHoliday);
 router.put('/holidays/:id', updateHoliday);
 router.delete('/holidays/:id', deleteHoliday);
+
+// Allowance Types
+router.post('/allowance-types', addAllowanceType);
+router.put('/allowance-types/:id', updateAllowanceType);
+router.delete('/allowance-types/:id', deleteAllowanceType);
 
 // Notifications
 router.put('/notifications/:id/toggle', toggleNotification);

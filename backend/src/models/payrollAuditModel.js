@@ -4,7 +4,7 @@ const payrollAuditSchema = new mongoose.Schema({
     action: {
         type: String,
         required: true,
-        enum: ["GENERATED", "FINALIZED", "ADJUSTMENT", "EXPORTED", "SIF_GENERATED"]
+        enum: ["GENERATED", "FINALIZED", "UNFINALIZED", "ANCHOR_SET", "ADJUSTMENT", "EXPORTED", "SIF_GENERATED"]
     },
     performedBy: {
         type: mongoose.Schema.Types.ObjectId,
@@ -14,6 +14,12 @@ const payrollAuditSchema = new mongoose.Schema({
     performedByName: { type: String },
     month: { type: String, required: true },
     year: { type: String, required: true },
+    // Real period identity for GENERATED/FINALIZED entries under the rolling-window
+    // model. Optional so pre-existing audit rows (calendar-month era) still validate;
+    // getLatestFinalizedCycle() falls back to computing an equivalent periodEnd from
+    // month/year for those older rows.
+    periodStart: { type: Date },
+    periodEnd: { type: Date },
     details: { type: String },
     relatedPayrollId: { type: mongoose.Schema.Types.ObjectId, ref: "Payroll" }, // ✅ Linked to specific payroll record
 

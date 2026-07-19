@@ -19,9 +19,10 @@ export const uploadDocument = async (formData) => {
     return res.data;
 };
 
-// GET Stats
-export const getDocumentStats = async () => {
-    const res = await api.get(`${BASE_URL}/stats`);
+// GET Stats. Pass { scope: "company" } to count only Company documents (Documents Library
+// page); omit for the merged org-wide count (Dashboard card).
+export const getDocumentStats = async (params = {}) => {
+    const res = await api.get(`${BASE_URL}/stats`, { params });
     return res.data;
 };
 

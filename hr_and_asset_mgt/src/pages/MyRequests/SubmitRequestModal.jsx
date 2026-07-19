@@ -4,12 +4,14 @@ import "../../style/SubmitRequestModal.css";
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
 import { leaveTypeService, repaymentPeriodService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
+import { getMyWallets } from "../../services/leaveWalletService.js";
 import { toast } from "react-toastify";
 
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
+  const [walletBalances, setWalletBalances] = useState([]); // leaveTypeId -> balanceDays
   const [repaymentPeriods, setRepaymentPeriods] = useState([]);
   const [medicalFile, setMedicalFile] = useState(null);
 
@@ -71,7 +73,19 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
       }
     };
     fetchLeaveTypes();
+
+    const fetchWallets = async () => {
+      try {
+        const res = await getMyWallets();
+        setWalletBalances(res.data || []);
+      } catch (error) {
+        console.error("Failed to fetch leave balances:", error);
+      }
+    };
+    fetchWallets();
   }, []);
+
+  const selectedBalance = walletBalances.find(w => w.leaveTypeId === leaveForm.leaveTypeId);
 
   useEffect(() => {
     const fetchRepaymentPeriods = async () => {
@@ -285,6 +299,14 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                     </option>
                   ))}
                 </select>
+                {selectedBalance && (
+                  <p style={{
+                    margin: "6px 0 0 0", fontSize: "12px",
+                    color: selectedBalance.balanceDays < 0 ? "#dc2626" : "#6b7280"
+                  }}>
+                    Available balance: <strong>{selectedBalance.balanceDays} day(s)</strong>
+                  </p>
+                )}
               </div>
 
               <div>

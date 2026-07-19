@@ -6,7 +6,16 @@ import "../../style/Employees.css";
 
 import { useRole } from "../../contexts/RoleContext";
 
-export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
+const resolveUploadedAssetUrl = (url) => {
+  if (!url) return "";
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+
+  const apiBase = import.meta.env.VITE_API_BASE || "";
+  const serverBase = apiBase.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
+};
+
+export default function EmployeesTable({ employees = [] }) {
   const navigate = useNavigate();
   const { hasPermission } = useRole();
 
@@ -37,7 +46,11 @@ export default function EmployeesTable({ employees = [], onEdit, onDelete }) {
                       style={{ cursor: 'pointer' }}
                     >
                       <div className="employee-avatar">
-                        {emp.name.charAt(0)}
+                        {emp.profilePhotoUrl ? (
+                          <img src={resolveUploadedAssetUrl(emp.profilePhotoUrl)} alt={emp.name} />
+                        ) : (
+                          emp.name.charAt(0)
+                        )}
                       </div>
                       <div>
                         <div className="employee-name">{emp.name}</div>

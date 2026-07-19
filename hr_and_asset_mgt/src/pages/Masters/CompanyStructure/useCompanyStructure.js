@@ -37,6 +37,8 @@ export default function useCompanyStructure() {
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [companyCode, setCompanyCode] = useState("");
+    const [branchCompanyId, setBranchCompanyId] = useState("");
 
     const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
@@ -89,11 +91,13 @@ export default function useCompanyStructure() {
         }
     };
 
-    const handleOpenAdd = (type) => {
+    const handleOpenAdd = (type, parentCompanyId = "") => {
         setModalType(type);
         setInputValue("");
         setSelectedPermissions([]);
         setRepaymentMonths("");
+        setCompanyCode("");
+        setBranchCompanyId(type === "Branch" ? parentCompanyId : "");
         setEditId(null);
         setImageFile(null);
         setImagePreview(null);
@@ -112,6 +116,10 @@ export default function useCompanyStructure() {
         if (type === "Company") {
             setImagePreview(item.image);
             setImageFile(null);
+            setCompanyCode(item.code || "");
+        }
+        if (type === "Branch") {
+            setBranchCompanyId(item.parentId || "");
         }
         setEditId(item._id);
         setShowModal(true);
@@ -130,16 +138,21 @@ export default function useCompanyStructure() {
             } else if (modalType === "Company") {
                 const formData = new FormData();
                 formData.append("name", inputValue);
+                formData.append("code", companyCode.trim());
                 if (imageFile) {
                     formData.append("image", imageFile);
                 }
-                
+
                 if (editId) await updateCompany(editId, formData);
                 else await addCompany(formData);
                 const data = await getCompanies();
                 setCompanies(data);
             } else if (modalType === "Branch") {
-                const payload = { name: inputValue };
+                if (!branchCompanyId) {
+                    toast.warning("Please select the company this branch belongs to");
+                    return;
+                }
+                const payload = { name: inputValue, parentId: branchCompanyId };
                 if (editId) await updateBranch(editId, payload);
                 else await addBranch(payload);
                 const data = await getBranches();
@@ -255,6 +268,10 @@ export default function useCompanyStructure() {
         setImageFile,
         imagePreview,
         setImagePreview,
+        companyCode,
+        setCompanyCode,
+        branchCompanyId,
+        setBranchCompanyId,
         handleOpenAdd,
         handleOpenEdit,
         handleSave,

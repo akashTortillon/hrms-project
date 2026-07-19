@@ -2,9 +2,11 @@ import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
 
-
-
-export default function PayrollSummaryCards({ stats, month, year, setMonth, setYear, onExportWPS }) {
+export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS }) {
+  // Rolling pay period, force-contiguous: "From" is always locked/auto-computed by
+  // the parent (day after the last finalized period's end) — HR only picks "To".
+  // Picking "To" is what defines the period; the actual attendance-day count
+  // (29, 30, 31, whatever) just falls out of whatever range gets picked.
   const cards = [
     {
       title: "Most recent payroll",
@@ -48,16 +50,24 @@ export default function PayrollSummaryCards({ stats, month, year, setMonth, setY
 
         <div className="payroll-header-actions">
            <div className="period-selector">
-              <select className="period-select" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
-                ))}
-              </select>
-              <select className="period-select" value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {[2024, 2025, 2026].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+              <div className="period-date-range">
+                <input
+                  type="date"
+                  className="period-select period-date-input"
+                  value={periodStart}
+                  disabled
+                  title="Period start — locked to the day after the last finalized period ended"
+                />
+                <span className="period-date-range-sep">to</span>
+                <input
+                  type="date"
+                  className="period-select period-date-input"
+                  value={periodEnd}
+                  min={periodStart}
+                  onChange={(e) => e.target.value && setPeriodEnd(e.target.value)}
+                  title="Period end — pick the date this payroll cycle should close on"
+                />
+              </div>
            </div>
            <button className="export-record-btn" onClick={onExportWPS}>
               <SvgIcon name="download" size={14} />

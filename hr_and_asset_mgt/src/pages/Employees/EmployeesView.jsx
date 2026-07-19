@@ -122,7 +122,7 @@ import {
 } from "../../services/employeeService.js";
 import { toast } from "react-toastify";
 
-import { getDepartments, getBranches } from "../../services/masterService";
+import { getDepartments, getBranches, getCompanies, getDesignations } from "../../services/masterService";
 import { useRole } from "../../contexts/RoleContext";
 
 export default function Employees() {
@@ -130,10 +130,16 @@ export default function Employees() {
   // 🔹 URL Filters (Source of Truth)
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const department = searchParams.get("department") || "All Departments";
-  const branch = searchParams.get("branch") || "All Branches";
+  // 🔹 Single filter: pick a dimension (company/department/branch/designation), then a value within it
+  const filterField = searchParams.get("filterField") || "department";
+  const filterValue = searchParams.get("filterValue") || "";
   const status = searchParams.get("status") || "All Status";
   const urlSearch = searchParams.get("search") || "";
+
+  const department = filterField === "department" && filterValue ? filterValue : "All Departments";
+  const branch = filterField === "branch" && filterValue ? filterValue : "All Branches";
+  const company = filterField === "company" && filterValue ? filterValue : "All Companies";
+  const designation = filterField === "designation" && filterValue ? filterValue : "All Designations";
 
   // 🔹 Local Search State (for Debounce)
   const [searchInput, setSearchInput] = useState(urlSearch);
@@ -141,9 +147,18 @@ export default function Employees() {
   // 🔹 Options & Data
   const [deptOptions, setDeptOptions] = useState([]);
   const [branchOptions, setBranchOptions] = useState([]);
+  const [companyOptions, setCompanyOptions] = useState([]);
+  const [designationOptions, setDesignationOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  const filterOptionsByField = {
+    company: companyOptions,
+    department: deptOptions,
+    branch: branchOptions,
+    designation: designationOptions
+  };
 
   // 🔹 Sync Local Search with URL (e.g. back button)
   useEffect(() => {
@@ -164,10 +179,12 @@ export default function Employees() {
     return () => clearTimeout(timer);
   }, [searchInput, setSearchParams, urlSearch]);
 
-  // 🔹 Fetch Departments & Branches on Mount
+  // 🔹 Fetch filter dimension options on Mount
   useEffect(() => {
     loadDepartments();
     loadBranches();
+    loadCompanies();
+    loadDesignations();
   }, []);
 
   const loadDepartments = async () => {
@@ -192,6 +209,28 @@ export default function Employees() {
     }
   };
 
+  const loadCompanies = async () => {
+    try {
+      const data = await getCompanies();
+      if (data) {
+        setCompanyOptions(data.map(c => c.name));
+      }
+    } catch (err) {
+      console.error("Failed to load companies", err);
+    }
+  };
+
+  const loadDesignations = async () => {
+    try {
+      const data = await getDesignations();
+      if (data) {
+        setDesignationOptions(data.map(d => d.name));
+      }
+    } catch (err) {
+      console.error("Failed to load designations", err);
+    }
+  };
+
   // 🔹 Fetch Employees when URL Params change
   useEffect(() => {
     fetchEmployees();
@@ -208,6 +247,8 @@ export default function Employees() {
       const params = {
         department,
         branch,
+        company,
+        designation,
         status,
         search: urlSearch
       };
@@ -227,7 +268,8 @@ export default function Employees() {
         joinDate: emp.joinDate
           ? new Date(emp.joinDate).toISOString().split("T")[0]
           : "",
-        status: emp.status
+        status: emp.status,
+        profilePhotoUrl: emp.profilePhotoUrl
       }));
 
       setEmployees(formattedEmployees);
@@ -239,18 +281,18 @@ export default function Employees() {
   };
 
   // 🔹 Filter Handlers
-  const handleSetDepartment = (val) => {
+  const handleSetFilterField = (field) => {
     setSearchParams(prev => {
-      prev.set("department", val);
-      // If val is "All Departments", we can keep it or delete it. 
-      // Keeping it makes UI state explicit in URL: ?department=All%20Departments
+      prev.set("filterField", field);
+      prev.delete("filterValue");
       return prev;
     });
   };
 
-  const handleSetBranch = (val) => {
+  const handleSetFilterValue = (val) => {
     setSearchParams(prev => {
-      prev.set("branch", val);
+      if (val) prev.set("filterValue", val);
+      else prev.delete("filterValue");
       return prev;
     });
   };
@@ -313,6 +355,8 @@ export default function Employees() {
       const params = {
         department,
         branch,
+        company,
+        designation,
         status,
         search: searchInput
       };
@@ -338,16 +382,15 @@ export default function Employees() {
       {/* HEADER */}
       <EmployeesHeader
         onAddEmployee={hasPermission("MANAGE_EMPLOYEES") ? () => setShowAddModal(true) : null}
-        department={department}
-        setDepartment={handleSetDepartment}
-        branch={branch}
-        setBranch={handleSetBranch}
+        filterField={filterField}
+        setFilterField={handleSetFilterField}
+        filterValue={filterValue}
+        setFilterValue={handleSetFilterValue}
+        filterOptionsByField={filterOptionsByField}
         status={status}
         setStatus={handleSetStatus}
         search={searchInput}
         setSearch={setSearchInput}
-        deptOptions={deptOptions}
-        branchOptions={branchOptions}
         onExport={hasPermission("MANAGE_EMPLOYEES") ? handleExport : null}
         onImport={
           hasPermission("MANAGE_EMPLOYEES")

@@ -49,8 +49,15 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
 
     useEffect(() => {
         if (request && request.details) {
-            setAmount(parseFloat(request.details.amount) || 0);
-            setTenure(parseInt(request.details.repaymentPeriod) || 1);
+            const defaultAmount = request.currentApprovalStage === "HR"
+                ? request.details.financeApprovedAmount ?? request.details.amount
+                : request.details.amount;
+            const defaultTenure = request.currentApprovalStage === "HR"
+                ? request.details.financeApprovedRepaymentPeriod ?? request.details.repaymentPeriod
+                : request.details.repaymentPeriod;
+
+            setAmount(parseFloat(defaultAmount) || 0);
+            setTenure(parseInt(defaultTenure) || 1);
             setStartCurrentCycle(false);
         }
     }, [request]);
@@ -86,6 +93,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     const isLoan = request.details?.subType === 'loan' || request.subType === 'loan';
     const typeLabel = isLoan ? "Loan" : "Salary Advance";
     const isFinanceStage = request.currentApprovalStage === "FINANCE";
+    const requestedAmount = request.details?.requestedAmount ?? request.details?.amount;
+    const financeApprovedAmount = request.details?.financeApprovedAmount;
     const stageLabel = isFinanceStage ? "Finance Confirmation (Level 1)" : "HR Final Approval";
 
     // Footer Actions
@@ -117,7 +126,12 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                     marginBottom: '12px',
                     border: '1px solid #b6effb'
                 }}>
-                    Reviewing request from <strong>{request.userId?.name}</strong> for <strong>{amount} AED</strong>.
+                    Reviewing request from <strong>{request.userId?.name}</strong> for <strong>{requestedAmount} AED</strong>.
+                    {!isFinanceStage && financeApprovedAmount !== undefined && financeApprovedAmount !== null && (
+                        <>
+                            {" "}Finance approved <strong>{financeApprovedAmount} AED</strong>.
+                        </>
+                    )}
                 </div>
 
                 {/* Stage badge */}
@@ -158,7 +172,10 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                             onChange={(e) => setAmount(e.target.value)}
                         />
                         <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
-                            Requested Amount: {request.details.amount} AED. You may modify this value as needed.
+                            Requested Amount: {requestedAmount} AED
+                            {!isFinanceStage && financeApprovedAmount !== undefined && financeApprovedAmount !== null
+                                ? ` | Finance Approved: ${financeApprovedAmount} AED`
+                                : ""}. You may modify this value as needed.
                         </small>
                     </div>
 

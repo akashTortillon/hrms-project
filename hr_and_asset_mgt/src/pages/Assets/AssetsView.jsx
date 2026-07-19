@@ -78,6 +78,7 @@ function Assets() {
 
   // Filters
   const [search, setSearch] = useState("");
+  const [assetClass, setAssetClass] = useState("ALL");
   const [type, setType] = useState("ALL");
   const [status, setStatus] = useState("ALL");
   const [branch, setBranch] = useState("ALL");
@@ -92,6 +93,7 @@ function Assets() {
 
       const params = {
         search: search || undefined,
+        assetClass: assetClass !== "ALL" ? assetClass : undefined,
         type: type !== "ALL" ? type : undefined,
         status: status !== "ALL" ? status : undefined,
         branch: branch !== "ALL" ? branch : undefined,
@@ -161,7 +163,7 @@ function Assets() {
   
   useEffect(() => {
     fetchAssets();
-  }, [search, type, status, branch, company]);
+  }, [search, assetClass, type, status, branch, company]);
 
   // Filtered assets
   // const filteredAssets = useMemo(() => {
@@ -441,6 +443,8 @@ function Assets() {
       <AssetsFilters
         search={search}
         setSearch={setSearch}
+        assetClass={assetClass}
+        setAssetClass={setAssetClass}
         type={type}
         setType={setType}
         status={status}

@@ -145,6 +145,19 @@ export const addItem = async (req, res) => {
             payload.image = req.file.location;
         }
 
+        // Branches must be nested under a valid Company
+        if (dbType === "BRANCH") {
+            if (!payload.parentId) {
+                return res.status(400).json({ message: "A branch must be assigned to a company" });
+            }
+            const parentCompany = await Master.findOne({ _id: payload.parentId, type: "COMPANY" });
+            if (!parentCompany) {
+                return res.status(400).json({ message: "Selected company not found in master data" });
+            }
+        } else {
+            delete payload.parentId;
+        }
+
         const newItem = new Master(payload);
         await newItem.save();
         
@@ -191,6 +204,18 @@ export const updateItem = async (req, res) => {
         // If new file was uploaded (from S3 middleware)
         if (req.file && req.file.location) {
             payload.image = req.file.location;
+        }
+
+        if (dbType === "BRANCH") {
+            if (!payload.parentId) {
+                return res.status(400).json({ message: "A branch must be assigned to a company" });
+            }
+            const parentCompany = await Master.findOne({ _id: payload.parentId, type: "COMPANY" });
+            if (!parentCompany) {
+                return res.status(400).json({ message: "Selected company not found in master data" });
+            }
+        } else {
+            delete payload.parentId;
         }
 
         const updated = await Master.findByIdAndUpdate(id, payload, { new: true });
@@ -297,8 +322,16 @@ export const deleteItem = async (req, res) => {
         // 5. Check Master (Self-linkage, e.g. Categories linked to Asset Type)
         const linkedMasters = await Master.countDocuments({ assetTypeId: id });
         if (linkedMasters > 0) {
-            return res.status(400).json({ 
-                message: `Cannot delete: This master item is referenced by ${linkedMasters} other master entries.` 
+            return res.status(400).json({
+                message: `Cannot delete: This master item is referenced by ${linkedMasters} other master entries.`
+            });
+        }
+
+        // 6. Check Master (Branches nested under this Company)
+        const nestedChildren = await Master.countDocuments({ parentId: id });
+        if (nestedChildren > 0) {
+            return res.status(400).json({
+                message: `Cannot delete: This company has ${nestedChildren} branch(es) under it. Delete or reassign those branches first.`
             });
         }
 

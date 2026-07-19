@@ -14,6 +14,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +41,58 @@ const resolveCompanyLogoPath = (companyImage) => {
 
 const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month);
 
+// Midnight-normalized day formatter/parser — periods are whole days, so all
+// period-boundary comparisons happen at day granularity, not exact timestamps.
+const toDayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const toDayEnd = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const formatYMD = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+};
+
+// Finds the furthest-out finalized payroll period (by periodEnd date, not by when
+// the finalize action was logged — periods can be finalized out of order) so the
+// lockout always reflects the actual latest locked period, not a hardcoded cutoff
+// day. Legacy audit rows from before rolling periods existed only have month/year —
+// for those, periodEnd is synthesized as the last calendar day of that month so old
+// finalizations still lock correctly under the new date-based comparison.
+const getLatestFinalizedCycle = async () => {
+    // ANCHOR_SET entries participate too — an admin-set starting anchor moves the
+    // lockout cursor exactly like a real finalize would, without any actual
+    // Payroll records existing for it.
+    const finalized = await PayrollAudit
+        .find({ action: { $in: ["FINALIZED", "ANCHOR_SET"] } })
+        .select("month year periodStart periodEnd createdAt");
+
+    if (!finalized.length) return null;
+
+    return finalized.reduce((latest, entry) => {
+        const periodEnd = entry.periodEnd
+            ? toDayEnd(entry.periodEnd)
+            : toDayEnd(new Date(Number(entry.year), Number(entry.month), 0));
+        if (!latest || periodEnd > latest.periodEnd) {
+            const periodStart = entry.periodStart ? toDayStart(entry.periodStart) : null;
+            return {
+                month: Number(entry.month),
+                year: Number(entry.year),
+                periodStart,
+                periodEnd,
+                // Plain "YYYY-MM-DD" strings alongside the Date objects — lets the
+                // frontend compare against its own date-input state directly instead
+                // of reconstructing Date objects client-side (browser/server timezone
+                // drift risk otherwise).
+                periodStartStr: periodStart ? formatYMD(periodStart) : null,
+                periodEndStr: formatYMD(periodEnd),
+                finalizedAt: entry.createdAt
+            };
+        }
+        return latest;
+    }, null);
+};
+
 const hasScheduledSkip = (details = {}, month, year) => {
     const overrides = Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
     return overrides.some((entry) =>
@@ -49,8 +102,8 @@ const hasScheduledSkip = (details = {}, month, year) => {
     );
 };
 
-const resolveEffectiveSalary = (employee, month, year) => {
-    const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
+const resolveEffectiveSalary = (employee, asOfDate) => {
+    const periodEnd = toDayEnd(asOfDate);
     const history = [...(employee.salaryHistory || [])]
         .filter(entry => entry.effectiveDate && new Date(entry.effectiveDate) <= periodEnd)
         .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
@@ -195,13 +248,18 @@ const parseHours = (timeStr) => {
 };
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employee, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
+const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
     const employeeId = employee._id;
-    // 1. Setup Date Range
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const strMonth = String(month).padStart(2, '0');
-    const startStr = `${year}-${strMonth}-01`;
-    const endStr = `${year}-${strMonth}-${daysInMonth}`;
+    // 1. Setup Date Range — periodStart/periodEnd are the actual pay-period
+    // boundaries (rolling window, not necessarily a calendar month).
+    const rangeStart = toDayStart(periodStart);
+    const rangeEnd = toDayEnd(periodEnd);
+    // Day-count MUST diff two day-starts (not day-start to day-end, which rounds
+    // up an extra day) — this count drives the loop below, so an off-by-one here
+    // silently pulls in one real day past the period boundary.
+    const totalDaysInPeriod = Math.round((toDayStart(periodEnd) - rangeStart) / 86400000) + 1;
+    const startStr = formatYMD(rangeStart);
+    const endStr = formatYMD(rangeEnd);
 
     // 2. Fetch Data Sources
     const logs = await Attendance.find({
@@ -226,7 +284,7 @@ const getAttendanceStats = async (employee, month, year, preFetchedSettings = nu
     }
 
     // --- PHASE 1: BUILD DAY-BY-DAY STATUS ARRAY ---
-    const dayStatuses = []; // Index 0 = Day 1
+    const dayStatuses = []; // Index 0 = first day of period
     const GLOBAL_STANDARD_HOURS = 9;
 
     // Helper to get hours for a specific shift name
@@ -237,9 +295,10 @@ const getAttendanceStats = async (employee, month, year, preFetchedSettings = nu
 
     let totalOvertimeHours = 0;
 
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${year}-${strMonth}-${String(day).padStart(2, '0')}`;
-        const dateObj = new Date(year, month - 1, day);
+    for (let i = 0; i < totalDaysInPeriod; i++) {
+        const day = i + 1;
+        const dateObj = addDays(rangeStart, i);
+        const dateStr = formatYMD(dateObj);
         const dayOfWeek = dateObj.getDay(); // 0 = Sun
 
         let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, HALF_PAID_LEAVE, UNPAID_LEAVE
@@ -364,7 +423,7 @@ const getAttendanceStats = async (employee, month, year, preFetchedSettings = nu
     const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
 
     if (hasAnyWorkedOrApprovedDay) {
-        console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
+        console.log(`[DEBUG] Employee ${employeeId} (${startStr} to ${endStr}) - Starting Sandwich Check (With Boundary Scan)`);
 
         let i = 0;
         while (i < dayStatuses.length) {
@@ -381,9 +440,8 @@ const getAttendanceStats = async (employee, month, year, preFetchedSettings = nu
                 if (i > 0) {
                     if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
                 } else {
-                    // BOUNDARY CHECK: Scan backwards from Day 1
-                    let backDate = new Date(year, month - 1, 1);
-                    backDate.setDate(backDate.getDate() - 1); // Last day of prev month
+                    // BOUNDARY CHECK: Scan backwards from the day before this period starts
+                    let backDate = addDays(rangeStart, -1);
 
                     // Scan up to 7 days back looking for non-gap
                     for (let b = 0; b < 7; b++) {
@@ -401,9 +459,8 @@ const getAttendanceStats = async (employee, month, year, preFetchedSettings = nu
                 if (j < dayStatuses.length) {
                     if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
                 } else {
-                    // BOUNDARY CHECK: Scan forwards from End of Month
-                    let fwdDate = new Date(year, month - 1, daysInMonth);
-                    fwdDate.setDate(fwdDate.getDate() + 1); // First day of next month
+                    // BOUNDARY CHECK: Scan forwards from the day after this period ends
+                    let fwdDate = addDays(rangeEnd, 1);
 
                     for (let f = 0; f < 7; f++) {
                         const st = getStatusForDate(fwdDate);
@@ -482,8 +539,8 @@ const getAttendanceStats = async (employee, month, year, preFetchedSettings = nu
     });
 
     return {
-        totalDays: daysInMonth,
-        daysPresent: paidDays, // Note: Present includes weekends/holidays/paid leaves in terms of "Days Paid" usually? 
+        totalDays: totalDaysInPeriod,
+        daysPresent: paidDays, // Note: Present includes weekends/holidays/paid leaves in terms of "Days Paid" usually?
         // Wait, previously paidDays meant "Days to be Paid for".
         // PRESENT, WEEKEND, HOLIDAY, PAID_LEAVE all contribute to Salary (if 30 day basis).
         // ABSENT, UNPAID_LEAVE, SANDWICH reduce from 30? Or if 'paidDays' is solely 'Worked Days'?
@@ -555,10 +612,126 @@ export const validatePayrollGeneration = async (req, res) => {
     }
 };
 
+// --- API: Latest Finalized Payroll Period ---
+// Used by the period picker to lock out any month/year at or before the last
+// finalized cycle. Derived from the audit trail so it moves with whenever
+// finalize actually happens, instead of a fixed day-of-month cutoff.
+export const getLatestFinalizedPeriod = async (req, res) => {
+    try {
+        const latest = await getLatestFinalizedCycle();
+        res.json({ success: true, latestFinalized: latest });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch latest finalized payroll period" });
+    }
+};
+
+// --- API: Set Payroll Period Anchor ---
+// Admin-only correction tool (Masters > System Settings), separate from Finalize/
+// Un-finalize. Moves the rolling-period lockout cursor to a chosen date WITHOUT
+// creating, editing, or touching any real Payroll/employee data — purely records
+// a marker so the next generate's "From" locks to (anchorDate + 1 day). Used to
+// set up or correct where the date-range payroll system starts counting from.
+export const setPayrollAnchor = async (req, res) => {
+    try {
+        const { anchorDate: anchorDateRaw, force } = req.body;
+
+        if (!anchorDateRaw) {
+            return res.status(400).json({ message: "anchorDate is required." });
+        }
+
+        const anchorPeriodEnd = toDayEnd(anchorDateRaw);
+        const month = anchorPeriodEnd.getMonth() + 1;
+        const year = anchorPeriodEnd.getFullYear();
+
+        // Safety check: setting the anchor to a date that falls at/before an
+        // already-PROCESSED period's end risks a future generate double-counting
+        // those days (they were already paid under whatever recorded that period).
+        // Moving the anchor FORWARD (skipping a gap) is always safe; moving it
+        // BACKWARD into already-paid territory needs an explicit override.
+        const conflicting = await Payroll.find({
+            status: { $in: ["PROCESSED", "PAID"] },
+            periodEnd: { $gt: anchorPeriodEnd }
+        }).select("employee periodStart periodEnd").limit(1);
+
+        if (conflicting.length > 0 && !force) {
+            const conflict = conflicting[0];
+            return res.status(409).json({
+                message: `This date is before an already-finalized period ending ${formatYMD(conflict.periodEnd)}. `
+                    + `Setting the anchor here risks double-counting those days if you later generate payroll for them. `
+                    + `Pass force to override if this is intentional.`,
+                conflictPeriodEnd: formatYMD(conflict.periodEnd)
+            });
+        }
+
+        await PayrollAudit.create({
+            action: "ANCHOR_SET",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            periodEnd: anchorPeriodEnd,
+            details: `Payroll period anchor set to ${formatYMD(anchorPeriodEnd)} (next period starts ${formatYMD(addDays(anchorPeriodEnd, 1))})${conflicting.length ? " — overrode an existing-finalized-period conflict" : ""}`
+        });
+
+        logActivity({
+            req,
+            action: "UPDATE",
+            module: "SETTINGS",
+            description: `Payroll period anchor set to ${formatYMD(anchorPeriodEnd)}`,
+            targetName: "Payroll Period Anchor"
+        }).catch(() => {});
+
+        res.json({
+            success: true,
+            message: `Anchor set. Next payroll period will start ${formatYMD(addDays(anchorPeriodEnd, 1))}.`,
+            anchorPeriodEnd: formatYMD(anchorPeriodEnd)
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- API: Generate Payroll for a Month ---
 export const generatePayroll = async (req, res) => {
     try {
-        const { month, year } = req.body;
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
+
+        if (!periodStartRaw || !periodEndRaw) {
+            return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        const periodStart = toDayStart(periodStartRaw);
+        const periodEnd = toDayEnd(periodEndRaw);
+
+        if (periodEnd < periodStart) {
+            return res.status(400).json({ message: "periodEnd cannot be before periodStart." });
+        }
+
+        // Block (re)generating a period that's already been finalized, or anything
+        // before it — once finalized, that period and every earlier one is locked.
+        const latestFinalized = await getLatestFinalizedCycle();
+        if (latestFinalized && periodEnd <= latestFinalized.periodEnd) {
+            return res.status(400).json({
+                message: `Payroll through ${formatYMD(latestFinalized.periodEnd)} is already finalized and locked. Select a later period.`
+            });
+        }
+
+        // Force-contiguous: the new period must start the day right after the last
+        // finalized period ended — no gaps (missed pay days), no overlaps (double-paid
+        // days). First-ever cycle has no prior finalized period, so any start is fine.
+        if (latestFinalized) {
+            const requiredStart = toDayStart(addDays(latestFinalized.periodEnd, 1));
+            if (periodStart.getTime() !== requiredStart.getTime()) {
+                return res.status(400).json({
+                    message: `Period must start ${formatYMD(requiredStart)} (the day after the last finalized period ended) to stay contiguous.`
+                });
+            }
+        }
+
+        // month/year are derived from periodEnd — used only for backward-compat
+        // bucketing in reports/exports/loan-deduction scheduling, not as the period identity.
+        const month = periodEnd.getMonth() + 1;
+        const year = periodEnd.getFullYear();
 
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
@@ -601,7 +774,7 @@ export const generatePayroll = async (req, res) => {
         const payrollRecords = [];
 
         for (const emp of employees) {
-            const effectiveSalary = resolveEffectiveSalary(emp, month, year);
+            const effectiveSalary = resolveEffectiveSalary(emp, periodEnd);
             const basicSalary = effectiveSalary.visaBase || effectiveSalary.basicSalary;
 
             const allowanceList = [];
@@ -619,7 +792,7 @@ export const generatePayroll = async (req, res) => {
 
             // Get Stats
             const stats = await getAttendanceStats(
-                emp, month, year,
+                emp, periodStart, periodEnd,
                 settings, shiftMap,
                 { code: emp.code },
                 approvedLeaveMap,
@@ -650,6 +823,20 @@ export const generatePayroll = async (req, res) => {
                 if (amount > 0) {
                     allowanceList.push({
                         name: fa.name,
+                        amount: amount,
+                        type: "AUTO",
+                        meta: "Fixed Monthly Allowance"
+                    });
+                    totalAllowances += amount;
+                }
+            });
+
+            // Ad-hoc allowances added/increased via Appraisals > Add Allowance
+            (emp.allowances || []).forEach(item => {
+                const amount = Number(item.amount) || 0;
+                if (amount > 0) {
+                    allowanceList.push({
+                        name: item.typeName,
                         amount: amount,
                         type: "AUTO",
                         meta: "Fixed Monthly Allowance"
@@ -970,12 +1157,16 @@ export const generatePayroll = async (req, res) => {
             // 4. Calculate Net
             const netSalary = basicSalary + totalAllowances - totalDeductions;
 
-            // 5. Prepare Record
+            // 5. Prepare Record — identity is the exact period (employee + periodStart +
+            // periodEnd), not derived month/year, so regenerating the same period
+            // updates the same draft instead of creating a duplicate.
             payrollRecords.push({
                 updateOne: {
-                    filter: { employee: emp._id, month, year },
+                    filter: { employee: emp._id, periodStart, periodEnd },
                     update: {
                         $set: {
+                            month,
+                            year,
                             status: "DRAFT",
                             basicSalary,
                             allowances: allowanceList,
@@ -1002,7 +1193,9 @@ export const generatePayroll = async (req, res) => {
                 performedByName: req.user ? req.user.name : "System",
                 month,
                 year,
-                details: `Generated payroll for ${payrollRecords.length} employees`,
+                periodStart,
+                periodEnd,
+                details: `Generated payroll for ${payrollRecords.length} employees (${formatYMD(periodStart)} to ${formatYMD(periodEnd)})`,
                 totalEmployees: payrollRecords.length
             });
         }
@@ -1010,7 +1203,9 @@ export const generatePayroll = async (req, res) => {
         res.status(200).json({
             message: `Payroll Generated for ${employees.length} employees`,
             month,
-            year
+            year,
+            periodStart,
+            periodEnd
         });
 
     } catch (error) {
@@ -1244,10 +1439,20 @@ export const removePayrollItem = async (req, res) => {
 // --- API: Finalize Payroll ---
 export const finalizePayroll = async (req, res) => {
     try {
-        const { month, year } = req.body;
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
 
-        // 1. Fetch DRAFT records to process
-        const records = await Payroll.find({ month, year, status: "DRAFT" });
+        if (!periodStartRaw || !periodEndRaw) {
+            return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        const periodStart = toDayStart(periodStartRaw);
+        const periodEnd = toDayEnd(periodEndRaw);
+        const month = periodEnd.getMonth() + 1;
+        const year = periodEnd.getFullYear();
+
+        // 1. Fetch DRAFT records to process — identity is the exact period, matching
+        // how generatePayroll stores it (not derived month/year).
+        const records = await Payroll.find({ periodStart, periodEnd, status: "DRAFT" });
 
         if (records.length === 0) {
             return res.status(400).json({ message: "No Draft payroll records found to finalize." });
@@ -1314,8 +1519,120 @@ export const finalizePayroll = async (req, res) => {
             performedByName: req.user ? req.user.name : "System",
             month,
             year,
-            details: `Finalized payroll for ${records.length} records`
+            periodStart,
+            periodEnd,
+            details: `Finalized payroll for ${records.length} records (${formatYMD(periodStart)} to ${formatYMD(periodEnd)})`
         });
+
+        logActivity({
+            req,
+            action: "APPROVE",
+            module: "PAYROLL",
+            description: `Payroll finalized for ${month}/${year} — ${records.length} employees`,
+            targetName: `Payroll ${month}/${year}`
+        }).catch(() => {});
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// --- API: Un-finalize Payroll (undo a mistaken Finalize) ---
+// Only the MOST RECENTLY finalized period can be reverted — undoing an older one
+// while a later one stays locked would desync the force-contiguous chain (the
+// lockout always looks at the furthest periodEnd across all FINALIZED audit
+// entries, so reverting a non-latest period wouldn't actually reopen anything).
+export const unfinalizePayroll = async (req, res) => {
+    try {
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
+
+        if (!periodStartRaw || !periodEndRaw) {
+            return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        const periodStart = toDayStart(periodStartRaw);
+        const periodEnd = toDayEnd(periodEndRaw);
+        const month = periodEnd.getMonth() + 1;
+        const year = periodEnd.getFullYear();
+
+        const latestFinalized = await getLatestFinalizedCycle();
+        if (!latestFinalized || latestFinalized.periodEnd.getTime() !== periodEnd.getTime()) {
+            return res.status(400).json({
+                message: latestFinalized
+                    ? `Only the most recently finalized period (through ${formatYMD(latestFinalized.periodEnd)}) can be un-finalized.`
+                    : "No finalized payroll period exists to un-finalize."
+            });
+        }
+
+        const records = await Payroll.find({ periodStart, periodEnd, status: "PROCESSED" });
+        if (records.length === 0) {
+            return res.status(400).json({ message: "No finalized (PROCESSED) payroll records found for this exact period." });
+        }
+
+        // Reverse any loan/advance deductions this finalize applied — exact inverse
+        // of the bookkeeping finalizePayroll performed.
+        for (const p of records) {
+            const loanDeductions = p.deductions.filter(d =>
+                (d.name.includes("Loan Repayment") || d.name.includes("Salary Advance"))
+                && d.meta && d.meta.includes("Req ID:")
+            );
+
+            for (const ded of loanDeductions) {
+                const reqIdMatch = ded.meta.match(/Req ID: (REQ\d+)/);
+                const reqId = reqIdMatch ? reqIdMatch[1] : null;
+
+                if (reqId) {
+                    const request = await Request.findOne({ requestId: reqId });
+                    if (request) {
+                        const idx = request.payrollDeductions.findIndex((pd) => pd.month == month && pd.year == year);
+                        if (idx > -1) {
+                            request.payrollDeductions.splice(idx, 1);
+
+                            const totalPaid = request.payrollDeductions.reduce((sum, x) => sum + x.amount, 0);
+                            if (totalPaid < (request.details.amount - 1)) {
+                                request.isFullyPaid = false;
+                                // Only step back from COMPLETED if finalize is what set it —
+                                // don't clobber some other terminal status for a different reason.
+                                if (request.status === "COMPLETED") request.status = "APPROVED";
+                            }
+
+                            await request.save();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Revert to DRAFT
+        for (const p of records) {
+            p.status = "DRAFT";
+            await p.save();
+        }
+
+        // Remove the FINALIZED audit entry for this exact period so the lockout
+        // correctly rolls back to whatever was finalized before it.
+        await PayrollAudit.deleteMany({ action: "FINALIZED", periodStart, periodEnd });
+
+        res.json({ message: `Un-finalized payroll for ${records.length} employees. The period is editable again.` });
+
+        await PayrollAudit.create({
+            action: "UNFINALIZED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            periodStart,
+            periodEnd,
+            details: `Un-finalized payroll for ${records.length} records (${formatYMD(periodStart)} to ${formatYMD(periodEnd)})`
+        });
+
+        logActivity({
+            req,
+            action: "UPDATE",
+            module: "PAYROLL",
+            description: `Payroll un-finalized for ${month}/${year} — ${records.length} employees`,
+            targetName: `Payroll ${month}/${year}`
+        }).catch(() => {});
 
     } catch (error) {
         res.status(500).json({ message: error.message });

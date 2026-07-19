@@ -31,6 +31,23 @@ export const deleteHoliday = async (id) => {
     return res.data;
 };
 
+// Allowance Types
+export const addAllowanceType = async (payload) => {
+    // payload: { name }
+    const res = await api.post(`${BASE_URL}/allowance-types`, payload);
+    return res.data;
+};
+
+export const updateAllowanceType = async (id, payload) => {
+    const res = await api.put(`${BASE_URL}/allowance-types/${id}`, payload);
+    return res.data;
+};
+
+export const deleteAllowanceType = async (id) => {
+    const res = await api.delete(`${BASE_URL}/allowance-types/${id}`);
+    return res.data;
+};
+
 // Notifications
 export const toggleNotification = async (id) => {
     // id here is the string key like 'doc_expiry'

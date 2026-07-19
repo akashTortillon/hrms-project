@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
 import { getEmployees } from "../../services/employeeService";
+import { COUNTRY_CODES } from "../../constants/countryCodes.js";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -54,6 +55,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     probationEndDate: "",
     fixedProbationIncrementAmount: ""
   });
+  const [countryCode, setCountryCode] = useState("+971");
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
@@ -142,10 +144,10 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
   };
 
   const handleSubmit = () => {
-    const { name, role, department, email, phone, joinDate } = form;
+    const { name, code, role, department, email, phone, joinDate } = form;
 
-    if (!name || !role || !department || !email || !phone || !joinDate) {
-      alert("Name, role, department, email, phone and joining date are required");
+    if (!name || !code || !role || !department || !email || !phone || !joinDate) {
+      alert("Name, employee code, role, department, email, phone and joining date are required");
       return;
     }
 
@@ -167,12 +169,23 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     });
   };
 
+  // Guard against losing a half-filled form to an accidental outside click.
+  const hasFormData = Object.entries(form || {}).some(([k, v]) => {
+    if (["laborCards"].includes(k)) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== "" && v !== null && v !== undefined;
+  });
+  const requestClose = () => {
+    if (hasFormData && !window.confirm("Discard this employee? Your entered details will be lost.")) return;
+    onClose();
+  };
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={requestClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Add Employee</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={requestClose}>✕</button>
         </div>
 
         <div className="modal-body">
@@ -185,6 +198,11 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Employee Name</label>
               <input name="name" placeholder="Enter Full Name" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Employee Code</label>
+              <input name="code" placeholder="e.g. EMP001" value={form.code} onChange={handleChange} />
             </div>
 
             <div className="form-group">
@@ -249,11 +267,38 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Company</label>
+              <select
+                name="company"
+                value={form.company}
+                onChange={(e) => {
+                  const nextCompany = companies.find(c => c.name === e.target.value);
+                  const nextBranches = nextCompany
+                    ? branchesList.filter(b => b.parentId === nextCompany._id)
+                    : [];
+                  const branchStillValid = nextBranches.some(b => b.name === form.branch);
+                  setForm(prev => ({
+                    ...prev,
+                    company: e.target.value,
+                    branch: branchStillValid ? prev.branch : ""
+                  }));
+                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Company</option>
+                {companies.map(c => (
+                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
               <label>Branch</label>
               <select
                 name="branch"
                 value={form.branch}
                 onChange={handleChange}
+                disabled={!form.company}
                 style={{
                   width: "100%",
                   padding: "10px",
@@ -264,24 +309,29 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                   height: "42px"
                 }}
               >
-                <option value="">Select Branch</option>
-                {branchesList.map(b => (
-                  <option key={b.name} value={b.name}>{b.name}</option>
-                ))}
+                <option value="">{form.company ? "Select Branch" : "Select Company first"}</option>
+                {branchesList
+                  .filter(b => {
+                    const selectedCompany = companies.find(c => c.name === form.company);
+                    return selectedCompany && b.parentId === selectedCompany._id;
+                  })
+                  .map(b => (
+                    <option key={b._id || b.name} value={b.name}>{b.name}</option>
+                  ))}
               </select>
             </div>
 
             <div className="form-group">
-              <label>Company</label>
+              <label>Visa Company</label>
               <select
-                name="company"
-                value={form.company}
+                name="visaCompany"
+                value={form.visaCompany}
                 onChange={handleChange}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
               >
-                <option value="">Select Company</option>
-                {companies.map(c => (
-                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                <option value="">Select Branch on Visa</option>
+                {branchesList.map(b => (
+                  <option key={b._id || b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -317,13 +367,25 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Phone Number</label>
               <div className="phone-input-wrapper" style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb' }}>
-                <span style={{ padding: '0 12px', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '44px', display: 'flex', alignItems: 'center' }}>+971</span>
+                <select
+                  value={countryCode}
+                  onChange={(e) => {
+                    setCountryCode(e.target.value);
+                    const val = form.phone ? form.phone.replace(/^\+\d+/, '') : '';
+                    setForm(prev => ({ ...prev, phone: `${e.target.value}${val}` }));
+                  }}
+                  style={{ border: 'none', boxShadow: 'none', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '44px', padding: '0 6px' }}
+                >
+                  {COUNTRY_CODES.map(c => (
+                    <option key={`${c.country}-${c.dial}`} value={c.dial}>{c.dial} {c.country}</option>
+                  ))}
+                </select>
                 <input
                   name="phoneSuffix"
                   placeholder="50 123 4567"
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, '');
-                    setForm(prev => ({ ...prev, phone: `+971${val}` }));
+                    setForm(prev => ({ ...prev, phone: `${countryCode}${val}` }));
                   }}
                   style={{ border: 'none', boxShadow: 'none', background: 'transparent', height: '44px' }}
                 />
@@ -575,21 +637,6 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
-              <label>Visa Company</label>
-              <select
-                name="visaCompany"
-                value={form.visaCompany}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
-              >
-                <option value="">Select Visa Company</option>
-                {companies.map(c => (
-                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
               <label>Work Permit Company</label>
               <select
                 name="workPermitCompany"
@@ -597,9 +644,9 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 onChange={handleChange}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
               >
-                <option value="">Select Work Permit Company</option>
-                {companies.map(c => (
-                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                <option value="">Select Work Permit Branch</option>
+                {branchesList.map(b => (
+                  <option key={b._id || b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
             </div>
