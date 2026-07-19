@@ -6,6 +6,7 @@ import {
     getDocumentExpiryReport,
     getAssetDepreciationReport,
     getPayrollSummaryReport,
+    getBranchWiseEmployeeReport,
     generateCustomReport,
     getSchedules,
     createSchedule,
@@ -16,7 +17,16 @@ import {
     updateCustomConfig,
     deleteCustomConfig,
     getReportStats,
-    logManualActivity
+    logManualActivity,
+    getLoanReport,
+    getAppraisalReport,
+    getAttendanceReport,
+    getSalaryPaidReport,
+    getSalaryRevisionReport,
+    getLeaveBalanceReport,
+    getHeadcountReport,
+    getAssetAssignmentReport,
+    getOvertimeAllowanceReport
 } from "../controllers/reportController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import { generateSIF, generateMOLReport } from "../controllers/payrollController.js";
@@ -35,8 +45,22 @@ router.get("/department-attendance/daily", getDailyDepartmentAttendanceReport);
 router.get("/document-expiry", getDocumentExpiryReport);
 router.get("/asset-depreciation", getAssetDepreciationReport);
 
-// Payroll Reports
-router.get("/payroll-summary", getPayrollSummaryReport);
+// Payroll Reports — additionally require MANAGE_PAYROLL (VIEW_REPORTS alone must not expose salary data)
+router.get("/payroll-summary", hasPermission("MANAGE_PAYROLL"), getPayrollSummaryReport);
+router.get("/employees/branch-wise", getBranchWiseEmployeeReport);
+
+// Loan & Appraisal Reports
+router.get("/loans", hasPermission("MANAGE_PAYROLL"), getLoanReport);
+router.get("/appraisals", getAppraisalReport);
+
+// New Reports
+router.get("/attendance-employee", getAttendanceReport);
+router.get("/salary-paid", hasPermission("MANAGE_PAYROLL"), getSalaryPaidReport);
+router.get("/salary-revision", hasPermission("MANAGE_PAYROLL"), getSalaryRevisionReport);
+router.get("/leave-balance", getLeaveBalanceReport);
+router.get("/headcount", getHeadcountReport);
+router.get("/asset-assignments", getAssetAssignmentReport);
+router.get("/overtime-allowance", getOvertimeAllowanceReport);
 
 // Dashboard Stats
 router.get("/stats", getReportStats);
@@ -49,9 +73,9 @@ router.post("/custom-configs", saveCustomConfig);
 router.patch("/custom-configs/:id", updateCustomConfig);
 router.delete("/custom-configs/:id", deleteCustomConfig);
 
-// Compliance Exports (Mapped from Payroll Controller)
-router.get("/compliance/wps-sif", generateSIF);
-router.get("/compliance/mol-report", generateMOLReport);
+// Compliance Exports (Mapped from Payroll Controller) — payroll-sensitive
+router.get("/compliance/wps-sif", hasPermission("MANAGE_PAYROLL"), generateSIF);
+router.get("/compliance/mol-report", hasPermission("MANAGE_PAYROLL"), generateMOLReport);
 
 // Scheduled Reports
 router.get("/schedules", getSchedules);

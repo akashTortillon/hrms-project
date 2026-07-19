@@ -4,22 +4,36 @@ import "../../style/Employees.css";
 
 
 
+const FILTER_FIELD_LABELS = {
+  company: "Company",
+  department: "Department",
+  branch: "Branch",
+  designation: "Designation"
+};
+
+const FILTER_FIELD_LABELS_PLURAL = {
+  company: "Companies",
+  department: "Departments",
+  branch: "Branches",
+  designation: "Designations"
+};
+
 export default function EmployeesHeader({
   onAddEmployee,
-  department,
-  setDepartment,
-  branch,
-  setBranch,
+  filterField,
+  setFilterField,
+  filterValue,
+  setFilterValue,
+  filterOptionsByField = {},
   status,
   setStatus,
   search,
   setSearch,
-  deptOptions = [],
-  branchOptions = [],
   onExport,
   onImport,
   count = 0
 }) {
+  const currentOptions = filterOptionsByField[filterField] || [];
   return (
     <div className="employees-header">
       {/* Page Title */}
@@ -31,12 +45,28 @@ export default function EmployeesHeader({
           </p>
         </div>
 
-        {onAddEmployee && (
-          <button className="employees-add-btn" onClick={onAddEmployee}>
-            <SvgIcon name="plus" size={16} />
-            Add Employee
-          </button>
-        )}
+        <div className="employees-header-actions">
+          {onExport && (
+            <button className="employees-utility-btn" onClick={onExport}>
+              <SvgIcon name="download" size={16} />
+              Export
+            </button>
+          )}
+
+          {onImport && (
+            <button className="employees-utility-btn" onClick={onImport}>
+              <SvgIcon name="upload" size={16} />
+              Import
+            </button>
+          )}
+
+          {onAddEmployee && (
+            <button className="employees-add-btn" onClick={onAddEmployee}>
+              <SvgIcon name="plus" size={16} />
+              Add Employee
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -47,18 +77,18 @@ export default function EmployeesHeader({
             <SvgIcon name="search" size={18} />
             <input
               type="text"
-              placeholder="Search by name, ID, or email..."
+              placeholder="Search by name or employee ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
-          {/* Department */}
+          {/* Filter dimension: pick what to filter by, then pick the value */}
           <div style={{ width: '100%' }}>
             <select
               className="employees-select"
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
+              value={filterField}
+              onChange={(e) => setFilterField(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -69,19 +99,17 @@ export default function EmployeesHeader({
                 height: "42px"
               }}
             >
-              <option value="All Departments">All Departments</option>
-              {deptOptions.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
+              {Object.entries(FILTER_FIELD_LABELS).map(([field, label]) => (
+                <option key={field} value={field}>Filter by {label}</option>
               ))}
             </select>
           </div>
 
-          {/* Branch */}
           <div style={{ width: '100%' }}>
             <select
               className="employees-select"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
+              value={filterValue}
+              onChange={(e) => setFilterValue(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -92,9 +120,9 @@ export default function EmployeesHeader({
                 height: "42px"
               }}
             >
-              <option value="All Branches">All Branches</option>
-              {branchOptions.map(b => (
-                <option key={b} value={b}>{b}</option>
+              <option value="">All {FILTER_FIELD_LABELS_PLURAL[filterField]}</option>
+              {currentOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
           </div>
@@ -123,25 +151,6 @@ export default function EmployeesHeader({
             </select>
           </div>
 
-
-          {onImport && (
-            <button
-              className="employees-export-btn"
-              onClick={onImport}
-              style={{ marginRight: "10px" }}
-            >
-              <SvgIcon name="upload" size={16} />
-              Import
-            </button>
-          )}
-
-          {/* Export */}
-          {onExport && (
-            <button className="employees-export-btn" onClick={onExport}>
-              <SvgIcon name="download" size={16} />
-              Export
-            </button>
-          )}
         </div>
 
         <div className="employees-count">

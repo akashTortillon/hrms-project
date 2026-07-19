@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations, shiftService, getBranches } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
+import { getEmployees } from "../../services/employeeService";
+import { COUNTRY_CODES } from "../../constants/countryCodes.js";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -10,6 +12,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     role: "",
     department: "",
     branch: "",
+    company: "",
     designation: "",
     contractType: "",
     email: "",
@@ -19,41 +22,81 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     dob: "",
     nationality: "",
     address: "",
+    passportNo: "",
     passportExpiry: "",
+    emiratesIdNo: "",
     emiratesIdExpiry: "",
     basicSalary: "",
+    allowance: "",
+    hra: "",
+    accommodationAllowance: "",
+    vehicleAllowance: "",
+    totalSalary: "",
     accommodation: "",
+    visaNo: "",
+    visaFileNo: "",
     visaExpiry: "",
+    visaCompany: "",
+    workPermitCompany: "",
+    visaBase: "",
+    workBase: "",
+    ctc: "",
     shift: "",
     laborCardNumber: "",
+    laborCards: [{ number: "", expiryDate: "", issueDate: "", notes: "", isPrimary: true }],
     agentId: "",
     bankName: "",
     iban: "",
     bankAccount: "",
-    personalId: ""
+    personalId: "",
+    designatedManager: "",
+    designatedFinanceManager: "",
+    probationStartDate: "",
+    probationEndDate: "",
+    fixedProbationIncrementAmount: ""
   });
+  const [countryCode, setCountryCode] = useState("+971");
   const [roles, setRoles] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [managers, setManagers] = useState([]);
 
   useEffect(() => {
     fetchMasters();
   }, []);
 
+  useEffect(() => {
+    const basic = Number(form.basicSalary) || 0;
+    const allowance = Number(form.allowance) || 0;
+    const hra = Number(form.hra) || 0;
+    const accommodation = Number(form.accommodationAllowance) || 0;
+    const vehicle = Number(form.vehicleAllowance) || 0;
+    
+    setForm(prev => ({
+      ...prev,
+      totalSalary: basic + allowance + hra + accommodation + vehicle
+    }));
+  }, [form.basicSalary, form.allowance, form.hra, form.accommodationAllowance, form.vehicleAllowance]);
+
   const fetchMasters = async () => {
     try {
-      const [rolesData, typesData, desigData, branchesData] = await Promise.all([
+      const [rolesData, typesData, desigData, branchesData, companiesData, employeesData] = await Promise.all([
         roleService.getAll(),
         employeeTypeService.getAll(),
         getDesignations(),
-        getBranches()
+        getBranches(),
+        getCompanies(),
+        getEmployees()
       ]);
       setRoles(rolesData);
       setContractTypes(typesData);
       setDesignations(desigData);
       setBranchesList(branchesData);
+      setCompanies(companiesData);
+      setManagers(Array.isArray(employeesData) ? employeesData : []);
 
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
@@ -66,23 +109,83 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = () => {
-    const { name, role, department, designation, contractType, email, phone, joinDate } = form;
+  const handleLaborCardChange = (index, field, value) => {
+    setForm((prev) => {
+      const nextCards = [...prev.laborCards];
+      nextCards[index] = {
+        ...nextCards[index],
+        [field]: value,
+        isPrimary: index === 0
+      };
+      return { ...prev, laborCards: nextCards };
+    });
+  };
 
-    if (!name || !role || !department || !email || !phone || !joinDate || !designation || !contractType) {
-      alert("All fields are required");
+  const addLaborCard = () => {
+    setForm((prev) => ({
+      ...prev,
+      laborCards: [
+        ...(Array.isArray(prev.laborCards) ? prev.laborCards : []),
+        { number: "", expiryDate: "", issueDate: "", notes: "", isPrimary: false }
+      ]
+    }));
+  };
+
+  const removeLaborCard = (index) => {
+    setForm((prev) => {
+      const nextCards = (prev.laborCards || []).filter((_, cardIndex) => cardIndex !== index);
+      return {
+        ...prev,
+        laborCards: nextCards.length
+          ? nextCards.map((card, cardIndex) => ({ ...card, isPrimary: cardIndex === 0 }))
+          : [{ number: "", expiryDate: "", issueDate: "", notes: "", isPrimary: true }]
+      };
+    });
+  };
+
+  const handleSubmit = () => {
+    const { name, code, role, department, email, phone, joinDate } = form;
+
+    if (!name || !code || !role || !department || !email || !phone || !joinDate) {
+      alert("Name, employee code, role, department, email, phone and joining date are required");
       return;
     }
 
-    onAddEmployee(form);
+    const laborCards = (form.laborCards || [])
+      .filter((item) => item && item.number?.trim())
+      .map((item, index) => ({
+        number: item.number.trim(),
+        expiryDate: item.expiryDate || "",
+        issueDate: item.issueDate || "",
+        notes: item.notes || "",
+        isPrimary: index === 0
+      }));
+
+    onAddEmployee({
+      ...form,
+      laborCards,
+      laborCardNumber: laborCards[0]?.number || form.laborCardNumber,
+      probationStartDate: form.probationStartDate || form.joinDate
+    });
+  };
+
+  // Guard against losing a half-filled form to an accidental outside click.
+  const hasFormData = Object.entries(form || {}).some(([k, v]) => {
+    if (["laborCards"].includes(k)) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== "" && v !== null && v !== undefined;
+  });
+  const requestClose = () => {
+    if (hasFormData && !window.confirm("Discard this employee? Your entered details will be lost.")) return;
+    onClose();
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={requestClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Add Employee</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={requestClose}>✕</button>
         </div>
 
         <div className="modal-body">
@@ -95,6 +198,11 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Employee Name</label>
               <input name="name" placeholder="Enter Full Name" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Employee Code</label>
+              <input name="code" placeholder="e.g. EMP001" value={form.code} onChange={handleChange} />
             </div>
 
             <div className="form-group">
@@ -116,6 +224,21 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 <option value="">Select Role</option>
                 {roles.map(r => (
                   <option key={r.name} value={r.name}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Finance Manager</label>
+              <select
+                name="designatedFinanceManager"
+                value={form.designatedFinanceManager}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Finance Manager</option>
+                {managers.map(manager => (
+                  <option key={`finance-${manager._id}`} value={manager._id}>{manager.name}</option>
                 ))}
               </select>
             </div>
@@ -144,11 +267,38 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Company</label>
+              <select
+                name="company"
+                value={form.company}
+                onChange={(e) => {
+                  const nextCompany = companies.find(c => c.name === e.target.value);
+                  const nextBranches = nextCompany
+                    ? branchesList.filter(b => b.parentId === nextCompany._id)
+                    : [];
+                  const branchStillValid = nextBranches.some(b => b.name === form.branch);
+                  setForm(prev => ({
+                    ...prev,
+                    company: e.target.value,
+                    branch: branchStillValid ? prev.branch : ""
+                  }));
+                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Company</option>
+                {companies.map(c => (
+                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
               <label>Branch</label>
               <select
                 name="branch"
                 value={form.branch}
                 onChange={handleChange}
+                disabled={!form.company}
                 style={{
                   width: "100%",
                   padding: "10px",
@@ -159,9 +309,29 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                   height: "42px"
                 }}
               >
-                <option value="">Select Branch</option>
+                <option value="">{form.company ? "Select Branch" : "Select Company first"}</option>
+                {branchesList
+                  .filter(b => {
+                    const selectedCompany = companies.find(c => c.name === form.company);
+                    return selectedCompany && b.parentId === selectedCompany._id;
+                  })
+                  .map(b => (
+                    <option key={b._id || b.name} value={b.name}>{b.name}</option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Visa Company</label>
+              <select
+                name="visaCompany"
+                value={form.visaCompany}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Branch on Visa</option>
                 {branchesList.map(b => (
-                  <option key={b.name} value={b.name}>{b.name}</option>
+                  <option key={b._id || b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -197,13 +367,25 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Phone Number</label>
               <div className="phone-input-wrapper" style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb' }}>
-                <span style={{ padding: '0 12px', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '44px', display: 'flex', alignItems: 'center' }}>+971</span>
+                <select
+                  value={countryCode}
+                  onChange={(e) => {
+                    setCountryCode(e.target.value);
+                    const val = form.phone ? form.phone.replace(/^\+\d+/, '') : '';
+                    setForm(prev => ({ ...prev, phone: `${e.target.value}${val}` }));
+                  }}
+                  style={{ border: 'none', boxShadow: 'none', background: '#e5e7eb', color: '#374151', fontSize: '14px', fontWeight: '600', height: '44px', padding: '0 6px' }}
+                >
+                  {COUNTRY_CODES.map(c => (
+                    <option key={`${c.country}-${c.dial}`} value={c.dial}>{c.dial} {c.country}</option>
+                  ))}
+                </select>
                 <input
                   name="phoneSuffix"
                   placeholder="50 123 4567"
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, '');
-                    setForm(prev => ({ ...prev, phone: `+971${val}` }));
+                    setForm(prev => ({ ...prev, phone: `${countryCode}${val}` }));
                   }}
                   style={{ border: 'none', boxShadow: 'none', background: 'transparent', height: '44px' }}
                 />
@@ -302,9 +484,52 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
               </select>
             </div>
 
-            <div className="form-group">
-              <label>Labor Card No</label>
-              <input name="laborCardNumber" placeholder="e.g. 876321" onChange={handleChange} />
+            <div className="form-group full-width employee-labor-section">
+              <div className="employee-section-row">
+                <label className="employee-section-heading">Labour Cards</label>
+                <button type="button" className="employee-add-inline-btn" onClick={addLaborCard}>
+                  + Add Card
+                </button>
+              </div>
+
+              <div className="employee-labor-card-list">
+                {(form.laborCards || []).map((card, index) => (
+                  <div className="employee-labor-card" key={`labor-card-${index}`}>
+                    <div className="employee-labor-card-top">
+                      <span>Card {index + 1}</span>
+                      {(form.laborCards || []).length > 1 && (
+                        <button
+                          type="button"
+                          className="employee-remove-inline-btn"
+                          onClick={() => removeLaborCard(index)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="employee-labor-grid">
+                      <div className="form-group">
+                        <label>Labor Card No {index + 1}</label>
+                        <input
+                          value={card.number || ""}
+                          placeholder="Enter Card No"
+                          onChange={(e) => handleLaborCardChange(index, "number", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Expiry Date</label>
+                        <input
+                          type="date"
+                          value={card.expiryDate || ""}
+                          onChange={(e) => handleLaborCardChange(index, "expiryDate", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="form-group">
@@ -315,6 +540,52 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             <div className="form-group">
               <label>Basic Salary (AED)</label>
               <input name="basicSalary" placeholder="e.g. 15000" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Allowance (AED)</label>
+              <input name="allowance" type="number" placeholder="e.g. 500" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>HRA (AED)</label>
+              <input name="hra" type="number" placeholder="e.g. 300" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Accommodation Allowance (AED)</label>
+              <input name="accommodationAllowance" type="number" placeholder="e.g. 500" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Vehicle Allowance (AED)</label>
+              <input name="vehicleAllowance" type="number" placeholder="e.g. 400" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Total Salary (AED)</label>
+              <input
+                name="totalSalary"
+                type="number"
+                placeholder="Auto or manual"
+                value={form.totalSalary}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Visa Base (AED)</label>
+              <input name="visaBase" placeholder="Payroll basis" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Work Base (AED)</label>
+              <input name="workBase" placeholder="Internal work base" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>CTC (AED)</label>
+              <input name="ctc" placeholder="Optional CTC" onChange={handleChange} />
             </div>
 
             <div className="form-group">
@@ -346,15 +617,68 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 name="visaExpiry"
                 value={form.visaExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }}
               />
+            </div>
+
+            {/* Visa & Work Permit */}
+            <div className="form-group full-width" style={{ gridColumn: '1 / -1', margin: '15px 0 10px 0' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#1f2937', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>Visa & Work Permit</h4>
+            </div>
+
+            <div className="form-group">
+              <label>Visa Number</label>
+              <input name="visaNo" placeholder="e.g. 201/2023/12345" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Visa File Number</label>
+              <input name="visaFileNo" placeholder="e.g. 10100/2023" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
+              <label>Work Permit Company</label>
+              <select
+                name="workPermitCompany"
+                value={form.workPermitCompany}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Work Permit Branch</option>
+                {branchesList.map(b => (
+                  <option key={b._id || b.name} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Designated Manager</label>
+              <select
+                name="designatedManager"
+                value={form.designatedManager}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
+              >
+                <option value="">Select Manager</option>
+                {managers.map(manager => (
+                  <option key={manager._id} value={manager._id}>{manager.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Probation Start Date</label>
+              <input type="date" name="probationStartDate" value={form.probationStartDate} onChange={handleChange} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }} />
+            </div>
+
+            <div className="form-group">
+              <label>Probation End Date</label>
+              <input type="date" name="probationEndDate" value={form.probationEndDate} onChange={handleChange} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }} />
+            </div>
+
+            <div className="form-group">
+              <label>Fixed Probation Increment</label>
+              <input name="fixedProbationIncrementAmount" value={form.fixedProbationIncrementAmount} placeholder="e.g. 500" onChange={handleChange} />
             </div>
 
             {/* Personal Info */}
@@ -396,21 +720,24 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
+              <label>Passport Number</label>
+              <input name="passportNo" placeholder="e.g. A1234567" onChange={handleChange} />
+            </div>
+
+            <div className="form-group">
               <label>Passport Expiry</label>
               <input
                 type="date"
                 name="passportExpiry"
                 value={form.passportExpiry}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "14px",
-                  height: "42px"
-                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px", height: "42px" }}
               />
+            </div>
+
+            <div className="form-group">
+              <label>Emirates ID Number</label>
+              <input name="emiratesIdNo" placeholder="e.g. 784-1990-1234567-8" onChange={handleChange} />
             </div>
 
             <div className="form-group">

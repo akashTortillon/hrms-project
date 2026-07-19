@@ -158,6 +158,7 @@ import Employee from "../models/employeeModel.js";
 import fs from "fs";
 import path from "path";
 import XLSX from "xlsx";
+import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 
 // Generate next asset code (AST001, AST002, etc.)
 const generateAssetCode = async () => {
@@ -188,7 +189,10 @@ export const createAsset = async (req, res) => {
       purchaseDate,
       status,
       warrantyPeriod,
-      serviceDueDate
+      serviceDueDate,
+      branch,
+      company,
+      assetClass
     } = req.body;
 
     // Validation
@@ -220,6 +224,7 @@ export const createAsset = async (req, res) => {
       name,
       serialNumber: serialNumber || "",
       type,
+      assetClass: assetClass || "Physical",
       category,
       location,
       subLocation: subLocation || "",
@@ -230,6 +235,8 @@ export const createAsset = async (req, res) => {
       warrantyPeriod: warrantyPeriod ? parseInt(warrantyPeriod) : null,
       warrantyExpiryDate,
       serviceDueDate: serviceDueDate || null,
+      branch: branch || "",
+      company: company || "",
       status: status || "Available",
       currentLocation: {
         type: custodian ? "EMPLOYEE" : "STORE",
@@ -270,7 +277,7 @@ export const createAsset = async (req, res) => {
 
 export const getAssets = async (req, res) => {
   try {
-    const { search, type, status } = req.query;
+    const { search, type, status, branch } = req.query;
 
     // Base filter
     const filter = {};
@@ -283,6 +290,11 @@ export const getAssets = async (req, res) => {
       filter.isDeleted = false;
     }
 
+    // Filter by assetClass
+    if (req.query.assetClass && req.query.assetClass !== "ALL") {
+      filter.assetClass = req.query.assetClass;
+    }
+
     // Filter by asset type
     if (type && type !== "ALL") {
       filter.type = type;
@@ -291,6 +303,17 @@ export const getAssets = async (req, res) => {
     // Filter by asset status
     if (status && status !== "ALL") {
       filter.status = status;
+    }
+
+    // Filter by branch
+    if (branch && branch !== "ALL") {
+      filter.branch = branch;
+    }
+
+    // Filter by company
+    const { company } = req.query;
+    if (company && company !== "ALL") {
+      filter.company = company;
     }
 
     // Search (case-insensitive, partial match)
@@ -355,7 +378,7 @@ export const getAssetById = async (req, res) => {
 export const updateAsset = async (req, res) => {
   try {
     const { id } = req.params;
-    const { warrantyPeriod, purchaseDate, custodian, ...otherFields } = req.body;
+    const { warrantyPeriod, purchaseDate, custodian, branch, company, assetClass, ...otherFields } = req.body;
 
     // Validate custodian if provided
     if (custodian) {
@@ -377,6 +400,9 @@ export const updateAsset = async (req, res) => {
       ...otherFields,
       ...(purchaseDate && { purchaseDate }),
       ...(custodian !== undefined && { custodian: custodian || null }),
+      ...(branch !== undefined && { branch: branch || "" }),
+      ...(company !== undefined && { company: company || "" }),
+      ...(assetClass && { assetClass }),
       ...(warrantyPeriod && { warrantyPeriod: parseInt(warrantyPeriod) }),
       ...(warrantyExpiryDate && { warrantyExpiryDate })
     };
@@ -747,7 +773,7 @@ export const deleteMaintenanceLog = async (req, res) => {
 
 export const exportAssets = async (req, res) => {
   try {
-    const { department, status, search, category, location } = req.query;
+    const { department, status, search, category, location, branch, company, assetClass } = req.query;
     let matchStage = {};
 
     // Filters
@@ -755,6 +781,9 @@ export const exportAssets = async (req, res) => {
     if (status && status !== "All Status") matchStage.status = status;
     if (category && category !== "All Categories") matchStage.category = category;
     if (location && location !== "All Locations") matchStage.location = location;
+    if (branch && branch !== "All Branches") matchStage.branch = branch;
+    if (company && company !== "All Companies") matchStage.company = company;
+    if (assetClass && assetClass !== "ALL") matchStage.assetClass = assetClass;
     if (search) {
       matchStage.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -901,10 +930,18 @@ export const uploadDocument = async (req, res) => {
       return res.status(404).json({ message: "Asset not found" });
     }
 
+    const storedFile = await storeUploadedFile({
+      file: req.file,
+      folder: "asset-documents",
+      preferS3: true
+    });
+
     const document = {
       type,
       fileName: req.file.originalname,
-      filePath: req.file.path,
+      filePath: storedFile.filePath,
+      fileUrl: storedFile.fileUrl,
+      storage: storedFile.storage,
       uploadedBy: req.user.id,
       uploadedAt: new Date()
     };
@@ -940,10 +977,7 @@ export const deleteDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Delete file from filesystem
-    if (fs.existsSync(document.filePath)) {
-      fs.unlinkSync(document.filePath);
-    }
+    deleteStoredFile(document.filePath, document.storage);
 
     asset.documents.pull(documentId);
     await asset.save();
@@ -970,6 +1004,10 @@ export const downloadDocument = async (req, res) => {
     const document = asset.documents.id(documentId);
     if (!document) {
       return res.status(404).json({ message: "Document not found" });
+    }
+
+    if (document.storage === "S3") {
+      return res.redirect(await getSignedFileUrl(document.toObject ? document.toObject() : document));
     }
 
     if (!fs.existsSync(document.filePath)) {

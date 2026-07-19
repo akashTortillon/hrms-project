@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../../api/apiClient";
 import { toast } from "react-toastify";
 import jsPDF from "jspdf";
@@ -8,9 +8,10 @@ import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
 import Button from "../../components/reusable/Button";
 import ScheduledReports from "./ScheduledReports";
+import { getBranches, getCompanies, getDepartments } from "../../services/masterService.js";
 import "../../style/Reports.css";
 
-const TABS = ["All", "HR", "Payroll", "Assets", "Documents", "Compliance"];
+const TABS = ["All", "HR", "Payroll", "Assets", "Documents", "Compliance", "Work Permit", "Work Visa", "Headcount"];
 
 const MONTHS = [
   { value: 1, label: "January" },
@@ -33,6 +34,20 @@ export default function PrebuiltReports() {
   const [reportData, setReportData] = useState([]);
   const [reportType, setReportType] = useState(""); // attendance | expiry | depreciation | payroll
   const [error, setError] = useState(null);
+  const [reportSummary, setReportSummary] = useState(null);
+  const [pagination, setPagination] = useState(null);
+  const [branchOptions, setBranchOptions] = useState([]);
+  const [companyOptions, setCompanyOptions] = useState([]);
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [branchReportFilters, setBranchReportFilters] = useState({
+    branch: "All Branches",
+    company: "All Companies",
+    department: "All Departments",
+    status: "All Status",
+    search: "",
+    page: 1,
+    limit: 10
+  });
 
   /** 🔁 Report Mode (for Attendance) */
   const [mode, setMode] = useState("monthly"); // daily | monthly
@@ -46,6 +61,27 @@ export default function PrebuiltReports() {
   const [year, setYear] = useState(currentDate.getFullYear());
   const [days, setDays] = useState(30);
 
+  // New report filters
+  const [attendanceFilters, setAttendanceFilters] = useState({ branch: "", department: "", company: "" });
+  const [salaryFilters, setSalaryFilters] = useState({ branch: "", department: "", company: "" });
+  const [revisionFilters, setRevisionFilters] = useState({ branch: "", department: "", fromDate: "", toDate: "" });
+  const [leaveYear, setLeaveYear] = useState(currentDate.getFullYear());
+  const [leaveFilters, setLeaveFilters] = useState({ branch: "", department: "", company: "" });
+  const [headcountFilters, setHeadcountFilters] = useState({ branch: "", department: "", company: "" });
+  const [assetFilters, setAssetFilters] = useState({ branch: "", department: "", company: "" });
+
+  useEffect(() => {
+    Promise.all([getBranches(), getCompanies(), getDepartments()])
+      .then(([branches, companies, departments]) => {
+        setBranchOptions(Array.isArray(branches) ? branches : []);
+        setCompanyOptions(Array.isArray(companies) ? companies : []);
+        setDepartmentOptions(Array.isArray(departments) ? departments : []);
+      })
+      .catch((masterError) => {
+        console.error("Failed to load report masters", masterError);
+      });
+  }, []);
+
   const handleGenerate = async (type) => {
     if (loading) return;
 
@@ -54,26 +90,52 @@ export default function PrebuiltReports() {
       setError(null);
       setReportData([]);
       setReportType(type);
+      setReportSummary(null);
+      setPagination(null);
 
       let url = "";
 
       if (type === "attendance") {
         if (mode === "daily") {
-          url = `/api/reports/department-attendance/daily?date=${date}`;
+          url = `/reports/department-attendance/daily?date=${date}`;
         } else {
-          url = `/api/reports/department-attendance?month=${month}&year=${year}`;
+          url = `/reports/department-attendance?month=${month}&year=${year}`;
         }
       } else if (type === "expiry") {
-        url = `/api/reports/document-expiry?days=${days}`;
+        url = `/reports/document-expiry?days=${days}`;
       } else if (type === "depreciation") {
-        url = `/api/reports/asset-depreciation`;
+        url = `/reports/asset-depreciation`;
       } else if (type === "payroll") {
-        url = `/api/reports/payroll-summary?month=${month}&year=${year}`;
+        url = `/reports/payroll-summary?month=${month}&year=${year}`;
+      } else if (type === "work-permit") {
+        url = `/employees?limit=1000`;
+      } else if (type === "work-visa") {
+        url = `/employees?limit=1000`;
+      } else if (type === "branch-wise-employees") {
+        const params = new URLSearchParams();
+        if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+        if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+        if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+        if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+        if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+        params.set("page", String(branchReportFilters.page || 1));
+        params.set("limit", String(branchReportFilters.limit || 10));
+        url = `/reports/employees/branch-wise?${params.toString()}`;
       }
 
       const response = await api.get(url);
 
-      if (response.data.success) {
+      if (type === "branch-wise-employees" && response.data.success) {
+        const data = response.data.data || [];
+        if (!data.length) {
+          toast.warning("No employees found for the selected filters");
+        } else {
+          toast.success("Branch-wise employee report generated");
+        }
+        setReportData(data);
+        setReportSummary(response.data.summary || null);
+        setPagination(response.data.pagination || null);
+      } else if (response.data.success) {
         const data = response.data.data || [];
         if (!data.length) {
           toast.warning("No data found for selected period");
@@ -81,6 +143,15 @@ export default function PrebuiltReports() {
           toast.success("Report generated successfully");
         }
         setReportData(data);
+      } else if (type === "work-permit" || type === "work-visa") {
+        // Employees API returns array directly
+        const allEmps = Array.isArray(response.data) ? response.data : (response.data.employees || response.data.data || []);
+        const filtered = type === "work-permit"
+          ? allEmps.filter(e => e.workPermitCompany)
+          : allEmps.filter(e => e.visaCompany);
+        if (!filtered.length) toast.warning("No employees found with " + (type === "work-permit" ? "Work Permit Company" : "Visa Company") + " set.");
+        else toast.success("Report generated successfully");
+        setReportData(filtered);
       } else {
         toast.error("Failed to generate report");
         setError("Failed to generate report");
@@ -101,16 +172,25 @@ export default function PrebuiltReports() {
     // Note: using relative paths for api client
     if (reportType === "attendance") {
       url = mode === "daily"
-        ? `/api/reports/department-attendance/daily?date=${date}&export=true`
-        : `/api/reports/department-attendance?month=${month}&year=${year}&export=true`;
+        ? `/reports/department-attendance/daily?date=${date}&export=true`
+        : `/reports/department-attendance?month=${month}&year=${year}&export=true`;
     } else if (reportType === "expiry") {
-      url = `/api/reports/document-expiry?days=${days}&export=true`;
+      url = `/reports/document-expiry?days=${days}&export=true`;
     } else if (reportType === "depreciation") {
-      url = `/api/reports/asset-depreciation?export=true`;
+      url = `/reports/asset-depreciation?export=true`;
     } else if (reportType === "payroll") {
-      url = `/api/reports/payroll-summary?month=${month}&year=${year}&export=true`;
+      url = `/reports/payroll-summary?month=${month}&year=${year}&export=true`;
     } else if (reportType === "wps") {
-      url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}`;
+      url = `/reports/compliance/wps-sif?month=${month}&year=${year}`;
+    } else if (reportType === "branch-wise-employees") {
+      const params = new URLSearchParams();
+      if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+      if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+      if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+      if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+      if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+      params.set("export", "true");
+      url = `/reports/employees/branch-wise?${params.toString()}`;
     }
 
     if (url) {
@@ -126,6 +206,7 @@ export default function PrebuiltReports() {
           if (reportType === "wps") filename = "WPS_SIF.sif";
           else if (reportType === "attendance") filename = `Attendance_${mode}_${date || `${month}_${year}`}.xlsx`;
           else if (reportType === "payroll") filename = `Payroll_${month}_${year}.xlsx`;
+          else if (reportType === "branch-wise-employees") filename = "Branch_Wise_Employee_Report.xlsx";
 
           link.setAttribute('download', filename);
           document.body.appendChild(link);
@@ -177,6 +258,7 @@ export default function PrebuiltReports() {
         : reportType === "expiry" ? `Document Expiry Forecast - Next ${days} Days`
           : reportType === "depreciation" ? `Asset Depreciation Schedule`
             : reportType === "payroll" ? `Payroll Summary - ${MONTHS.find(m => m.value === month)?.label} ${year}`
+              : reportType === "branch-wise-employees" ? "Branch Wise Employee Report"
               : "HR Report";
 
       doc.setTextColor(17, 24, 39); // #111827
@@ -193,7 +275,8 @@ export default function PrebuiltReports() {
         attendance: ["Department", "Employees", "Present", "Absent", "Late", "Leave"],
         expiry: ["Type", "Owner", "Document", "Expiry Date", "Days Rem."],
         depreciation: ["Code", "Name", "Cost", "Annual Dep.", "Accumulated", "Book Value"],
-        payroll: ["Department", "Emps", "Basic", "Allowances", "Deductions", "Net Paid"]
+        payroll: ["Department", "Emps", "Basic", "Allowances", "Deductions", "Net Paid"],
+        "branch-wise-employees": ["Employee", "Code", "Company", "Branch", "Department", "Status"]
       };
 
       const tableData = reportData.map(row => {
@@ -201,6 +284,7 @@ export default function PrebuiltReports() {
         if (reportType === "expiry") return [row.type, row.owner, row.docType, new Date(row.expiryDate).toLocaleDateString(), `${row.daysRemaining} days`];
         if (reportType === "depreciation") return [row.assetCode, row.name, `AED ${row.purchaseCost}`, `AED ${row.annualDepreciation}`, `AED ${row.accumulatedDepreciation}`, `AED ${row.netBookValue}`];
         if (reportType === "payroll") return [row.department, row.employeeCount, `AED ${row.totalBasic}`, `AED ${row.totalAllowances}`, `AED ${row.totalDeductions}`, `AED ${row.totalNet}`];
+        if (reportType === "branch-wise-employees") return [row.name, row.code, row.company || "—", row.branch || "—", row.department || "—", row.status || "—"];
         return [];
       });
 
@@ -217,7 +301,7 @@ export default function PrebuiltReports() {
       toast.success("PDF generated successfully");
 
       // Log the activity to update the dashboard stats
-      await api.post("/api/reports/log-activity", {
+      await api.post("/reports/log-activity", {
         type: "Export",
         reportName: title
       });
@@ -236,7 +320,7 @@ export default function PrebuiltReports() {
       setReportData([]);
       setReportType("wps");
 
-      const url = `/api/reports/compliance/wps-sif?month=${month}&year=${year}&format=json`;
+      const url = `/reports/compliance/wps-sif?month=${month}&year=${year}&format=json`;
       const response = await api.get(url);
 
       if (response.data.success) {
@@ -367,50 +451,100 @@ export default function PrebuiltReports() {
                 </div>
               ) : (
                 <>
-                  <>
-                    <div style={{ width: '140px' }}>
-                      <select
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #d1d5db',
-                          backgroundColor: 'white',
-                          fontSize: '14px'
-                        }}
-                        value={month}
-                        onChange={(e) => setMonth(Number(e.target.value))}
-                      >
-                        {MONTHS.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ width: '100px' }}>
-                      <select
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #d1d5db',
-                          backgroundColor: 'white',
-                          fontSize: '14px'
-                        }}
-                        value={year}
-                        onChange={(e) => setYear(Number(e.target.value))}
-                      >
-                        {[0, 1, 2, 3, 4].map(i => {
-                          const y = currentDate.getFullYear() - i;
-                          return <option key={y} value={y}>{y}</option>;
-                        })}
-                      </select>
-                    </div>
-                  </>
+                  <div style={{ flex: '2', minWidth: 0 }}>
+                    <select
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #d1d5db',
+                        backgroundColor: 'white',
+                        fontSize: '14px'
+                      }}
+                      value={month}
+                      onChange={(e) => setMonth(Number(e.target.value))}
+                    >
+                      {MONTHS.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: '1', minWidth: 0 }}>
+                    <select
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #d1d5db',
+                        backgroundColor: 'white',
+                        fontSize: '14px'
+                      }}
+                      value={year}
+                      onChange={(e) => setYear(Number(e.target.value))}
+                    >
+                      {[0, 1, 2, 3, 4].map(i => {
+                        const y = currentDate.getFullYear() - i;
+                        return <option key={y} value={y}>{y}</option>;
+                      })}
+                    </select>
+                  </div>
                 </>
               )}
             </div>
             <div className="report-actions">
               <Button className="generate-btn" onClick={() => handleGenerate("attendance")} disabled={loading}>Generate</Button>
+            </div>
+          </Card>
+        )}
+
+        {(activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="users" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Branch-wise Employee Report</h4>
+            <p className="report-desc">Headcount and employee directory by branch with company, department, status, and payroll basis details.</p>
+            <div className="report-filters">
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.branch} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, branch: e.target.value, page: 1 }))}>
+                  <option>All Branches</option>
+                  {branchOptions.map((item) => <option key={`report-branch-${item._id || item.name}`} value={item.name}>{item.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.company} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, company: e.target.value, page: 1 }))}>
+                  <option>All Companies</option>
+                  {companyOptions.map((item) => <option key={`report-company-${item._id || item.name}`} value={item.name}>{item.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.department} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, department: e.target.value, page: 1 }))}>
+                  <option>All Departments</option>
+                  {departmentOptions.map((item) => <option key={`report-department-${item._id || item.name || item}`} value={item.name || item}>{item.name || item}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px" }} value={branchReportFilters.status} onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, status: e.target.value, page: 1 }))}>
+                  <option>All Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="Onboarding">Onboarding</option>
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <input
+                  type="text"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", boxSizing: "border-box" }}
+                  value={branchReportFilters.search}
+                  placeholder="Search employee, code, email..."
+                  onChange={(e) => setBranchReportFilters((prev) => ({ ...prev, search: e.target.value, page: 1 }))}
+                />
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={() => handleGenerate("branch-wise-employees")} disabled={loading}>Generate</Button>
             </div>
           </Card>
         )}
@@ -454,7 +588,7 @@ export default function PrebuiltReports() {
         {(activeTab === "Assets" || activeTab === "All") && (
           <Card className="report-card">
             <div className="report-card-header">
-              <div className="report-icon"><SvgIcon name="dollar" size={22} /></div>
+              <div className="report-icon"><SvgIcon name="cube" size={22} /></div>
               <span className="report-tag">Assets</span>
             </div>
             <h4 className="report-title">Asset Depreciation Schedule</h4>
@@ -475,7 +609,7 @@ export default function PrebuiltReports() {
             <h4 className="report-title">Payroll Monthly Summary</h4>
             <p className="report-desc">Total cost breakdown per department for the selected month.</p>
             <div className="report-filters">
-              <div style={{ width: '140px' }}>
+              <div style={{ flex: '2', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -494,7 +628,7 @@ export default function PrebuiltReports() {
                   ))}
                 </select>
               </div>
-              <div style={{ width: '100px' }}>
+              <div style={{ flex: '1', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -521,6 +655,459 @@ export default function PrebuiltReports() {
           </Card>
         )}
 
+        {/* Loan Report */}
+        {(activeTab === "Payroll" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="dollar" size={22} /></div>
+              <span className="report-tag">Payroll</span>
+            </div>
+            <h4 className="report-title">Loan Report</h4>
+            <p className="report-desc">Complete loan and salary advance report with repayment tracking.</p>
+            <div className="report-actions" style={{ marginTop: 'auto' }}>
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const res = await api.get("/reports/loans?export=true", { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `Loan_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  toast.success("Loan report downloaded");
+                } catch { toast.error("Failed to download loan report"); }
+              }} disabled={loading}>
+                Download Excel
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Appraisal Report */}
+        {(activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="star" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Appraisal Report</h4>
+            <p className="report-desc">Employee appraisal cycles with increment details and approval status.</p>
+            <div className="report-actions" style={{ marginTop: 'auto' }}>
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const res = await api.get("/reports/appraisals?export=true", { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `Appraisal_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  toast.success("Appraisal report downloaded");
+                } catch { toast.error("Failed to download appraisal report"); }
+              }} disabled={loading}>
+                Download Excel
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── ATTENDANCE REPORT (per-employee) ── */}
+        {(activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="calendar" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Attendance Report</h4>
+            <p className="report-desc">Per-employee present, absent, late and leave counts for a selected month.</p>
+            <div className="report-filters">
+              <div style={{ flex: 2 }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={month} onChange={e => setMonth(Number(e.target.value))}>
+                  {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={year} onChange={e => setYear(Number(e.target.value))}>
+                  {[0,1,2,3,4].map(i => { const y = currentDate.getFullYear()-i; return <option key={y} value={y}>{y}</option>; })}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={attendanceFilters.branch} onChange={e => setAttendanceFilters(p => ({ ...p, branch: e.target.value }))}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id||b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={attendanceFilters.department} onChange={e => setAttendanceFilters(p => ({ ...p, department: e.target.value }))}>
+                  <option value="">All Departments</option>
+                  {departmentOptions.map(d => <option key={d._id||d.name} value={d.name||d}>{d.name||d}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ month, year, export: "true" });
+                  if (attendanceFilters.branch) params.set("branch", attendanceFilters.branch);
+                  if (attendanceFilters.department) params.set("department", attendanceFilters.department);
+                  const res = await api.get(`/reports/attendance-employee?${params}`, { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = `Attendance_Report_${month}_${year}.xlsx`;
+                  document.body.appendChild(link); link.click(); link.remove();
+                  toast.success("Attendance report downloaded");
+                } catch { toast.error("Failed to download"); }
+              }} disabled={loading}>Download Excel</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── SALARY PAID REPORT ── */}
+        {(activeTab === "Payroll" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="dollar" size={22} /></div>
+              <span className="report-tag">Payroll</span>
+            </div>
+            <h4 className="report-title">Salary Paid Report</h4>
+            <p className="report-desc">Per-employee net salary after all allowances and deductions for a selected month.</p>
+            <div className="report-filters">
+              <div style={{ flex: 2 }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={month} onChange={e => setMonth(Number(e.target.value))}>
+                  {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={year} onChange={e => setYear(Number(e.target.value))}>
+                  {[0,1,2,3,4].map(i => { const y = currentDate.getFullYear()-i; return <option key={y} value={y}>{y}</option>; })}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={salaryFilters.branch} onChange={e => setSalaryFilters(p => ({ ...p, branch: e.target.value }))}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id||b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={salaryFilters.department} onChange={e => setSalaryFilters(p => ({ ...p, department: e.target.value }))}>
+                  <option value="">All Departments</option>
+                  {departmentOptions.map(d => <option key={d._id||d.name} value={d.name||d}>{d.name||d}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ month, year, export: "true" });
+                  if (salaryFilters.branch) params.set("branch", salaryFilters.branch);
+                  if (salaryFilters.department) params.set("department", salaryFilters.department);
+                  const res = await api.get(`/reports/salary-paid?${params}`, { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = `Salary_Paid_${month}_${year}.xlsx`;
+                  document.body.appendChild(link); link.click(); link.remove();
+                  toast.success("Salary paid report downloaded");
+                } catch { toast.error("Failed to download"); }
+              }} disabled={loading}>Download Excel</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── SALARY REVISION HISTORY ── */}
+        {(activeTab === "HR" || activeTab === "Payroll" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="star" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Salary Revision History</h4>
+            <p className="report-desc">Appraisal and demotion history — previous salary, increment/change, new salary.</p>
+            <div className="report-filters">
+              <div style={{ width: "100%" }}>
+                <input type="date" placeholder="From Date" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={revisionFilters.fromDate} onChange={e => setRevisionFilters(p => ({ ...p, fromDate: e.target.value }))} />
+              </div>
+              <div style={{ width: "100%" }}>
+                <input type="date" placeholder="To Date" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={revisionFilters.toDate} onChange={e => setRevisionFilters(p => ({ ...p, toDate: e.target.value }))} />
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={revisionFilters.branch} onChange={e => setRevisionFilters(p => ({ ...p, branch: e.target.value }))}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id||b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ export: "true" });
+                  if (revisionFilters.branch) params.set("branch", revisionFilters.branch);
+                  if (revisionFilters.fromDate) params.set("fromDate", revisionFilters.fromDate);
+                  if (revisionFilters.toDate) params.set("toDate", revisionFilters.toDate);
+                  const res = await api.get(`/reports/salary-revision?${params}`, { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = "Salary_Revision_History.xlsx";
+                  document.body.appendChild(link); link.click(); link.remove();
+                  toast.success("Salary revision report downloaded");
+                } catch { toast.error("Failed to download"); }
+              }} disabled={loading}>Download Excel</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── LEAVE BALANCE REPORT ── */}
+        {(activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="calendar" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Leave Balance Report</h4>
+            <p className="report-desc">Sick, annual, casual, unpaid and maternity leave taken per employee for the year.</p>
+            <div className="report-filters">
+              <div style={{ flex: 1 }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={leaveYear} onChange={e => setLeaveYear(Number(e.target.value))}>
+                  {[0,1,2,3,4].map(i => { const y = currentDate.getFullYear()-i; return <option key={y} value={y}>{y}</option>; })}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={leaveFilters.branch} onChange={e => setLeaveFilters(p => ({ ...p, branch: e.target.value }))}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id||b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={leaveFilters.department} onChange={e => setLeaveFilters(p => ({ ...p, department: e.target.value }))}>
+                  <option value="">All Departments</option>
+                  {departmentOptions.map(d => <option key={d._id||d.name} value={d.name||d}>{d.name||d}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ year: leaveYear, export: "true" });
+                  if (leaveFilters.branch) params.set("branch", leaveFilters.branch);
+                  if (leaveFilters.department) params.set("department", leaveFilters.department);
+                  const res = await api.get(`/reports/leave-balance?${params}`, { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = `Leave_Balance_${leaveYear}.xlsx`;
+                  document.body.appendChild(link); link.click(); link.remove();
+                  toast.success("Leave balance report downloaded");
+                } catch { toast.error("Failed to download"); }
+              }} disabled={loading}>Download Excel</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── HEADCOUNT REPORT ── */}
+        {(activeTab === "Headcount" || activeTab === "HR" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="users" size={22} /></div>
+              <span className="report-tag">HR</span>
+            </div>
+            <h4 className="report-title">Headcount Report</h4>
+            <p className="report-desc">Employee count grouped by branch, department and company with active/inactive breakdown.</p>
+            <div className="report-filters">
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={headcountFilters.branch} onChange={e => setHeadcountFilters(p => ({ ...p, branch: e.target.value }))}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id||b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={headcountFilters.company} onChange={e => setHeadcountFilters(p => ({ ...p, company: e.target.value }))}>
+                  <option value="">All Companies</option>
+                  {companyOptions.map(c => <option key={c._id||c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={headcountFilters.department} onChange={e => setHeadcountFilters(p => ({ ...p, department: e.target.value }))}>
+                  <option value="">All Departments</option>
+                  {departmentOptions.map(d => <option key={d._id||d.name} value={d.name||d}>{d.name||d}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ export: "true" });
+                  if (headcountFilters.branch) params.set("branch", headcountFilters.branch);
+                  if (headcountFilters.company) params.set("company", headcountFilters.company);
+                  if (headcountFilters.department) params.set("department", headcountFilters.department);
+                  const res = await api.get(`/reports/headcount?${params}`, { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = "Headcount_Report.xlsx";
+                  document.body.appendChild(link); link.click(); link.remove();
+                  toast.success("Headcount report downloaded");
+                } catch { toast.error("Failed to download"); }
+              }} disabled={loading}>Download Excel</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── ASSET ASSIGNMENT REPORT ── */}
+        {(activeTab === "Assets" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="cube" size={22} /></div>
+              <span className="report-tag">Assets</span>
+            </div>
+            <h4 className="report-title">Asset Assignment Report</h4>
+            <p className="report-desc">All assets assigned to employees — physical and virtual — with custodian and period details.</p>
+            <div className="report-filters">
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={assetFilters.branch} onChange={e => setAssetFilters(p => ({ ...p, branch: e.target.value }))}>
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id||b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{ width: "100%" }}>
+                <select style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }} value={assetFilters.company} onChange={e => setAssetFilters(p => ({ ...p, company: e.target.value }))}>
+                  <option value="">All Companies</option>
+                  {companyOptions.map(c => <option key={c._id||c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ export: "true" });
+                  if (assetFilters.branch) params.set("branch", assetFilters.branch);
+                  if (assetFilters.company) params.set("company", assetFilters.company);
+                  const res = await api.get(`/reports/asset-assignments?${params}`, { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = "Asset_Assignment_Report.xlsx";
+                  document.body.appendChild(link); link.click(); link.remove();
+                  toast.success("Asset assignment report downloaded");
+                } catch { toast.error("Failed to download"); }
+              }} disabled={loading}>Download Excel</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── OVERTIME & ALLOWANCE REPORT (Phase 2) ── */}
+        {(activeTab === "Payroll" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon" style={{ backgroundColor: "#f0fdf4" }}>
+                <SvgIcon name="dollar" size={22} />
+              </div>
+              <span className="report-tag" style={{ background: "#dcfce7", color: "#166534" }}>Payroll</span>
+            </div>
+            <h4 className="report-title">Overtime & Allowance Report</h4>
+            <p className="report-desc">
+              Per-employee overtime hours, overtime pay, accommodation, vehicle, housing and all other allowances for a selected month.
+            </p>
+
+            <div className="report-filters">
+              {/* Month */}
+              <div style={{ flex: 2 }}>
+                <select
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                  value={month}
+                  onChange={e => setMonth(Number(e.target.value))}
+                >
+                  {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+
+              {/* Year */}
+              <div style={{ flex: 1 }}>
+                <select
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                  value={year}
+                  onChange={e => setYear(Number(e.target.value))}
+                >
+                  {[0, 1, 2, 3, 4].map(i => {
+                    const y = currentDate.getFullYear() - i;
+                    return <option key={y} value={y}>{y}</option>;
+                  })}
+                </select>
+              </div>
+
+              {/* Branch */}
+              <div style={{ width: "100%" }}>
+                <select
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                  value={salaryFilters.branch}
+                  onChange={e => setSalaryFilters(p => ({ ...p, branch: e.target.value }))}
+                >
+                  <option value="">All Branches</option>
+                  {branchOptions.map(b => <option key={b._id || b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+
+              {/* Department */}
+              <div style={{ width: "100%" }}>
+                <select
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                  value={salaryFilters.department}
+                  onChange={e => setSalaryFilters(p => ({ ...p, department: e.target.value }))}
+                >
+                  <option value="">All Departments</option>
+                  {departmentOptions.map(d => <option key={d._id || d.name} value={d.name || d}>{d.name || d}</option>)}
+                </select>
+              </div>
+
+              {/* Company */}
+              <div style={{ width: "100%" }}>
+                <select
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                  value={salaryFilters.company}
+                  onChange={e => setSalaryFilters(p => ({ ...p, company: e.target.value }))}
+                >
+                  <option value="">All Companies</option>
+                  {companyOptions.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Info note */}
+            <div style={{
+              background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px",
+              padding: "10px 14px", fontSize: "12px", color: "#166534", marginTop: "8px"
+            }}>
+              Overtime hours are calculated from attendance check-in/out times vs shift standard hours.
+              Overtime pay is pulled from processed payroll allowances.
+            </div>
+
+            <div className="report-actions" style={{ marginTop: "14px" }}>
+              <Button
+                className="generate-btn"
+                onClick={async () => {
+                  try {
+                    const params = new URLSearchParams({ month, year, export: "true" });
+                    if (salaryFilters.branch) params.set("branch", salaryFilters.branch);
+                    if (salaryFilters.department) params.set("department", salaryFilters.department);
+                    if (salaryFilters.company) params.set("company", salaryFilters.company);
+                    const res = await api.get(`/reports/overtime-allowance?${params}`, { responseType: "blob" });
+                    const url = window.URL.createObjectURL(new Blob([res.data]));
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `Overtime_Allowance_${month}_${year}.xlsx`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    toast.success("Overtime & allowance report downloaded");
+                  } catch {
+                    toast.error("Failed to download report");
+                  }
+                }}
+                disabled={loading}
+              >
+                Download Excel
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* WPS Salary File */}
         {(activeTab === "Compliance" || activeTab === "All") && (
           <Card className="report-card">
@@ -533,7 +1120,7 @@ export default function PrebuiltReports() {
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Last: {new Date().toISOString().split('T')[0]} • Monthly</div>
 
             <div className="report-filters">
-              <div style={{ width: '140px' }}>
+              <div style={{ flex: '2', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -552,7 +1139,7 @@ export default function PrebuiltReports() {
                   ))}
                 </select>
               </div>
-              <div style={{ width: '100px' }}>
+              <div style={{ flex: '1', minWidth: 0 }}>
                 <select
                   style={{
                     width: '100%',
@@ -594,6 +1181,36 @@ export default function PrebuiltReports() {
             </div>
           </Card>
         )}
+
+        {/* Work Permit Report */}
+        {(activeTab === "Work Permit" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon" style={{ background: '#eff6ff' }}><SvgIcon name="briefcase" size={22} color="#1d4ed8" /></div>
+              <span className="report-tag" style={{ background: '#dbeafe', color: '#1d4ed8' }}>HR</span>
+            </div>
+            <h4 className="report-title">Work Permit Report</h4>
+            <p className="report-desc">List of employees grouped by Work Permit Company.</p>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={() => handleGenerate("work-permit")} disabled={loading}>Generate</Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Work Visa Report */}
+        {(activeTab === "Work Visa" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon" style={{ background: '#f0fdf4' }}><SvgIcon name="clipboard-list" size={22} color="#15803d" /></div>
+              <span className="report-tag" style={{ background: '#dcfce7', color: '#15803d' }}>HR</span>
+            </div>
+            <h4 className="report-title">Work Visa Report</h4>
+            <p className="report-desc">List of employees grouped by Visa Company with expiry status.</p>
+            <div className="report-actions">
+              <Button className="generate-btn" onClick={() => handleGenerate("work-visa")} disabled={loading}>Generate</Button>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Result Section */}
@@ -605,7 +1222,27 @@ export default function PrebuiltReports() {
             {reportType === "depreciation" && `Asset Depreciation Schedule – As of Today`}
             {reportType === "payroll" && `Payroll Summary – ${MONTHS.find(m => m.value === month)?.label} ${year}`}
             {reportType === "wps" && `WPS Salary File Preview – ${MONTHS.find(m => m.value === month)?.label} ${year}`}
+            {reportType === "work-permit" && '🔖 Work Permit Report'}
+            {reportType === "work-visa" && '🛂 Work Visa Report'}
+            {reportType === "branch-wise-employees" && "Branch-wise Employee Report"}
           </h3>
+
+          {reportType === "branch-wise-employees" && reportSummary && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px", marginBottom: "18px" }}>
+              {[
+                { label: "Total Employees", value: reportSummary.totalEmployees || 0 },
+                { label: "Active", value: reportSummary.activeEmployees || 0 },
+                { label: "Onboarding", value: reportSummary.onboardingEmployees || 0 },
+                { label: "Branches", value: reportSummary.branchCount || 0 },
+                { label: "Departments", value: reportSummary.departmentCount || 0 }
+              ].map((item) => (
+                <div key={item.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "14px 16px" }}>
+                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#0f172a" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="report-table-wrapper">
             <table className="report-table">
@@ -657,6 +1294,27 @@ export default function PrebuiltReports() {
                     <th>Basic</th>
                     <th>Allowances</th>
                     <th>Net Payable</th>
+                  </tr>
+                )}
+                {(reportType === "work-permit" || reportType === "work-visa") && (
+                  <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Department</th>
+                    <th>{reportType === "work-permit" ? "Work Permit Company" : "Visa Company"}</th>
+                    <th>Visa Expiry</th>
+                  </tr>
+                )}
+                {reportType === "branch-wise-employees" && (
+                  <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Company</th>
+                    <th>Branch</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Status</th>
+                    <th>Visa Base</th>
                   </tr>
                 )}
               </thead>
@@ -712,11 +1370,99 @@ export default function PrebuiltReports() {
                         <td><strong>AED {row["Total Net"]}</strong></td>
                       </>
                     )}
+                    {(reportType === "work-permit" || reportType === "work-visa") && (
+                      <>
+                        <td><strong>{row.name}</strong></td>
+                        <td style={{ color: '#6b7280' }}>{row.code}</td>
+                        <td>{row.department}</td>
+                        <td>
+                          <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: '6px', fontSize: '13px' }}>
+                            {reportType === "work-permit" ? row.workPermitCompany : row.visaCompany}
+                          </span>
+                        </td>
+                        <td style={{ color: row.visaExpiry && new Date(row.visaExpiry) < new Date() ? '#dc2626' : '#16a34a' }}>
+                          {row.visaExpiry ? new Date(row.visaExpiry).toLocaleDateString() : '—'}
+                        </td>
+                      </>
+                    )}
+                    {reportType === "branch-wise-employees" && (
+                      <>
+                        <td><strong>{row.name}</strong><div style={{ color: "#64748b", fontSize: "12px" }}>{row.email || "—"}</div></td>
+                        <td>{row.code}</td>
+                        <td>{row.company || "—"}</td>
+                        <td>{row.branch || "—"}</td>
+                        <td>{row.department || "—"}</td>
+                        <td>{row.designation || "—"}</td>
+                        <td>{row.status || "—"}</td>
+                        <td>AED {Number(row.visaBase || 0).toLocaleString()}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {reportType === "branch-wise-employees" && pagination && pagination.pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "16px" }}>
+              <div style={{ color: "#64748b", fontSize: "14px" }}>
+                Page {pagination.page} of {pagination.pages} • {pagination.total} employees
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (pagination.page > 1) {
+                      const nextPage = pagination.page - 1;
+                      setBranchReportFilters((prev) => ({ ...prev, page: nextPage }));
+                      const params = new URLSearchParams();
+                      if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+                      if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+                      if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+                      if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+                      if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+                      params.set("page", String(nextPage));
+                      params.set("limit", String(branchReportFilters.limit || 10));
+                      api.get(`/reports/employees/branch-wise?${params.toString()}`).then((response) => {
+                        if (response.data.success) {
+                          setReportData(response.data.data || []);
+                          setReportSummary(response.data.summary || null);
+                          setPagination(response.data.pagination || null);
+                        }
+                      });
+                    }
+                  }}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (pagination.page < pagination.pages) {
+                      const nextPage = pagination.page + 1;
+                      setBranchReportFilters((prev) => ({ ...prev, page: nextPage }));
+                      const params = new URLSearchParams();
+                      if (branchReportFilters.branch && branchReportFilters.branch !== "All Branches") params.set("branch", branchReportFilters.branch);
+                      if (branchReportFilters.company && branchReportFilters.company !== "All Companies") params.set("company", branchReportFilters.company);
+                      if (branchReportFilters.department && branchReportFilters.department !== "All Departments") params.set("department", branchReportFilters.department);
+                      if (branchReportFilters.status && branchReportFilters.status !== "All Status") params.set("status", branchReportFilters.status);
+                      if (branchReportFilters.search) params.set("search", branchReportFilters.search);
+                      params.set("page", String(nextPage));
+                      params.set("limit", String(branchReportFilters.limit || 10));
+                      api.get(`/reports/employees/branch-wise?${params.toString()}`).then((response) => {
+                        if (response.data.success) {
+                          setReportData(response.data.data || []);
+                          setReportSummary(response.data.summary || null);
+                          setPagination(response.data.pagination || null);
+                        }
+                      });
+                    }
+                  }}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
           <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
             <Button variant="outline" onClick={() => handleExport("excel")}>Export as Excel</Button>
             <Button variant="outline" onClick={() => handleExport("pdf")}>Export as PDF</Button>

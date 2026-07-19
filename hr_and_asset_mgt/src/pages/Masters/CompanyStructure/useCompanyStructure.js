@@ -5,6 +5,10 @@ import {
     addDepartment,
     updateDepartment,
     deleteDepartment,
+    getCompanies,
+    addCompany,
+    updateCompany,
+    deleteCompany,
     getBranches,
     addBranch,
     updateBranch,
@@ -13,20 +17,28 @@ import {
     addDesignation,
     updateDesignation,
     deleteDesignation,
-    roleService
+    roleService,
+    repaymentPeriodService
 } from "../../../services/masterService.js";
 
 export default function useCompanyStructure() {
     const [departments, setDepartments] = useState([]);
+    const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [designations, setDesignations] = useState([]);
+    const [repaymentPeriods, setRepaymentPeriods] = useState([]);
     const [roles, setRoles] = useState([]);
     const [selectedPermissions, setSelectedPermissions] = useState([]);
+    const [repaymentMonths, setRepaymentMonths] = useState("");
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState("");
     const [inputValue, setInputValue] = useState("");
     const [editId, setEditId] = useState(null);
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [companyCode, setCompanyCode] = useState("");
+    const [branchCompanyId, setBranchCompanyId] = useState("");
 
     const [deleteConfig, setDeleteConfig] = useState({ show: false, type: null, id: null, name: null });
 
@@ -41,6 +53,13 @@ export default function useCompanyStructure() {
         } catch (error) {
             console.error("❌ Error fetching departments:", error);
             toast.error("Failed to load departments");
+        }
+
+        try {
+            const data = await getCompanies();
+            setCompanies(data);
+        } catch (error) {
+            console.error("❌ Error fetching companies:", error);
         }
 
         try {
@@ -63,13 +82,25 @@ export default function useCompanyStructure() {
         } catch (error) {
             console.error("❌ Error fetching roles:", error);
         }
+
+        try {
+            const data = await repaymentPeriodService.getAll();
+            setRepaymentPeriods(data);
+        } catch (error) {
+            console.error("❌ Error fetching repayment periods:", error);
+        }
     };
 
-    const handleOpenAdd = (type) => {
+    const handleOpenAdd = (type, parentCompanyId = "") => {
         setModalType(type);
         setInputValue("");
         setSelectedPermissions([]);
+        setRepaymentMonths("");
+        setCompanyCode("");
+        setBranchCompanyId(type === "Branch" ? parentCompanyId : "");
         setEditId(null);
+        setImageFile(null);
+        setImagePreview(null);
         setShowModal(true);
     };
 
@@ -78,6 +109,17 @@ export default function useCompanyStructure() {
         setInputValue(item.name);
         if (type === "Role") {
             setSelectedPermissions(item.permissions || []);
+        }
+        if (type === "Repayment Period") {
+            setRepaymentMonths(String(item.metadata?.months || parseInt(item.name, 10) || ""));
+        }
+        if (type === "Company") {
+            setImagePreview(item.image);
+            setImageFile(null);
+            setCompanyCode(item.code || "");
+        }
+        if (type === "Branch") {
+            setBranchCompanyId(item.parentId || "");
         }
         setEditId(item._id);
         setShowModal(true);
@@ -88,18 +130,37 @@ export default function useCompanyStructure() {
         setLoading(true);
         try {
             if (modalType === "Department") {
-                if (editId) await updateDepartment(editId, inputValue);
-                else await addDepartment(inputValue);
+                const payload = { name: inputValue };
+                if (editId) await updateDepartment(editId, payload);
+                else await addDepartment(payload);
                 const data = await getDepartments();
                 setDepartments(data);
+            } else if (modalType === "Company") {
+                const formData = new FormData();
+                formData.append("name", inputValue);
+                formData.append("code", companyCode.trim());
+                if (imageFile) {
+                    formData.append("image", imageFile);
+                }
+
+                if (editId) await updateCompany(editId, formData);
+                else await addCompany(formData);
+                const data = await getCompanies();
+                setCompanies(data);
             } else if (modalType === "Branch") {
-                if (editId) await updateBranch(editId, inputValue);
-                else await addBranch(inputValue);
+                if (!branchCompanyId) {
+                    toast.warning("Please select the company this branch belongs to");
+                    return;
+                }
+                const payload = { name: inputValue, parentId: branchCompanyId };
+                if (editId) await updateBranch(editId, payload);
+                else await addBranch(payload);
                 const data = await getBranches();
                 setBranches(data);
             } else if (modalType === "Designation") {
-                if (editId) await updateDesignation(editId, inputValue);
-                else await addDesignation(inputValue);
+                const payload = { name: inputValue };
+                if (editId) await updateDesignation(editId, payload);
+                else await addDesignation(payload);
                 const data = await getDesignations();
                 setDesignations(data);
             } else if (modalType === "Role") {
@@ -111,6 +172,20 @@ export default function useCompanyStructure() {
                 else await roleService.add(payload);
                 const data = await roleService.getAll();
                 setRoles(data);
+            } else if (modalType === "Repayment Period") {
+                const months = Number(repaymentMonths);
+                if (!Number.isFinite(months) || months <= 0) {
+                    toast.warning("Please enter a valid repayment month count");
+                    return;
+                }
+                const payload = {
+                    name: inputValue,
+                    metadata: { months }
+                };
+                if (editId) await repaymentPeriodService.update(editId, payload);
+                else await repaymentPeriodService.add(payload);
+                const data = await repaymentPeriodService.getAll();
+                setRepaymentPeriods(data);
             }
             toast.success(`${modalType} ${editId ? "updated" : "added"} successfully!`);
             setShowModal(false);
@@ -120,15 +195,19 @@ export default function useCompanyStructure() {
         } finally {
             setLoading(false);
             setEditId(null);
+            setImageFile(null);
+            setImagePreview(null);
         }
     };
 
     const handleDelete = (type, id) => {
         let item = null;
         if (type === "Department") item = departments.find(i => i._id === id);
+        else if (type === "Company") item = companies.find(i => i._id === id);
         else if (type === "Branch") item = branches.find(i => i._id === id);
         else if (type === "Designation") item = designations.find(i => i._id === id);
         else if (type === "Role") item = roles.find(i => i._id === id);
+        else if (type === "Repayment Period") item = repaymentPeriods.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -142,6 +221,9 @@ export default function useCompanyStructure() {
             if (type === "Department") {
                 await deleteDepartment(id);
                 setDepartments(departments.filter((d) => d._id !== id));
+            } else if (type === "Company") {
+                await deleteCompany(id);
+                setCompanies(companies.filter((c) => c._id !== id));
             } else if (type === "Branch") {
                 await deleteBranch(id);
                 setBranches(branches.filter((b) => b._id !== id));
@@ -151,6 +233,9 @@ export default function useCompanyStructure() {
             } else if (type === "Role") {
                 await roleService.delete(id);
                 setRoles(roles.filter((r) => r._id !== id));
+            } else if (type === "Repayment Period") {
+                await repaymentPeriodService.delete(id);
+                setRepaymentPeriods(repaymentPeriods.filter((period) => period._id !== id));
             }
             toast.success(`${type} deleted successfully`);
             setDeleteConfig({ ...deleteConfig, show: false });
@@ -164,17 +249,29 @@ export default function useCompanyStructure() {
 
     return {
         departments,
+        companies,
         branches,
         designations,
+        repaymentPeriods,
         roles,
         selectedPermissions,
         setSelectedPermissions,
+        repaymentMonths,
+        setRepaymentMonths,
         showModal,
         setShowModal,
         modalType,
         inputValue,
         setInputValue,
         loading,
+        imageFile,
+        setImageFile,
+        imagePreview,
+        setImagePreview,
+        companyCode,
+        setCompanyCode,
+        branchCompanyId,
+        setBranchCompanyId,
         handleOpenAdd,
         handleOpenEdit,
         handleSave,

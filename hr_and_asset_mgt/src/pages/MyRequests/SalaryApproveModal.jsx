@@ -1,20 +1,64 @@
 import { useState, useEffect } from "react";
 import AppButton from "../../components/reusable/Button.jsx";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
+import { repaymentPeriodService } from "../../services/masterService.js";
 
 export default function SalaryApproveModal({ show, request, onClose, onApprove }) {
-    const [interestRate, setInterestRate] = useState(0);
     const [tenure, setTenure] = useState(1);
     const [amount, setAmount] = useState(0);
     const [approving, setApproving] = useState(false);
+    const [startCurrentCycle, setStartCurrentCycle] = useState(false);
+    const [repaymentPeriods, setRepaymentPeriods] = useState([]);
+
+    const fallbackPeriods = [
+        { _id: "fallback-1", name: "1 Month", metadata: { months: 1 } },
+        { _id: "fallback-3", name: "3 Months", metadata: { months: 3 } },
+        { _id: "fallback-6", name: "6 Months", metadata: { months: 6 } },
+        { _id: "fallback-12", name: "12 Months", metadata: { months: 12 } }
+    ];
+
+    const periodOptions = repaymentPeriods.length > 0 ? repaymentPeriods : fallbackPeriods;
+    const getPeriodMonths = (period) => {
+        const months = Number(period.metadata?.months ?? period.value ?? parseInt(period.name, 10));
+        return Number.isFinite(months) && months > 0 ? months : 1;
+    };
+
+    const getCycleLabel = (useCurrentCycle) => {
+        const base = new Date();
+        if (!useCurrentCycle) {
+            base.setMonth(base.getMonth() + 1, 1);
+        }
+        return base.toLocaleString("en-US", {
+            month: "long",
+            year: "numeric"
+        });
+    };
+
+    useEffect(() => {
+        const fetchRepaymentPeriods = async () => {
+            try {
+                const data = await repaymentPeriodService.getAll();
+                setRepaymentPeriods(Array.isArray(data) ? data : []);
+            } catch (error) {
+                console.error("Failed to fetch repayment periods:", error);
+                setRepaymentPeriods([]);
+            }
+        };
+        fetchRepaymentPeriods();
+    }, []);
 
     useEffect(() => {
         if (request && request.details) {
-            setAmount(parseFloat(request.details.amount) || 0);
-            setTenure(parseInt(request.details.repaymentPeriod) || 1);
+            const defaultAmount = request.currentApprovalStage === "HR"
+                ? request.details.financeApprovedAmount ?? request.details.amount
+                : request.details.amount;
+            const defaultTenure = request.currentApprovalStage === "HR"
+                ? request.details.financeApprovedRepaymentPeriod ?? request.details.repaymentPeriod
+                : request.details.repaymentPeriod;
 
-            // Reset interest to 0 on new request open
-            setInterestRate(0);
+            setAmount(parseFloat(defaultAmount) || 0);
+            setTenure(parseInt(defaultTenure) || 1);
+            setStartCurrentCycle(false);
         }
     }, [request]);
 
@@ -23,8 +67,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
             setApproving(true);
             await onApprove(request._id, {
                 amount: parseFloat(amount),
-                interestRate: isLoan ? parseFloat(interestRate) : 0,
-                repaymentPeriod: isLoan ? parseInt(tenure) : 1
+                repaymentPeriod: isLoan ? parseInt(tenure) : 1,
+                startCurrentCycle
             });
         } catch (error) {
             console.error("Approval failed:", error);
@@ -34,10 +78,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     };
 
     const calculateTotal = () => {
-        const rate = parseFloat(interestRate) || 0;
         const principal = parseFloat(amount) || 0;
-        const total = principal + (principal * rate / 100);
-        return total.toFixed(2);
+        return principal.toFixed(2);
     };
 
     const calculateMonthly = () => {
@@ -50,6 +92,10 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
 
     const isLoan = request.details?.subType === 'loan' || request.subType === 'loan';
     const typeLabel = isLoan ? "Loan" : "Salary Advance";
+    const isFinanceStage = request.currentApprovalStage === "FINANCE";
+    const requestedAmount = request.details?.requestedAmount ?? request.details?.amount;
+    const financeApprovedAmount = request.details?.financeApprovedAmount;
+    const stageLabel = isFinanceStage ? "Finance Confirmation (Level 1)" : "HR Final Approval";
 
     // Footer Actions
     const modalFooter = (
@@ -66,7 +112,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     return (
         <CustomModal
             show={show}
-            title={`Approve ${typeLabel}`}
+            title={`${stageLabel} — ${typeLabel}`}
             onClose={onClose}
             footer={modalFooter}
         >
@@ -77,10 +123,31 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                     color: '#055160',
                     padding: '12px',
                     borderRadius: '4px',
-                    marginBottom: '20px',
+                    marginBottom: '12px',
                     border: '1px solid #b6effb'
                 }}>
-                    Reviewing request from <strong>{request.userId?.name}</strong> for <strong>{amount} AED</strong>.
+                    Reviewing request from <strong>{request.userId?.name}</strong> for <strong>{requestedAmount} AED</strong>.
+                    {!isFinanceStage && financeApprovedAmount !== undefined && financeApprovedAmount !== null && (
+                        <>
+                            {" "}Finance approved <strong>{financeApprovedAmount} AED</strong>.
+                        </>
+                    )}
+                </div>
+
+                {/* Stage badge */}
+                <div style={{
+                    display: 'inline-block',
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    marginBottom: '16px',
+                    background: isFinanceStage ? '#fef3c7' : '#dcfce7',
+                    color: isFinanceStage ? '#92400e' : '#166534'
+                }}>
+                    {isFinanceStage
+                        ? '⚡ Step 1 of 2 — Finance must confirm before HR final approval'
+                        : '✅ Step 2 of 2 — HR Final Sanction'}
                 </div>
 
                 {/* Form Content */}
@@ -105,7 +172,10 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                             onChange={(e) => setAmount(e.target.value)}
                         />
                         <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
-                            Requested Amount: {request.details.amount} AED. You may modify this value as needed.
+                            Requested Amount: {requestedAmount} AED
+                            {!isFinanceStage && financeApprovedAmount !== undefined && financeApprovedAmount !== null
+                                ? ` | Finance Approved: ${financeApprovedAmount} AED`
+                                : ""}. You may modify this value as needed.
                         </small>
                     </div>
 
@@ -115,47 +185,29 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
                                 Approved Tenure (Months)
                             </label>
-                            <input
-                                type="number"
-                                min="1"
+                            <select
                                 className="form-control"
                                 style={{
                                     width: '100%',
                                     padding: '8px 12px',
                                     border: '1px solid #ced4da',
-                                    borderRadius: '4px'
+                                    borderRadius: '4px',
+                                    backgroundColor: '#fff'
                                 }}
                                 value={tenure}
                                 onChange={(e) => setTenure(e.target.value)}
-                            />
+                            >
+                                {periodOptions.map((period) => {
+                                    const months = getPeriodMonths(period);
+                                    return (
+                                        <option key={period._id || period.name} value={months}>
+                                            {period.name || `${months} Month${months > 1 ? "s" : ""}`}
+                                        </option>
+                                    );
+                                })}
+                            </select>
                             <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
                                 Requested: {request.details.repaymentPeriod || 'N/A'}
-                            </small>
-                        </div>
-                    )}
-
-                    {/* Interest Rate (Loans Only) */}
-                    {isLoan && (
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                                Interest Rate (%)
-                            </label>
-                            <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                className="form-control"
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    border: '1px solid #ced4da',
-                                    borderRadius: '4px'
-                                }}
-                                value={interestRate}
-                                onChange={(e) => setInterestRate(e.target.value)}
-                            />
-                            <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
-                                Enter 0 for no interest.
                             </small>
                         </div>
                     )}
@@ -174,7 +226,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                         {isLoan && (
                             <>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                    <span>Total Repayment (inc. Interest):</span>
+                                    <span>Total Repayment:</span>
                                     <strong>{calculateTotal()}</strong>
                                 </div>
                                 <div style={{
@@ -198,9 +250,36 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                                 marginTop: '8px'
                             }}>
                                 <span>Advance Deduction:</span>
-                                <strong style={{ color: '#dc3545' }}>{parseFloat(amount || 0).toFixed(2)} / next payslip</strong>
+                                <strong style={{ color: '#dc3545' }}>{parseFloat(amount || 0).toFixed(2)} / cycle</strong>
                             </div>
                         )}
+                    </div>
+
+                    <div style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '10px',
+                        padding: '14px 16px',
+                        background: '#fffaf0'
+                    }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={startCurrentCycle}
+                                onChange={(e) => setStartCurrentCycle(e.target.checked)}
+                                style={{ marginTop: '3px' }}
+                            />
+                            <div>
+                                <div style={{ fontWeight: '600', color: '#1f2937' }}>
+                                    Start deduction in current payroll cycle
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                    Leave unchecked to defer the first deduction to {getCycleLabel(false)}.
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#92400e', marginTop: '6px' }}>
+                                    First deduction will start in {getCycleLabel(startCurrentCycle)}.
+                                </div>
+                            </div>
+                        </label>
                     </div>
 
                 </div>

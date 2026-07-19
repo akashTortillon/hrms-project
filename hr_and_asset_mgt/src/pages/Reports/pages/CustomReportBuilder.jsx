@@ -33,7 +33,7 @@ export default function CustomReportBuilder() {
 
     const fetchConfig = async () => {
         try {
-            const response = await api.get("/api/reports/custom-configs");
+            const response = await api.get("/reports/custom-configs");
             const config = response.data.data.find(c => c._id === editingId);
             if (config) {
                 setReportTitle(config.title);
@@ -54,7 +54,7 @@ export default function CustomReportBuilder() {
     const handlePreviewRequest = async (dataset, columns) => {
         try {
             setLoading(true);
-            const response = await api.post("/api/reports/custom", {
+            const response = await api.post("/reports/custom", {
                 dataset,
                 columns,
                 filters: {}
@@ -86,7 +86,7 @@ export default function CustomReportBuilder() {
 
         try {
             setLoading(true);
-            const response = await api.post("/api/reports/custom", {
+            const response = await api.post("/reports/custom", {
                 dataset: selectedDataset,
                 columns: selectedColumns,
                 filters: {}
@@ -108,7 +108,7 @@ export default function CustomReportBuilder() {
 
         try {
             toast.info("Preparing export...");
-            const response = await api.post("/api/reports/custom", {
+            const response = await api.post("/reports/custom", {
                 dataset: selectedDataset,
                 columns: selectedColumns,
                 filters: {},
@@ -142,10 +142,10 @@ export default function CustomReportBuilder() {
             };
 
             if (editingId) {
-                await api.patch(`/api/reports/custom-configs/${editingId}`, payload);
+                await api.patch(`/reports/custom-configs/${editingId}`, payload);
                 toast.success("Report updated");
             } else {
-                await api.post("/api/reports/custom-configs", payload);
+                await api.post("/reports/custom-configs", payload);
                 toast.success("Report saved to Recent Reports");
             }
         } catch (err) {

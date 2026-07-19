@@ -202,6 +202,7 @@ import Master from "../models/masterModel.js";
 import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
+import biometricSyncService from "../services/biometricSyncService.js";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -211,230 +212,46 @@ import * as XLSX from "xlsx";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Helper: Parse time to minutes (HH:MM) -> minutes
-const toMinutes = (time) => {
-  if (!time) return 0;
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
-};
-
-// Helper: Get Holidays Set
-const getHolidaysSet = async () => {
-  const settings = await SystemSettings.findOne();
-  const holidaySet = new Set();
-  if (settings && settings.holidays) {
-    settings.holidays.forEach(h => {
-      if (h.date) {
-        const d = new Date(h.date);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        holidaySet.add(`${yyyy}-${mm}-${dd}`);
-      }
-    });
-  }
-  return holidaySet;
-};
-
-// Helper: Calculate duration between two times in HH:MM format
-const calculateDuration = (start, end) => {
-  if (!start || !end) return null;
-  const startMin = toMinutes(start);
-  const endMin = toMinutes(end);
-  let duration = endMin - startMin;
-  if (duration < 0) duration += 24 * 60; // Handle overnight
-
-  const h = Math.floor(duration / 60);
-  const m = duration % 60;
-  return `${h}h ${m}m`;
-};
-
-/**
- * Get Shift Rules from Master
- */
-const getShiftRules = async (shiftName) => {
-  const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
-  if (shiftMaster && shiftMaster.metadata) {
-    const meta = shiftMaster.metadata;
-    // Extract buffers from latePolicy if available, otherwise fallback to buffers or lateLimit
-    let buffers = [];
-    if (meta.latePolicy && Array.isArray(meta.latePolicy)) {
-      buffers = meta.latePolicy.map(p => p.time).filter(t => t);
-    } else {
-      buffers = meta.buffers || [meta.lateLimit || "09:15"];
-    }
-
-    return {
-      start: meta.startTime || "09:00",
-      end: meta.endTime || "18:00",
-      lateLimit: meta.lateLimit || "09:15",
-      latePolicy: meta.latePolicy || [], // Pass full policy for other controllers if needed
-      buffers: buffers.length > 0 ? buffers : ["09:15"]
-    };
-  }
-  // Default fallback
-  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
-};
-
-const calculateLateTier = (checkInTime, rules) => {
-  if (!checkInTime) return 0;
-  const checkInMin = toMinutes(checkInTime);
-
-  // Ensure we have at least one buffer
-  const buffers = rules.buffers || [rules.lateLimit];
-  if (buffers.length === 0) return 0;
-
-  // Convert all buffers to minutes
-  const bufferMins = buffers.map(b => toMinutes(b)).sort((a, b) => a - b);
-
-  // Logic: 
-  // <= Buffer 1 -> Present (Tier 0)
-  // > Buffer 1 && <= Buffer 2 -> Late Tier 1
-  // > Buffer 2 && <= Buffer 3 -> Late Tier 2
-  // > Buffer 3 -> Late Tier 3
-
-  if (checkInMin <= bufferMins[0]) return 0; // On Time
-
-  if (bufferMins.length === 1) return 1; // Only 1 buffer defined, so simple Late
-
-  if (checkInMin <= bufferMins[1]) return 1; // Between Buf1 and Buf2
-  if (bufferMins.length === 2) return 2; // > Buf2, limit reached
-
-  if (checkInMin <= bufferMins[2]) return 2; // Between Buf2 and Buf3
-
-  return 3; // > Buf3
-};
+import {
+  toMinutes,
+  calculateDuration,
+  getShiftRules,
+  calculateLateTier,
+  getHolidaysSet,
+  getApprovedLeavesMap,
+  getApprovedLeaves,
+  isLeave
+} from "../utils/attendanceUtils.js";
 
 /**
  * SYNC Biometrics
- * Reads mock data and processes attendance
+ * Manually trigger biometric data synchronization
  */
 export const syncBiometrics = async (req, res) => {
   try {
-    // console.log("Starting Biometric Sync...");
-    const dataPath = path.join(__dirname, "../data/mockBiometricData.json");
-    if (!fs.existsSync(dataPath)) {
-      return res.status(404).json({ message: "Biometric data file not found" });
-    }
+    const { startDate, endDate } = req.body;
+    const userId = req.user?._id;
 
-    const rawData = fs.readFileSync(dataPath, "utf-8");
-    const logs = JSON.parse(rawData);
-    // console.log(`Found ${logs.length} biometric logs.`);
+    console.log(`[attendanceController] Manual sync triggered by user ${userId}. Range: ${startDate || "Default"} to ${endDate || "Default"}`);
 
-    // 1. Group logs by Employee + Date
-    const groupedData = {};
-    const employeeCodes = new Set(); // To fetch relevant employees later
+    const result = await biometricSyncService.executeSyncJob(
+      "MANUAL",
+      startDate || null,
+      endDate || null,
+      userId
+    );
 
-    for (const log of logs) {
-      const date = log.timestamp.split("T")[0];
-      const time = log.timestamp.split("T")[1].substring(0, 5); // HH:MM
-      const key = `${log.employeeCode}_${date}`;
-      employeeCodes.add(log.employeeCode);
-
-      if (!groupedData[key]) {
-        groupedData[key] = {
-          employeeCode: log.employeeCode,
-          date,
-          checkIn: null,
-          checkOut: null
-        };
-      }
-
-      if (log.type === "IN") {
-        // Keep earliest check-in
-        if (!groupedData[key].checkIn || time < groupedData[key].checkIn) {
-          groupedData[key].checkIn = time;
-        }
-      } else if (log.type === "OUT") {
-        // Keep latest check-out
-        if (!groupedData[key].checkOut || time > groupedData[key].checkOut) {
-          groupedData[key].checkOut = time;
-        }
-      }
-    }
-
-    // Fetch relevant employees to check for leaves
-    const employeesList = await Employee.find({ code: { $in: Array.from(employeeCodes) } });
-    const leaveMap = await getApprovedLeavesMap(employeesList);
-
-    // 2. Process each grouped record
-    let syncedCount = 0;
-    const errors = [];
-
-    for (const key in groupedData) {
-      const record = groupedData[key];
-      // console.log(`Processing: ${record.employeeCode} on ${record.date} | In: ${record.checkIn} Out: ${record.checkOut}`);
-
-      const employee = employeesList.find(e => e.code === record.employeeCode);
-
-      if (!employee) {
-        errors.push(`Employee not found: ${record.employeeCode}`);
-        continue;
-      }
-
-      // ✅ CHECK LEAVE FIRST: If employee is on approved leave, ignore biometric entry
-      if (isLeave(employee._id, record.date, leaveMap)) {
-        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} has Approved Leave. Skipping biometric overwrite.`);
-        continue;
-      }
-
-      // Get Shift Rules
-      const shiftName = employee.shift || "Day Shift";
-      const rules = await getShiftRules(shiftName);
-
-      // Determine Status
-      let status = "Absent";
-      let lateTier = 0;
-
-      if (record.checkIn) {
-        lateTier = calculateLateTier(record.checkIn, rules);
-        status = lateTier > 0 ? "Late" : "Present";
-      }
-
-      // Calculate Work Hours
-      const workHours = calculateDuration(record.checkIn, record.checkOut);
-
-      // console.log(`[SYNC] ${record.employeeCode} | ${record.date} | ${status} | In: ${record.checkIn} Out: ${record.checkOut}`);
-
-      // ✅ NEW: Protect "On Leave" status from being overwritten
-      const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
-      if (existingRecord && existingRecord.status === "On Leave") {
-        // console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
-        continue;
-      }
-
-      // // ✅ NEW: Protect "On Leave" status from being overwritten
-      // const existingRecord = await Attendance.findOne({ employee: employee._id, date: record.date });
-      // if (existingRecord && existingRecord.status === "On Leave") {
-      //   console.log(`[SYNC SKIP] ${record.employeeCode} on ${record.date} is On Leave. Skipping biometric overwrite.`);
-      //   continue;
-      // }
-
-      // Upsert Attendance
-      await Attendance.findOneAndUpdate(
-        { employee: employee._id, date: record.date },
-        {
-          employee: employee._id,
-          date: record.date,
-          shift: shiftName,
-          checkIn: record.checkIn,
-          checkOut: record.checkOut,
-          checkOut: record.checkOut,
-          status,
-          lateTier,
-          workHours
-        },
-        { upsert: true, new: true }
-      );
-      syncedCount++;
-    }
-
-    // console.log(`Sync Completed. Processed: ${syncedCount}, Errors: ${errors.length}`);
-
-    res.json({ message: "Sync successful", synced: syncedCount, errors });
+    return res.status(200).json({
+      success: true,
+      message: "Sync completed successfully",
+      data: result
+    });
   } catch (error) {
-    // console.error("Sync error:", error);
-    res.status(500).json({ message: "Server error during sync" });
+    console.error("[attendanceController] Manual sync failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error during manual biometric synchronization"
+    });
   }
 };
 
@@ -442,120 +259,7 @@ export const syncBiometrics = async (req, res) => {
  * GET daily attendance
  * /api/attendance?date=YYYY-MM-DD
  */
-// Helper: Get Set of EmployeeIDs who are on APPROVED LEAVE for a specific date
-const getApprovedLeaves = async (date, employees) => {
-  const onLeaveEmployeeIds = new Set();
-
-  // 1. Map Employee Emails -> Employee IDs
-  const emailToEmpId = {};
-  const emails = [];
-  employees.forEach(emp => {
-    if (emp.email) {
-      emailToEmpId[emp.email] = emp._id.toString();
-      emails.push(emp.email);
-    }
-  });
-
-  // 2. Find Users for these employees
-  const users = await User.find({ email: { $in: emails } });
-  const userIdToEmpId = {};
-  const userIds = [];
-
-  users.forEach(u => {
-    userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
-    userIds.push(u._id);
-  });
-
-  // 3. Find APPROVED LEAVE Requests for these users
-  const requests = await Request.find({
-    userId: { $in: userIds },
-    requestType: "LEAVE",
-    status: "APPROVED"
-  });
-
-  // 4. Check date overlap
-  const targetDate = new Date(date);
-  targetDate.setHours(0, 0, 0, 0);
-
-  requests.forEach(req => {
-    if (req.details && req.details.startDate && req.details.endDate) {
-      const start = new Date(req.details.startDate);
-      const end = new Date(req.details.endDate);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(0, 0, 0, 0);
-
-      if (targetDate >= start && targetDate <= end) {
-        const empId = userIdToEmpId[req.userId.toString()];
-        if (empId) onLeaveEmployeeIds.add(empId);
-      }
-    }
-  });
-
-  return onLeaveEmployeeIds;
-};
-
-// ✅ NEW HELPER: Get Map of Approved Leaves for Multiple Employees
-const getApprovedLeavesMap = async (employees) => {
-  const emailToEmpId = {};
-  const emails = [];
-  employees.forEach(emp => {
-    if (emp.email) {
-      emailToEmpId[emp.email] = emp._id.toString();
-      emails.push(emp.email);
-    }
-  });
-
-  const users = await User.find({ email: { $in: emails } });
-  const userIdToEmpId = {};
-  const userIds = [];
-  users.forEach(u => {
-    userIdToEmpId[u._id.toString()] = emailToEmpId[u.email];
-    userIds.push(u._id);
-  });
-
-  const requests = await Request.find({
-    userId: { $in: userIds },
-    requestType: "LEAVE",
-    status: "APPROVED"
-  });
-
-  const map = {}; // empId -> [{start, end}]
-  requests.forEach(req => {
-    const details = req.details || {};
-    const startDate = details.startDate || details.fromDate;
-    const endDate = details.endDate || details.toDate;
-
-    if (startDate && endDate) {
-      const empId = userIdToEmpId[req.userId.toString()];
-      if (empId) {
-        if (!map[empId]) map[empId] = [];
-        const s = new Date(startDate);
-        const e = new Date(endDate);
-        s.setHours(0, 0, 0, 0);
-        e.setHours(23, 59, 59, 999);
-        // ✅ Include leaveType for Payroll
-        map[empId].push({
-          start: s,
-          end: e,
-          leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave"
-        });
-      }
-    }
-  });
-  return map;
-};
-
-// ✅ NEW HELPER: Check if a date is within any leave range
-const isLeave = (empId, dateStr, map) => {
-  const ranges = map[empId.toString()];
-  if (!ranges) return false;
-  const d = new Date(dateStr);
-  d.setHours(12, 0, 0, 0); // Mid-day check
-  for (const r of ranges) {
-    if (d >= r.start && d <= r.end) return true;
-  }
-  return false;
-};
+// Leave helpers are imported from attendanceUtils.js
 
 /**
  * GET daily attendance
@@ -720,7 +424,8 @@ export const getMonthlyAttendance = async (req, res) => {
 
     if (!canViewAll) {
       if (!req.user.employeeId) {
-        return res.status(403).json({ message: "Access Denied: No employee profile linked" });
+        // Return graceful empty array instead of 403 to prevent frontend crashing
+        return res.status(200).json([]);
       }
       employeeQuery._id = req.user.employeeId;
     }
@@ -819,6 +524,88 @@ export const getMonthlyAttendance = async (req, res) => {
 
   } catch (error) {
     // console.error("Get monthly attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * BULK mark attendance for a date range (Manager / HR)
+ * Body: { employeeId, fromDate, toDate, checkIn, checkOut, shift, status, reason, skipWeekends }
+ */
+export const markAttendanceBulk = async (req, res) => {
+  try {
+    const { employeeId, fromDate, toDate, checkIn, checkOut, shift, status, reason, skipWeekends } = req.body;
+
+    if (!employeeId || !fromDate || !toDate) {
+      return res.status(400).json({ message: "employeeId, fromDate and toDate are required" });
+    }
+
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    if (end < start) {
+      return res.status(400).json({ message: "toDate must be on or after fromDate" });
+    }
+
+    const rules = await getShiftRules(shift || "Day Shift");
+    const results = [];
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay(); // 0 = Sunday, 6 = Saturday
+      if (skipWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) continue;
+
+      const dateStr = d.toISOString().split("T")[0];
+
+      let resolvedStatus = status || "Absent";
+      let lateTier = 0;
+
+      if (!status) {
+        if (checkIn) {
+          lateTier = calculateLateTier(checkIn, rules);
+          resolvedStatus = lateTier > 0 ? "Late" : "Present";
+        }
+      }
+
+      const workHours = calculateDuration(checkIn, checkOut);
+
+      const updateData = {
+        employee: employeeId,
+        date: dateStr,
+        shift: shift || "Day Shift",
+        checkIn: checkIn || null,
+        checkOut: checkOut || null,
+        status: resolvedStatus,
+        lateTier,
+        workHours
+      };
+
+      if (reason && req.user) {
+        updateData.isManuallyEdited = true;
+        updateData.editedBy = req.user._id;
+        updateData.editedAt = new Date();
+        updateData.editReason = reason;
+      }
+
+      const record = await Attendance.findOneAndUpdate(
+        { employee: employeeId, date: dateStr },
+        updateData,
+        { upsert: true, new: true }
+      );
+
+      results.push(record);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Attendance marked for ${results.length} day(s)`,
+      count: results.length,
+      data: results
+    });
+  } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
 };

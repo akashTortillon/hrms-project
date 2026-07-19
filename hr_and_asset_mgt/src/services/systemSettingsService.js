@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/system-settings";
+const BASE_URL = "/system-settings";
 
 export const getSettings = async () => {
     const res = await api.get(`${BASE_URL}/`);
@@ -28,6 +28,23 @@ export const updateHoliday = async (id, payload) => {
 
 export const deleteHoliday = async (id) => {
     const res = await api.delete(`${BASE_URL}/holidays/${id}`);
+    return res.data;
+};
+
+// Allowance Types
+export const addAllowanceType = async (payload) => {
+    // payload: { name }
+    const res = await api.post(`${BASE_URL}/allowance-types`, payload);
+    return res.data;
+};
+
+export const updateAllowanceType = async (id, payload) => {
+    const res = await api.put(`${BASE_URL}/allowance-types/${id}`, payload);
+    return res.data;
+};
+
+export const deleteAllowanceType = async (id) => {
+    const res = await api.delete(`${BASE_URL}/allowance-types/${id}`);
     return res.data;
 };
 

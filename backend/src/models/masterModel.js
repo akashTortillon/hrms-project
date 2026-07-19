@@ -23,7 +23,13 @@ const unifiedMasterSchema = new mongoose.Schema({
         default: true
     },
     metadata: { type: mongoose.Schema.Types.Mixed }, // Flexible JSON field
+    image: { type: String }, // S3 URL for icons/logos
     assetTypeId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Master',
+        index: true
+    },
+    parentId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Master',
         index: true

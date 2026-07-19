@@ -2,51 +2,86 @@
 import api from "../api/apiClient";
 
 export const payrollService = {
-    // Generate Payroll for a Month
-    generate: async (month, year) => {
-        const response = await api.post("/api/payroll/generate", { month, year });
+    // Generate Payroll for a rolling period — periodStart/periodEnd are "YYYY-MM-DD" strings
+    generate: async (periodStart, periodEnd) => {
+        const response = await api.post("/payroll/generate", { periodStart, periodEnd });
         return response.data;
     },
 
     // Get Payroll Summary (Records)
-    getSummary: async (month, year) => {
-        const response = await api.get(`/api/payroll/summary?month=${month}&year=${year}`);
+    getSummary: async (month, year, filters = {}) => {
+        const params = new URLSearchParams({ month, year, ...filters }).toString();
+        const response = await api.get(`/payroll/summary?${params}`);
         return response.data;
+    },
+
+    // Latest finalized period — used to lock out already-finalized (and earlier) periods
+    getLatestFinalizedPeriod: async () => {
+        const response = await api.get("/payroll/latest-finalized");
+        return response.data.latestFinalized; // { month, year, periodStart, periodEnd, finalizedAt } or null
     },
 
     // Add Manual Adjustment
     addAdjustment: async (payload) => {
-        const response = await api.post("/api/payroll/adjust", payload);
+        const response = await api.post("/payroll/adjust", payload);
         return response.data;
     },
 
     // Remove Payroll Item
     removePayrollItem: async (payrollId, itemId, type) => {
-        const response = await api.post("/api/payroll/remove-item", { payrollId, itemId, type });
+        const response = await api.post("/payroll/remove-item", { payrollId, itemId, type });
         return response.data;
     },
 
     // Get Audit Logs
     getAuditLogs: async (payrollId) => {
-        const response = await api.get(`/api/payroll/audit-logs?payrollId=${payrollId}`);
+        const response = await api.get(`/payroll/audit-logs?payrollId=${payrollId}`);
         return response.data;
     },
 
-    // Finalize Payroll
-    finalize: async (month, year) => {
-        const response = await api.post("/api/payroll/finalize", { month, year });
+    // Finalize Payroll — same periodStart/periodEnd identity as generate
+    finalize: async (periodStart, periodEnd) => {
+        const response = await api.post("/payroll/finalize", { periodStart, periodEnd });
+        return response.data;
+    },
+
+    // Un-finalize Payroll — undo a mistaken Finalize. Only the most recently
+    // finalized period is allowed (server enforces this).
+    unfinalize: async (periodStart, periodEnd) => {
+        const response = await api.post("/payroll/unfinalize", { periodStart, periodEnd });
+        return response.data;
+    },
+
+    // Set Payroll Period Anchor (Masters > System Settings) — moves the rolling
+    // -period lockout cursor without touching any real payroll data. `force: true`
+    // overrides the conflict warning if the anchor predates an already-finalized period.
+    setAnchor: async (anchorDate, force = false) => {
+        const response = await api.post("/payroll/set-anchor", { anchorDate, force });
         return response.data;
     },
 
     // Export Excel
-    exportExcel: async (month, year) => {
-        const response = await api.get(`/api/payroll/export?month=${month}&year=${year}`, {
+    exportExcel: async (month, year, reportType = null, filters = {}) => {
+        let urlPath = `/payroll/export?month=${month}&year=${year}`;
+        if (reportType) urlPath += `&reportType=${reportType}`;
+        if (filters.visaCompany) urlPath += `&visaCompany=${encodeURIComponent(filters.visaCompany)}`;
+        if (filters.workPermitCompany) urlPath += `&workPermitCompany=${encodeURIComponent(filters.workPermitCompany)}`;
+        if (filters.company) urlPath += `&company=${encodeURIComponent(filters.company)}`;
+        if (filters.branch) urlPath += `&branch=${encodeURIComponent(filters.branch)}`;
+
+        const response = await api.get(urlPath, {
             responseType: 'blob'
         });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `Payroll_${month}_${year}.xlsx`);
+        
+        // Dynamic filename
+        let filename = `Payroll_${month}_${year}.xlsx`;
+        if (reportType === 'permit') filename = `Location_Report_${month}_${year}.xlsx`;
+        else if (reportType === 'visa') filename = `Visa_Report_${month}_${year}.xlsx`;
+
+        link.setAttribute('download', filename);
         document.body.appendChild(link);
         link.click();
         link.parentNode.removeChild(link);
@@ -54,12 +89,12 @@ export const payrollService = {
 
     // Generate SIF
     generateSIF: async (month, year) => {
-        const response = await api.get(`/api/payroll/export-sif?month=${month}&year=${year}`, {
+        const response = await api.get(`/payroll/export-sif?month=${month}&year=${year}`, {
             responseType: 'blob'
         });
         // Try to get filename from header
         const contentDisposition = response.headers['content-disposition'];
-        let filename = `SIF_${year}${month}.csv`;
+        let filename = `SIF_${year}${month}.zip`;
         if (contentDisposition) {
             const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
             if (fileNameMatch && fileNameMatch.length === 2)
@@ -77,7 +112,7 @@ export const payrollService = {
 
     // Download MOL Report
     downloadMOLReport: async (month, year) => {
-        const response = await api.get(`/api/payroll/export-mol?month=${month}&year=${year}`, { responseType: 'blob' });
+        const response = await api.get(`/payroll/export-mol?month=${month}&year=${year}`, { responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
@@ -89,7 +124,7 @@ export const payrollService = {
 
     // Download Payment History
     downloadPaymentHistory: async (year) => {
-        const response = await api.get(`/api/payroll/history?year=${year}`, { responseType: 'blob' });
+        const response = await api.get(`/payroll/history?year=${year}`, { responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
@@ -97,5 +132,27 @@ export const payrollService = {
         document.body.appendChild(link);
         link.click();
         link.parentNode.removeChild(link);
+    },
+
+    // Download Employee Payslip PDF
+    downloadPayslipPdf: async (payrollId, employeeName = "employee") => {
+        const response = await api.get(`/payroll/download/${payrollId}`, {
+            responseType: 'blob'
+        });
+        const safeName = String(employeeName || "employee").replace(/[^a-z0-9_-]+/gi, "_");
+        const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Payslip_${safeName}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(url);
+    },
+
+    // Self-service: employee's own processed payslips
+    getMyPayslips: async () => {
+        const response = await api.get("/payroll/my-payslips");
+        return response.data;
     }
 };

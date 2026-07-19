@@ -23,11 +23,16 @@
 
 import api from "../api/apiClient";
 
-const REQUEST_API = "/api/requests";
+const REQUEST_API = "/requests";
 
 // Create a new request
 export const createRequest = async (requestData) => {
-  const response = await api.post(REQUEST_API, requestData);
+  const isMultipart = requestData instanceof FormData;
+  const response = await api.post(REQUEST_API, requestData, isMultipart ? {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  } : undefined);
   return response.data;
 };
 
@@ -95,8 +100,23 @@ export const updateRequestStatus = async (id, payload) => {
   return response.data;
 };
 
+export const updateRepaymentSchedule = async (id, payload) => {
+  const response = await api.patch(
+    `${REQUEST_API}/${id}/repayment-schedule`,
+    payload
+  );
+  return response.data;
+};
+
 // Get requests for a specific employee
 export const getEmployeeRequests = async (employeeId, params = {}) => {
   const response = await api.get(`${REQUEST_API}/employee/${employeeId}`, { params });
   return response.data; // expect { success: true, data: [] }
 };
+
+// Get leave summary breakdown by type
+export const getLeaveSummary = async (params = {}) => {
+  const response = await api.get(`${REQUEST_API}/leave-summary`, { params });
+  return response.data;
+};
+

@@ -2,8 +2,8 @@ import api from "../api/apiClient";
 
 // --- UNIFIED MASTERS ---
 // All masters use the same endpoint structure: /api/masters/:type
-
-const UNIFIED_BASE = "/api/masters";
+// huhu
+const UNIFIED_BASE = "/masters";
 
 const createGenericService = (typeSlug) => ({
     getAll: async () => {
@@ -11,13 +11,12 @@ const createGenericService = (typeSlug) => ({
         return res.data;
     },
     add: async (data) => {
-        // Handle both simple name string and complex object
-        const payload = typeof data === 'string' ? { name: data } : data;
+        const payload = (typeof data === 'string') ? { name: data } : data;
         const res = await api.post(`${UNIFIED_BASE}/${typeSlug}`, payload);
         return res.data;
     },
     update: async (id, data) => {
-        const payload = typeof data === 'string' ? { name: data } : data;
+        const payload = (typeof data === 'string') ? { name: data } : data;
         const res = await api.put(`${UNIFIED_BASE}/${typeSlug}/${id}`, payload);
         return res.data;
     },
@@ -38,6 +37,11 @@ export const addBranch = async (name) => (await createGenericService("branches")
 export const updateBranch = async (id, name) => (await createGenericService("branches").update(id, name));
 export const deleteBranch = async (id) => (await createGenericService("branches").delete(id));
 
+export const getCompanies = async () => (await createGenericService("companies").getAll());
+export const addCompany = async (name) => (await createGenericService("companies").add(name));
+export const updateCompany = async (id, name) => (await createGenericService("companies").update(id, name));
+export const deleteCompany = async (id) => (await createGenericService("companies").delete(id));
+
 export const getDesignations = async () => (await createGenericService("designations").getAll());
 export const addDesignation = async (name) => (await createGenericService("designations").add(name));
 export const updateDesignation = async (id, name) => (await createGenericService("designations").update(id, name));
@@ -49,6 +53,7 @@ export const leaveTypeService = createGenericService('leave-types');
 export const documentTypeService = createGenericService('document-types');
 export const nationalityService = createGenericService('nationalities');
 export const payrollRuleService = createGenericService('payroll-rules');
+export const repaymentPeriodService = createGenericService('repayment-periods');
 export const workflowTemplateService = createGenericService('workflow-templates');
 export const shiftService = createGenericService('shifts');
 

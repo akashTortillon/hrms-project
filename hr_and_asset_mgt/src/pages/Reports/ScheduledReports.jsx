@@ -26,7 +26,7 @@ export default function ScheduledReports() {
 
   const fetchSchedules = async () => {
     try {
-      const response = await api.get("/api/reports/schedules");
+      const response = await api.get("/reports/schedules");
       if (response.data.success) {
         setSchedules(response.data.data);
       }
@@ -58,13 +58,13 @@ export default function ScheduledReports() {
     e.preventDefault();
     try {
       if (editingId) {
-        const response = await api.patch(`/api/reports/schedules/${editingId}`, formData);
+        const response = await api.patch(`/reports/schedules/${editingId}`, formData);
         if (response.data.success) {
           setSchedules(schedules.map(s => s._id === editingId ? response.data.data : s));
           toast.success("Schedule updated successfully");
         }
       } else {
-        const response = await api.post("/api/reports/schedules", formData);
+        const response = await api.post("/reports/schedules", formData);
         if (response.data.success) {
           setSchedules([...schedules, response.data.data]);
           toast.success("New schedule created");
@@ -79,7 +79,7 @@ export default function ScheduledReports() {
   const toggleStatus = async (id, currentStatus) => {
     try {
       const newStatus = currentStatus === "Active" ? "Inactive" : "Active";
-      const response = await api.patch(`/api/reports/schedules/${id}`, { status: newStatus });
+      const response = await api.patch(`/reports/schedules/${id}`, { status: newStatus });
       if (response.data.success) {
         setSchedules(schedules.map(s => s._id === id ? { ...s, status: newStatus } : s));
         toast.success(`Schedule ${newStatus === "Active" ? "Activated" : "Deactivated"}`);
@@ -92,7 +92,7 @@ export default function ScheduledReports() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this schedule?")) return;
     try {
-      const response = await api.delete(`/api/reports/schedules/${id}`);
+      const response = await api.delete(`/reports/schedules/${id}`);
       if (response.data.success) {
         setSchedules(schedules.filter(s => s._id !== id));
         toast.success("Schedule deleted");

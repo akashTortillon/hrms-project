@@ -1,5 +1,5 @@
 import api from "../api/apiClient";
-const API_BASE = "/api/dashboard";
+const API_BASE = "/dashboard";
 
 /**
  * ✅ Used for TOP DASHBOARD METRICS
@@ -13,8 +13,8 @@ export const fetchMetrics = () =>
 export const fetchCompanyDocuments = () =>
   api.get(`${API_BASE}/company-documents`);
 
-export const fetchEmployeeVisas = () =>
-  api.get(`${API_BASE}/employee-visas`);
+export const fetchEmployeeVisas = (all = false) =>
+  api.get(`${API_BASE}/employee-visas`, { params: all ? { all: true } : {} });
 
 export const fetchPendingApprovals = () =>
   api.get(`${API_BASE}/pending-approvals`);

@@ -3,13 +3,17 @@ import "../../style/SubmitRequestModal.css";
 
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
-import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
+import { leaveTypeService, repaymentPeriodService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
+import { getMyWallets } from "../../services/leaveWalletService.js";
 import { toast } from "react-toastify";
 
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
   const [loading, setLoading] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
+  const [walletBalances, setWalletBalances] = useState([]); // leaveTypeId -> balanceDays
+  const [repaymentPeriods, setRepaymentPeriods] = useState([]);
+  const [medicalFile, setMedicalFile] = useState(null);
 
   // ✅ NEW: SubType state for Salary requests
   const [salarySubType, setSalarySubType] = useState("salary_advance");
@@ -28,9 +32,22 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
   const [salaryForm, setSalaryForm] = useState({
     amount: "",
-    repaymentPeriod: "3 Months",
+    repaymentPeriod: "",
     reason: ""
   });
+
+  const fallbackRepaymentPeriods = [
+    { _id: "fallback-1", name: "1 Month", metadata: { months: 1 } },
+    { _id: "fallback-3", name: "3 Months", metadata: { months: 3 } },
+    { _id: "fallback-6", name: "6 Months", metadata: { months: 6 } },
+    { _id: "fallback-12", name: "12 Months", metadata: { months: 12 } }
+  ];
+
+  const repaymentPeriodOptions = repaymentPeriods.length > 0 ? repaymentPeriods : fallbackRepaymentPeriods;
+  const getRepaymentMonths = (period) => {
+    const months = Number(period.metadata?.months ?? period.value ?? parseInt(period.name, 10));
+    return Number.isFinite(months) && months > 0 ? months : 1;
+  };
 
   const [documentForm, setDocumentForm] = useState({
     documentType: "Salary Certificate",
@@ -56,16 +73,48 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
       }
     };
     fetchLeaveTypes();
+
+    const fetchWallets = async () => {
+      try {
+        const res = await getMyWallets();
+        setWalletBalances(res.data || []);
+      } catch (error) {
+        console.error("Failed to fetch leave balances:", error);
+      }
+    };
+    fetchWallets();
+  }, []);
+
+  const selectedBalance = walletBalances.find(w => w.leaveTypeId === leaveForm.leaveTypeId);
+
+  useEffect(() => {
+    const fetchRepaymentPeriods = async () => {
+      try {
+        const data = await repaymentPeriodService.getAll();
+        const periods = Array.isArray(data) ? data : [];
+        setRepaymentPeriods(periods);
+        const firstPeriod = periods[0] || fallbackRepaymentPeriods[1];
+        setSalaryForm(prev => ({
+          ...prev,
+          repaymentPeriod: String(getRepaymentMonths(firstPeriod))
+        }));
+      } catch (error) {
+        console.error("Failed to fetch repayment periods:", error);
+        setRepaymentPeriods([]);
+        setSalaryForm(prev => ({
+          ...prev,
+          repaymentPeriod: String(getRepaymentMonths(fallbackRepaymentPeriods[1]))
+        }));
+      }
+    };
+    fetchRepaymentPeriods();
   }, []);
 
   const handleSubmit = async () => {
     try {
       setLoading(true);
 
-      let requestData = {
-        requestType: activeType.toUpperCase(),
-        details: {}
-      };
+      let requestData;
 
       // Prepare details based on request type
       if (activeType === "leave") {
@@ -74,7 +123,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
-        requestData.details = {
+        const leaveDetails = {
           leaveType: leaveForm.leaveType,
           leaveTypeId: leaveForm.leaveTypeId, // ✅ NEW
           isPaid: leaveForm.isPaid,           // ✅ NEW
@@ -84,6 +133,12 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           toDate: leaveForm.isHalfDay ? leaveForm.fromDate : leaveForm.toDate,
           reason: leaveForm.reason
         };
+        requestData = new FormData();
+        requestData.append("requestType", "LEAVE");
+        requestData.append("details", JSON.stringify(leaveDetails));
+        if (medicalFile) {
+          requestData.append("document", medicalFile);
+        }
       } else if (activeType === "salary") {
         if (!salaryForm.amount || !salaryForm.reason) {
           toast.error("Please fill all required fields");
@@ -91,11 +146,14 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           return;
         }
         // ✅ NEW: Include subType for salary requests
-        requestData.subType = salarySubType;
-        requestData.details = {
+        requestData = {
+          requestType: "SALARY",
+          subType: salarySubType,
+          details: {
           amount: salaryForm.amount,
-          repaymentPeriod: salarySubType === "salary_advance" ? "1 Month" : salaryForm.repaymentPeriod,
+          repaymentPeriod: salarySubType === "salary_advance" ? "1" : salaryForm.repaymentPeriod,
           reason: salaryForm.reason
+          }
         };
       } else if (activeType === "document") {
         if (!documentForm.purpose) {
@@ -103,9 +161,12 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
-        requestData.details = {
+        requestData = {
+          requestType: "DOCUMENT",
+          details: {
           documentType: documentForm.documentType,
           purpose: documentForm.purpose
+          }
         };
       }
 
@@ -126,7 +187,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         });
         setSalaryForm({
           amount: "",
-          repaymentPeriod: "3 Months",
+          repaymentPeriod: String(getRepaymentMonths(repaymentPeriodOptions[0] || fallbackRepaymentPeriods[1])),
           reason: ""
         });
         setDocumentForm({
@@ -135,6 +196,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         });
         setActiveType("leave");
         setSalarySubType("salary_advance"); // Reset subType
+        setMedicalFile(null);
         onClose();
         if (onSuccess) {
           onSuccess();
@@ -237,6 +299,14 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                     </option>
                   ))}
                 </select>
+                {selectedBalance && (
+                  <p style={{
+                    margin: "6px 0 0 0", fontSize: "12px",
+                    color: selectedBalance.balanceDays < 0 ? "#dc2626" : "#6b7280"
+                  }}>
+                    Available balance: <strong>{selectedBalance.balanceDays} day(s)</strong>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -246,9 +316,17 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   placeholder="5"
                   value={leaveForm.isHalfDay ? "0.5" : leaveForm.numberOfDays}
                   disabled={leaveForm.isHalfDay}
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, numberOfDays: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const days = parseInt(e.target.value, 10);
+                    if (!isNaN(days) && days > 0 && leaveForm.fromDate) {
+                      const from = new Date(leaveForm.fromDate);
+                      from.setDate(from.getDate() + days - 1);
+                      const toDate = from.toISOString().split('T')[0];
+                      setLeaveForm({ ...leaveForm, numberOfDays: e.target.value, toDate });
+                    } else {
+                      setLeaveForm({ ...leaveForm, numberOfDays: e.target.value });
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -280,14 +358,17 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 <input
                   type="date"
                   value={leaveForm.fromDate}
-                  onChange={(e) =>
-                    setLeaveForm({
-                      ...leaveForm,
-                      fromDate: e.target.value,
-                      // Sync toDate automatically if half day
-                      toDate: leaveForm.isHalfDay ? e.target.value : leaveForm.toDate
-                    })
-                  }
+                  onChange={(e) => {
+                    const from = e.target.value;
+                    let toDate = leaveForm.isHalfDay ? from : leaveForm.toDate;
+                    // Auto-calc toDate if numberOfDays is already set
+                    if (!leaveForm.isHalfDay && leaveForm.numberOfDays && parseInt(leaveForm.numberOfDays) > 0) {
+                      const d = new Date(from);
+                      d.setDate(d.getDate() + parseInt(leaveForm.numberOfDays) - 1);
+                      toDate = d.toISOString().split('T')[0];
+                    }
+                    setLeaveForm({ ...leaveForm, fromDate: from, toDate });
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px",
@@ -305,9 +386,16 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   type="date"
                   value={leaveForm.isHalfDay ? leaveForm.fromDate : leaveForm.toDate}
                   disabled={leaveForm.isHalfDay}
-                  onChange={(e) =>
-                    setLeaveForm({ ...leaveForm, toDate: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const toDate = e.target.value;
+                    // Auto-calc numberOfDays from date range
+                    let days = leaveForm.numberOfDays;
+                    if (leaveForm.fromDate && toDate) {
+                      const diff = Math.floor((new Date(toDate) - new Date(leaveForm.fromDate)) / 86400000) + 1;
+                      if (diff > 0) days = String(diff);
+                    }
+                    setLeaveForm({ ...leaveForm, toDate, numberOfDays: days });
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px",
@@ -320,6 +408,22 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 />
               </div>
             </div>
+
+            {String(leaveForm.leaveType || "").toLowerCase().includes("sick") && (
+              <div className="form-row">
+                <div>
+                  <label>Medical Document</label>
+                  <input
+                    type="file"
+                    onChange={(e) => setMedicalFile(e.target.files?.[0] || null)}
+                    style={{ width: "100%" }}
+                  />
+                  <small style={{ color: "#6b7280" }}>
+                    Required for more than 1 consecutive sick-leave day. If not uploaded, leave becomes unpaid from day 2.
+                  </small>
+                </div>
+              </div>
+            )}
 
             <div>
               <label>Reason</label>
@@ -398,9 +502,14 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                   }}
                 >
                   <option value="" disabled>Select Period</option>
-                  <option value="3 Months">3 Months</option>
-                  <option value="6 Months">6 Months</option>
-                  <option value="9 Months">9 Months</option>
+                  {repaymentPeriodOptions.map((period) => {
+                    const months = getRepaymentMonths(period);
+                    return (
+                      <option key={period._id || period.name} value={months}>
+                        {period.name || `${months} Month${months > 1 ? "s" : ""}`}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
@@ -422,7 +531,6 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         {activeType === "document" && (
           <div className="leave-form">
             <div>
-              <label>Document Type</label>
               <label>Document Type</label>
               <select
                 value={documentForm.documentType}
@@ -446,6 +554,8 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                 <option value="Salary Certificate">Salary Certificate</option>
                 <option value="Experience Letter">Experience Letter</option>
                 <option value="Employment Letter">Employment Letter</option>
+                <option value="Employment Certificate">Employment Certificate</option>
+                <option value="Bonafide Certificate">Bonafide Certificate</option>
                 <option value="NOC (No Objection Certificate)">NOC (No Objection Certificate)</option>
               </select>
             </div>

@@ -4,6 +4,7 @@ import {
   Navbar,
   Container,
 } from "react-bootstrap";
+import { toast } from "react-toastify";
 import GlobalSearch from "./GlobalSearch";
 
 import SvgIcon from "../svgIcon/svgView.jsx";
@@ -36,6 +37,19 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   const [badgeCount, setBadgeCount] = useState(0);
 
   const { role, setRole, hasPermission } = useRole();
+  const canUseGlobalSearch = role && role !== "Employee";
+  const availableQuickActions = quickActions.filter((action) => {
+    if (action.key === "addEmployee") {
+      return hasPermission("MANAGE_EMPLOYEES");
+    }
+    if (action.key === "addAsset") {
+      return hasPermission("MANAGE_ASSETS");
+    }
+    if (action.key === "uploadDocument") {
+      return hasPermission("MANAGE_DOCUMENTS");
+    }
+    return false;
+  });
   const profileAnchorRef = useRef(null);
   const navigate = useNavigate();
 
@@ -70,8 +84,20 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   };
 
   const handleDeleteNotification = async (id) => {
-    await deleteNotification(id);
-    loadNotifications();
+    try {
+      // ✅ Handle both virtual and database notifications
+      if (typeof id === 'string' && id.startsWith("virtual-")) {
+        await dismissVirtualNotification(id);
+        toast.success("Notification dismissed");
+      } else {
+        await deleteNotification(id);
+        toast.success("Notification deleted");
+      }
+      loadNotifications();
+    } catch (err) {
+      console.error("Failed to delete notification", err);
+      toast.error("Failed to remove notification");
+    }
   };
 
   const handleLogout = () => {
@@ -92,17 +118,25 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
           </Button>
         </div>
 
-        {role && <GlobalSearch />}
+        {canUseGlobalSearch && <GlobalSearch />}
 
         <div className="topbar-actions">
-          <QuickActionMenu
-            items={quickActions}
-            onSelect={(action) => {
-              console.log("Selected:", action.key);
-            }}
-          >
-            <SvgIcon name="plus" size={15} />
-          </QuickActionMenu>
+          {availableQuickActions.length > 0 && (
+            <QuickActionMenu
+              items={availableQuickActions}
+              onSelect={(action) => {
+                if (action.key === "addEmployee") {
+                  navigate("/app/employees");
+                } else if (action.key === "addAsset") {
+                  navigate("/app/assets");
+                } else if (action.key === "uploadDocument") {
+                  navigate("/app/documents");
+                }
+              }}
+            >
+              <SvgIcon name="plus" size={15} />
+            </QuickActionMenu>
+          )}
 
 
 
@@ -154,7 +188,6 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
               onRoleChange={setRole}
               onClose={() => setProfileOpen(false)}
               onProfile={() => navigate("/app/employees/me")}
-              onSettings={() => console.log("Settings")}
               onLogout={handleLogout}
               anchorRef={profileAnchorRef}
             />

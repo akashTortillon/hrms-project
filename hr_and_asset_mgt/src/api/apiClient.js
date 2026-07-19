@@ -2,19 +2,25 @@ import axios from "axios";
 
 // Create shared axios instance
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE || "http://localhost:5000",
+    baseURL: import.meta.env.VITE_API_BASE,
     headers: {
         "Content-Type": "application/json",
     },
     withCredentials: true, // Important for cookies (refreshToken)
 });
 
-// Request Interceptor: Attach Token
+// Request Interceptor: Attach Token and Handle FormData Content-Type
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem("token");
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Crucial: Allow browser to set boundary for FormData by removing application/json
+    if (config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
+    }
+
     return config;
 }, (error) => {
     return Promise.reject(error);
@@ -61,7 +67,7 @@ api.interceptors.response.use(
                 // Call refresh endpoint
                 // We utilize axios directly to avoid interceptor loop for this specific call
                 const response = await axios.post(
-                    `${api.defaults.baseURL}/api/auth/refresh`,
+                    `${api.defaults.baseURL}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 );

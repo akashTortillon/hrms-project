@@ -1,8 +1,10 @@
+import { useState } from "react";
 import MastersCard from "../components/MastersCard.jsx"; // New Card Component
 import CustomButton from "../../../components/reusable/Button.jsx";
 import useCompanyStructure from "./useCompanyStructure.js"; // Import the custom hook
 import "../../../style/Masters.css";
 import { RenderList } from "../components/RenderList.jsx";
+import { RenderCompanyAccordion } from "../components/RenderCompanyAccordion.jsx";
 import { RenderRolesGrid } from "../components/RenderRolesGrid.jsx";
 import CustomModal from "../../../components/reusable/CustomModal.jsx";
 import DeleteConfirmationModal from "../../../components/reusable/DeleteConfirmationModal.jsx";
@@ -20,25 +22,42 @@ const PERMISSIONS_LIST = [
   "MANAGE_MASTERS",
   "MANAGE_SETTINGS",
   "APPROVE_REQUESTS",
+  "APPROVE_MANAGER_REQUESTS",
+  "APPROVE_FINANCE_REQUESTS",
   "VIEW_REPORTS",
   "MANAGE_ONBOARDING",
-  "MANAGE_OFFBOARDING"
+  "MANAGE_OFFBOARDING",
+  "MANAGE_APPRAISALS",
+  "MANAGE_POLICIES",
+  "MANAGE_ANNOUNCEMENTS"
 ];
 
 export default function CompanyStructure() {
   const {
     departments,
+    companies,
     branches,
     designations,
+    repaymentPeriods,
     roles,
     selectedPermissions,
     setSelectedPermissions,
+    repaymentMonths,
+    setRepaymentMonths,
     showModal,
     setShowModal,
     modalType,
     inputValue,
     setInputValue,
     loading,
+    imageFile,
+    setImageFile,
+    imagePreview,
+    setImagePreview,
+    companyCode,
+    setCompanyCode,
+    branchCompanyId,
+    setBranchCompanyId,
     handleOpenAdd,
     handleOpenEdit,
     handleSave,
@@ -47,6 +66,27 @@ export default function CompanyStructure() {
     deleteConfig,
     setDeleteConfig
   } = useCompanyStructure();
+
+  const [deptSearch, setDeptSearch] = useState("");
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [designationSearch, setDesignationSearch] = useState("");
+
+  const filteredDepartments = departments.filter(d =>
+    d.name.toLowerCase().includes(deptSearch.toLowerCase())
+  );
+
+  const filteredDesignations = designations.filter(d =>
+    d.name.toLowerCase().includes(designationSearch.toLowerCase())
+  );
+
+  const filteredCompanies = companies.filter(c => {
+    if (companyFilter && c.name !== companyFilter) return false;
+    const term = companySearch.toLowerCase();
+    if (!term) return true;
+    if (c.name.toLowerCase().includes(term)) return true;
+    return branches.some(b => b.parentId === c._id && b.name.toLowerCase().includes(term));
+  });
 
   return (
     <div className="company-structure">
@@ -64,16 +104,33 @@ export default function CompanyStructure() {
         <MastersCard
           title="Departments"
           onAdd={() => handleOpenAdd("Department")}
+          search={deptSearch}
+          onSearchChange={setDeptSearch}
+          searchPlaceholder="Search departments..."
         >
-          <RenderList items={departments} type="Department" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+          <RenderList items={filteredDepartments} type="Department" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
         </MastersCard>
 
-        {/* Branches */}
+        {/* Companies, each expands to show its nested Branches */}
         <MastersCard
-          title="Branches"
-          onAdd={() => handleOpenAdd("Branch")}
+          title="Companies & Branches"
+          description="Click a company to see and add its branches"
+          onAdd={() => handleOpenAdd("Company")}
+          search={companySearch}
+          onSearchChange={setCompanySearch}
+          searchPlaceholder="Search companies or branches..."
+          filterValue={companyFilter}
+          onFilterChange={setCompanyFilter}
+          filterOptions={companies.map(c => c.name)}
+          filterLabel="All Companies"
         >
-          <RenderList items={branches} type="Branch" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+          <RenderCompanyAccordion
+            companies={filteredCompanies}
+            branches={branches}
+            handleDelete={handleDelete}
+            handleEdit={handleOpenEdit}
+            onAddBranch={(companyId) => handleOpenAdd("Branch", companyId)}
+          />
         </MastersCard>
       </div>
 
@@ -82,8 +139,21 @@ export default function CompanyStructure() {
         <MastersCard
           title="Designations"
           onAdd={() => handleOpenAdd("Designation")}
+          search={designationSearch}
+          onSearchChange={setDesignationSearch}
+          searchPlaceholder="Search designations..."
         >
-          <RenderList items={designations} type="Designation" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+          <RenderList items={filteredDesignations} type="Designation" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+        </MastersCard>
+      </div>
+
+      <div className="mt-4">
+        <MastersCard
+          title="Repayment Periods"
+          description="Loan tenure options used in employee loan requests"
+          onAdd={() => handleOpenAdd("Repayment Period")}
+        >
+          <RenderList items={repaymentPeriods} type="Repayment Period" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
         </MastersCard>
       </div>
 
@@ -136,6 +206,99 @@ export default function CompanyStructure() {
               autoFocus
             />
           </div>
+
+          {modalType === "Company" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Code ID</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Used to match WORK LOCATION / VISA LOCATION during bulk import"
+                value={companyCode}
+                onChange={(e) => setCompanyCode(e.target.value)}
+              />
+            </div>
+          )}
+
+          {modalType === "Branch" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={branchCompanyId}
+                onChange={(e) => setBranchCompanyId(e.target.value)}
+              >
+                <option value="">Select company</option>
+                {companies.map((c) => (
+                  <option key={c._id} value={c._id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {modalType === "Company" && (
+            <div className="company-logo-upload">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
+              <div className="flex items-center gap-4">
+                <div className="logo-preview-box">
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="Company Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="flex items-center justify-center bg-gray-100 w-full h-full text-gray-400">
+                      No Logo
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="company-logo-input"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        setImageFile(file);
+                        setImagePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  <label htmlFor="company-logo-input" className="cursor-pointer px-3 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 text-xs font-semibold hover:bg-blue-100">
+                    Upload New Logo
+                  </label>
+                  {imagePreview && (
+                    <button 
+                      type="button" 
+                      className="text-red-500 text-xs text-left"
+                      onClick={() => {
+                        setImageFile(null);
+                        setImagePreview(null);
+                      }}
+                    >
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {modalType === "Repayment Period" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Month Count</label>
+              <input
+                type="number"
+                min="1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Example: 6"
+                value={repaymentMonths}
+                onChange={(e) => setRepaymentMonths(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Example: name can be "6 Months" and month count should be 6.
+              </p>
+            </div>
+          )}
 
           {modalType === "Role" && (
             <div>

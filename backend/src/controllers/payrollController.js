@@ -13,9 +13,159 @@ import { PDFDocument as PDFLibDocument } from "pdf-lib";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { buildZipArchive } from "../utils/zip.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const resolveCompanyLogoPath = (companyImage) => {
+    if (!companyImage || /^https?:\/\//i.test(companyImage)) return null;
+
+    const normalized = String(companyImage).replace(/^\/+/, "");
+    const candidates = [
+        path.join(__dirname, "..", normalized),
+        path.join(__dirname, "..", "..", normalized),
+        path.join(__dirname, "..", "..", "hr_and_asset_mgt", "public", normalized),
+        path.join(__dirname, "..", "..", "hr_and_asset_mgt", "public", path.basename(normalized))
+    ];
+
+    return candidates.find((candidate) => {
+        const ext = path.extname(candidate).toLowerCase();
+        return [".png", ".jpg", ".jpeg"].includes(ext) && fs.existsSync(candidate);
+    }) || null;
+};
+
+const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month);
+
+// Midnight-normalized day formatter/parser — periods are whole days, so all
+// period-boundary comparisons happen at day granularity, not exact timestamps.
+const toDayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const toDayEnd = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const formatYMD = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+};
+
+// Finds the furthest-out finalized payroll period (by periodEnd date, not by when
+// the finalize action was logged — periods can be finalized out of order) so the
+// lockout always reflects the actual latest locked period, not a hardcoded cutoff
+// day. Legacy audit rows from before rolling periods existed only have month/year —
+// for those, periodEnd is synthesized as the last calendar day of that month so old
+// finalizations still lock correctly under the new date-based comparison.
+const getLatestFinalizedCycle = async () => {
+    // ANCHOR_SET entries participate too — an admin-set starting anchor moves the
+    // lockout cursor exactly like a real finalize would, without any actual
+    // Payroll records existing for it.
+    const finalized = await PayrollAudit
+        .find({ action: { $in: ["FINALIZED", "ANCHOR_SET"] } })
+        .select("month year periodStart periodEnd createdAt");
+
+    if (!finalized.length) return null;
+
+    return finalized.reduce((latest, entry) => {
+        const periodEnd = entry.periodEnd
+            ? toDayEnd(entry.periodEnd)
+            : toDayEnd(new Date(Number(entry.year), Number(entry.month), 0));
+        if (!latest || periodEnd > latest.periodEnd) {
+            const periodStart = entry.periodStart ? toDayStart(entry.periodStart) : null;
+            return {
+                month: Number(entry.month),
+                year: Number(entry.year),
+                periodStart,
+                periodEnd,
+                // Plain "YYYY-MM-DD" strings alongside the Date objects — lets the
+                // frontend compare against its own date-input state directly instead
+                // of reconstructing Date objects client-side (browser/server timezone
+                // drift risk otherwise).
+                periodStartStr: periodStart ? formatYMD(periodStart) : null,
+                periodEndStr: formatYMD(periodEnd),
+                finalizedAt: entry.createdAt
+            };
+        }
+        return latest;
+    }, null);
+};
+
+const hasScheduledSkip = (details = {}, month, year) => {
+    const overrides = Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
+    return overrides.some((entry) =>
+        entry?.action === "SKIP"
+        && Number(entry.month) === Number(month)
+        && Number(entry.year) === Number(year)
+    );
+};
+
+const resolveEffectiveSalary = (employee, asOfDate) => {
+    const periodEnd = toDayEnd(asOfDate);
+    const history = [...(employee.salaryHistory || [])]
+        .filter(entry => entry.effectiveDate && new Date(entry.effectiveDate) <= periodEnd)
+        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
+
+    const latest = history[0];
+    if (latest) {
+        return {
+            basicSalary: toNumber(latest.basicSalary),
+            visaBase: toNumber(latest.visaBase || latest.basicSalary),
+            workBase: toNumber(latest.workBase || latest.basicSalary),
+            ctc: toNumber(latest.ctc || latest.workBase || latest.basicSalary)
+        };
+    }
+
+    return {
+        basicSalary: toNumber(employee.basicSalary),
+        visaBase: toNumber(employee.visaBase || employee.basicSalary),
+        workBase: toNumber(employee.workBase || employee.basicSalary),
+        ctc: toNumber(employee.ctc || employee.workBase || employee.basicSalary)
+    };
+};
+
+const isEmployeeOnProbation = (employee, dateStr) => {
+    if (!employee?.probationEndDate) return false;
+    if (employee.probationStatus === "CONFIRMED") return false;
+    const checkDate = new Date(dateStr);
+    return checkDate <= new Date(employee.probationEndDate);
+};
+
+const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}) => {
+    if (!leaveInfo) return null;
+
+    if (isEmployeeOnProbation(employee, dateStr)) {
+        return "UNPAID_LEAVE";
+    }
+
+    const typeName = leaveInfo.leaveType;
+    const normalizedType = String(typeName || "").toLowerCase();
+    const currentDate = new Date(dateStr);
+
+    if (normalizedType.includes("sick")) {
+        const dayIndex = Math.floor((currentDate - new Date(leaveInfo.start)) / (1000 * 60 * 60 * 24)) + 1;
+        const totalDays = Number(leaveInfo.numberOfDays || dayIndex || 1);
+
+        if (!leaveInfo.hasMedicalDocument && totalDays > 1 && dayIndex >= 2) {
+            return "UNPAID_LEAVE";
+        }
+
+        if (dayIndex <= 15) return "PAID_LEAVE";
+        if (dayIndex <= 45) return "HALF_PAID_LEAVE";
+        return "UNPAID_LEAVE";
+    }
+
+    let isPaid = true;
+    if (leaveInfo.isPaid !== undefined) isPaid = leaveInfo.isPaid;
+    else if (typeName) {
+        if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
+        else if (normalizedType.includes("unpaid")) isPaid = false;
+    }
+
+    return isPaid ? "PAID_LEAVE" : "UNPAID_LEAVE";
+};
 
 // --- HELPER: Calculate Attendance Stats ---
 // --- HELPER: Parse "8h 45m" to decimal hours ---
@@ -61,7 +211,11 @@ const getApprovedLeavesMap = async (employees) => {
                 map[empId].push({
                     start: s,
                     end: e,
-                    leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave"
+                    leaveType: details.leaveType || details.leaveTypeId || "Unpaid Leave",
+                    numberOfDays: details.numberOfDays || 1,
+                    isPaid: details.isPaid,
+                    hasMedicalDocument: details.hasMedicalDocument,
+                    leavePayStatus: details.leavePayStatus || "FULLY_PAID"
                 });
             }
         }
@@ -94,12 +248,18 @@ const parseHours = (timeStr) => {
 };
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
-    // 1. Setup Date Range
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const strMonth = String(month).padStart(2, '0');
-    const startStr = `${year}-${strMonth}-01`;
-    const endStr = `${year}-${strMonth}-${daysInMonth}`;
+const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
+    const employeeId = employee._id;
+    // 1. Setup Date Range — periodStart/periodEnd are the actual pay-period
+    // boundaries (rolling window, not necessarily a calendar month).
+    const rangeStart = toDayStart(periodStart);
+    const rangeEnd = toDayEnd(periodEnd);
+    // Day-count MUST diff two day-starts (not day-start to day-end, which rounds
+    // up an extra day) — this count drives the loop below, so an off-by-one here
+    // silently pulls in one real day past the period boundary.
+    const totalDaysInPeriod = Math.round((toDayStart(periodEnd) - rangeStart) / 86400000) + 1;
+    const startStr = formatYMD(rangeStart);
+    const endStr = formatYMD(rangeEnd);
 
     // 2. Fetch Data Sources
     const logs = await Attendance.find({
@@ -124,7 +284,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     }
 
     // --- PHASE 1: BUILD DAY-BY-DAY STATUS ARRAY ---
-    const dayStatuses = []; // Index 0 = Day 1
+    const dayStatuses = []; // Index 0 = first day of period
     const GLOBAL_STANDARD_HOURS = 9;
 
     // Helper to get hours for a specific shift name
@@ -135,12 +295,13 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
 
     let totalOvertimeHours = 0;
 
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${year}-${strMonth}-${String(day).padStart(2, '0')}`;
-        const dateObj = new Date(year, month - 1, day);
+    for (let i = 0; i < totalDaysInPeriod; i++) {
+        const day = i + 1;
+        const dateObj = addDays(rangeStart, i);
+        const dateStr = formatYMD(dateObj);
         const dayOfWeek = dateObj.getDay(); // 0 = Sun
 
-        let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, UNPAID_LEAVE
+        let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, HALF_PAID_LEAVE, UNPAID_LEAVE
         let isLate = false;
         let lateTier = 0;
 
@@ -165,8 +326,11 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                     }
                 }
             } else if (recStatus === 'On Leave') {
-                // If record says leave, check if Paid/Unpaid
-                if (record.isPaid === false) status = 'UNPAID_LEAVE';
+                const mappedLeaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
+                if (mappedLeaveInfo) {
+                    status = resolveLeaveDayStatus(employee, mappedLeaveInfo, dateStr, leaveRules);
+                } else if (record.leavePayStatus === "HALF_PAID") status = 'HALF_PAID_LEAVE';
+                else if (record.isPaid === false || record.leavePayStatus === "UNPAID") status = 'UNPAID_LEAVE';
                 else status = 'PAID_LEAVE';
             } else {
                 status = 'ABSENT';
@@ -177,14 +341,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         if (status === 'UNKNOWN' || status === 'ABSENT') {
             const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
             if (leaveInfo) {
-                // Resolved Paid/Unpaid Logic
-                const typeName = leaveInfo.leaveType;
-                let isPaid = true;
-                if (typeName) {
-                    if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
-                    else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
-                }
-                status = isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE';
+                status = resolveLeaveDayStatus(employee, leaveInfo, dateStr, leaveRules);
             }
         }
 
@@ -204,6 +361,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         });
     }
 
+    const hasAnyWorkedOrApprovedDay = dayStatuses.some((item) =>
+        ["PRESENT", "PAID_LEAVE", "HALF_PAID_LEAVE"].includes(item.status)
+    );
+
     // --- PHASE 2: APPLY SANDWICH RULE ---
     // Rule: If (ABSENT) -> [WEEKEND/HOLIDAY] -> (ABSENT), then [WEEKEND/HOLIDAY] becomes (UNPAID_LEAVE/SANDWICH)
 
@@ -219,7 +380,14 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         if (logMap[dStr]) {
             const r = logMap[dStr];
             if (r.status === 'Present' || r.status === 'Late') return 'PRESENT';
-            if (r.status === 'On Leave') return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            if (r.status === 'On Leave') {
+                const mappedLeaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
+                if (mappedLeaveInfo) {
+                    return resolveLeaveDayStatus(employee, mappedLeaveInfo, dStr, leaveRules);
+                }
+                if (r.leavePayStatus === "HALF_PAID") return 'HALF_PAID_LEAVE';
+                return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            }
             return 'ABSENT';
         }
 
@@ -231,13 +399,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         // So safe to assume we have it.
         const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
         if (leaveInfo) {
-            const typeName = leaveInfo.leaveType;
-            let isPaid = true;
-            if (typeName) {
-                if (leaveRules[typeName] !== undefined) isPaid = leaveRules[typeName];
-                else if (String(typeName).toLowerCase().includes('unpaid')) isPaid = false;
-            }
-            return isPaid ? 'PAID_LEAVE' : 'UNPAID_LEAVE'; // Treat Unpaid Leave as Absent-equivalent for Sandwich
+            return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules);
         }
 
         // 3. Fallback
@@ -260,69 +422,69 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
     const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
 
-    console.log(`[DEBUG] Employee ${employeeId} (${month}/${year}) - Starting Sandwich Check (With Boundary Scan)`);
+    if (hasAnyWorkedOrApprovedDay) {
+        console.log(`[DEBUG] Employee ${employeeId} (${startStr} to ${endStr}) - Starting Sandwich Check (With Boundary Scan)`);
 
-    let i = 0;
-    while (i < dayStatuses.length) {
-        if (isGap(dayStatuses[i].status)) {
-            // Found start of a gap sequence
-            let j = i;
-            while (j < dayStatuses.length && isGap(dayStatuses[j].status)) {
-                j++;
-            }
-            // Gap is from i to j-1
+        let i = 0;
+        while (i < dayStatuses.length) {
+            if (isGap(dayStatuses[i].status)) {
+                // Found start of a gap sequence
+                let j = i;
+                while (j < dayStatuses.length && isGap(dayStatuses[j].status)) {
+                    j++;
+                }
+                // Gap is from i to j-1
 
-            // Check Left Side
-            let leftIsAbsent = false;
-            if (i > 0) {
-                if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
-            } else {
-                // BOUNDARY CHECK: Scan backwards from Day 1
-                let backDate = new Date(year, month - 1, 1);
-                backDate.setDate(backDate.getDate() - 1); // Last day of prev month
+                // Check Left Side
+                let leftIsAbsent = false;
+                if (i > 0) {
+                    if (isAbsentOrLOP(dayStatuses[i - 1].status)) leftIsAbsent = true;
+                } else {
+                    // BOUNDARY CHECK: Scan backwards from the day before this period starts
+                    let backDate = addDays(rangeStart, -1);
 
-                // Scan up to 7 days back looking for non-gap
-                for (let b = 0; b < 7; b++) {
-                    const st = getStatusForDate(backDate);
-                    if (!isGap(st)) {
-                        if (isAbsentOrLOP(st)) leftIsAbsent = true;
-                        break; // Found the anchor
+                    // Scan up to 7 days back looking for non-gap
+                    for (let b = 0; b < 7; b++) {
+                        const st = getStatusForDate(backDate);
+                        if (!isGap(st)) {
+                            if (isAbsentOrLOP(st)) leftIsAbsent = true;
+                            break; // Found the anchor
+                        }
+                        backDate.setDate(backDate.getDate() - 1);
                     }
-                    backDate.setDate(backDate.getDate() - 1);
                 }
-            }
 
-            // Check Right Side
-            let rightIsAbsent = false;
-            if (j < dayStatuses.length) {
-                if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
-            } else {
-                // BOUNDARY CHECK: Scan forwards from End of Month
-                let fwdDate = new Date(year, month - 1, daysInMonth);
-                fwdDate.setDate(fwdDate.getDate() + 1); // First day of next month
+                // Check Right Side
+                let rightIsAbsent = false;
+                if (j < dayStatuses.length) {
+                    if (isAbsentOrLOP(dayStatuses[j].status)) rightIsAbsent = true;
+                } else {
+                    // BOUNDARY CHECK: Scan forwards from the day after this period ends
+                    let fwdDate = addDays(rangeEnd, 1);
 
-                for (let f = 0; f < 7; f++) {
-                    const st = getStatusForDate(fwdDate);
-                    if (!isGap(st)) {
-                        if (isAbsentOrLOP(st)) rightIsAbsent = true;
-                        break;
+                    for (let f = 0; f < 7; f++) {
+                        const st = getStatusForDate(fwdDate);
+                        if (!isGap(st)) {
+                            if (isAbsentOrLOP(st)) rightIsAbsent = true;
+                            break;
+                        }
+                        fwdDate.setDate(fwdDate.getDate() + 1);
                     }
-                    fwdDate.setDate(fwdDate.getDate() + 1);
                 }
-            }
 
-            console.log(`[DEBUG] Gap found Days ${i + 1} to ${j}: Left=${leftIsAbsent}, Right=${rightIsAbsent}`);
+                console.log(`[DEBUG] Gap found Days ${i + 1} to ${j}: Left=${leftIsAbsent}, Right=${rightIsAbsent}`);
 
-            if (leftIsAbsent && rightIsAbsent) {
-                for (let k = i; k < j; k++) {
-                    dayStatuses[k].status = 'SANDWICH_LEAVE';
-                    console.log(`  -> Day ${k + 1} marked SANDWICH`);
+                if (leftIsAbsent && rightIsAbsent) {
+                    for (let k = i; k < j; k++) {
+                        dayStatuses[k].status = 'SANDWICH_LEAVE';
+                        console.log(`  -> Day ${k + 1} marked SANDWICH`);
+                    }
                 }
-            }
 
-            i = j; // Advance
-        } else {
-            i++;
+                i = j; // Advance
+            } else {
+                i++;
+            }
         }
     }
 
@@ -333,6 +495,7 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     let lateTier1 = 0, lateTier2 = 0, lateTier3 = 0;
     let unpaidLeavesCount = 0;
     let paidLeavesCount = 0;
+    let halfPaidLeavesCount = 0;
 
     dayStatuses.forEach(d => {
         // console.log(`[DEBUG] Day ${d.day}: ${d.status}`);
@@ -351,6 +514,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
                 paidDays++;
                 paidLeavesCount++;
                 console.log(`[DEBUG] Day ${d.day} is PAID_LEAVE (+Paid)`);
+                break;
+            case 'HALF_PAID_LEAVE':
+                paidDays += 0.5;
+                halfPaidLeavesCount++;
                 break;
             case 'WEEKEND':
             case 'HOLIDAY':
@@ -372,8 +539,8 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     });
 
     return {
-        totalDays: daysInMonth,
-        daysPresent: paidDays, // Note: Present includes weekends/holidays/paid leaves in terms of "Days Paid" usually? 
+        totalDays: totalDaysInPeriod,
+        daysPresent: paidDays, // Note: Present includes weekends/holidays/paid leaves in terms of "Days Paid" usually?
         // Wait, previously paidDays meant "Days to be Paid for".
         // PRESENT, WEEKEND, HOLIDAY, PAID_LEAVE all contribute to Salary (if 30 day basis).
         // ABSENT, UNPAID_LEAVE, SANDWICH reduce from 30? Or if 'paidDays' is solely 'Worked Days'?
@@ -391,11 +558,10 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
         // else lopDays++;
 
         // Yes, my switch case matches this logic.
-
-        daysPresent: paidDays, // This variable name in return object is slightly misleading if it includes weekends, but standard in this codebase seems to be "Days Payable"
         daysAbsent: lopDays,
         unpaidLeaves: unpaidLeavesCount,
         paidLeaves: paidLeavesCount,
+        halfPaidLeaves: halfPaidLeavesCount,
         overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
         late: lateCount,
         lateTier1,
@@ -404,10 +570,168 @@ const getAttendanceStats = async (employeeId, month, year, preFetchedSettings = 
     };
 };
 
+export const validatePayrollGeneration = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        if (!month || !year) {
+            return res.status(400).json({ message: "Month and year are required" });
+        }
+
+        const employees = await Employee.find({ status: "Active" }).select("_id name code department");
+        const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
+        const strMonth = String(month).padStart(2, "0");
+        const startStr = `${year}-${strMonth}-01`;
+        const endStr = `${year}-${strMonth}-${daysInMonth}`;
+
+        const warnings = [];
+
+        for (const employee of employees) {
+            const attendanceCount = await Attendance.countDocuments({
+                employee: employee._id,
+                date: { $gte: startStr, $lte: endStr }
+            });
+
+            if (attendanceCount === 0) {
+                warnings.push({
+                    employeeId: employee._id,
+                    name: employee.name,
+                    code: employee.code,
+                    department: employee.department,
+                    type: "ZERO_ATTENDANCE",
+                    message: `${employee.name} has zero attendance records for ${strMonth}/${year}.`
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            warnings
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to validate payroll generation" });
+    }
+};
+
+// --- API: Latest Finalized Payroll Period ---
+// Used by the period picker to lock out any month/year at or before the last
+// finalized cycle. Derived from the audit trail so it moves with whenever
+// finalize actually happens, instead of a fixed day-of-month cutoff.
+export const getLatestFinalizedPeriod = async (req, res) => {
+    try {
+        const latest = await getLatestFinalizedCycle();
+        res.json({ success: true, latestFinalized: latest });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch latest finalized payroll period" });
+    }
+};
+
+// --- API: Set Payroll Period Anchor ---
+// Admin-only correction tool (Masters > System Settings), separate from Finalize/
+// Un-finalize. Moves the rolling-period lockout cursor to a chosen date WITHOUT
+// creating, editing, or touching any real Payroll/employee data — purely records
+// a marker so the next generate's "From" locks to (anchorDate + 1 day). Used to
+// set up or correct where the date-range payroll system starts counting from.
+export const setPayrollAnchor = async (req, res) => {
+    try {
+        const { anchorDate: anchorDateRaw, force } = req.body;
+
+        if (!anchorDateRaw) {
+            return res.status(400).json({ message: "anchorDate is required." });
+        }
+
+        const anchorPeriodEnd = toDayEnd(anchorDateRaw);
+        const month = anchorPeriodEnd.getMonth() + 1;
+        const year = anchorPeriodEnd.getFullYear();
+
+        // Safety check: setting the anchor to a date that falls at/before an
+        // already-PROCESSED period's end risks a future generate double-counting
+        // those days (they were already paid under whatever recorded that period).
+        // Moving the anchor FORWARD (skipping a gap) is always safe; moving it
+        // BACKWARD into already-paid territory needs an explicit override.
+        const conflicting = await Payroll.find({
+            status: { $in: ["PROCESSED", "PAID"] },
+            periodEnd: { $gt: anchorPeriodEnd }
+        }).select("employee periodStart periodEnd").limit(1);
+
+        if (conflicting.length > 0 && !force) {
+            const conflict = conflicting[0];
+            return res.status(409).json({
+                message: `This date is before an already-finalized period ending ${formatYMD(conflict.periodEnd)}. `
+                    + `Setting the anchor here risks double-counting those days if you later generate payroll for them. `
+                    + `Pass force to override if this is intentional.`,
+                conflictPeriodEnd: formatYMD(conflict.periodEnd)
+            });
+        }
+
+        await PayrollAudit.create({
+            action: "ANCHOR_SET",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            periodEnd: anchorPeriodEnd,
+            details: `Payroll period anchor set to ${formatYMD(anchorPeriodEnd)} (next period starts ${formatYMD(addDays(anchorPeriodEnd, 1))})${conflicting.length ? " — overrode an existing-finalized-period conflict" : ""}`
+        });
+
+        logActivity({
+            req,
+            action: "UPDATE",
+            module: "SETTINGS",
+            description: `Payroll period anchor set to ${formatYMD(anchorPeriodEnd)}`,
+            targetName: "Payroll Period Anchor"
+        }).catch(() => {});
+
+        res.json({
+            success: true,
+            message: `Anchor set. Next payroll period will start ${formatYMD(addDays(anchorPeriodEnd, 1))}.`,
+            anchorPeriodEnd: formatYMD(anchorPeriodEnd)
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- API: Generate Payroll for a Month ---
 export const generatePayroll = async (req, res) => {
     try {
-        const { month, year } = req.body;
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
+
+        if (!periodStartRaw || !periodEndRaw) {
+            return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        const periodStart = toDayStart(periodStartRaw);
+        const periodEnd = toDayEnd(periodEndRaw);
+
+        if (periodEnd < periodStart) {
+            return res.status(400).json({ message: "periodEnd cannot be before periodStart." });
+        }
+
+        // Block (re)generating a period that's already been finalized, or anything
+        // before it — once finalized, that period and every earlier one is locked.
+        const latestFinalized = await getLatestFinalizedCycle();
+        if (latestFinalized && periodEnd <= latestFinalized.periodEnd) {
+            return res.status(400).json({
+                message: `Payroll through ${formatYMD(latestFinalized.periodEnd)} is already finalized and locked. Select a later period.`
+            });
+        }
+
+        // Force-contiguous: the new period must start the day right after the last
+        // finalized period ended — no gaps (missed pay days), no overlaps (double-paid
+        // days). First-ever cycle has no prior finalized period, so any start is fine.
+        if (latestFinalized) {
+            const requiredStart = toDayStart(addDays(latestFinalized.periodEnd, 1));
+            if (periodStart.getTime() !== requiredStart.getTime()) {
+                return res.status(400).json({
+                    message: `Period must start ${formatYMD(requiredStart)} (the day after the last finalized period ended) to stay contiguous.`
+                });
+            }
+        }
+
+        // month/year are derived from periodEnd — used only for backward-compat
+        // bucketing in reports/exports/loan-deduction scheduling, not as the period identity.
+        const month = periodEnd.getMonth() + 1;
+        const year = periodEnd.getFullYear();
 
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
@@ -450,8 +774,8 @@ export const generatePayroll = async (req, res) => {
         const payrollRecords = [];
 
         for (const emp of employees) {
-            const basicSalaryRaw = emp.basicSalary || "0";
-            const basicSalary = Number(String(basicSalaryRaw).replace(/[^0-9.-]+/g, ""));
+            const effectiveSalary = resolveEffectiveSalary(emp, periodEnd);
+            const basicSalary = effectiveSalary.visaBase || effectiveSalary.basicSalary;
 
             const allowanceList = [];
             const deductionList = [];
@@ -468,12 +792,58 @@ export const generatePayroll = async (req, res) => {
 
             // Get Stats
             const stats = await getAttendanceStats(
-                emp._id, month, year,
+                emp, periodStart, periodEnd,
                 settings, shiftMap,
                 { code: emp.code },
                 approvedLeaveMap,
                 leaveRulesMap
             );
+
+            if (stats.halfPaidLeaves > 0) {
+                const halfPayDeduction = stats.halfPaidLeaves * (dailySalary / 2);
+                deductionList.push({
+                    name: "Sick Leave Half Pay Adjustment",
+                    amount: parseFloat(halfPayDeduction.toFixed(2)),
+                    type: "AUTO",
+                    meta: `${stats.halfPaidLeaves} day(s) at half pay`
+                });
+                totalDeductions += halfPayDeduction;
+            }
+
+            // --- 2.2 FIXED EMPLOYEE ALLOWANCES ---
+            const fixedAllowances = [
+                { name: "Housing Rent Allowance (HRA)", value: emp.hra },
+                { name: "Accommodation Allowance", value: emp.accommodationAllowance },
+                { name: "Vehicle Allowance", value: emp.vehicleAllowance },
+                { name: "Other Allowance", value: emp.allowance }
+            ];
+
+            fixedAllowances.forEach(fa => {
+                const amount = Number(fa.value) || 0;
+                if (amount > 0) {
+                    allowanceList.push({
+                        name: fa.name,
+                        amount: amount,
+                        type: "AUTO",
+                        meta: "Fixed Monthly Allowance"
+                    });
+                    totalAllowances += amount;
+                }
+            });
+
+            // Ad-hoc allowances added/increased via Appraisals > Add Allowance
+            (emp.allowances || []).forEach(item => {
+                const amount = Number(item.amount) || 0;
+                if (amount > 0) {
+                    allowanceList.push({
+                        name: item.typeName,
+                        amount: amount,
+                        type: "AUTO",
+                        meta: "Fixed Monthly Allowance"
+                    });
+                    totalAllowances += amount;
+                }
+            });
 
             // --- 2.5 SHIFT-BASED PENALTIES (Dynamic Late Deduction) ---
             // If the employee's shift has a "latePolicy", we apply it here.
@@ -726,6 +1096,26 @@ export const generatePayroll = async (req, res) => {
                     const principal = Number(amount) || 0;
                     const totalPayable = Number(totalRepaymentAmount) || principal; // Fallback to principal if no interest
                     const period = Number(repaymentPeriod) || 1;
+                    const startMonth = Number(req.details?.deductionStartMonth) || Number(month);
+                    const startYear = Number(req.details?.deductionStartYear) || Number(year);
+                    const currentCycleKey = getPayrollCycleKey(month, year);
+                    const startCycleKey = getPayrollCycleKey(startMonth, startYear);
+
+                    if (currentCycleKey < startCycleKey) {
+                        continue;
+                    }
+
+                    if (hasScheduledSkip(req.details, month, year)) {
+                        continue;
+                    }
+
+                    const alreadyDeductedThisCycle = Array.isArray(req.payrollDeductions) && req.payrollDeductions.some((entry) =>
+                        Number(entry.month) === Number(month) && Number(entry.year) === Number(year)
+                    );
+
+                    if (alreadyDeductedThisCycle) {
+                        continue;
+                    }
 
                     // Logic: Deduction Amount
                     let deductionAmount = 0;
@@ -767,12 +1157,16 @@ export const generatePayroll = async (req, res) => {
             // 4. Calculate Net
             const netSalary = basicSalary + totalAllowances - totalDeductions;
 
-            // 5. Prepare Record
+            // 5. Prepare Record — identity is the exact period (employee + periodStart +
+            // periodEnd), not derived month/year, so regenerating the same period
+            // updates the same draft instead of creating a duplicate.
             payrollRecords.push({
                 updateOne: {
-                    filter: { employee: emp._id, month, year },
+                    filter: { employee: emp._id, periodStart, periodEnd },
                     update: {
                         $set: {
+                            month,
+                            year,
                             status: "DRAFT",
                             basicSalary,
                             allowances: allowanceList,
@@ -799,7 +1193,9 @@ export const generatePayroll = async (req, res) => {
                 performedByName: req.user ? req.user.name : "System",
                 month,
                 year,
-                details: `Generated payroll for ${payrollRecords.length} employees`,
+                periodStart,
+                periodEnd,
+                details: `Generated payroll for ${payrollRecords.length} employees (${formatYMD(periodStart)} to ${formatYMD(periodEnd)})`,
                 totalEmployees: payrollRecords.length
             });
         }
@@ -807,7 +1203,9 @@ export const generatePayroll = async (req, res) => {
         res.status(200).json({
             message: `Payroll Generated for ${employees.length} employees`,
             month,
-            year
+            year,
+            periodStart,
+            periodEnd
         });
 
     } catch (error) {
@@ -818,18 +1216,62 @@ export const generatePayroll = async (req, res) => {
 
 // --- API: Get Payroll Summary ---
 export const getPayrollSummary = async (req, res) => {
+
     try {
-        const { month, year } = req.query;
-        const records = await Payroll.find({ month, year })
-            .populate("employee", "name code department designation role")
-            .populate("allowances.addedBy", "name") // ✅ Populate Allowance Editor
-            .populate("deductions.addedBy", "name"); // ✅ Populate Deduction Editor
+        const { month, year, company, branch, visaCompany, workPermitCompany, search, reportType, page = 1, limit = 50 } = req.query;
 
-        let totalNet = 0;
-        let totalBasic = 0;
-        let totalAllowances = 0;
-        let totalDeductions = 0;
+        // ✅ Native Backend Filtering (Database Level)
+        let employeeMatch = {};
+        if (reportType === 'permit') {
+            employeeMatch = { workPermitCompany: { $ne: null, $exists: true } };
+        } else if (reportType === 'visa') {
+            employeeMatch = { visaCompany: { $ne: null, $exists: true } };
+        }
 
+        // 1. Fetch payroll records for month/year with native employee match
+        let records = await Payroll.find({ month, year })
+            .populate({
+                path: "employee",
+                select: "name code department designation role company branch basicSalary visaBase workBase ctc salaryHistory visaCompany workPermitCompany",
+                match: employeeMatch
+            })
+            .populate("allowances.addedBy", "name")
+            .populate("deductions.addedBy", "name");
+
+        // Filter out records where employee didn't match the criteria (for populated nulls)
+        records = records.filter(r => r.employee !== null);
+
+        // 2. Filter by company
+        if (company) {
+            records = records.filter(r => r.employee?.company === company);
+        }
+
+        // 3. Filter by branch
+        if (branch) {
+            records = records.filter(r => r.employee?.branch === branch);
+        }
+
+        // 3b. Filter by visaCompany
+        if (visaCompany) {
+            records = records.filter(r => r.employee?.visaCompany === visaCompany);
+        }
+
+        // 3c. Filter by workPermitCompany (Location)
+        if (workPermitCompany) {
+            records = records.filter(r => r.employee?.workPermitCompany === workPermitCompany);
+        }
+
+        // 4. Filter by search (name or code)
+        if (search) {
+            const q = search.toLowerCase();
+            records = records.filter(r =>
+                r.employee?.name?.toLowerCase().includes(q) ||
+                r.employee?.code?.toLowerCase().includes(q)
+            );
+        }
+
+        // 5. Stats (before pagination)
+        let totalNet = 0, totalBasic = 0, totalAllowances = 0, totalDeductions = 0;
         records.forEach(r => {
             totalNet += r.netSalary || 0;
             totalBasic += r.basicSalary || 0;
@@ -837,14 +1279,27 @@ export const getPayrollSummary = async (req, res) => {
             totalDeductions += r.totalDeductions || 0;
         });
 
+        // 6. Pagination
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const totalRecords = records.length;
+        const totalPages = Math.ceil(totalRecords / limitNum);
+        const paginatedRecords = records.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
         res.status(200).json({
-            records,
+            records: paginatedRecords,
             stats: {
-                count: records.length,
+                count: totalRecords,
                 totalBasic,
                 totalAllowances,
                 totalDeductions,
                 totalNet
+            },
+            pagination: {
+                current: pageNum,
+                limit: limitNum,
+                totalRecords,
+                totalPages
             }
         });
 
@@ -852,6 +1307,7 @@ export const getPayrollSummary = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
 
 // --- API: Get Audit Logs for a Specific Payroll Record ---
 export const getPayrollAuditLogs = async (req, res) => {
@@ -983,10 +1439,20 @@ export const removePayrollItem = async (req, res) => {
 // --- API: Finalize Payroll ---
 export const finalizePayroll = async (req, res) => {
     try {
-        const { month, year } = req.body;
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
 
-        // 1. Fetch DRAFT records to process
-        const records = await Payroll.find({ month, year, status: "DRAFT" });
+        if (!periodStartRaw || !periodEndRaw) {
+            return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        const periodStart = toDayStart(periodStartRaw);
+        const periodEnd = toDayEnd(periodEndRaw);
+        const month = periodEnd.getMonth() + 1;
+        const year = periodEnd.getFullYear();
+
+        // 1. Fetch DRAFT records to process — identity is the exact period, matching
+        // how generatePayroll stores it (not derived month/year).
+        const records = await Payroll.find({ periodStart, periodEnd, status: "DRAFT" });
 
         if (records.length === 0) {
             return res.status(400).json({ message: "No Draft payroll records found to finalize." });
@@ -1053,8 +1519,120 @@ export const finalizePayroll = async (req, res) => {
             performedByName: req.user ? req.user.name : "System",
             month,
             year,
-            details: `Finalized payroll for ${records.length} records`
+            periodStart,
+            periodEnd,
+            details: `Finalized payroll for ${records.length} records (${formatYMD(periodStart)} to ${formatYMD(periodEnd)})`
         });
+
+        logActivity({
+            req,
+            action: "APPROVE",
+            module: "PAYROLL",
+            description: `Payroll finalized for ${month}/${year} — ${records.length} employees`,
+            targetName: `Payroll ${month}/${year}`
+        }).catch(() => {});
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// --- API: Un-finalize Payroll (undo a mistaken Finalize) ---
+// Only the MOST RECENTLY finalized period can be reverted — undoing an older one
+// while a later one stays locked would desync the force-contiguous chain (the
+// lockout always looks at the furthest periodEnd across all FINALIZED audit
+// entries, so reverting a non-latest period wouldn't actually reopen anything).
+export const unfinalizePayroll = async (req, res) => {
+    try {
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
+
+        if (!periodStartRaw || !periodEndRaw) {
+            return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        const periodStart = toDayStart(periodStartRaw);
+        const periodEnd = toDayEnd(periodEndRaw);
+        const month = periodEnd.getMonth() + 1;
+        const year = periodEnd.getFullYear();
+
+        const latestFinalized = await getLatestFinalizedCycle();
+        if (!latestFinalized || latestFinalized.periodEnd.getTime() !== periodEnd.getTime()) {
+            return res.status(400).json({
+                message: latestFinalized
+                    ? `Only the most recently finalized period (through ${formatYMD(latestFinalized.periodEnd)}) can be un-finalized.`
+                    : "No finalized payroll period exists to un-finalize."
+            });
+        }
+
+        const records = await Payroll.find({ periodStart, periodEnd, status: "PROCESSED" });
+        if (records.length === 0) {
+            return res.status(400).json({ message: "No finalized (PROCESSED) payroll records found for this exact period." });
+        }
+
+        // Reverse any loan/advance deductions this finalize applied — exact inverse
+        // of the bookkeeping finalizePayroll performed.
+        for (const p of records) {
+            const loanDeductions = p.deductions.filter(d =>
+                (d.name.includes("Loan Repayment") || d.name.includes("Salary Advance"))
+                && d.meta && d.meta.includes("Req ID:")
+            );
+
+            for (const ded of loanDeductions) {
+                const reqIdMatch = ded.meta.match(/Req ID: (REQ\d+)/);
+                const reqId = reqIdMatch ? reqIdMatch[1] : null;
+
+                if (reqId) {
+                    const request = await Request.findOne({ requestId: reqId });
+                    if (request) {
+                        const idx = request.payrollDeductions.findIndex((pd) => pd.month == month && pd.year == year);
+                        if (idx > -1) {
+                            request.payrollDeductions.splice(idx, 1);
+
+                            const totalPaid = request.payrollDeductions.reduce((sum, x) => sum + x.amount, 0);
+                            if (totalPaid < (request.details.amount - 1)) {
+                                request.isFullyPaid = false;
+                                // Only step back from COMPLETED if finalize is what set it —
+                                // don't clobber some other terminal status for a different reason.
+                                if (request.status === "COMPLETED") request.status = "APPROVED";
+                            }
+
+                            await request.save();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Revert to DRAFT
+        for (const p of records) {
+            p.status = "DRAFT";
+            await p.save();
+        }
+
+        // Remove the FINALIZED audit entry for this exact period so the lockout
+        // correctly rolls back to whatever was finalized before it.
+        await PayrollAudit.deleteMany({ action: "FINALIZED", periodStart, periodEnd });
+
+        res.json({ message: `Un-finalized payroll for ${records.length} employees. The period is editable again.` });
+
+        await PayrollAudit.create({
+            action: "UNFINALIZED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            periodStart,
+            periodEnd,
+            details: `Un-finalized payroll for ${records.length} records (${formatYMD(periodStart)} to ${formatYMD(periodEnd)})`
+        });
+
+        logActivity({
+            req,
+            action: "UPDATE",
+            module: "PAYROLL",
+            description: `Payroll un-finalized for ${month}/${year} — ${records.length} employees`,
+            targetName: `Payroll ${month}/${year}`
+        }).catch(() => {});
 
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -1064,12 +1642,42 @@ export const finalizePayroll = async (req, res) => {
 // --- API: Export Payroll to Excel ---
 export const exportPayroll = async (req, res) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, reportType, visaCompany, workPermitCompany, company, branch } = req.query;
+
         // Populate fields needed for the report
-        const records = await Payroll.find({ month, year }).populate("employee", "name code designation department bankAccount iban bankName laborCardNumber personalId");
+        // ✅ ADDED: Specialized filtering for Work Permit / Visa reports
+        let match = {};
+        if (reportType === 'permit') {
+            match = { workPermitCompany: { $ne: null, $exists: true } };
+        } else if (reportType === 'visa') {
+            match = { visaCompany: { $ne: null, $exists: true } };
+        }
+
+        let records = await Payroll.find({ month, year }).populate({
+            path: "employee",
+            select: "name code designation department company branch bankAccount iban bankName laborCardNumber personalId workPermitCompany visaCompany",
+            match
+        });
+
+        // Filter out records where employee didn't match the specific report criteria
+        records = records.filter(r => r.employee !== null);
+
+        // ✅ Apply additional filters (company, branch, visaCompany, workPermitCompany)
+        if (company) {
+            records = records.filter(r => r.employee?.company === company);
+        }
+        if (branch) {
+            records = records.filter(r => r.employee?.branch === branch);
+        }
+        if (visaCompany) {
+            records = records.filter(r => r.employee?.visaCompany === visaCompany);
+        }
+        if (workPermitCompany) {
+            records = records.filter(r => r.employee?.workPermitCompany === workPermitCompany);
+        }
 
         if (!records || records.length === 0) {
-            return res.status(404).json({ message: "No payroll records found for this month." });
+            return res.status(404).json({ message: `No ${reportType || ''} payroll records found for this month.` });
         }
 
         // --- Prepare Data for Excel ---
@@ -1077,9 +1685,16 @@ export const exportPayroll = async (req, res) => {
         const monthName = monthNames[parseInt(month) - 1] || "UNKNOWN";
 
         // Company Constants (Hardcoded as per request image)
-        const COMPANY_NAME = "COMPANY NAME: LEPTIS HYPERMARKET LLC";
+        const exportCompanyName = records[0]?.employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
+        const COMPANY_NAME = `COMPANY NAME: ${exportCompanyName}`;
         const MOL_ID = "MOL ID No. 0000001564503";
-        const REPORT_TITLE = `PAYROLL FOR THE MONTH OF ${monthName} - ${year}`;
+
+        // ✅ DYNAMIC TITLE based on report type
+        let reportPrefix = "PAYROLL";
+        if (reportType === 'permit') reportPrefix = "LOCATION REPORT";
+        if (reportType === 'visa') reportPrefix = "VISA REPORT";
+
+        const REPORT_TITLE = `${reportPrefix} FOR THE MONTH OF ${monthName} - ${year}`;
 
         // 1. Define the Array of Arrays (AoA) Structure
         const aoa = [];
@@ -1235,7 +1850,7 @@ export const generateSIF = async (req, res) => {
     try {
         const { month, year } = req.query;
         // Fetch only PROCESSED (Finalized) records ideally, but DRAFT is ok for testing
-        const records = await Payroll.find({ month, year }).populate("employee", "name code laborCardNumber bankAccount iban agentId");
+        const records = await Payroll.find({ month, year }).populate("employee", "name code bankName laborCardNumber bankAccount iban agentId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No payroll records found." });
@@ -1265,24 +1880,37 @@ export const generateSIF = async (req, res) => {
             return res.status(200).json({ success: true, data: previewData });
         }
 
-        let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${recordCount},${totalAmount}\n`;
+        const groupedByBank = records.reduce((acc, record) => {
+            const bankName = (record.employee?.bankName || "UNSPECIFIED_BANK").replace(/[^a-zA-Z0-9_-]/g, "_");
+            if (!acc[bankName]) acc[bankName] = [];
+            acc[bankName].push(record);
+            return acc;
+        }, {});
 
-        // Body: EDR, PersonID, AgentID, Account, StartDate, EndDate, Days, Income, Basic, Extra, Deduction
-        records.forEach(r => {
-            const empId = r.employee?.laborCardNumber || r.employee?.code;
-            const agentId = r.employee?.agentId || "AGENT001";
-            const account = r.employee?.iban || r.employee?.bankAccount || "000000000000";
-            const amount = (r.netSalary || 0).toFixed(2);
+        const zipEntries = Object.entries(groupedByBank).map(([bankName, bankRecords]) => {
+            let sifContent = `SCR,${employerId},${bankCode},${creationDate},${creationTime},${salaryMonth},${bankRecords.length},${bankRecords.reduce((sum, item) => sum + (item.netSalary || 0), 0).toFixed(2)}\n`;
 
-            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-            const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
+            bankRecords.forEach(r => {
+                const empId = r.employee?.laborCardNumber || r.employee?.code;
+                const agentId = r.employee?.agentId || "AGENT001";
+                const account = r.employee?.iban || r.employee?.bankAccount || "000000000000";
+                const amount = (r.netSalary || 0).toFixed(2);
+                const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+                const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
 
-            // Standard EDR line
-            sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${r.basicSalary},${r.totalAllowances},0\n`;
+                sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${r.basicSalary},${r.totalAllowances},0\n`;
+            });
+
+            return {
+                name: `bank-transfer/${bankName}_${salaryMonth}.csv`,
+                content: sifContent
+            };
         });
 
-        res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.csv"`);
-        res.setHeader("Content-Type", "text/csv");
+        const archive = buildZipArchive(zipEntries);
+
+        res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.zip"`);
+        res.setHeader("Content-Type", "application/zip");
 
         // AUDIT LOG
         PayrollAudit.create({
@@ -1291,11 +1919,11 @@ export const generateSIF = async (req, res) => {
             performedByName: req.user ? req.user.name : "System",
             month,
             year,
-            details: `Generated SIF File: SIF_${employerId}_${creationDate}.csv`,
+            details: `Generated bank transfer ZIP: SIF_${employerId}_${creationDate}.zip`,
             totalNetSalary: totalAmount
         }).catch(console.error);
 
-        res.send(sifContent);
+        res.send(archive);
 
     } catch (error) {
         // console.error(error);
@@ -1427,7 +2055,7 @@ export const getMyPayslips = async (req, res) => {
 export const downloadPayslip = async (req, res) => {
     try {
         const { id } = req.params;
-        const payroll = await Payroll.findById(id).populate("employee", "name code designation department");
+        const payroll = await Payroll.findById(id).populate("employee", "name code designation department company");
 
         if (!payroll) {
             return res.status(404).json({ message: "Payslip not found" });
@@ -1442,6 +2070,11 @@ export const downloadPayslip = async (req, res) => {
         }
 
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year } = payroll;
+        const companyName = employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
+        const companyMaster = companyName
+            ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
+            : null;
+        const companyLogoPath = resolveCompanyLogoPath(companyMaster?.image || process.env.COMPANY_LOGO);
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         const periodStr = `${monthName} ${year}`;
         const totalAllowances = payroll.totalAllowances || 0;
@@ -1480,6 +2113,14 @@ export const downloadPayslip = async (req, res) => {
         const centerX = pageWidth / 2;
 
         // Title
+        if (companyLogoPath) {
+            try {
+                doc.image(companyLogoPath, 50, 112, { fit: [90, 46], align: "left", valign: "center" });
+            } catch (imageError) {
+                console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
+            }
+        }
+        doc.fontSize(12).fillColor("#182d54").text(companyName, centerX - 140, 138, { align: "center", width: 280 });
         doc.fontSize(16).fillColor("#404040").text("PAYSLIP", centerX - 50, 155, { align: "center", width: 100 }); // Moved down to Y=155pt (approx 55mm)
         // doc.text(text, x, y, options)
 

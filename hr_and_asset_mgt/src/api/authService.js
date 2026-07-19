@@ -1,48 +1,21 @@
-
-// const API_URL = "http://localhost:5000/api/auth";
-
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000"; // e.g. https://your-backend.onrender.com
-const API_URL = `${API_BASE}/api/auth`;
+import api from "./apiClient";
 
 export const registerUser = async (data) => {
-  const res = await fetch(`${API_URL}/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-
-  const result = await res.json();
-
-  if (!res.ok) {
-    throw new Error(result.message || "Registration failed");
-  }
-
-  return result;
+  const res = await api.post("/auth/register", data);
+  return res.data;
 };
 
 export const loginUser = async (data) => {
-  const res = await fetch(`${API_URL}/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-    credentials: "include", // Important for receiving httpOnly cookies
+  const res = await api.post("/auth/login", data, {
+    withCredentials: true, // Important for receiving httpOnly cookies
   });
-
-  const result = await res.json();
-
-  if (!res.ok) {
-    throw new Error(result.message || "Login failed");
-  }
-
-  return result;
+  return res.data;
 };
 
 export const logoutUser = async () => {
   try {
-    await fetch(`${API_URL}/logout`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include", // Important for sending httpOnly cookies
+    await api.post("/auth/logout", {}, {
+      withCredentials: true, // Important for sending httpOnly cookies
     });
   } catch (error) {
     console.error("Logout API call failed", error);
@@ -50,18 +23,6 @@ export const logoutUser = async () => {
 };
 
 export const changePassword = async (oldPassword, newPassword) => {
-  const res = await fetch(`${API_URL}/change-password`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${localStorage.getItem("token")}`
-    },
-    body: JSON.stringify({ oldPassword, newPassword }),
-  });
-
-  const result = await res.json();
-  if (!res.ok) {
-    throw new Error(result.message || "Failed to change password");
-  }
-  return result;
+  const res = await api.post("/auth/change-password", { oldPassword, newPassword });
+  return res.data;
 };

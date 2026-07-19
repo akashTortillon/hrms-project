@@ -96,6 +96,15 @@ const documentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  fileUrl: {
+    type: String,
+    default: ""
+  },
+  storage: {
+    type: String,
+    enum: ["LOCAL", "S3"],
+    default: "S3"
+  },
   uploadedAt: {
     type: Date,
     default: Date.now
@@ -152,6 +161,11 @@ const assetSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  assetClass: {
+    type: String,
+    enum: ["Physical", "Virtual"],
+    default: "Physical"
+  },
   serialNumber: {
     type: String,
     default: ""
@@ -169,6 +183,14 @@ const assetSchema = new mongoose.Schema({
     required: true
   },
   subLocation: {
+    type: String,
+    default: ""
+  },
+  branch: {
+    type: String,
+    default: ""
+  },
+  company: {
     type: String,
     default: ""
   },

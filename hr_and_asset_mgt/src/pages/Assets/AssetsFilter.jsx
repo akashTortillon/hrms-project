@@ -116,10 +116,18 @@ import { toast } from "react-toastify";
 const AssetsFilters = ({
   search,
   setSearch,
+  assetClass,
+  setAssetClass,
   type,
   setType,
   status,
   setStatus,
+  branch,
+  setBranch,
+  company,
+  setCompany,
+  branches = [],
+  companies = [],
   assetTypes = [],
   assetStatuses = [],
   total = 0,
@@ -129,15 +137,17 @@ const AssetsFilters = ({
     try {
       const filters = Object.fromEntries(
         Object.entries({
+          assetClass: assetClass !== "ALL" ? assetClass : undefined,
           type: type !== "ALL" ? type : undefined,
           status: status !== "ALL" ? status : undefined,
+          branch: branch !== "ALL" ? branch : undefined,
+          company: company !== "ALL" ? company : undefined,
           search: search || undefined,
-        }).filter(([_, value]) => value) // Remove empty values
+        }).filter(([_, value]) => value)
       );
 
       const blob = await exportAssets(filters);
 
-      // Download the file
       const downloadLink = document.createElement("a");
       downloadLink.href = window.URL.createObjectURL(blob);
       downloadLink.download = `Assets_${new Date().toISOString().split("T")[0]}.xlsx`;
@@ -167,47 +177,70 @@ const AssetsFilters = ({
           />
         </div>
 
-        {/* Asset Type */}
-        {/* Asset Type */}
-        <div style={{ width: '100%' }}>
-          {/* Asset Type */}
-          <div style={{ width: '100%' }}>
-            <select
-              className="assets-select"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              <option value="ALL">All Types</option>
-              {assetTypes.map(t => (
-                <option key={t._id || t.name} value={t.name}>{t.name}</option>
-              ))}
-            </select>
-          </div>
+        {/* Dropdowns */}
+        <select
+          className="assets-select"
+          value={assetClass}
+          onChange={(e) => setAssetClass(e.target.value)}
+        >
+          <option value="ALL">All Natures</option>
+          <option value="Physical">Physical</option>
+          <option value="Virtual">Virtual</option>
+        </select>
 
-          {/* Asset Status */}
-          <div style={{ width: '100%' }}>
-            <select
-              className="assets-select"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="ALL">All Status</option>
-              {assetStatuses.map(s => (
-                <option key={s._id || s.name} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <select
+          className="assets-select"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="ALL">All Types</option>
+          {assetTypes.map(t => (
+            <option key={t._id || t.name} value={t.name}>{t.name}</option>
+          ))}
+        </select>
+
+        <select
+          className="assets-select"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="ALL">All Status</option>
+          {assetStatuses.map(s => (
+            <option key={s._id || s.name} value={s.name}>{s.name}</option>
+          ))}
+        </select>
+
+        <select
+          className="assets-select"
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+        >
+          <option value="ALL">All Branches</option>
+          {branches.map(b => (
+            <option key={b._id || b.name} value={b.name}>{b.name}</option>
+          ))}
+        </select>
+
+        <select
+          className="assets-select"
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+        >
+          <option value="ALL">All Companies</option>
+          {companies.map(c => (
+            <option key={c._id || c.name} value={c.name}>{c.name}</option>
+          ))}
+        </select>
 
         {/* Export */}
         <button className="assets-export-btn" onClick={handleExportAssets}>
           <SvgIcon name="download" size={16} />
-          Export Assets
+          Export
         </button>
       </div>
 
       <div className="assets-count">
-        Showing {total} of {total} assets
+        Found {total} active {total === 1 ? 'asset' : 'assets'} matching your filters
       </div>
     </div>
   );

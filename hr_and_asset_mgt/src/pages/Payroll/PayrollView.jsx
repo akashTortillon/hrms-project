@@ -1,34 +1,241 @@
-
-
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView";
 import PayrollSummaryCards from "./PayrollCards";
-import PayrollStatus from "./PayrollStatus";
 import PayrollEmployeesTable from "./PayrollTable";
+import { EmployeePayrollOverviewChart, LoansAdvancesChart } from "./PayrollCharts";
 import { payrollService } from "../../services/payrollService";
+import { getCompanies, getBranches } from "../../services/masterService.js";
+import CustomModal from "../../components/reusable/CustomModal.jsx";
+import CustomButton from "../../components/reusable/Button.jsx";
+
+// Reusable filter section (Original logic + New Style)
+function PayrollFilters({ filters, setFilters, companies, branches }) {
+  return (
+    <div className="payroll-filter-section">
+      <div className="filter-group">
+        <select
+          value={filters.company || ''}
+          onChange={e => setFilters(f => ({ ...f, company: e.target.value, page: 1 }))}
+        >
+          <option value="">All Companies</option>
+          {companies.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
+        </select>
+      </div>
+
+      <div className="filter-group">
+        <select
+          value={filters.branch || ''}
+          onChange={e => setFilters(f => ({ ...f, branch: e.target.value, page: 1 }))}
+        >
+          <option value="">All Branches</option>
+          {branches.map(b => <option key={b._id || b.name} value={b.name}>{b.name}</option>)}
+        </select>
+      </div>
+
+      <div className="filter-group" style={{ flex: 2 }}>
+        <input
+          type="text"
+          placeholder="Search employees..."
+          value={filters.search || ''}
+          onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
+        />
+      </div>
+
+      <button className="filter-btn-primary" onClick={() => setFilters(f => ({...f, page: 1}))}>
+        Apply Filters
+      </button>
+    </div>
+  );
+}
+
+// Work Permit / Visa Report Table (Original columns + New Style)
+function WorkReportTable({ records, reportType, loading, onExport }) {
+  const companyKey = reportType === 'permit' ? 'workPermitCompany' : 'visaCompany';
+  const label = reportType === 'permit' ? 'Location' : 'Visa';
+
+  const filtered = records.filter(r => r.employee?.[companyKey]);
+
+  return (
+    <div className="payroll-list-table-wrapper">
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px' }}>
+          <button className="export-record-btn" onClick={onExport}>
+              <SvgIcon name="download" size={14} />
+              Export Record
+          </button>
+      </div>
+
+      <table className="payroll-modern-table">
+        <thead>
+          <tr>
+            <th>EMPLOYEE</th>
+            <th>{label.toUpperCase()}</th>
+            <th>BASIC SALARY</th>
+            <th>ALLOWANCES</th>
+            <th>DEDUCTIONS</th>
+            <th>NET SALARY</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan="6" className="text-center p-4">Loading...</td></tr>
+          ) : filtered.length === 0 ? (
+            <tr><td colSpan="6" className="text-center p-4">No records found.</td></tr>
+          ) : filtered.map(record => (
+            <tr key={record._id}>
+              <td>
+                <div className="p-emp-name">{record.employee?.name || 'Unknown'}</div>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>{record.employee?.code}</div>
+              </td>
+              <td>
+                <span className="p-status-badge approved">
+                  {record.employee?.[companyKey]}
+                </span>
+              </td>
+              <td className="p-salary">{(record.basicSalary || 0).toLocaleString()} AED</td>
+              <td style={{ color: '#10b981' }}>+{(record.totalAllowances || 0).toLocaleString()} AED</td>
+              <td style={{ color: '#f43f5e' }}>-{(record.totalDeductions || 0).toLocaleString()} AED</td>
+              <td className="p-salary" style={{ fontWeight: '700' }}>{(record.netSalary || 0).toLocaleString()} AED</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Pagination component (Original Style wrapper)
+function PayrollPagination({ pagination, onPageChange }) {
+  if (!pagination || pagination.totalPages <= 1) return null;
+  const { current, totalPages } = pagination;
+  return (
+    <div className="payroll-pagination">
+      <div className="pagination-info">Page {current} of {totalPages}</div>
+      <div className="pagination-controls">
+        <button onClick={() => onPageChange(current - 1)} disabled={current === 1} className="pag-btn">←</button>
+        <button className="pag-btn active">{current}</button>
+        <button onClick={() => onPageChange(current + 1)} disabled={current === totalPages} className="pag-btn blue-pag">→</button>
+      </div>
+    </div>
+  );
+}
+
+const pad2 = (n) => String(n).padStart(2, "0");
+const toDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 function Payroll() {
-  const [month, setMonth] = useState(1); // Jan
-  const [year, setYear] = useState(2026);
+  // Rolling pay period — force-contiguous. periodStart is always auto-computed
+  // (locked to the day after the last finalized period's end) and periodEnd is
+  // the only date HR actually picks. month/year below are DERIVED from periodEnd
+  // purely for the existing month/year-based read endpoints (summary, exports,
+  // SIF, MOL) — the real period identity lives in periodStart/periodEnd.
+  const today = new Date();
+  const [periodStart, setPeriodStart] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)));
+  const [periodEnd, setPeriodEnd] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
+  const periodEndDate = new Date(`${periodEnd}T00:00:00`);
+  const month = periodEndDate.getMonth() + 1;
+  const year = periodEndDate.getFullYear();
+  const [activeTab, setActiveTab] = useState('Payroll');
   const [records, setRecords] = useState([]);
+  const [allRecords, setAllRecords] = useState([]); // unfiltered for report tabs
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({ count: 0, totalBasic: 0, totalNet: 0 });
+  const [stats, setStats] = useState({});
+  const [pagination, setPagination] = useState(null);
+  const [companies, setCompanies] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [filters, setFilters] = useState({ company: '', branch: '', visaCompany: '', workPermitCompany: '', search: '', page: 1, limit: 10 });
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+  const [finalizeConfirmText, setFinalizeConfirmText] = useState("");
+  const [showUnfinalizeConfirm, setShowUnfinalizeConfirm] = useState(false);
+  const [unfinalizeConfirmText, setUnfinalizeConfirmText] = useState("");
+  // { month, year, periodStart, periodEnd, finalizedAt } | null
+  const [latestFinalized, setLatestFinalized] = useState(null);
+
+  // --- MOCK DATA FOR CHARTS (To avoid breaking backend dependencies) ---
+  const mockTrends = [
+    { name: 'Jan', netSalary: 45000, deductions: 5000 },
+    { name: 'Feb', netSalary: 46000, deductions: 4800 },
+    { name: 'Mar', netSalary: 48000, deductions: 5200 },
+    { name: 'Apr', netSalary: 44000, deductions: 4500 },
+    { name: 'May', netSalary: 47000, deductions: 5000 },
+    { name: 'Jun', netSalary: 49000, deductions: 5500 },
+  ];
+
+  const mockLoans = [
+    { name: 'Loans', value: 12500 },
+    { name: 'Salary Advances', value: 8400 },
+  ];
+
+  useEffect(() => {
+    getCompanies().then(setCompanies).catch(console.error);
+    getBranches().then(setBranches).catch(console.error);
+    fetchLatestFinalized();
+  }, []);
+
+  const fetchLatestFinalized = async () => {
+    try {
+      const latest = await payrollService.getLatestFinalizedPeriod();
+      setLatestFinalized(latest);
+
+      // periodStart is always locked to the day after the last finalized period's
+      // end (force-contiguous — no gaps, no overlaps). If the current periodEnd
+      // selection is already covered by that lock, bump it forward to a sensible
+      // ~1-month default instead of landing on an already-locked period.
+      // Comparing plain "YYYY-MM-DD" strings (from the server) — avoids any
+      // browser/server timezone drift that reconstructing Date objects here would risk.
+      if (latest) {
+        const lockedEndStr = latest.periodEndStr;
+        const lockedEnd = new Date(`${lockedEndStr}T00:00:00`);
+        const requiredStart = new Date(lockedEnd);
+        requiredStart.setDate(requiredStart.getDate() + 1);
+        setPeriodStart(toDateStr(requiredStart));
+
+        if (periodEnd <= lockedEndStr) {
+          const suggestedEnd = new Date(requiredStart);
+          suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
+          suggestedEnd.setDate(suggestedEnd.getDate() - 1);
+          setPeriodEnd(toDateStr(suggestedEnd));
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   useEffect(() => {
     fetchPayroll();
-  }, [month, year]);
+  }, [periodEnd, filters]);
+
+  useEffect(() => {
+    if (activeTab !== 'Payroll') {
+      fetchAllRecords();
+    }
+  }, [activeTab, periodEnd, filters]);
 
   const fetchPayroll = async () => {
     try {
       setLoading(true);
-      const data = await payrollService.getSummary(month, year);
+      const data = await payrollService.getSummary(month, year, filters);
       setRecords(data.records || []);
       setStats(data.stats || {});
+      setPagination(data.pagination || null);
     } catch (error) {
       console.error(error);
-      // toast.error("Failed to fetch payroll");
+      toast.error("Failed to fetch payroll summary");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllRecords = async () => {
+    try {
+      setLoading(true);
+      const reportType = activeTab === 'Location report' ? 'permit' : activeTab === 'Visa report' ? 'visa' : null;
+      const data = await payrollService.getSummary(month, year, { ...filters, reportType, limit: 1000 });
+      setAllRecords(data.records || []);
+    } catch (error) {
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -37,11 +244,11 @@ function Payroll() {
   const handleGenerate = async () => {
     try {
       setLoading(true);
-      await payrollService.generate(month, year);
+      await payrollService.generate(periodStart, periodEnd);
       toast.success("Payroll Generated Successfully!");
-      fetchPayroll(); // Refresh list
+      fetchPayroll();
     } catch (error) {
-      toast.error("Failed to generate payroll");
+      toast.error(error.response?.data?.message || "Failed to generate payroll");
     } finally {
       setLoading(false);
     }
@@ -50,9 +257,10 @@ function Payroll() {
   const handleFinalize = async () => {
     try {
       setLoading(true);
-      await payrollService.finalize(month, year);
+      await payrollService.finalize(periodStart, periodEnd);
       toast.success("Payroll Finalized & Locked!");
-      fetchPayroll(); // Refresh
+      fetchPayroll();
+      fetchLatestFinalized();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to finalize");
     } finally {
@@ -60,12 +268,37 @@ function Payroll() {
     }
   };
 
-  const handleExportExcel = async () => {
+  const handleConfirmFinalize = () => {
+    setShowFinalizeConfirm(false);
+    setFinalizeConfirmText("");
+    handleFinalize();
+  };
+
+  const handleUnfinalize = async () => {
     try {
-      await payrollService.exportExcel(month, year);
+      setLoading(true);
+      await payrollService.unfinalize(periodStart, periodEnd);
+      toast.success("Payroll un-finalized — period is editable again.");
+      fetchPayroll();
+      fetchLatestFinalized();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to un-finalize");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmUnfinalize = () => {
+    setShowUnfinalizeConfirm(false);
+    setUnfinalizeConfirmText("");
+    handleUnfinalize();
+  };
+
+  const handleExportExcel = async (reportType = null) => {
+    try {
+      await payrollService.exportExcel(month, year, reportType, filters);
       toast.success("Export Downloaded!");
     } catch (error) {
-      console.error(error);
       toast.error("Export failed.");
     }
   };
@@ -75,7 +308,6 @@ function Payroll() {
       await payrollService.generateSIF(month, year);
       toast.success("SIF File Generated!");
     } catch (error) {
-      console.error(error);
       toast.error("SIF Generation failed.");
     }
   };
@@ -98,67 +330,288 @@ function Payroll() {
     }
   };
 
+  // Derive state guards
+  const isGenerated = records.length > 0;
+  const isFinalized = isGenerated && records.every(r => r.status === 'PROCESSED' || r.status === 'PAID');
+  // Un-finalize is only allowed on the exact period the server considers "latest
+  // finalized" — matches the backend's own restriction (undoing an older locked
+  // period while a later one stays locked would desync the force-contiguous chain).
+  // String comparison against the server's own formatted date — no timezone risk.
+  const canUnfinalize = isFinalized && latestFinalized?.periodEndStr === periodEnd;
+
   return (
-    <div>
-      {/* Date Selector could go here */}
+    <div className="payroll-dashboard-wrapper">
       <PayrollSummaryCards
         stats={stats}
-        month={month}
-        year={year}
-        setMonth={setMonth}
-        setYear={setYear}
-        onExportWPS={handleGenerateSIF}
+        periodStart={periodStart}
+        periodEnd={periodEnd}
+        setPeriodEnd={setPeriodEnd}
+        onExportWPS={() => handleExportExcel()}
       />
 
-      <PayrollStatus
-        onGenerate={handleGenerate}
-        onFinalize={handleFinalize}
-        loading={loading}
-        status={records.length > 0 ? (records[0].status === 'PROCESSED' ? 2 : 1) : 0}
-      />
-
-      <PayrollEmployeesTable
-        employees={records}
-        loading={loading}
-        onRefresh={fetchPayroll}
-        isFinalized={records.length > 0 && records[0].status === 'PROCESSED'}
-        onExport={() => handleExportExcel()}
-      />
-
-      <div className="wps-section">
-
-        <h5 className="wps-title"><SvgIcon name="document" size={20} /> WPS Compliance Tools</h5>
-
-
-        <div className="wps-card-grid">
-          <div onClick={handleGenerateSIF} style={{ cursor: 'pointer' }}>
-            <Card
-              title="Generate SIF File"
-              subtitle="Create salary payment file for banks"
-              className="wps-card"
-            />
-          </div>
-
-          <div onClick={handleGenerateMOL} style={{ cursor: 'pointer' }}>
-            <Card
-              title="MOL Report"
-              subtitle="Ministry of Labour compliance report"
-              className="wps-card"
-            />
-          </div>
-
-          <div onClick={handlePaymentHistory} style={{ cursor: 'pointer' }}>
-            <Card
-              title="Payment History"
-              subtitle="View past payroll transactions"
-              className="wps-card"
-            />
-          </div>
-        </div>
+      {/* Modern Tabs Switcher (Design only) */}
+      <div className="payroll-premium-tabs">
+          <button 
+            className={`tab-pill ${activeTab === 'Payroll' ? 'active' : ''}`}
+            onClick={() => setActiveTab('Payroll')}
+          >
+            Dashboard & Payroll
+          </button>
+          <button 
+            className={`tab-pill ${activeTab === 'Location report' ? 'active' : ''}`}
+            onClick={() => setActiveTab('Location report')}
+          >
+            Location report
+          </button>
+          <button 
+            className={`tab-pill ${activeTab === 'Visa report' ? 'active' : ''}`}
+            onClick={() => setActiveTab('Visa report')}
+          >
+            Visa report
+          </button>
       </div>
+
+      {activeTab === 'Payroll' && (
+        <>
+            {/* Action Bar (Original Logic + New Style) */}
+            <div className="payroll-action-row">
+                 <div className={`action-step ${isGenerated ? 'active completed' : 'active'}`}>
+                    <span className="step-num">{isGenerated ? '✓' : '1'}</span>
+                    <div className="step-txt">
+                        <span className="step-label">Generate</span>
+                        <span className="step-desc">{isGenerated ? 'Successfully generated' : 'Process current month'}</span>
+                    </div>
+                 </div>
+                 <div className={`separator ${isGenerated ? 'active' : ''}`} />
+                 <div className={`action-step ${isFinalized ? 'active completed' : isGenerated ? 'active' : ''}`}>
+                    <span className="step-num">{isFinalized ? '✓' : '2'}</span>
+                    <div className="step-txt">
+                        <span className="step-label">Finalize</span>
+                        <span className="step-desc">{isFinalized ? 'Payroll locked' : 'Lock and approve'}</span>
+                    </div>
+                 </div>
+                 
+                 <div className="action-btns-group">
+                    <button 
+                      className="gen-btn" 
+                      onClick={handleGenerate} 
+                      disabled={loading || isFinalized}
+                    >
+                        {loading ? 'Processing...' : isGenerated ? 'Regenerate' : 'Generate Payroll'}
+                    </button>
+                    <button
+                      className="final-btn"
+                      onClick={() => setShowFinalizeConfirm(true)}
+                      disabled={loading || !isGenerated || isFinalized}
+                    >
+                        {isFinalized ? 'Finalized' : 'Finalize Payroll'}
+                    </button>
+                    {isFinalized && (
+                      <button
+                        className="final-btn"
+                        style={{ background: '#fff', color: '#b91c1c', border: '1px solid #b91c1c' }}
+                        onClick={() => setShowUnfinalizeConfirm(true)}
+                        disabled={loading || !canUnfinalize}
+                        title={canUnfinalize ? "Undo finalize for this period" : "Only the most recently finalized period can be un-finalized"}
+                      >
+                          Un-finalize
+                      </button>
+                    )}
+                 </div>
+            </div>
+
+            {/* Charts Grid (Commented out for now) */}
+            {/* <div className="payroll-charts-grid">
+                <EmployeePayrollOverviewChart data={mockTrends} />
+                <LoansAdvancesChart 
+                    data={mockLoans} 
+                    total={mockLoans.reduce((s, a) => s + a.value, 0)} 
+                />
+            </div> */}
+
+            {/* Payroll List Section */}
+            <div className="payroll-list-container">
+                <div className="list-header">
+                    <h2 className="list-title">Payroll List</h2>
+                    <p className="list-subtitle">Detailed monthly payroll records</p>
+                </div>
+
+                <p className="filter-label">Filter payroll list by:</p>
+                
+                <PayrollFilters
+                    filters={filters}
+                    setFilters={setFilters}
+                    companies={companies}
+                    branches={branches}
+                />
+
+                <PayrollEmployeesTable
+                    employees={records}
+                    loading={loading}
+                    onRefresh={fetchPayroll}
+                    isFinalized={isFinalized}
+                    companies={companies}
+                />
+
+                <PayrollPagination
+                    pagination={pagination}
+                    onPageChange={(pg) => setFilters(f => ({ ...f, page: pg }))}
+                />
+            </div>
+
+            {/* WPS Compliance Tools (Original Component Layout in New Design) */}
+            <div className="wps-compliance-section">
+                <div className="wps-header">
+                    <SvgIcon name="document" size={18} />
+                    <h3>WPS Compliance Tools</h3>
+                </div>
+                <div className="wps-tools-grid">
+                    <div className="wps-tool-card" onClick={handleGenerateSIF}>
+                        <div className="tool-icon-box blue"><SvgIcon name="dollar" size={20} /></div>
+                        <div className="tool-content">
+                            <h4>Generate SIF File</h4>
+                            <p>Create salary payment file for banks</p>
+                        </div>
+                    </div>
+                    <div className="wps-tool-card" onClick={handleGenerateMOL}>
+                        <div className="tool-icon-box green"><SvgIcon name="reports" size={20} /></div>
+                        <div className="tool-content">
+                            <h4>MOL Report</h4>
+                            <p>Ministry of Labour compliance report</p>
+                        </div>
+                    </div>
+                    <div className="wps-tool-card" onClick={handlePaymentHistory}>
+                        <div className="tool-icon-box orange"><SvgIcon name="clock (1)" size={20} /></div>
+                        <div className="tool-content">
+                            <h4>Payment History</h4>
+                            <p>View past payroll transactions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+      )}
+
+      {activeTab === 'Location report' && (
+        <div className="payroll-list-container">
+            <div className="list-header">
+                <h2 className="list-title">Location Report</h2>
+                <p className="list-subtitle">Analysis filtered by location</p>
+            </div>
+            
+            <PayrollFilters
+                filters={filters}
+                setFilters={setFilters}
+                companies={companies}
+                branches={branches}
+            />
+
+            <WorkReportTable 
+                records={allRecords} 
+                reportType="permit" 
+                loading={loading} 
+                onExport={() => handleExportExcel('permit')} 
+            />
+        </div>
+      )}
+
+      {activeTab === 'Visa report' && (
+        <div className="payroll-list-container">
+            <div className="list-header">
+                <h2 className="list-title">Visa Report</h2>
+                <p className="list-subtitle">Analysis filtered by visa company</p>
+            </div>
+
+            <PayrollFilters
+                filters={filters}
+                setFilters={setFilters}
+                companies={companies}
+                branches={branches}
+            />
+
+            <WorkReportTable
+                records={allRecords}
+                reportType="visa"
+                loading={loading}
+                onExport={() => handleExportExcel('visa')}
+            />
+        </div>
+      )}
+
+      <CustomModal
+        show={showFinalizeConfirm}
+        title="Finalize Payroll"
+        onClose={() => { setShowFinalizeConfirm(false); setFinalizeConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setShowFinalizeConfirm(false); setFinalizeConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton onClick={handleConfirmFinalize} disabled={finalizeConfirmText.trim().toLowerCase() !== "yes"}>
+              Finalize Payroll
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>
+          This locks payroll for {periodStart} to {periodEnd}. It cannot be undone from here — loan and advance
+          requests will be updated and no further edits will be possible.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={finalizeConfirmText}
+          onChange={(e) => setFinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
+
+      <CustomModal
+        show={showUnfinalizeConfirm}
+        title="Un-finalize Payroll"
+        onClose={() => { setShowUnfinalizeConfirm(false); setUnfinalizeConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setShowUnfinalizeConfirm(false); setUnfinalizeConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton onClick={handleConfirmUnfinalize} disabled={unfinalizeConfirmText.trim().toLowerCase() !== "yes"}>
+              Un-finalize Payroll
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>
+          This unlocks payroll for {periodStart} to {periodEnd} back to a draft — it also reverses any loan/salary-advance
+          repayments that this finalize recorded. Only use this to correct a mistake; a new Finalize will be
+          needed once the period is fixed.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={unfinalizeConfirmText}
+          onChange={(e) => setUnfinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
     </div>
   );
 }
-
 
 export default Payroll;

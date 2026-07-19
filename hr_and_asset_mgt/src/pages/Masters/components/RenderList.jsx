@@ -11,27 +11,34 @@ export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
 
             return (
                 <div key={item._id} className="structure-item">
-                    <div className="item-content">
-                        <span className="structure-name" style={{ fontSize: '13px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>{item.name}</span>
-                        {/* Show extra details for Payroll Rules */}
-                        {type === "Payroll Rule" && (
-                            <div className="item-meta" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                {isLeaveConfig ? (
-                                    <>
-                                        <span className="item-badge" style={{ fontSize: '10px', padding: '1px 6px' }}>{meta.days} Days</span>
-                                        <span style={{ fontSize: '11px', color: '#6b7280', lineHeight: '1.4' }}>{item.description}</span>
-                                    </>
-                                ) : (
-                                    <span style={{ fontSize: '11px', color: '#6b7280' }}>{item.description}</span>
-                                )}
+                    <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                        {item.image && (
+                            <div className="rendered-item-logo">
+                                <img src={item.image} alt={item.name} />
                             </div>
                         )}
-                        {/* Show extra details for Holidays */}
-                        {type === "Holiday" && item.date && (
-                            <span style={{ fontSize: '11px', color: '#6b7280' }}>
-                                {new Date(item.date).toLocaleDateString()}
-                            </span>
-                        )}
+                        <div className="item-content">
+                            <span className="structure-name" style={{ fontSize: '13px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>{item.name}</span>
+                            {/* Show extra details for Payroll Rules */}
+                            {type === "Payroll Rule" && (
+                                <div className="item-meta" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                    {isLeaveConfig ? (
+                                        <>
+                                            <span className="item-badge" style={{ fontSize: '10px', padding: '1px 6px' }}>{meta.days} Days</span>
+                                            <span style={{ fontSize: '11px', color: '#6b7280', lineHeight: '1.4' }}>{item.description}</span>
+                                        </>
+                                    ) : (
+                                        <span style={{ fontSize: '11px', color: '#6b7280' }}>{item.description}</span>
+                                    )}
+                                </div>
+                            )}
+                            {/* Show extra details for Holidays */}
+                            {type === "Holiday" && item.date && (
+                                <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                                    {new Date(item.date).toLocaleDateString()}
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <div className="structure-actions">
                         <button className="icon-btn edit" onClick={() => handleEdit(type, item)}>
@@ -47,5 +54,5 @@ export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
                 </div>
             );
         })}
-    </div >
+    </div>
 );

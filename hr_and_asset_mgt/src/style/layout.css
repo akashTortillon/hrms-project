@@ -110,6 +110,8 @@ body {
   transition: transform 0.3s ease, width 0.25s ease;
   overflow: hidden;
   z-index: 1001;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 1024px) {
@@ -249,6 +251,31 @@ body {
 .sidebar-nav {
   gap: 4px;
   padding: 0 4px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 24px;
+  flex-wrap: nowrap !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Custom premium scrollbar for sidebar */
+.sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .sidebar-brand-logo {
@@ -584,20 +611,28 @@ body {
 
 .notification-dot {
   position: absolute !important;
-  top: -6px !important;
-  right: -6px !important;
-  min-width: 18px !important;
-  height: 18px !important;
+  top: -8px !important;
+  right: -8px !important;
+  min-width: 20px !important;
+  height: 20px !important;
   border-radius: 10px !important;
   background: #ff2d55 !important;
   color: #fff !important;
-  font-size: 10px !important;
-  font-weight: 700 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  padding: 0 4px !important;
+  padding: 0 5px !important;
   border: 2px solid #fff !important;
+  box-shadow: 0 0 0 0 rgba(255, 45, 85, 0.7) !important;
+  animation: notif-pulse 1.8s infinite !important;
+}
+
+@keyframes notif-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 45, 85, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(255, 45, 85, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 45, 85, 0); }
 }
 
 .profile {
@@ -870,6 +905,12 @@ body {
   border-color: var(--border);
 }
 
+.quick-action-btn .svg-icon,
+.quick-action-btn .svg-icon-white {
+  filter: invert(30%) sepia(83%) saturate(2326%) hue-rotate(204deg) brightness(96%) contrast(92%) !important;
+  opacity: 1 !important;
+}
+
 /* Dropdown card */
 .quick-action-menu {
   position: absolute !important;
@@ -927,8 +968,8 @@ body {
   position: absolute !important;
   top: calc(100% + 8px) !important;
   right: 0 !important;
-  width: 380px !important;
-  max-width: 450px !important;
+  width: 440px !important;
+  max-width: min(480px, calc(100vw - 24px)) !important;
   border-radius: 14px !important;
   padding: 0 !important;
   background: #ffffff !important;
@@ -1047,6 +1088,15 @@ body {
   font-weight: 500;
   margin-bottom: 3px;
   line-height: 1.4;
+}
+
+.notification-item-message {
+  color: #475569;
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .notification-item.unread .notification-item-title {

@@ -76,6 +76,11 @@ export default function NotificationDropdown({
                       <div className="notification-item-title">
                         {item.title}
                       </div>
+                      {item.message && (
+                        <div className="notification-item-message">
+                          {item.message}
+                        </div>
+                      )}
                       <div className="notification-item-time">{item.time}</div>
                     </div>
                     <div className="notification-item-actions">
@@ -101,7 +106,6 @@ export default function NotificationDropdown({
     </div>
   );
 }
-
 
 
 

@@ -7,6 +7,12 @@ const companyDocSchema = new mongoose.Schema({
     issueDate: { type: Date },
     expiryDate: { type: Date }, // Optional now
     filePath: { type: String, required: true }, // saved filename
+    fileUrl: { type: String, default: "" },
+    storage: {
+        type: String,
+        enum: ["LOCAL", "S3"],
+        default: "S3"
+    },
     status: {
         type: String,
         enum: ["Valid", "Expiring Soon", "Expired", "Critical"],

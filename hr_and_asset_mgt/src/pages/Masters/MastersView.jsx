@@ -13,6 +13,31 @@ export default function MastersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "company";
 
+  const tabMeta = {
+    company: {
+      eyebrow: "Organization Setup",
+      statLabel: "Active Workspace",
+      statValue: "Company Structure"
+    },
+    hr: {
+      eyebrow: "People Controls",
+      statLabel: "Active Workspace",
+      statValue: "HR Management"
+    },
+    asset: {
+      eyebrow: "Asset Controls",
+      statLabel: "Active Workspace",
+      statValue: "Asset Management"
+    },
+    system: {
+      eyebrow: "System Controls",
+      statLabel: "Active Workspace",
+      statValue: "System Settings"
+    }
+  };
+
+  const currentMeta = tabMeta[activeTab] || tabMeta.company;
+
   const handleTabChange = (tabId) => {
     setSearchParams({ tab: tabId });
   };
@@ -34,18 +59,22 @@ export default function MastersPage() {
 
   return (
     <div className="masters-page">
-
-      {/* Page Header */}
       <div className="masters-header">
-        <h1 className="masters-title">Masters & Configuration</h1>
-        <p className="masters-subtitle">
-          Manage system masters and configuration settings
-        </p>
+        <div>
+          <span className="masters-header-eyebrow">{currentMeta.eyebrow}</span>
+          <h1 className="masters-title">Masters & Configuration</h1>
+          <p className="masters-subtitle">
+            Manage system masters and configuration settings
+          </p>
+        </div>
+
+        <div className="masters-header-stat">
+          <span className="masters-header-stat-label">{currentMeta.statLabel}</span>
+          <strong className="masters-header-stat-value">{currentMeta.statValue}</strong>
+        </div>
       </div>
 
-      {/* Content Container */}
       <div className="masters-content">
-        {/* Tabs */}
         <MastersTabs activeTab={activeTab} onChange={handleTabChange} />
 
         <div className="masters-tab-content">

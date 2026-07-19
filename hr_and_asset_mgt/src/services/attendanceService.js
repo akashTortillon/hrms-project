@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const ATTENDANCE_API = "/api/attendance";
+const ATTENDANCE_API = "/attendance";
 
 // ✅ Fetch daily attendance for a specific date (with pagination/filters)
 export const getDailyAttendance = async (params) => {
@@ -62,3 +62,9 @@ export const getEmployeeAttendanceHistory = async (employeeId, month, year) => {
   return res.data;
 };
 
+
+// ✅ Mark attendance for a date range (bulk)
+export const markAttendanceBulk = async (data) => {
+  const res = await api.post(`${ATTENDANCE_API}/mark-bulk`, data);
+  return res.data;
+};

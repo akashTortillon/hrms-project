@@ -20,6 +20,23 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({ message: "User not found" });
       }
 
+      // 🔹 Auto-heal: If user lacks employeeId, try to link it based on Email
+      if (!user.employeeId && user.role !== "Admin") {
+        try {
+          // Import employeeModel dynamically if needed, or assume it's at top
+          // Wait, I need to import it at the top of authMiddleware.js
+          const Employee = (await import("../models/employeeModel.js")).default;
+          const linkedEmp = await Employee.findOne({ email: new RegExp(`^${user.email}$`, "i") });
+          if (linkedEmp) {
+            user.employeeId = linkedEmp._id;
+            await user.save(); // save the link globally
+          }
+        } catch (healError) {
+           console.error("Employee auto-heal error:", healError);
+        }
+      }
+
+
       // Fetch Role Permissions
       let permissions = [];
       if (user.role === "Admin") {

@@ -7,8 +7,9 @@ import DocumentsFilter from "./DocumentsFilter";
 import DocumentsGrid from "./DocumentsGrid";
 import ExpiryReminders from "./DocumentExpiryCards";
 import UploadDocumentModal from "./UploadDocumentModal";
+import UploadEmployeeDocumentModal from "../Employees/UploadEmployeeDocumentModal.jsx";
 import { getDocuments, uploadDocument, deleteDocument, getDocumentStats } from "../../services/documentService";
-import { getMyDocuments } from "../../services/employeeDocumentService";
+import { getMyDocuments, uploadMyDocument } from "../../services/employeeDocumentService";
 import { companyDocumentTypeService, documentTypeService } from "../../services/masterService";
 import { toast } from "react-toastify";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal";
@@ -70,7 +71,7 @@ function Documents() {
     // Only fetch global stats if manager
     if (!isManager) return;
     try {
-      const data = await getDocumentStats();
+      const data = await getDocumentStats({ scope: "company" });
       setStats(data);
     } catch (err) {
       console.error("Stats failed", err);
@@ -153,6 +154,7 @@ function Documents() {
         status: doc.status,
         daysLeft: daysLeft,
         filePath: doc.filePath,
+        fileUrl: doc.fileUrl,
         isPersonal: false
       };
     });
@@ -183,6 +185,7 @@ function Documents() {
         status: doc.status || "Valid",
         daysLeft: daysLeft,
         filePath: doc.filePath,
+        fileUrl: doc.fileUrl,
         isPersonal: true
       };
     });
@@ -205,7 +208,8 @@ function Documents() {
   // HANDLE UPLOAD
   const handleUpload = async (formData) => {
     try {
-      await uploadDocument(formData);
+      if (isManager) await uploadDocument(formData);
+      else await uploadMyDocument(formData);
       toast.success("Document uploaded successfully");
       setShowUploadModal(false);
       fetchDocs(); // Refresh list
@@ -253,7 +257,7 @@ function Documents() {
       */}
       <DocumentLibraryHeader
         stats={isManager ? stats : { total: documents.length, valid: 0, expiring: 0, critical: 0, expired: 0 }}
-        onUploadClick={isManager ? () => setShowUploadModal(true) : null}
+        onUploadClick={() => setShowUploadModal(true)}
       />
 
       <DocumentsFilter
@@ -282,8 +286,15 @@ function Documents() {
       {isManager && <ExpiryReminders documents={documents} />}
 
       {/* MODALS */}
-      {showUploadModal && (
+      {showUploadModal && isManager && (
         <UploadDocumentModal
+          onClose={() => setShowUploadModal(false)}
+          onUpload={handleUpload}
+        />
+      )}
+
+      {showUploadModal && !isManager && (
+        <UploadEmployeeDocumentModal
           onClose={() => setShowUploadModal(false)}
           onUpload={handleUpload}
         />

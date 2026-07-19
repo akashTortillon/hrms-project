@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import "../../style/EmployeeDetail.css";
 
@@ -37,12 +37,19 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument } from "../../services/employeeService";
+import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments } from "../../services/masterService";
-import { getEmployeeRequests } from "../../services/requestService";
+import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
+import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
 
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
 import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
+import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
+import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
+import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
+import AddAllowanceModal from "./AddAllowanceModal.jsx";
+import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
@@ -52,7 +59,18 @@ import { assignAssetToEmployee } from "../../services/assignmentService";
 import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
 import WorkflowTab from "../../components/employee/WorkflowTab";
+import WarningsTab from "../../components/employee/WarningsTab.jsx";
+import LeaveWalletTab from "../../components/employee/LeaveWalletTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
+
+const resolveUploadedAssetUrl = (url) => {
+    if (!url) return "";
+    if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+
+    const apiBase = import.meta.env.VITE_API_BASE || "";
+    const serverBase = apiBase.replace(/\/api\/?$/, "").replace(/\/$/, "");
+    return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 export default function EmployeeDetail() {
     const { id } = useParams();
@@ -70,6 +88,7 @@ export default function EmployeeDetail() {
     const canEdit = hasPermission("MANAGE_EMPLOYEES");
     const canManageDocs = hasPermission("MANAGE_DOCUMENTS");
     const canManageAssets = hasPermission("MANAGE_ASSETS");
+    const canManageRepayments = hasPermission("APPROVE_REQUESTS") || hasPermission("ALL") || user?.role === "Admin";
 
 
 
@@ -80,12 +99,20 @@ export default function EmployeeDetail() {
 
     // Edit Modal State
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [showConfirmProbationModal, setShowConfirmProbationModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Change Password Modal State
+    const [showAddAllowanceModal, setShowAddAllowanceModal] = useState(false);
+    const [allowanceSubmitting, setAllowanceSubmitting] = useState(false);
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
+    const [photoUploading, setPhotoUploading] = useState(false);
+    const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
+    const photoInputRef = useRef(null);
 
     // Document State
     const [documents, setDocuments] = useState([]);
+    const [workflowDocs, setWorkflowDocs] = useState([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
 
     // Attendance & Training State
@@ -98,6 +125,28 @@ export default function EmployeeDetail() {
 
     // Loan State
     const [loans, setLoans] = useState([]);
+    const [confirmingProbation, setConfirmingProbation] = useState(false);
+    const [showSkipLoanModal, setShowSkipLoanModal] = useState(false);
+
+    // Gratuity State
+    const [gratuity, setGratuity] = useState(null);
+    const [gratuityLoading, setGratuityLoading] = useState(false);
+    const [selectedLoanForSkip, setSelectedLoanForSkip] = useState(null);
+    const [savingLoanSkip, setSavingLoanSkip] = useState(false);
+
+    // Leave Summary State
+    const [leaveSummary, setLeaveSummary] = useState([]);
+    const [leaveSummaryTotals, setLeaveSummaryTotals] = useState({
+        sick: 0,
+        casual: 0,
+        annual: 0,
+        unpaid: 0,
+        approvedDays: 0,
+        pendingRequests: 0
+    });
+    const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
+    const [leaveSummaryYear, setLeaveSummaryYear] = useState(new Date().getFullYear());
+    const [leaveSummaryMonth, setLeaveSummaryMonth] = useState(0); // 0 = whole year
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
@@ -126,6 +175,36 @@ export default function EmployeeDetail() {
         fetchEmployee();
         loadDepartments();
     }, [effectiveId]);
+
+    const handleAddAllowance = async ({ typeName, amount }) => {
+        setAllowanceSubmitting(true);
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            await appraisalService.applyAdjustment({
+                employee: effectiveId,
+                type: "ALLOWANCE",
+                allowanceTypeName: typeName,
+                amount,
+                effectiveDate: today
+            });
+            await fetchEmployee();
+            setShowAddAllowanceModal(false);
+            toast.success("Allowance applied successfully");
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to apply allowance");
+        } finally {
+            setAllowanceSubmitting(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!showPhotoLightbox) return;
+        const handleEscape = (e) => {
+            if (e.key === "Escape") setShowPhotoLightbox(false);
+        };
+        window.addEventListener("keydown", handleEscape);
+        return () => window.removeEventListener("keydown", handleEscape);
+    }, [showPhotoLightbox]);
 
     const loadDepartments = async () => {
         try {
@@ -162,6 +241,8 @@ export default function EmployeeDetail() {
             fetchEmployeeAssetsData();
         } else if (activeTab === "Loans") {
             fetchEmployeeLoans();
+        } else if (activeTab === "Salary") {
+            fetchGratuity();
         }
     }, [activeTab, effectiveId]);
 
@@ -173,6 +254,28 @@ export default function EmployeeDetail() {
         } catch (e) {
             console.error(e);
         }
+        fetchWorkflowDocuments();
+    };
+
+    // Onboarding/offboarding checklist uploads live in the Workflow collection, not
+    // EmployeeDocument. Surface them (read-only) so they're visible alongside regular docs.
+    // Requires workflow permission; silently skipped for users without it.
+    const fetchWorkflowDocuments = async () => {
+        if (!effectiveId) return;
+        const collected = [];
+        for (const type of ["Onboarding", "Offboarding"]) {
+            try {
+                const wf = await getEmployeeWorkflow(effectiveId, type);
+                (wf?.items || []).forEach((item) => {
+                    if (item.documentUrl) {
+                        collected.push({ _id: item._id, name: item.name, type, documentUrl: item.documentUrl });
+                    }
+                });
+            } catch {
+                // no workflow / no permission — ignore
+            }
+        }
+        setWorkflowDocs(collected);
     };
 
     const handleUploadDocument = async (formData) => {
@@ -224,6 +327,49 @@ export default function EmployeeDetail() {
         }
     };
 
+    const fetchGratuity = async () => {
+        if (!effectiveId) return;
+        setGratuityLoading(true);
+        try {
+            const res = await getEmployeeGratuity(effectiveId);
+            setGratuity(res.data || null);
+        } catch (e) {
+            console.error("Gratuity fetch error:", e);
+        } finally {
+            setGratuityLoading(false);
+        }
+    };
+
+    // Fetch leave summary when tab becomes active
+    const fetchLeaveSummary = async (year = leaveSummaryYear, month = leaveSummaryMonth) => {
+        if (!effectiveId) return;
+        setLeaveSummaryLoading(true);
+        try {
+            const params = { year };
+            if (month) params.month = month;
+            if (!isSelf) params.employeeId = effectiveId;
+            const res = await getLeaveSummary(params);
+            setLeaveSummary(res.data || []);
+            setLeaveSummaryTotals(res.totals || {
+                sick: 0,
+                casual: 0,
+                annual: 0,
+                unpaid: 0,
+                approvedDays: 0,
+                pendingRequests: 0
+            });
+        } catch (e) {
+            console.error("Leave summary fetch error:", e);
+        } finally {
+            setLeaveSummaryLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === "Leave Summary") {
+            fetchLeaveSummary(leaveSummaryYear, leaveSummaryMonth);
+        }
+    }, [activeTab, leaveSummaryYear, leaveSummaryMonth]);
 
     const handleAssignAsset = async (data) => {
         try {
@@ -237,19 +383,126 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handleTransferEmployee = async (transferData) => {
+        try {
+            await transferEmployee(effectiveId, transferData);
+            toast.success("Employee transferred successfully");
+            setShowTransferModal(false);
+            fetchEmployee();
+        } catch (error) {
+            console.error("Transfer failed", error);
+            toast.error(error.response?.data?.message || "Failed to transfer employee");
+        }
+    };
+
+    const handlePhotoUpload = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file || !effectiveId) return;
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Please select an image file");
+            event.target.value = "";
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("photo", file);
+
+        try {
+            setPhotoUploading(true);
+            const updatedEmployee = await uploadEmployeePhoto(effectiveId, formData);
+            setEmployee(updatedEmployee);
+            toast.success("Employee photo updated");
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to upload employee photo");
+        } finally {
+            setPhotoUploading(false);
+            event.target.value = "";
+        }
+    };
+
+    const handleConfirmProbation = async (payload) => {
+        try {
+            setConfirmingProbation(true);
+            await confirmProbation(effectiveId, payload);
+            toast.success("Probation confirmed successfully");
+            setShowConfirmProbationModal(false);
+            fetchEmployee();
+        } catch (error) {
+            console.error("Probation confirmation failed", error);
+            toast.error(error.response?.data?.message || "Failed to confirm probation");
+        } finally {
+            setConfirmingProbation(false);
+        }
+    };
+
+    const handleOpenSkipLoanModal = (loan) => {
+        setSelectedLoanForSkip(loan);
+        setShowSkipLoanModal(true);
+    };
+
+    const handleSkipLoanMonth = async (requestId, payload) => {
+        try {
+            setSavingLoanSkip(true);
+            await updateRepaymentSchedule(requestId, payload);
+            toast.success("Repayment skip saved successfully");
+            setShowSkipLoanModal(false);
+            setSelectedLoanForSkip(null);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Repayment skip failed", error);
+            toast.error(error.response?.data?.message || "Failed to save repayment skip");
+        } finally {
+            setSavingLoanSkip(false);
+        }
+    };
+
+    const handleViewEmployeeDocument = async (document) => {
+        try {
+            if (document.fileUrl) {
+                window.open(document.fileUrl, "_blank", "noopener,noreferrer");
+                return;
+            }
+            const blob = await downloadEmployeeDocument(document._id);
+            const url = window.URL.createObjectURL(blob);
+            window.open(url, "_blank", "noopener,noreferrer");
+            setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+        } catch (error) {
+            console.error("Document view failed", error);
+            toast.error(error.response?.data?.message || "Failed to open document");
+        }
+    };
+
+    const handleDeleteEmployeeDocument = async (document) => {
+        if (!window.confirm(`Delete "${document.documentType}"? This cannot be undone.`)) return;
+        try {
+            await deleteEmployeeDocument(document._id);
+            toast.success("Document deleted");
+            fetchDocuments();
+        } catch (error) {
+            console.error("Document delete failed", error);
+            toast.error(error.response?.data?.message || "Failed to delete document");
+        }
+    };
+
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
 
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans"];
-    // Conditionally add Onboarding/Offboarding based on granular permissions
-    if (hasPermission("MANAGE_ONBOARDING")) {
-        tabs.push("Onboarding");
+    const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
+
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary", "Leave Wallet"];
+    // Salary tab — Finance/HR/Admin, OR the employee viewing their OWN profile (read-only).
+    const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS") || isSelf;
+    if (canViewSalary) {
+        tabs.push("Salary");
     }
-    if (hasPermission("MANAGE_OFFBOARDING")) {
-        tabs.push("Offboarding");
+    // Warnings tab — visible to HR/Admin/Manager (can manage) and the employee themselves
+    const canViewWarnings = canEdit || isSelf;
+    if (canViewWarnings) {
+        tabs.push("Warnings");
     }
 
     return (
@@ -272,9 +525,82 @@ export default function EmployeeDetail() {
             {/* Profile Card */}
             <div className="employee-profile-card">
                 <div className="profile-main-info">
-                    <div className="profile-avatar-large">
-                        {employee.name ? employee.name.charAt(0) : "U"}
+                    <div
+                        className={`profile-avatar-large ${(canEdit || isSelf) ? "profile-avatar-uploadable" : ""}`}
+                        style={{ position: "relative", cursor: employee.profilePhotoUrl ? "zoom-in" : undefined }}
+                        onClick={() => {
+                            if (employee.profilePhotoUrl) setShowPhotoLightbox(true);
+                            else if (canEdit || isSelf) photoInputRef.current?.click();
+                        }}
+                        title={employee.profilePhotoUrl ? "Click to enlarge" : ((canEdit || isSelf) ? "Upload photo" : employee.name)}
+                    >
+                        {employee.profilePhotoUrl ? (
+                            <img src={resolveUploadedAssetUrl(employee.profilePhotoUrl)} alt={employee.name} />
+                        ) : (
+                            employee.name ? employee.name.charAt(0) : "U"
+                        )}
+                        {(canEdit || isSelf) && (
+                            <button
+                                type="button"
+                                className="profile-avatar-camera-btn"
+                                title="Upload photo"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    photoInputRef.current?.click();
+                                }}
+                                style={{
+                                    position: "absolute", bottom: "4px", right: "4px",
+                                    width: "28px", height: "28px", borderRadius: "50%",
+                                    background: "#1f2937", border: "2px solid white",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", padding: 0
+                                }}
+                            >
+                                <SvgIcon name="edit" size={14} className="svg-icon-white" />
+                            </button>
+                        )}
+                        {(canEdit || isSelf) && photoUploading && (
+                            <span className="profile-avatar-upload-hint">Uploading...</span>
+                        )}
                     </div>
+                    {(canEdit || isSelf) && (
+                        <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePhotoUpload}
+                            style={{ display: "none" }}
+                        />
+                    )}
+                    {showPhotoLightbox && employee.profilePhotoUrl && (
+                        <div
+                            className="photo-lightbox-overlay"
+                            onClick={() => setShowPhotoLightbox(false)}
+                            style={{
+                                position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                zIndex: 2000, cursor: "zoom-out"
+                            }}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setShowPhotoLightbox(false)}
+                                style={{
+                                    position: "absolute", top: "20px", right: "24px",
+                                    background: "none", border: "none", cursor: "pointer",
+                                    color: "white", fontSize: "28px", lineHeight: 1
+                                }}
+                            >
+                                ✕
+                            </button>
+                            <img
+                                src={resolveUploadedAssetUrl(employee.profilePhotoUrl)}
+                                alt={employee.name}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "8px", cursor: "default" }}
+                            />
+                        </div>
+                    )}
                     <div className="profile-details">
                         <h2>
                             {employee.name}
@@ -282,6 +608,11 @@ export default function EmployeeDetail() {
                         </h2>
                         <div className="profile-role-id">
                             {employee.role} • {employee.code}
+                            {employee.systemCode && (
+                                <span title="Internal system reference number" style={{ marginLeft: '8px', color: '#9ca3af', fontSize: '12px' }}>
+                                    (Ref: {employee.systemCode})
+                                </span>
+                            )}
                         </div>
                         <div className="profile-contact">
                             <div className="contact-item">
@@ -299,15 +630,52 @@ export default function EmployeeDetail() {
 
                 <div className="profile-actions">
                     {canEdit && (
-                        <button
-                            className="edit-profile-btn"
-                            onClick={() => {
-                                setEditMode("profile");
-                                setShowEditModal(true);
-                            }}
-                        >
-                            Edit Profile
-                        </button>
+                        <>
+                            <button
+                                className="edit-profile-btn"
+                                onClick={() => {
+                                    setEditMode("profile");
+                                    setShowEditModal(true);
+                                }}
+                            >
+                                Edit Profile
+                            </button>
+                            {!isSelf && (
+                                <>
+                                    <button
+                                        className="edit-profile-btn transfer-profile-btn"
+                                        onClick={() => setShowTransferModal(true)}
+                                    >
+                                        Transfer Employee
+                                    </button>
+                                    {canConfirmProbation && (
+                                        <button
+                                            className="edit-profile-btn probation-profile-btn"
+                                            onClick={() => setShowConfirmProbationModal(true)}
+                                        >
+                                            Confirm Probation
+                                        </button>
+                                    )}
+                                    <button
+                                        className="edit-profile-btn reset-pass-btn"
+                                        style={{ marginLeft: '8px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5' }}
+                                        onClick={async () => {
+                                            if (window.confirm("Are you sure you want to reset this employee's password? An email will be sent immediately with a new temporary password.")) {
+                                                try {
+                                                    await resetEmployeePassword(effectiveId);
+                                                    toast.success("Password reset successfully. Email sent to employee.");
+                                                } catch (err) {
+                                                    console.error("Password reset failed", err);
+                                                    toast.error(err.response?.data?.message || "Failed to reset password");
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        Reset Password
+                                    </button>
+                                </>
+                            )}
+                        </>
                     )}
                     {isSelf && (
                         <button
@@ -440,6 +808,10 @@ export default function EmployeeDetail() {
                                 <div>{employee.contractType || "N/A"}</div>
                             </div>
                             <div className="info-group">
+                                <label>Company</label>
+                                <div>{employee.company || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
                                 <label>Department</label>
                                 <div>{employee.department || "N/A"}</div>
                             </div>
@@ -452,20 +824,53 @@ export default function EmployeeDetail() {
                                 <div>{employee.designation || "N/A"}</div>
                             </div>
                             <div className="info-group">
-                                <label>Labor Card No</label>
-                                <div>{employee.laborCardNumber || "N/A"}</div>
+                                <label>Labour Cards</label>
+                                <div>
+                                    {Array.isArray(employee.laborCards) && employee.laborCards.length > 0
+                                        ? employee.laborCards.map((card, index) => (
+                                            <span key={`${card.number}-${index}`} style={{ display: 'block' }}>
+                                                {card.number || "N/A"}{card.expiryDate ? ` - Exp: ${new Date(card.expiryDate).toISOString().split("T")[0]}` : ""}
+                                            </span>
+                                        ))
+                                        : (employee.laborCardNumber || "N/A")}
+                                </div>
                             </div>
                             <div className="info-group">
                                 <label>Agent ID (WPS)</label>
                                 <div>{employee.agentId || "N/A"}</div>
                             </div>
                             <div className="info-group">
-                                <label>Basic Salary</label>
-                                <div>{employee.basicSalary ? `${employee.basicSalary} AED` : "N/A"}</div>
+                                <label>Probation Start Date</label>
+                                <div>{employee.probationStartDate ? new Date(employee.probationStartDate).toISOString().split("T")[0] : "N/A"}</div>
                             </div>
+                            <div className="info-group">
+                                <label>Probation End Date</label>
+                                <div>{employee.probationEndDate ? new Date(employee.probationEndDate).toISOString().split("T")[0] : "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Probation Status</label>
+                                <div>{employee.probationStatus ? employee.probationStatus.replace(/_/g, " ") : "N/A"}</div>
+                            </div>
+                            {/* Salary fields moved to the restricted Salary tab */}
                             <div className="info-group">
                                 <label>Accommodation</label>
                                 <div>{employee.accommodation || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa Company</label>
+                                <div>{employee.visaCompany || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Work Permit Company</label>
+                                <div>{employee.workPermitCompany || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa No</label>
+                                <div>{employee.visaNo || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Visa File No</label>
+                                <div>{employee.visaFileNo || "N/A"}</div>
                             </div>
                             <div className="info-group">
                                 <label>Visa Expiry</label>
@@ -498,6 +903,42 @@ export default function EmployeeDetail() {
                                 </div>
                             </div>
                         </div>
+
+                        <div className="transfer-history-section">
+                            <div className="transfer-history-header">
+                                <h4>Transfer History</h4>
+                                <span>{employee.transferHistory?.length || 0} records</span>
+                            </div>
+
+                            {Array.isArray(employee.transferHistory) && employee.transferHistory.length > 0 ? (
+                                <div className="transfer-history-list">
+                                    {[...employee.transferHistory]
+                                        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                                        .map((entry, index) => (
+                                            <div key={`${entry.effectiveDate}-${index}`} className="transfer-history-card">
+                                                <div className="transfer-history-date">
+                                                    {entry.effectiveDate ? new Date(entry.effectiveDate).toISOString().split("T")[0] : "N/A"}
+                                                </div>
+                                                <div className="transfer-history-body">
+                                                    <div className="transfer-history-row">
+                                                        <strong>Company:</strong> {entry.previousCompany || "N/A"} to {entry.newCompany || "N/A"}
+                                                    </div>
+                                                    <div className="transfer-history-row">
+                                                        <strong>Branch:</strong> {entry.previousBranch || "N/A"} to {entry.newBranch || "N/A"}
+                                                    </div>
+                                                    <div className="transfer-history-row">
+                                                        <strong>Reason:</strong> {entry.reason || "N/A"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                </div>
+                            ) : (
+                                <div className="transfer-history-empty">
+                                    No transfer history recorded for this employee yet.
+                                </div>
+                            )}
+                        </div>
                     </>
                 )}
 
@@ -524,7 +965,7 @@ export default function EmployeeDetail() {
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                                 }}>
                                     <div>
-                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}</div>
+                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}{doc.label ? ` — ${doc.label}` : ''}</div>
                                         <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
                                             {doc.documentNumber || 'No Ref'} • Expires: {doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : 'N/A'}
                                         </div>
@@ -537,14 +978,22 @@ export default function EmployeeDetail() {
                                         }}>
                                             {doc.status}
                                         </span>
-                                        <a
-                                            href={`${import.meta.env.VITE_API_BASE}/${doc.filePath.replace(/\\/g, '/')}`}
-                                            target="_blank" rel="noopener noreferrer"
-                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer' }}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleViewEmployeeDocument(doc)}
+                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
                                         >
                                             View
-                                        </a>
-                                        {/* Optional Delete Button */}
+                                        </button>
+                                        {canManageDocs && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteEmployeeDocument(doc)}
+                                                style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -554,6 +1003,33 @@ export default function EmployeeDetail() {
                                 </div>
                             )}
                         </div>
+
+                        {workflowDocs.length > 0 && (
+                            <div style={{ marginTop: '30px' }}>
+                                <h3 style={{ margin: '0 0 15px', fontSize: '16px', color: '#1f2937' }}>Onboarding / Offboarding Documents</h3>
+                                <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    {workflowDocs.map(doc => (
+                                        <div key={doc._id} style={{
+                                            background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px',
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontWeight: '600', color: '#111827' }}>{doc.name}</div>
+                                                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>{doc.type}</div>
+                                            </div>
+                                            <a
+                                                href={resolveUploadedAssetUrl(doc.documentUrl)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none' }}
+                                            >
+                                                View
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
 
@@ -683,12 +1159,211 @@ export default function EmployeeDetail() {
 
 
 
+                {/* Onboarding and Offboarding tabs temporarily disabled
                 {activeTab === "Onboarding" && (
                     <WorkflowTab employeeId={effectiveId} type="Onboarding" />
                 )}
 
                 {activeTab === "Offboarding" && (
                     <WorkflowTab employeeId={effectiveId} type="Offboarding" />
+                )}
+                */}
+
+                {/* ===== SALARY TAB (Finance / HR / Admin only) ===== */}
+                {activeTab === "Salary" && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Salary & Compensation</h3>
+                            {canEdit && (
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => setShowAddAllowanceModal(true)}
+                                        style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        + Add Allowance
+                                    </button>
+                                    <button
+                                        onClick={() => { setEditMode("employment"); setShowEditModal(true); }}
+                                        style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        <EditIcon /> Edit
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                            {/* Left column — salary breakdown */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                    Salary Breakdown
+                                </div>
+
+                                {[
+                                    { label: 'Fixed Probation Increment', value: employee.fixedProbationIncrementAmount, fallback: '0 AED' },
+                                    { label: 'Basic Salary', value: employee.basicSalary, fallback: 'N/A' },
+                                    { label: 'Accommodation Allowance', value: employee.accommodationAllowance, fallback: '0 AED' },
+                                    { label: 'Vehicle Allowance', value: employee.vehicleAllowance, fallback: '0 AED' },
+                                ].map(({ label, value, fallback }) => (
+                                    <div key={label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{label}</span>
+                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                            {value ? `${Number(value).toLocaleString()} AED` : fallback}
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {(employee.allowances || []).map((item) => (
+                                    <div key={item._id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{item.typeName}</span>
+                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                            {Number(item.amount).toLocaleString()} AED
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {/* Total Salary — highlighted */}
+                                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '14px', fontWeight: '700', color: '#1d4ed8' }}>Total Salary</span>
+                                    <span style={{ fontSize: '22px', fontWeight: '800', color: '#1e40af' }}>
+                                        {employee.totalSalary ? `${Number(employee.totalSalary).toLocaleString()} AED` : 'N/A'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Right column — gratuity */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                    UAE Gratuity (End-of-Service Benefit)
+                                </div>
+
+                                {gratuityLoading ? (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '10px' }}>
+                                        Calculating gratuity...
+                                    </div>
+                                ) : gratuity ? (
+                                    <>
+                                        {/* Service duration */}
+                                        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px' }}>
+                                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '600' }}>SERVICE DURATION</div>
+                                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#111827' }}>{gratuity.yearsOfService}</div>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Years</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#111827' }}>{gratuity.monthsOfService}</div>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Months</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#111827' }}>{gratuity.daysOfService}</div>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Days</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Formula breakdown */}
+                                        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px' }}>
+                                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '10px', fontWeight: '600' }}>CALCULATION BASIS</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                    <span style={{ color: '#6b7280' }}>Daily Basic Wage</span>
+                                                    <span style={{ fontWeight: '600', color: '#111827' }}>{gratuity.dailyBasicWage} AED</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                    <span style={{ color: '#6b7280' }}>Formula</span>
+                                                    <span style={{ fontWeight: '600', color: '#111827', fontSize: '12px' }}>
+                                                        {gratuity.yearsOfService <= 5
+                                                            ? `Daily × 21 × ${gratuity.yearsOfService}y`
+                                                            : `(Daily × 21 × 5) + (Daily × 30 × ${(gratuity.yearsOfService - 5).toFixed(2)}y)`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Gratuity amount — highlighted */}
+                                        <div style={{ background: gratuity.gratuityAmount > 0 ? '#f0fdf4' : '#fef9c3', border: `1px solid ${gratuity.gratuityAmount > 0 ? '#bbf7d0' : '#fde68a'}`, borderRadius: '10px', padding: '16px 20px' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '700', color: gratuity.gratuityAmount > 0 ? '#166534' : '#92400e', marginBottom: '6px' }}>
+                                                ESTIMATED GRATUITY
+                                            </div>
+                                            <div style={{ fontSize: '28px', fontWeight: '800', color: gratuity.gratuityAmount > 0 ? '#15803d' : '#92400e' }}>
+                                                {gratuity.gratuityAmount.toLocaleString()} AED
+                                            </div>
+                                            {gratuity.gratuityNote && (
+                                                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>
+                                                    {gratuity.gratuityNote}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div style={{ fontSize: '11px', color: '#9ca3af', padding: '0 4px' }}>
+                                            Based on UAE Federal Decree-Law No. 33 of 2021. Calculated on basic salary only, excluding allowances.
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '10px' }}>
+                                        No gratuity data available.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Salary history / increments — shows probation increments, appraisals, etc. with effective dates */}
+                        <div style={{ marginTop: '28px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+                                Salary History & Increments
+                            </div>
+                            {(employee.salaryHistory && employee.salaryHistory.length > 0) ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {[...employee.salaryHistory]
+                                        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                                        .map((entry, index) => {
+                                            const typeLabels = {
+                                                JOINING: 'Joining Salary',
+                                                APPRAISAL: 'Appraisal',
+                                                PROBATION_INCREMENT: 'Probation Increment',
+                                                MANUAL_ADJUSTMENT: 'Manual Adjustment'
+                                            };
+                                            return (
+                                                <div key={`${entry.effectiveDate}-${index}`} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>
+                                                            {typeLabels[entry.salaryType] || entry.salaryType || 'Adjustment'}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                                                            Effective: {entry.effectiveDate ? new Date(entry.effectiveDate).toISOString().split('T')[0] : 'N/A'}
+                                                            {entry.notes ? ` • ${entry.notes}` : ''}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        {Number(entry.incrementAmount) > 0 && (
+                                                            <div style={{ fontSize: '13px', fontWeight: '700', color: '#15803d' }}>
+                                                                +{Number(entry.incrementAmount).toLocaleString()} AED
+                                                            </div>
+                                                        )}
+                                                        <div style={{ fontSize: '13px', color: '#374151' }}>
+                                                            Basic: {Number(entry.basicSalary || 0).toLocaleString()} AED
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            ) : (
+                                <div style={{ padding: '18px', textAlign: 'center', color: '#6b7280', background: '#f9fafb', borderRadius: '10px', fontSize: '13px' }}>
+                                    No salary history recorded yet.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {/* ===== WARNINGS TAB ===== */}
+                {activeTab === "Warnings" && (
+                    <WarningsTab
+                        employeeId={effectiveId}
+                        isSelf={isSelf}
+                    />
                 )}
 
                 {activeTab === "Loans" && (
@@ -713,11 +1388,7 @@ export default function EmployeeDetail() {
                                             <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
                                                 Approved: {new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}
                                             </div>
-                                            {(loan.details.interestRate > 0) && (
-                                                <div style={{ fontSize: '12px', color: '#d97706', marginTop: '2px' }}>
-                                                    Interest Rate: {loan.details.interestRate}%
-                                                </div>
-                                            )}
+                                        
                                         </div>
                                         <div style={{ textAlign: 'right' }}>
                                             <div style={{ fontWeight: '600', color: '#111827' }}>
@@ -730,6 +1401,56 @@ export default function EmployeeDetail() {
                                             )}
                                         </div>
                                     </div>
+
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                                        {loan.details?.deductionStartMonth && loan.details?.deductionStartYear && (
+                                            <span style={{
+                                                fontSize: '12px',
+                                                color: '#1d4ed8',
+                                                background: '#dbeafe',
+                                                borderRadius: '999px',
+                                                padding: '6px 10px',
+                                                fontWeight: '500'
+                                            }}>
+                                                Starts: {String(loan.details.deductionStartMonth).padStart(2, '0')}/{loan.details.deductionStartYear}
+                                            </span>
+                                        )}
+                                        {Array.isArray(loan.details?.repaymentScheduleOverrides) && loan.details.repaymentScheduleOverrides
+                                            .filter((item) => item?.action === 'SKIP')
+                                            .map((item, index) => (
+                                                <span key={`${loan._id}-skip-${index}`} style={{
+                                                    fontSize: '12px',
+                                                    color: '#92400e',
+                                                    background: '#fef3c7',
+                                                    borderRadius: '999px',
+                                                    padding: '6px 10px',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    Skip: {String(item.month).padStart(2, '0')}/{item.year}
+                                                </span>
+                                            ))}
+                                    </div>
+
+                                    {canManageRepayments && !loan.isFullyPaid && (
+                                        <div style={{ marginBottom: '14px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenSkipLoanModal(loan)}
+                                                style={{
+                                                    border: '1px solid #f59e0b',
+                                                    background: '#fff7ed',
+                                                    color: '#b45309',
+                                                    borderRadius: '8px',
+                                                    padding: '8px 12px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Skip One Month
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Progress Bar */}
                                     {(() => {
@@ -775,7 +1496,79 @@ export default function EmployeeDetail() {
                     </>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && (
+                {activeTab === "Leave Summary" && (
+                    <div style={{ padding: '8px 0' }}>
+                        {/* Year filter */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937', fontWeight: '700' }}>📅 Leave Summary</h3>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <select
+                                    value={leaveSummaryMonth}
+                                    onChange={(e) => setLeaveSummaryMonth(Number(e.target.value))}
+                                    style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', background: 'white', cursor: 'pointer' }}
+                                >
+                                    <option value={0}>Whole Year</option>
+                                    {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
+                                        <option key={m} value={i + 1}>{m}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={leaveSummaryYear}
+                                    onChange={(e) => setLeaveSummaryYear(Number(e.target.value))}
+                                    style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', background: 'white', cursor: 'pointer' }}
+                                >
+                                    {[2026, 2025, 2024, 2023].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '18px' }}>
+                            {[
+                                ["Sick Leave", leaveSummaryTotals.sick, "#e0f2fe", "#0369a1"],
+                                ["Casual Leave", leaveSummaryTotals.casual, "#dcfce7", "#166534"],
+                                ["Annual Leave", leaveSummaryTotals.annual, "#fef3c7", "#92400e"],
+                                ["Unpaid Leave", leaveSummaryTotals.unpaid, "#fee2e2", "#991b1b"],
+                                ["Approved Days", leaveSummaryTotals.approvedDays, "#ede9fe", "#5b21b6"],
+                                ["Pending Requests", leaveSummaryTotals.pendingRequests, "#f1f5f9", "#334155"]
+                            ].map(([label, value, bg, color]) => (
+                                <div key={label} style={{ background: bg, border: '1px solid rgba(15,23,42,0.06)', borderRadius: '14px', padding: '14px 16px' }}>
+                                    <div style={{ fontSize: '12px', color, fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                                    <div style={{ fontSize: '24px', color, fontWeight: '800', marginTop: '6px' }}>{Number(value || 0)}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {leaveSummaryLoading ? (
+                            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>Loading...</div>
+                        ) : leaveSummary.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px', background: '#f9fafb', borderRadius: '12px' }}>
+                                No approved leave records found for {leaveSummaryYear}.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+                                {leaveSummary.map((item, idx) => {
+                                    const colors = ['#eff6ff','#f0fdf4','#fefce8','#fdf4ff','#fff7ed','#f0f9ff'];
+                                    const textColors = ['#1d4ed8','#15803d','#a16207','#7e22ce','#c2410c','#0c4a6e'];
+                                    const bg = colors[idx % colors.length];
+                                    const tc = textColors[idx % textColors.length];
+                                    return (
+                                        <div key={item.type} style={{ background: bg, borderRadius: '12px', padding: '20px', border: `1px solid ${bg}` }}>
+                                            <div style={{ fontSize: '13px', color: tc, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>{item.type}</div>
+                                            <div style={{ fontSize: '32px', fontWeight: '800', color: tc }}>{item.totalDays}</div>
+                                            <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>days • {item.count} request{item.count !== 1 ? 's' : ''}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === "Leave Wallet" && (
+                    <LeaveWalletTab employeeId={effectiveId} />
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && activeTab !== "Leave Wallet" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
@@ -799,6 +1592,45 @@ export default function EmployeeDetail() {
                     employeeId={effectiveId}
                     onClose={() => setShowUploadModal(false)}
                     onUpload={handleUploadDocument}
+                />
+            )}
+
+            {showTransferModal && (
+                <TransferEmployeeModal
+                    employee={employee}
+                    onClose={() => setShowTransferModal(false)}
+                    onSubmit={handleTransferEmployee}
+                />
+            )}
+
+            {showConfirmProbationModal && (
+                <ConfirmProbationModal
+                    employee={employee}
+                    onClose={() => setShowConfirmProbationModal(false)}
+                    onConfirm={handleConfirmProbation}
+                    submitting={confirmingProbation}
+                />
+            )}
+
+            {showAddAllowanceModal && (
+                <AddAllowanceModal
+                    employee={employee}
+                    onClose={() => setShowAddAllowanceModal(false)}
+                    onConfirm={handleAddAllowance}
+                    submitting={allowanceSubmitting}
+                />
+            )}
+
+            {showSkipLoanModal && (
+                <SkipLoanMonthModal
+                    show={showSkipLoanModal}
+                    request={selectedLoanForSkip}
+                    onClose={() => {
+                        setShowSkipLoanModal(false);
+                        setSelectedLoanForSkip(null);
+                    }}
+                    onSubmit={handleSkipLoanMonth}
+                    submitting={savingLoanSkip}
                 />
             )}
 

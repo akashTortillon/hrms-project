@@ -32,7 +32,12 @@ const AssetsTable = ({
             <SvgIcon name="cube" size={18} />
           </div>
           <div>
-            <div className="asset-name">{row.name}</div>
+            <div className="asset-name" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {row.name}
+              {row.assetClass === "Virtual" && (
+                <span style={{ fontSize: "10px", background: "#f3e8ff", color: "#7e22ce", padding: "2px 6px", borderRadius: "4px", fontWeight: "600" }}>VIRTUAL</span>
+              )}
+            </div>
             <div className="asset-sub">
               {row.code} · {row.category}
             </div>

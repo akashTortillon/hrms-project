@@ -43,7 +43,8 @@ const WorkflowTab = ({ employeeId, type }) => {
                 toast.success("Document uploaded successfully");
             }
         } catch (error) {
-            toast.error("Upload failed");
+            const message = error?.response?.data?.message || error?.message || "Upload failed";
+            toast.error(message);
         } finally {
             setUploadingId(null);
         }
@@ -59,7 +60,8 @@ const WorkflowTab = ({ employeeId, type }) => {
                 toast.success("Status updated");
             }
         } catch (error) {
-            toast.error("Update failed");
+            const message = error?.response?.data?.message || error?.message || "Update failed";
+            toast.error(message);
         }
     };
 
@@ -134,7 +136,7 @@ const WorkflowTab = ({ employeeId, type }) => {
                             {/* File Link if Uploaded */}
                             {item.documentUrl && (
                                 <a
-                                    href={`${import.meta.env.VITE_API_BASE || "http://localhost:5000"}${item.documentUrl}`}
+                                    href={`${(import.meta.env.VITE_API_BASE || "http://localhost:5000").replace(/\/api\/?$/, "")}${item.documentUrl}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="view-doc-link"

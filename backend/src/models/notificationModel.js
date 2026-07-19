@@ -17,7 +17,7 @@ const notificationSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["REQUEST", "EXPIRY", "INFO", "SYSTEM"],
+            enum: ["REQUEST", "EXPIRY", "INFO", "SYSTEM", "WARNING"],
             default: "INFO",
         },
         isRead: {

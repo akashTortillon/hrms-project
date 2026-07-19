@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const BASE_URL = "/api/employee-docs";
+const BASE_URL = "/employee-docs";
 
 // Get logged-in user's documents
 export const getMyDocuments = async (employeeId) => {
@@ -17,6 +17,22 @@ export const uploadEmployeeDocument = async (formData) => {
         headers: {
             "Content-Type": "multipart/form-data",
         },
+    });
+    return res.data;
+};
+
+export const uploadMyDocument = async (formData) => {
+    const res = await api.post(`${BASE_URL}/self`, formData, {
+        headers: {
+            "Content-Type": "multipart/form-data",
+        },
+    });
+    return res.data;
+};
+
+export const downloadEmployeeDocument = async (documentId) => {
+    const res = await api.get(`${BASE_URL}/${documentId}/download`, {
+        responseType: "blob"
     });
     return res.data;
 };

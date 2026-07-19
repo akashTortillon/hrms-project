@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const EMPLOYEE_API = "/api/employees";
+const EMPLOYEE_API = "/employees";
 
 // ✅ Fetch employees
 export const getEmployees = async (params = {}) => {
@@ -25,9 +25,37 @@ export const updateEmployee = async (id, data) => {
   return res.data.employee;
 };
 
+export const uploadEmployeePhoto = async (id, formData) => {
+  const res = await api.post(`${EMPLOYEE_API}/${id}/photo`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data.employee;
+};
+
+export const transferEmployee = async (id, data) => {
+  const res = await api.post(`${EMPLOYEE_API}/${id}/transfer`, data);
+  return res.data;
+};
+
+export const confirmProbation = async (id, data = {}) => {
+  const res = await api.post(`${EMPLOYEE_API}/${id}/confirm-probation`, data);
+  return res.data;
+};
+
+export const getProbationReminders = async () => {
+  const res = await api.get(`${EMPLOYEE_API}/probation/reminders`);
+  return res.data;
+};
+
 // DELETE employee
 export const deleteEmployee = async (id) => {
   const res = await api.delete(EMPLOYEE_API + `/${id}`);
+  return res.data;
+};
+
+// RESET PASSWORD
+export const resetEmployeePassword = async (id) => {
+  const res = await api.put(`${EMPLOYEE_API}/${id}/reset-password`);
   return res.data;
 };
 
@@ -48,7 +76,7 @@ export const importEmployees = async (formData) => {
   return res.data;
 };
 
-const DOC_API = "/api/employee-docs";
+const DOC_API = "/employee-docs";
 
 export const getEmployeeDocuments = async (employeeId) => {
   const res = await api.get(`${DOC_API}/${employeeId}`);
@@ -64,5 +92,11 @@ export const uploadEmployeeDocument = async (formData) => {
 
 export const deleteEmployeeDocument = async (docId) => {
   const res = await api.delete(`${DOC_API}/${docId}`);
+  return res.data;
+};
+
+// GET gratuity calculation for an employee
+export const getEmployeeGratuity = async (id) => {
+  const res = await api.get(`${EMPLOYEE_API}/${id}/gratuity`);
   return res.data;
 };

@@ -3,6 +3,7 @@ import express from "express";
 import {
   getDailyAttendance,
   markAttendance,
+  markAttendanceBulk,
   updateAttendance,
   getEmployeeAttendanceStats,
   syncBiometrics,
@@ -15,12 +16,14 @@ import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 const router = express.Router();
 
 router.post("/sync", protect, hasPermission("MANAGE_ATTENDANCE"), syncBiometrics);
+router.post("/sync-biometrics", protect, hasPermission("MANAGE_ATTENDANCE"), syncBiometrics);
 router.get("/monthly", protect, getMonthlyAttendance); // View own or all? Assuming all/manager view for now or handled in controller.
 router.get("/export", protect, hasPermission("MANAGE_ATTENDANCE"), exportAttendance);
 router.get("/", protect, getDailyAttendance); // Viewing daily attendance (role-filtered in controller)
 router.get("/stats/:employeeId", protect, getEmployeeAttendanceStats); // View specific stats
 router.get("/history/:employeeId", protect, getEmployeeAttendanceHistory);
-router.post("/mark", protect, hasPermission("MANAGE_ATTENDANCE"), markAttendance); // Manual mark by Admin/HR
+router.post("/mark", protect, hasPermission("MANAGE_ATTENDANCE"), markAttendance);
+router.post("/mark-bulk", protect, hasPermission("MANAGE_ATTENDANCE"), markAttendanceBulk);
 router.put("/:id", protect, hasPermission("MANAGE_ATTENDANCE"), updateAttendance);
 
 export default router;

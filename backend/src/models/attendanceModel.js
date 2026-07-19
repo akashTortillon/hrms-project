@@ -58,6 +58,11 @@ const attendanceSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    leavePayStatus: {
+      type: String,
+      enum: ["FULLY_PAID", "HALF_PAID", "UNPAID"],
+      default: "FULLY_PAID"
+    },
 
     // ✅ Manual Edit Tracking
     isManuallyEdited: {

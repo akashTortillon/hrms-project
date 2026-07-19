@@ -43,7 +43,9 @@ import {
   returnAssetToStore,
 } from "../../services/assignmentService.js";
 
-import { assetTypeService, assetStatusService } from "../../services/masterService";
+import {
+  assetTypeService, assetStatusService, getBranches, getCompanies
+} from "../../services/masterService";
 import { useRole } from "../../contexts/RoleContext.jsx";
 
 function Assets() {
@@ -76,8 +78,13 @@ function Assets() {
 
   // Filters
   const [search, setSearch] = useState("");
+  const [assetClass, setAssetClass] = useState("ALL");
   const [type, setType] = useState("ALL");
   const [status, setStatus] = useState("ALL");
+  const [branch, setBranch] = useState("ALL");
+  const [branches, setBranches] = useState([]);
+  const [company, setCompany] = useState("ALL");
+  const [companies, setCompanies] = useState([]);
 
   // Fetch assets
   const fetchAssets = async () => {
@@ -86,8 +93,11 @@ function Assets() {
 
       const params = {
         search: search || undefined,
+        assetClass: assetClass !== "ALL" ? assetClass : undefined,
         type: type !== "ALL" ? type : undefined,
         status: status !== "ALL" ? status : undefined,
+        branch: branch !== "ALL" ? branch : undefined,
+        company: company !== "ALL" ? company : undefined,
       };
 
       const response = await getAssets(params);
@@ -128,24 +138,32 @@ function Assets() {
   // Load masters
   useEffect(() => {
     const loadMasters = async () => {
-      try {
-        const [typesRes, statusRes] = await Promise.all([
-          assetTypeService.getAll(),
-          assetStatusService.getAll(),
-        ]);
+      // Fetch Asset Types
+      assetTypeService.getAll()
+        .then(res => setAssetTypes(res || []))
+        .catch(err => console.error("Failed to load asset types", err));
 
-        setAssetTypes(typesRes || []);
-        setAssetStatuses(statusRes || []);
-      } catch (err) {
-        console.error("Failed to load asset masters", err);
-      }
+      // Fetch Asset Statuses
+      assetStatusService.getAll()
+        .then(res => setAssetStatuses(res || []))
+        .catch(err => console.error("Failed to load asset statuses", err));
+
+      // Fetch Branches
+      getBranches()
+        .then(res => setBranches(res || []))
+        .catch(err => console.error("Failed to load branches", err));
+
+      // Fetch Companies
+      getCompanies()
+        .then(res => setCompanies(res || []))
+        .catch(err => console.error("Failed to load companies", err));
     };
     loadMasters();
   }, []);
-
+  
   useEffect(() => {
     fetchAssets();
-  }, [search, type, status]);
+  }, [search, assetClass, type, status, branch, company]);
 
   // Filtered assets
   // const filteredAssets = useMemo(() => {
@@ -425,10 +443,18 @@ function Assets() {
       <AssetsFilters
         search={search}
         setSearch={setSearch}
+        assetClass={assetClass}
+        setAssetClass={setAssetClass}
         type={type}
         setType={setType}
         status={status}
         setStatus={setStatus}
+        branch={branch}
+        setBranch={setBranch}
+        branches={branches}
+        company={company}
+        setCompany={setCompany}
+        companies={companies}
         assetTypes={assetTypes}
         assetStatuses={assetStatuses}
         total={assets.length}
@@ -466,12 +492,19 @@ function Assets() {
 
       {/* Modals */}
       {showAddModal && (
-        <AddAssetModal onClose={() => setShowAddModal(false)} onAddAsset={handleAddAsset} />
+        <AddAssetModal 
+            onClose={() => setShowAddModal(false)} 
+            onAddAsset={handleAddAsset} 
+            branches={branches}
+            companies={companies}
+        />
       )}
 
       {showEditModal && selectedAsset && (
         <AddAssetModal
           asset={selectedAsset}
+          branches={branches}
+          companies={companies}
           onClose={() => {
             setShowEditModal(false);
             setSelectedAsset(null);

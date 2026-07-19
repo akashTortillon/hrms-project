@@ -13,15 +13,17 @@ export default function AddAssetModal({
   onAddAsset,
   onUpdateAsset,
   asset = null,
+  branches = [],
+  companies = [],
 }) {
   const isEditMode = !!asset;
 
   const [employees, setEmployees] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
   const [categories, setCategories] = useState([]);
-
   const [form, setForm] = useState({
     name: "",
+    assetClass: "Physical",
     serialNumber: "",
     type: "",
     category: "",
@@ -34,6 +36,8 @@ export default function AddAssetModal({
     warrantyPeriod: "",
     serviceDueDate: "",
     status: "Available",
+    branch: "",
+    company: "",
   });
 
   /* -------------------- LOAD MASTERS & EMPLOYEES -------------------- */
@@ -52,17 +56,15 @@ export default function AddAssetModal({
   };
 
   const fetchMasters = async () => {
-    try {
-      const [typesRes, categoriesRes] = await Promise.all([
-        assetTypeService.getAll(),
-        assetCategoryService.getAll(),
-      ]);
+    // Fetch Asset Types
+    assetTypeService.getAll()
+      .then(res => setAssetTypes(Array.isArray(res) ? res : []))
+      .catch(err => console.error("Failed to load asset types", err));
 
-      setAssetTypes(Array.isArray(typesRes) ? typesRes : []);
-      setCategories(Array.isArray(categoriesRes) ? categoriesRes : []);
-    } catch (error) {
-      console.error("Failed to fetch asset masters", error);
-    }
+    // Fetch Asset Categories
+    assetCategoryService.getAll()
+      .then(res => setCategories(Array.isArray(res) ? res : []))
+      .catch(err => console.error("Failed to load asset categories", err));
   };
 
   /* -------------------- PREFILL FORM (EDIT MODE) -------------------- */
@@ -71,6 +73,7 @@ export default function AddAssetModal({
 
     setForm({
       name: asset.name || "",
+      assetClass: asset.assetClass || "Physical",
       serialNumber: asset.serialNumber || "",
       type: asset.type?._id || asset.type || "",
       category: asset.category?._id || asset.category || "",
@@ -87,6 +90,8 @@ export default function AddAssetModal({
         ? new Date(asset.serviceDueDate).toISOString().split("T")[0]
         : "",
       status: asset.status || "Available",
+      branch: asset.branch || "",
+      company: asset.company || "",
     });
   }, [asset]);
 
@@ -100,7 +105,7 @@ export default function AddAssetModal({
   };
 
   const handleSubmit = () => {
-    const { name, type, category, location, purchaseCost, purchaseDate } = form;
+    const { name, assetClass, type, category, location, purchaseCost, purchaseDate } = form;
 
     if (!name || !type || !category || !location || !purchaseCost || !purchaseDate) {
       alert("Please fill all required fields");
@@ -119,6 +124,7 @@ export default function AddAssetModal({
 
     const submitData = {
       name: form.name,
+      assetClass: form.assetClass,
       serialNumber: form.serialNumber || null,
       type: form.type,           // Master ID
       category: form.category,   // Master ID
@@ -130,6 +136,8 @@ export default function AddAssetModal({
       warrantyPeriod: form.warrantyPeriod ? Number(form.warrantyPeriod) : null,
       serviceDueDate: form.serviceDueDate || null,
       status: form.status,
+      branch: form.branch || null,
+      company: form.company || null,
     };
 
     if (isEditMode) {
@@ -153,6 +161,27 @@ export default function AddAssetModal({
 
             <input name="name" placeholder="Asset Name *" value={form.name} onChange={handleChange} />
             <input name="serialNumber" placeholder="Serial Number" value={form.serialNumber} onChange={handleChange} />
+
+            {/* Asset Class */}
+            <div style={{ gridColumn: 'span 1' }}>
+              <select
+                name="assetClass"
+                value={form.assetClass}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  fontSize: '14px',
+                  height: '42px'
+                }}
+              >
+                <option value="Physical">Physical Asset</option>
+                <option value="Virtual">Virtual Asset (Email, Software, etc.)</option>
+              </select>
+            </div>
 
             {/* Asset Type (MASTER) */}
             {/* Asset Type (MASTER) */}
@@ -228,6 +257,46 @@ export default function AddAssetModal({
                 ))}
               </select>
             </div>
+
+            <select
+              name="branch"
+              value={form.branch}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: 'white',
+                fontSize: '14px',
+                height: '42px'
+              }}
+            >
+              <option value="">Select Branch (Optional)</option>
+              {branches.map(b => (
+                <option key={b._id || b.name} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+
+            <select
+              name="company"
+              value={form.company}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                backgroundColor: 'white',
+                fontSize: '14px',
+                height: '42px'
+              }}
+            >
+              <option value="">Select Company (Optional)</option>
+              {companies.map(c => (
+                <option key={c._id || c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
 
             <input name="department" placeholder="Department" value={form.department} onChange={handleChange} />
             <input name="purchaseCost" type="number" placeholder="Purchase Cost (AED) *" value={form.purchaseCost} onChange={handleChange} />

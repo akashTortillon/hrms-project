@@ -1,6 +1,6 @@
 import api from "../api/apiClient";
 
-const TRAINING_API = "/api/trainings";
+const TRAINING_API = "/trainings";
 
 export const getEmployeeTrainings = async (employeeId) => {
     const res = await api.get(`${TRAINING_API}/${employeeId}`);

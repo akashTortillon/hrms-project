@@ -13,6 +13,22 @@ import Card from "../../components/reusable/Card";
    ✅ STATUS TEXT HELPER (DYNAMIC)
 ---------------------------------- */
 const getStatusText = (req) => {
+  if (req.status === "MANAGER_APPROVED") {
+    const managerName = req.managerApproval?.actedBy?.name || "Manager";
+    const managerDate = req.managerApproval?.actedAt
+      ? new Date(req.managerApproval.actedAt).toLocaleDateString()
+      : "";
+    return `Approved by ${managerName} on ${managerDate} and waiting for HR review`;
+  }
+
+  if (req.status === "FINANCE_APPROVED") {
+    const financeName = req.financeApproval?.actedBy?.name || "Finance Manager";
+    const financeDate = req.financeApproval?.actedAt
+      ? new Date(req.financeApproval.actedAt).toLocaleDateString()
+      : "";
+    return `Approved by ${financeName} on ${financeDate} and waiting for HR review`;
+  }
+
   // Debug log
   console.log("getStatusText called for:", req.requestId, {
     status: req.status,
@@ -140,6 +156,16 @@ export default function EmployeeRequests() {
         class: "status-pending",
         icon: <SvgIcon name="circle-tick" size={15} />
       },
+      MANAGER_APPROVED: {
+        label: "Manager Approved",
+        class: "status-approved",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
+      FINANCE_APPROVED: {
+        label: "Finance Approved",
+        class: "status-approved",
+        icon: <SvgIcon name="circle-tick" size={15} />
+      },
       APPROVED: {
         label: "Approved",
         class: "status-approved",
@@ -198,7 +224,20 @@ export default function EmployeeRequests() {
       return `${request.details.fromDate} to ${request.details.toDate}${days}`;
     }
     if (request.requestType === "SALARY") {
-      return `Amount: AED ${request.details.amount}`;
+      const requestedAmount = request.details?.requestedAmount ?? request.details?.amount;
+      const financeApprovedAmount = request.details?.financeApprovedAmount;
+      const finalApprovedAmount = request.status === "APPROVED" ? request.details?.amount : null;
+      const parts = [`Requested: AED ${requestedAmount}`];
+
+      if (financeApprovedAmount !== undefined && financeApprovedAmount !== null) {
+        parts.push(`Finance approved: AED ${financeApprovedAmount}`);
+      }
+
+      if (finalApprovedAmount !== null) {
+        parts.push(`Final approved: AED ${finalApprovedAmount}`);
+      }
+
+      return parts.join(" • ");
     }
     if (request.requestType === "DOCUMENT") {
       return `Document: ${request.details.documentType}`;
