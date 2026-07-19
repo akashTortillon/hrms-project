@@ -12,13 +12,18 @@ const notificationSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: true }
 });
 
+const allowanceTypeSchema = new mongoose.Schema({
+    name: { type: String, required: true }
+});
+
 const systemSettingsSchema = new mongoose.Schema({
     currency: { type: String, default: 'AED' },
     dateFormat: { type: String, default: 'DD/MM/YYYY' },
     timezone: { type: String, default: 'Asia/Dubai' },
     fiscalYearStart: { type: String, default: 'January' },
     holidays: [holidaySchema],
-    notifications: [notificationSchema]
+    notifications: [notificationSchema],
+    allowanceTypes: [allowanceTypeSchema]
 }, { timestamps: true });
 
 export default mongoose.model('SystemSettings', systemSettingsSchema);

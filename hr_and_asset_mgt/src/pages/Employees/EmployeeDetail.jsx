@@ -48,6 +48,8 @@ import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
 import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
+import AddAllowanceModal from "./AddAllowanceModal.jsx";
+import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
 import { useRole } from "../../contexts/RoleContext";
 import { getEmployeeAttendanceStats } from "../../services/attendanceService";
@@ -58,6 +60,7 @@ import AssignAssetToEmployeeModal from "./AssignAssetToEmployeeModal";
 import SvgIcon from "../../components/svgIcon/svgView";
 import WorkflowTab from "../../components/employee/WorkflowTab";
 import WarningsTab from "../../components/employee/WarningsTab.jsx";
+import LeaveWalletTab from "../../components/employee/LeaveWalletTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
 
 const resolveUploadedAssetUrl = (url) => {
@@ -99,6 +102,8 @@ export default function EmployeeDetail() {
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [showConfirmProbationModal, setShowConfirmProbationModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Change Password Modal State
+    const [showAddAllowanceModal, setShowAddAllowanceModal] = useState(false);
+    const [allowanceSubmitting, setAllowanceSubmitting] = useState(false);
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
     const [photoUploading, setPhotoUploading] = useState(false);
@@ -170,6 +175,27 @@ export default function EmployeeDetail() {
         fetchEmployee();
         loadDepartments();
     }, [effectiveId]);
+
+    const handleAddAllowance = async ({ typeName, amount }) => {
+        setAllowanceSubmitting(true);
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            await appraisalService.applyAdjustment({
+                employee: effectiveId,
+                type: "ALLOWANCE",
+                allowanceTypeName: typeName,
+                amount,
+                effectiveDate: today
+            });
+            await fetchEmployee();
+            setShowAddAllowanceModal(false);
+            toast.success("Allowance applied successfully");
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to apply allowance");
+        } finally {
+            setAllowanceSubmitting(false);
+        }
+    };
 
     useEffect(() => {
         if (!showPhotoLightbox) return;
@@ -467,7 +493,7 @@ export default function EmployeeDetail() {
 
     const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary"];
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary", "Leave Wallet"];
     // Salary tab — Finance/HR/Admin, OR the employee viewing their OWN profile (read-only).
     const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS") || isSelf;
     if (canViewSalary) {
@@ -1149,12 +1175,20 @@ export default function EmployeeDetail() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Salary & Compensation</h3>
                             {canEdit && (
-                                <button
-                                    onClick={() => { setEditMode("employment"); setShowEditModal(true); }}
-                                    style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                >
-                                    <EditIcon /> Edit
-                                </button>
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => setShowAddAllowanceModal(true)}
+                                        style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        + Add Allowance
+                                    </button>
+                                    <button
+                                        onClick={() => { setEditMode("employment"); setShowEditModal(true); }}
+                                        style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        <EditIcon /> Edit
+                                    </button>
+                                </div>
                             )}
                         </div>
 
@@ -1175,6 +1209,15 @@ export default function EmployeeDetail() {
                                         <span style={{ fontSize: '13px', color: '#6b7280' }}>{label}</span>
                                         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
                                             {value ? `${Number(value).toLocaleString()} AED` : fallback}
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {(employee.allowances || []).map((item) => (
+                                    <div key={item._id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{item.typeName}</span>
+                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                            {Number(item.amount).toLocaleString()} AED
                                         </span>
                                     </div>
                                 ))}
@@ -1521,7 +1564,11 @@ export default function EmployeeDetail() {
                     </div>
                 )}
 
-                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && (
+                {activeTab === "Leave Wallet" && (
+                    <LeaveWalletTab employeeId={effectiveId} />
+                )}
+
+                {activeTab !== "Personal Info" && activeTab !== "Employment" && activeTab !== "Documents" && activeTab !== "Attendance" && activeTab !== "Assets" && activeTab !== "Onboarding" && activeTab !== "Offboarding" && activeTab !== "Loans" && activeTab !== "Leave Summary" && activeTab !== "Leave Wallet" && (
                     <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
                         Content for {activeTab} will be available soon.
                     </div>
@@ -1562,6 +1609,15 @@ export default function EmployeeDetail() {
                     onClose={() => setShowConfirmProbationModal(false)}
                     onConfirm={handleConfirmProbation}
                     submitting={confirmingProbation}
+                />
+            )}
+
+            {showAddAllowanceModal && (
+                <AddAllowanceModal
+                    employee={employee}
+                    onClose={() => setShowAddAllowanceModal(false)}
+                    onConfirm={handleAddAllowance}
+                    submitting={allowanceSubmitting}
                 />
             )}
 

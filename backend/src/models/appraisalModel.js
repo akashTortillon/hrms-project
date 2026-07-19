@@ -17,6 +17,14 @@ const appraisalSchema = new mongoose.Schema({
   recommendedSalary: { type: Number, default: 0 },
   effectiveDate: { type: Date, required: true },
   comments: { type: String, default: "" },
+  // SALARY = base salary increment (existing behavior). ALLOWANCE = add/increase an
+  // entry in Employee.allowances[] instead of touching basicSalary/visaBase/etc.
+  type: {
+    type: String,
+    enum: ["SALARY", "ALLOWANCE"],
+    default: "SALARY"
+  },
+  allowanceTypeName: { type: String, default: "" },
   status: {
     type: String,
     enum: ["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"],

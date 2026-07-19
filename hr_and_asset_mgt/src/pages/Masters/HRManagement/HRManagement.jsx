@@ -36,7 +36,9 @@ export default function HRManagement() {
         workflowState,
         setWorkflowState,
         tempStepName,
-        setTempStepName
+        setTempStepName,
+        leaveTypeState,
+        setLeaveTypeState
     } = useHRManagement();
 
     return (
@@ -474,6 +476,136 @@ export default function HRManagement() {
                         </div>
                         <p className="text-xs text-gray-500 mt-2">
                             Configure thresholds for late marking. Tier 1 is typically the grace period. Tier 2 & 3 can trigger higher penalties (e.g. Half Day).
+                        </p>
+                    </div>
+                ) : modalType === "Leave Type" ? (
+                    <div className="space-y-4">
+                        <div className="form-group">
+                            <label className="modal-form-label">Leave Type Name</label>
+                            <input
+                                type="text"
+                                className="modal-form-input"
+                                placeholder="e.g. Annual Leave, Home Leave"
+                                value={leaveTypeState.name}
+                                onChange={(e) => setLeaveTypeState({ ...leaveTypeState, name: e.target.value })}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="form-group">
+                                <label className="modal-form-label">Allocation Rule</label>
+                                <select
+                                    className="modal-form-input"
+                                    value={leaveTypeState.allocationType}
+                                    onChange={(e) => setLeaveTypeState({ ...leaveTypeState, allocationType: e.target.value })}
+                                >
+                                    <option value="YEARLY">Yearly (credited every Jan 1)</option>
+                                    <option value="SERVICE_ANNIVERSARY">Home Leave / Annual (credited once per year, on joining-date anniversary)</option>
+                                    <option value="POLICY_BASED">Company Policy Based (no auto-credit)</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="modal-form-label">Days Per Cycle</label>
+                                <input
+                                    type="number"
+                                    className="modal-form-input"
+                                    placeholder="e.g. 12 or 30"
+                                    value={leaveTypeState.daysPerCycle}
+                                    onChange={(e) => setLeaveTypeState({ ...leaveTypeState, daysPerCycle: e.target.value })}
+                                    disabled={leaveTypeState.allocationType === "POLICY_BASED"}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                            <div className="form-group flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="leaveIsPaid"
+                                    checked={leaveTypeState.isPaid}
+                                    onChange={(e) => setLeaveTypeState({ ...leaveTypeState, isPaid: e.target.checked })}
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <label htmlFor="leaveIsPaid" className="text-sm font-medium text-gray-700">Paid Leave</label>
+                            </div>
+                            <div className="form-group flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="leaveCarryForward"
+                                    checked={leaveTypeState.carryForward}
+                                    onChange={(e) => setLeaveTypeState({ ...leaveTypeState, carryForward: e.target.checked })}
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <label htmlFor="leaveCarryForward" className="text-sm font-medium text-gray-700">Carry Forward Balance</label>
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="modal-form-label">Service-Year Tiers (optional)</label>
+                            <div className="tier-editor">
+                                <p className="tier-editor-hint">
+                                    Step up the credited days after completed years of service — e.g. "After 1 year → 15 days", "After 2 years → 30 days" (stays 30 in year 3+). Leave empty to always credit the flat Days Per Cycle above. Per-employee overrides on the Leave Wallet screen still win over this.
+                                </p>
+                                {leaveTypeState.tiers.map((tier, index) => (
+                                    <div key={index} className="tier-row">
+                                        <span className="tier-row-badge">{index + 1}</span>
+                                        <span className="tier-row-label">After</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="tier-row-input"
+                                            placeholder="0"
+                                            value={tier.afterYears}
+                                            onChange={(e) => {
+                                                const newTiers = [...leaveTypeState.tiers];
+                                                newTiers[index] = { ...newTiers[index], afterYears: e.target.value };
+                                                setLeaveTypeState({ ...leaveTypeState, tiers: newTiers });
+                                            }}
+                                        />
+                                        <span className="tier-row-label">year(s) → credit</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="tier-row-input"
+                                            placeholder="0"
+                                            value={tier.days}
+                                            onChange={(e) => {
+                                                const newTiers = [...leaveTypeState.tiers];
+                                                newTiers[index] = { ...newTiers[index], days: e.target.value };
+                                                setLeaveTypeState({ ...leaveTypeState, tiers: newTiers });
+                                            }}
+                                        />
+                                        <span className="tier-row-label">days/year</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newTiers = leaveTypeState.tiers.filter((_, i) => i !== index);
+                                                setLeaveTypeState({ ...leaveTypeState, tiers: newTiers });
+                                            }}
+                                            className="tier-row-remove"
+                                            title="Remove tier"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                                {leaveTypeState.tiers.length === 0 && (
+                                    <p className="tier-empty">No tiers added — flat Days Per Cycle applies every year.</p>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setLeaveTypeState({ ...leaveTypeState, tiers: [...leaveTypeState.tiers, { afterYears: '', days: '' }] })}
+                                    className="masters-add-btn"
+                                    style={{ marginTop: '4px' }}
+                                >
+                                    + Add Tier
+                                </button>
+                            </div>
+                        </div>
+
+                        <p className="text-xs text-gray-500">
+                            Yearly types (e.g. Casual/Sick Leave) credit every Jan 1. Home Leave / Annual types credit once per year, on each employee's own joining-date anniversary. Both run via the nightly accrual job. Per-employee overrides can be set from the employee's Leave Wallet screen.
                         </p>
                     </div>
                 ) : modalType === "Workflow Template" ? (

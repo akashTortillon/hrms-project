@@ -419,6 +419,8 @@ import fs from "fs";
 import mongoose from "mongoose";
 import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
 import { logActivity } from "../utils/activityLogger.js";
+import LeaveWallet from "../models/leaveWalletModel.js";
+import leaveWalletService from "../services/leaveWalletService.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -863,6 +865,21 @@ export const createRequest = async (req, res) => {
           message: "Unable to calculate leave days for the selected dates"
         });
       }
+
+      // Wallet balance check — employees can't self-submit past their balance.
+      // Advance leave (going negative before eligibility) is an HR-only action
+      // via a separate endpoint, not this self-service submission.
+      if (details.leaveTypeId && employee) {
+        const wallet = await LeaveWallet.findOne({ employee: employee._id, leaveType: details.leaveTypeId });
+        const balance = wallet?.balanceDays ?? 0;
+        if (numberOfDays > balance) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient leave balance. Available: ${balance} day(s), requested: ${numberOfDays}. Contact HR for an advance leave request.`
+          });
+        }
+      }
+
       const sickLeave = isSickLeave(details);
       let storedMedicalDoc = null;
 
@@ -1405,7 +1422,7 @@ export const updateRequestStatus = async (req, res) => {
       request.approvedAt = new Date();
 
       if (request.requestType === "LEAVE") {
-        const { fromDate, toDate, leaveType, isPaid, isHalfDay, leavePayStatus } = request.details;
+        const { fromDate, toDate, leaveType, leaveTypeId, numberOfDays, isPaid, isHalfDay, leavePayStatus } = request.details;
         if (fromDate && toDate) {
           await markLeaveAttendance(
             request.userId,
@@ -1416,6 +1433,24 @@ export const updateRequestStatus = async (req, res) => {
             isHalfDay,
             leavePayStatus === "HALF_PAID" ? "HALF_PAID" : (leavePayStatus === "UNPAID" ? "UNPAID" : "FULLY_PAID")
           );
+        }
+
+        if (leaveTypeId && numberOfDays) {
+          const employeeUserForWallet = await User.findById(request.userId);
+          const employeeForWallet = employeeUserForWallet?.employeeId
+            ? await Employee.findById(employeeUserForWallet.employeeId)
+            : null;
+          if (employeeForWallet) {
+            await leaveWalletService.debitWallet({
+              employeeId: employeeForWallet._id,
+              leaveTypeId,
+              days: numberOfDays,
+              transactionType: "LEAVE_TAKEN",
+              remarks: `Leave request ${request.requestId} approved`,
+              requestId: request._id,
+              createdBy: req.user.id
+            });
+          }
         }
       }
     } else if (action === "REJECT") {

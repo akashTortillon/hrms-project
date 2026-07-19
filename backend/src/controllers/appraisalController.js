@@ -6,6 +6,14 @@ import { createNotification } from "./notificationController.js";
 
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
 
+const computeTotalSalary = (employee) =>
+  toNumber(employee.basicSalary) +
+  toNumber(employee.allowance) +
+  toNumber(employee.hra) +
+  toNumber(employee.accommodationAllowance) +
+  toNumber(employee.vehicleAllowance) +
+  employee.allowances.reduce((sum, item) => sum + toNumber(item.amount), 0);
+
 export const getAppraisalCycles = async (req, res) => {
   try {
     const cycles = await AppraisalCycle.find().sort({ startDate: -1 });
@@ -51,10 +59,20 @@ export const createAppraisal = async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    const increment = toNumber(req.body.recommendedIncrement);
+    let currentSalary;
+
+    if (req.body.type === "ALLOWANCE") {
+      const existing = employee.allowances.find((item) => item.typeName === req.body.allowanceTypeName);
+      currentSalary = existing ? toNumber(existing.amount) : 0;
+    } else {
+      currentSalary = toNumber(employee.visaBase || employee.basicSalary);
+    }
+
     const appraisal = await Appraisal.create({
       ...req.body,
-      currentSalary: toNumber(employee.visaBase || employee.basicSalary),
-      recommendedSalary: toNumber(employee.visaBase || employee.basicSalary) + toNumber(req.body.recommendedIncrement),
+      currentSalary,
+      recommendedSalary: currentSalary + increment,
       createdBy: req.user._id
     });
 
@@ -78,10 +96,6 @@ export const approveAppraisal = async (req, res) => {
 
     const increment = toNumber(req.body.approvedIncrement ?? appraisal.recommendedIncrement);
     const effectiveDate = req.body.effectiveDate || appraisal.effectiveDate || new Date();
-    const latestVisaBase = toNumber(employee.visaBase || employee.basicSalary);
-    const latestWorkBase = toNumber(employee.workBase || employee.basicSalary);
-    const latestBasic = toNumber(employee.basicSalary);
-    const latestCtc = toNumber(employee.ctc || employee.workBase || employee.basicSalary);
 
     appraisal.approvedIncrement = increment;
     appraisal.status = "APPROVED";
@@ -90,35 +104,67 @@ export const approveAppraisal = async (req, res) => {
     appraisal.effectiveDate = effectiveDate;
     await appraisal.save();
 
-    employee.basicSalary = String(latestBasic + increment);
-    employee.visaBase = latestVisaBase + increment;
-    employee.workBase = latestWorkBase + increment;
-    employee.ctc = latestCtc + increment;
-    employee.salaryHistory.push({
-      salaryType: "APPRAISAL",
-      basicSalary: latestBasic + increment,
-      visaBase: latestVisaBase + increment,
-      workBase: latestWorkBase + increment,
-      ctc: latestCtc + increment,
-      incrementAmount: increment,
-      effectiveDate,
-      notes: req.body.notes || "Approved through appraisal",
-      createdBy: req.user._id
-    });
-    await employee.save();
-
     const linkedUser = await User.findOne({
       email: { $regex: new RegExp(`^${employee.email}$`, "i") }
     }).select("_id");
 
-    if (linkedUser) {
-      await createNotification({
-        recipient: linkedUser._id,
-        title: "Salary increment applied",
-        message: `Your salary increment was approved by ${req.user.name || "HR/Admin"}. Salary updated from AED ${latestVisaBase.toFixed(2)} to AED ${(latestVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`,
-        type: "INFO",
-        link: "/app/requests"
+    if (appraisal.type === "ALLOWANCE") {
+      const existing = employee.allowances.find((item) => item.typeName === appraisal.allowanceTypeName);
+      if (existing) {
+        existing.amount = toNumber(existing.amount) + increment;
+      } else {
+        employee.allowances.push({
+          typeName: appraisal.allowanceTypeName,
+          amount: increment,
+          effectiveDate,
+          addedBy: req.user._id
+        });
+      }
+      employee.totalSalary = computeTotalSalary(employee);
+      await employee.save();
+
+      if (linkedUser) {
+        await createNotification({
+          recipient: linkedUser._id,
+          title: "Allowance updated",
+          message: `Your "${appraisal.allowanceTypeName}" allowance was updated by ${req.user.name || "HR/Admin"}, increased by AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`,
+          type: "INFO",
+          link: "/app/requests"
+        });
+      }
+    } else {
+      const latestVisaBase = toNumber(employee.visaBase || employee.basicSalary);
+      const latestWorkBase = toNumber(employee.workBase || employee.basicSalary);
+      const latestBasic = toNumber(employee.basicSalary);
+      const latestCtc = toNumber(employee.ctc || employee.workBase || employee.basicSalary);
+
+      employee.basicSalary = String(latestBasic + increment);
+      employee.visaBase = latestVisaBase + increment;
+      employee.workBase = latestWorkBase + increment;
+      employee.ctc = latestCtc + increment;
+      employee.salaryHistory.push({
+        salaryType: "APPRAISAL",
+        basicSalary: latestBasic + increment,
+        visaBase: latestVisaBase + increment,
+        workBase: latestWorkBase + increment,
+        ctc: latestCtc + increment,
+        incrementAmount: increment,
+        effectiveDate,
+        notes: req.body.notes || "Approved through appraisal",
+        createdBy: req.user._id
       });
+      employee.totalSalary = computeTotalSalary(employee);
+      await employee.save();
+
+      if (linkedUser) {
+        await createNotification({
+          recipient: linkedUser._id,
+          title: "Salary increment applied",
+          message: `Your salary increment was approved by ${req.user.name || "HR/Admin"}. Salary updated from AED ${latestVisaBase.toFixed(2)} to AED ${(latestVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`,
+          type: "INFO",
+          link: "/app/requests"
+        });
+      }
     }
 
     res.json(appraisal);
