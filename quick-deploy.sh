@@ -7,8 +7,24 @@ echo "=========================================="
 echo "IBILL HRMS - Quick Deployment"
 echo "=========================================="
 
-KEY_PATH="/Users/jastin/Downloads/hrms-ibill.pem"
+KEY_PATH="${SSH_KEY_PATH:-/Users/jastin/Desktop/Development/vivil/hrms-project/hrms-ibill.pem}"
 SERVER="ubuntu@13.203.204.11"
+
+# Check if key exists
+if [ ! -f "$KEY_PATH" ]; then
+    echo "❌ SSH key not found at: $KEY_PATH"
+    echo ""
+    echo "Please set the SSH_KEY_PATH environment variable or copy your key to:"
+    echo "   /Users/jastin/Desktop/Development/vivil/hrms-project/hrms-ibill.pem"
+    echo ""
+    echo "Example:"
+    echo "   cp /Users/jastin/Downloads/hrms-ibill.pem ./hrms-ibill.pem"
+    echo "   chmod 600 ./hrms-ibill.pem"
+    echo ""
+    echo "Or use:"
+    echo "   SSH_KEY_PATH=/path/to/your/key.pem ./quick-deploy.sh"
+    exit 1
+fi
 
 echo ""
 echo "Step 1: Pushing local changes to Git..."

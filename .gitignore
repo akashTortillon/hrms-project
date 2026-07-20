@@ -16,6 +16,11 @@ dist/
 .env.local
 .env.production
 
+# SSH Keys (NEVER commit these!)
+*.pem
+*.key
+hrms-ibill.pem
+
 # Misc
 .DS_Store
 .npm
