@@ -81,29 +81,13 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
           <>
             {/* IBILL HRMS Logo */}
             <div className="sidebar-brand-logo" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
-              <svg viewBox="0 0 200 200" width="42" height="42" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                <defs>
-                  <linearGradient id="sidebarGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#c8902a"/>
-                    <stop offset="100%" stopColor="#f0c060"/>
-                  </linearGradient>
-                </defs>
-                <circle cx="100" cy="100" r="90" fill="none" stroke="url(#sidebarGold)" strokeWidth="9"/>
-                <path
-                  d="M72 52 L72 148 M72 100 L128 52 M72 100 L128 148"
-                  stroke="url(#sidebarGold)"
-                  strokeWidth="18"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
+              <img src={employeeImage} alt="IBILL HRMS" style={{ width: "42px", height: "42px", objectFit: "contain", flexShrink: 0 }} />
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
                 <span style={{
                   fontSize: "15px",
                   fontWeight: 800,
                   letterSpacing: "3px",
-                  background: "linear-gradient(135deg, #c8902a, #f0c060)",
+                  background: "linear-gradient(135deg, #2563eb, #3b82f6)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text"
@@ -114,7 +98,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
                   fontSize: "9px",
                   fontWeight: 500,
                   letterSpacing: "3px",
-                  color: "#8a7050",
+                  color: "#6b7280",
                   textTransform: "uppercase"
                 }}>
                   HRMS

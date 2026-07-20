@@ -1,0 +1,16 @@
+# IBILL HRMS - Deployment Command
+
+Copy and paste this entire block into your terminal:
+
+================================================================================
+
+ssh -i /Users/jastin/Downloads/hrms-ibill.pem ubuntu@13.203.204.11 << 'ENDSSH'
+cd /var/www/hrms-project && git checkout Development-ibill && git pull origin Development-ibill && \
+cd backend && npm install && (pm2 restart hrms-backend || pm2 start src/server.js --name hrms-backend) && \
+cd ../hr_and_asset_mgt && echo "VITE_API_BASE=http://13.203.204.11:5000/api" > .env && \
+npm install && npm run build && \
+sudo rm -rf /var/www/html/* && sudo cp -r dist/* /var/www/html/ && sudo systemctl reload nginx && \
+echo "✅ Deployed! Open http://13.203.204.11" && pm2 list
+ENDSSH
+
+================================================================================

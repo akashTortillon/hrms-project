@@ -3,6 +3,7 @@ import { loginUser } from "../../api/authService";
 import { useNavigate } from "react-router-dom";
 import "../../style/loginAuth.css";
 import { toast } from "react-toastify";
+import ibillLogo from "../../assets/images/ibhrm_logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -55,25 +56,8 @@ export default function Login() {
         <div className="login-brand-panel">
           <div className="login-brand-content">
             <div className="kayzan-logo-wrap">
-              {/* Kayzan Group SVG Logo */}
-              <svg viewBox="0 0 200 200" className="kayzan-logo-svg" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="100" cy="100" r="95" fill="none" stroke="url(#goldGrade)" strokeWidth="5" />
-                <defs>
-                  <linearGradient id="goldGrade" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#c8902a" />
-                    <stop offset="100%" stopColor="#f0c060" />
-                  </linearGradient>
-                </defs>
-                {/* K letter shape */}
-                <path
-                  d="M75 55 L75 145 M75 100 L125 55 M75 100 L125 145"
-                  stroke="url(#goldGrade)"
-                  strokeWidth="16"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
+              {/* IBILL HRMS Logo */}
+              <img src={ibillLogo} alt="IBILL HRMS" style={{ width: "120px", height: "auto", marginBottom: "20px" }} />
             </div>
             <div className="kayzan-wordmark">
               <span className="kayzan-name">IBILL</span>
