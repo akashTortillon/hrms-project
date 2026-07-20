@@ -76,10 +76,10 @@ export default function Login() {
               </svg>
             </div>
             <div className="kayzan-wordmark">
-              <span className="kayzan-name">KAYZAN</span>
-              <span className="kayzan-group">GROUP</span>
+              <span className="kayzan-name">IBILL</span>
+              <span className="kayzan-group">HRMS</span>
             </div>
-            <p className="login-brand-tagline">Human Resource &amp; Asset Management</p>
+            <p className="login-brand-tagline">Human Resource Management System</p>
 
             <div className="login-brand-features">
               <div className="feature-pill">
@@ -126,7 +126,7 @@ export default function Login() {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="you@kayzan.com"
+                    placeholder="you@company.com"
                     value={form.email}
                     onChange={handleChange}
                     autoComplete="email"
@@ -185,7 +185,7 @@ export default function Login() {
 
             <div className="login-card-footer">
               <span>Powered by</span>
-              <strong>Kayzan Group HRMS</strong>
+              <strong>IBILL HRMS</strong>
             </div>
           </div>
         </div>

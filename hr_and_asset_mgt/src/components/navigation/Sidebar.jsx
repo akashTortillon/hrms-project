@@ -79,7 +79,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
           </button>
         ) : (
           <>
-            {/* Kayzan Group Logo */}
+            {/* IBILL HRMS Logo */}
             <div className="sidebar-brand-logo" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
               <svg viewBox="0 0 200 200" width="42" height="42" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
                 <defs>
@@ -108,7 +108,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text"
                 }}>
-                  KAYZAN
+                  IBILL
                 </span>
                 <span style={{
                   fontSize: "9px",
@@ -117,7 +117,7 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
                   color: "#8a7050",
                   textTransform: "uppercase"
                 }}>
-                  GROUP
+                  HRMS
                 </span>
               </div>
             </div>
