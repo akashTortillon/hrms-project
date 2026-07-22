@@ -22,6 +22,10 @@ const allowanceSchema = new mongoose.Schema({
   amount: { type: Number, required: true, default: 0 },
   effectiveDate: { type: Date, required: true },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // Whether this allowance should be included in payroll generation. Defaults to true
+  // (matches historical behavior). Set to false via the "Include in Payroll" toggle in
+  // the Appraisals screen to store the allowance for record-keeping only.
+  includeInPayroll: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });
 

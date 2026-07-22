@@ -109,25 +109,35 @@ export const approveAppraisal = async (req, res) => {
     }).select("_id");
 
     if (appraisal.type === "ALLOWANCE") {
+      // Respect the "Include in Payroll" flag set by HR at the time of submission.
+      // Default to true so that appraisals created before this field existed continue
+      // to behave as before (included in payroll).
+      const includeInPayroll = appraisal.includeInPayroll !== false;
+
       const existing = employee.allowances.find((item) => item.typeName === appraisal.allowanceTypeName);
       if (existing) {
         existing.amount = toNumber(existing.amount) + increment;
+        // Always sync the flag — if HR changes preference on a subsequent appraisal
+        // the latest decision wins.
+        existing.includeInPayroll = includeInPayroll;
       } else {
         employee.allowances.push({
           typeName: appraisal.allowanceTypeName,
           amount: increment,
           effectiveDate,
-          addedBy: req.user._id
+          addedBy: req.user._id,
+          includeInPayroll
         });
       }
       employee.totalSalary = computeTotalSalary(employee);
       await employee.save();
 
       if (linkedUser) {
+        const payrollNote = includeInPayroll ? "" : " This allowance is excluded from payroll.";
         await createNotification({
           recipient: linkedUser._id,
           title: "Allowance updated",
-          message: `Your "${appraisal.allowanceTypeName}" allowance was updated by ${req.user.name || "HR/Admin"}, increased by AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`,
+          message: `Your "${appraisal.allowanceTypeName}" allowance was updated by ${req.user.name || "HR/Admin"}, increased by AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.${payrollNote}`,
           type: "INFO",
           link: "/app/requests"
         });

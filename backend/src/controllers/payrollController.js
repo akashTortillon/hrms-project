@@ -833,6 +833,10 @@ export const generatePayroll = async (req, res) => {
 
             // Ad-hoc allowances added/increased via Appraisals > Add Allowance
             (emp.allowances || []).forEach(item => {
+                // Respect the "Include in Payroll" toggle. Strict === false so that
+                // pre-existing entries (field absent / undefined) still pass through —
+                // no data migration required.
+                if (item.includeInPayroll === false) return;
                 const amount = Number(item.amount) || 0;
                 if (amount > 0) {
                     allowanceList.push({

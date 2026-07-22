@@ -41,6 +41,10 @@ export default function AppraisalsView() {
   const [adjustmentMode, setAdjustmentMode] = useState("SALARY"); // "SALARY" | "ALLOWANCE"
   const [allowanceTypes, setAllowanceTypes] = useState([]);
   const [selectedAllowanceType, setSelectedAllowanceType] = useState("");
+  // "Include in Payroll" toggle — only relevant for ALLOWANCE mode.
+  // When true (default) the allowance is picked up by payroll generation automatically.
+  // When false it is stored for record-keeping only and excluded from payroll runs.
+  const [includeInPayroll, setIncludeInPayroll] = useState(true);
   const [companyFilter, setCompanyFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -147,10 +151,12 @@ export default function AppraisalsView() {
         type: isAllowanceMode ? "ALLOWANCE" : "SALARY",
         allowanceTypeName: isAllowanceMode ? selectedAllowanceType : "",
         amount: parsedIncrement,
-        effectiveDate: today
+        effectiveDate: today,
+        includeInPayroll: isAllowanceMode ? includeInPayroll : true
       });
 
       setIncrementAmount("");
+      if (isAllowanceMode) setIncludeInPayroll(true); // reset to safe default after submit
       await loadData(selectedEmployeeId);
       toast.success(isAllowanceMode ? "Allowance applied successfully" : "Increment applied successfully");
     } catch (error) {
@@ -185,14 +191,14 @@ export default function AppraisalsView() {
               <button
                 type="button"
                 className={!isAllowanceMode ? "active" : ""}
-                onClick={() => { setAdjustmentMode("SALARY"); setIncrementAmount(""); }}
+                onClick={() => { setAdjustmentMode("SALARY"); setIncrementAmount(""); setIncludeInPayroll(true); }}
               >
                 Salary Increment
               </button>
               <button
                 type="button"
                 className={isAllowanceMode ? "active" : ""}
-                onClick={() => { setAdjustmentMode("ALLOWANCE"); setIncrementAmount(""); }}
+                onClick={() => { setAdjustmentMode("ALLOWANCE"); setIncrementAmount(""); setIncludeInPayroll(true); }}
               >
                 Allowance
               </button>
@@ -257,6 +263,31 @@ export default function AppraisalsView() {
                   ))}
                 </select>
               </label>
+            )}
+
+            {isAllowanceMode && (
+              <div className="appraisal-toggle-row">
+                <div className="appraisal-toggle-label-group">
+                  <span className="appraisal-toggle-label">Include in Payroll</span>
+                  <span className="appraisal-toggle-hint">
+                    {includeInPayroll
+                      ? "This allowance will be added to the employee's monthly payroll automatically."
+                      : "This allowance will be saved for record-keeping only and excluded from payroll runs."}
+                  </span>
+                </div>
+                <button
+                  id="appraisal-include-in-payroll-toggle"
+                  type="button"
+                  role="switch"
+                  aria-checked={includeInPayroll}
+                  className={`appraisal-toggle-switch${includeInPayroll ? " is-on" : ""}`}
+                  onClick={() => setIncludeInPayroll((prev) => !prev)}
+                  disabled={!canManageAppraisals || submitting}
+                >
+                  <span className="appraisal-toggle-thumb" />
+                  <span className="appraisal-toggle-text">{includeInPayroll ? "ON" : "OFF"}</span>
+                </button>
+              </div>
             )}
 
             <div className="appraisal-salary-box">
@@ -361,9 +392,11 @@ export default function AppraisalsView() {
                 <tr>
                   <th>Employee</th>
                   <th>Adjustment Date</th>
+                  <th>Type</th>
                   <th>Inc. Amount</th>
                   <th>Previous Salary</th>
                   <th>New Salary</th>
+                  <th>Payroll</th>
                 </tr>
               </thead>
               <tbody>
@@ -372,6 +405,11 @@ export default function AppraisalsView() {
                     const increment = Number(appraisal.approvedIncrement || appraisal.recommendedIncrement || 0);
                     const previousSalary = Number(appraisal.currentSalary || 0);
                     const newSalary = previousSalary + increment;
+
+                    const isAllowanceRow = appraisal.type === "ALLOWANCE";
+                    // includeInPayroll defaults to true for older records that predate
+                    // the field, so we treat undefined as included.
+                    const payrollIncluded = appraisal.includeInPayroll !== false;
 
                     return (
                       <tr key={appraisal._id}>
@@ -387,15 +425,29 @@ export default function AppraisalsView() {
                             {appraisal.comments || appraisal.cycle?.name || "Manual Appraisal"}
                           </div>
                         </td>
+                        <td>
+                          <span className={`appraisal-type-badge appraisal-type-badge--${isAllowanceRow ? "allowance" : "salary"}`}>
+                            {isAllowanceRow ? "Allowance" : "Salary"}
+                          </span>
+                        </td>
                         <td className="appraisal-history-increment">+{formatCurrency(increment)}</td>
                         <td>{formatCurrency(previousSalary)}</td>
                         <td className="appraisal-history-new-salary">{formatCurrency(newSalary)}</td>
+                        <td>
+                          {isAllowanceRow ? (
+                            <span className={`appraisal-payroll-badge appraisal-payroll-badge--${payrollIncluded ? "included" : "excluded"}`}>
+                              {payrollIncluded ? "Included" : "Excluded"}
+                            </span>
+                          ) : (
+                            <span className="appraisal-payroll-badge appraisal-payroll-badge--na">—</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan="5" className="appraisal-empty-state">
+                    <td colSpan="7" className="appraisal-empty-state">
                       {selectedEmployee
                         ? "No adjustment history found for this employee yet."
                         : "No adjustment history found for the selected filters."}

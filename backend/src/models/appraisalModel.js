@@ -25,6 +25,9 @@ const appraisalSchema = new mongoose.Schema({
     default: "SALARY"
   },
   allowanceTypeName: { type: String, default: "" },
+  // Only meaningful when type === "ALLOWANCE". When false the allowance is stored on
+  // the employee profile for record-keeping but is excluded from payroll generation.
+  includeInPayroll: { type: Boolean, default: true },
   status: {
     type: String,
     enum: ["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"],

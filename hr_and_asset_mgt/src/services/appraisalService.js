@@ -25,7 +25,7 @@ export const appraisalService = {
   // Shared create-cycle -> create -> approve chain used by both the Appraisals page
   // (salary increments) and the Employee Detail "+ Add Allowance" action, so the
   // instant-apply flow lives in one place instead of being duplicated per screen.
-  applyAdjustment: async ({ employee, type = "SALARY", allowanceTypeName = "", amount, effectiveDate, notes }) => {
+  applyAdjustment: async ({ employee, type = "SALARY", allowanceTypeName = "", amount, effectiveDate, notes, includeInPayroll = true }) => {
     const cycle = await appraisalService.createCycle({
       name: createCycleName(type),
       startDate: effectiveDate,
@@ -40,6 +40,9 @@ export const appraisalService = {
       allowanceTypeName,
       recommendedIncrement: amount,
       effectiveDate,
+      // Only pass includeInPayroll for ALLOWANCE type; for SALARY it is irrelevant
+      // but harmless to include (the backend ignores it in the SALARY branch).
+      includeInPayroll,
       comments: type === "ALLOWANCE" ? `Allowance: ${allowanceTypeName}` : "Manual appraisal adjustment"
     });
 
