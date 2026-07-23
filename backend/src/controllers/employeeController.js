@@ -96,8 +96,10 @@ const attachSignedProfilePhotoUrl = async (employee) => {
 };
 
 // Legacy records can have a date field stored as a plain string (from data that predates
-// the Date schema type, or a bad import). $dateToString throws on those, taking down the
-// whole export - $convert first so a bad value degrades to "" instead of a 500.
+// the Date schema type, or a bad import) - $convert guards that. Some also hold a real Date
+// with a garbage year (e.g. a bad Excel-serial import producing year 20024) - $dateToString's
+// %Y only supports 0-9999, so also bail out via $year before formatting. Either case degrades
+// to "" instead of crashing the whole export.
 const safeDateStr = (path) => ({
   $let: {
     vars: {
@@ -105,7 +107,13 @@ const safeDateStr = (path) => ({
     },
     in: {
       $cond: [
-        { $eq: ["$$d", null] },
+        {
+          $or: [
+            { $eq: ["$$d", null] },
+            { $lt: [{ $year: "$$d" }, 0] },
+            { $gt: [{ $year: "$$d" }, 9999] }
+          ]
+        },
         "",
         { $dateToString: { format: "%Y-%m-%d", date: "$$d" } }
       ]
@@ -1254,13 +1262,19 @@ export const importEmployees = async (req, res) => {
         const nextSystemCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
         const finalCode = employeeCode || nextSystemCode;
 
-        // Date parsing helper
+        // Date parsing helper. Rejects anything outside a sane year range instead of
+        // storing it - a stray large number in a date column (e.g. a phone/ID number
+        // mistaken for an Excel serial) previously produced garbage dates like year
+        // 20024, which later crashed the export's $dateToString (only supports 0-9999).
         const parseExcelDate = (val) => {
           if (!val) return null;
-          if (typeof val === 'number') {
-            return new Date(Math.round((val - 25569) * 86400 * 1000));
-          }
-          return new Date(val);
+          const date = typeof val === 'number'
+            ? new Date(Math.round((val - 25569) * 86400 * 1000))
+            : new Date(val);
+          if (isNaN(date.getTime())) return null;
+          const year = date.getFullYear();
+          if (year < 1900 || year > 2200) return null;
+          return date;
         };
 
         let joinDate = parseExcelDate(row["Joining Date"]) || new Date();
