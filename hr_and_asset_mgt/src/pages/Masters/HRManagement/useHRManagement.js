@@ -107,6 +107,7 @@ export default function useHRManagement() {
         setShiftState({
             startTime: '09:00',
             endTime: '18:00',
+            workHours: '',
             latePolicy: [
                 { tier: 1, time: '09:15', type: 'FIXED', value: 0 },
                 { tier: 2, time: '09:30', type: 'DAILY_RATE', value: 0.5 },
@@ -162,6 +163,7 @@ export default function useHRManagement() {
             setShiftState({
                 startTime: meta.startTime || '09:00',
                 endTime: meta.endTime || '18:00',
+                workHours: meta.workHours ?? '',
                 latePolicy: meta.latePolicy && meta.latePolicy.length > 0
                     ? meta.latePolicy
                     : [
@@ -302,6 +304,7 @@ export default function useHRManagement() {
                     metadata: {
                         startTime: shiftState.startTime,
                         endTime: shiftState.endTime,
+                        workHours: shiftState.workHours,
                         lateLimit: shiftState.latePolicy[0]?.time || '09:15', // Fallback for legacy
                         latePolicy: shiftState.latePolicy
                     }
