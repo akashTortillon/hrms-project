@@ -95,6 +95,24 @@ const attachSignedProfilePhotoUrl = async (employee) => {
   return item;
 };
 
+// Legacy records can have a date field stored as a plain string (from data that predates
+// the Date schema type, or a bad import). $dateToString throws on those, taking down the
+// whole export - $convert first so a bad value degrades to "" instead of a 500.
+const safeDateStr = (path) => ({
+  $let: {
+    vars: {
+      d: { $convert: { input: path, to: "date", onError: null, onNull: null } }
+    },
+    in: {
+      $cond: [
+        { $eq: ["$$d", null] },
+        "",
+        { $dateToString: { format: "%Y-%m-%d", date: "$$d" } }
+      ]
+    }
+  }
+});
+
 export const exportEmployees = async (req, res) => {
   try {
     const { department, status, search, branch, company, designation } = req.query;
@@ -134,55 +152,61 @@ export const exportEmployees = async (req, res) => {
       ];
     }
 
+    // Column headers match the ones importEmployees() reads, so an exported file
+    // can be re-imported as-is.
     const employees = await Employee.aggregate([
       { $match: matchStage },
       { $sort: { code: 1 } },
       {
         $project: {
           _id: 0,
-          "Employee ID": "$code",
+          "Employee Code": "$code",
           "Full Name": "$name",
           "Role": "$role",
           "Department": "$department",
-          "Branch": "$branch",
           "Company": "$company",
+          "Branch": "$branch",
+          "Designation": "$designation",
+          "Employee Type": "$contractType",
           "Email": "$email",
           "Contact Number": "$phone",
+          "Status": "$status",
+          "Shift": "$shift",
+          "Joining Date": safeDateStr("$joinDate"),
+          "Date of Birth": safeDateStr("$dob"),
+          "Nationality": "$nationality",
+          "UAE Address": "$address",
+          "Personal ID (14 Digit)": "$personalId",
+          "Passport No": "$passportNo",
+          "Passport Expiry": safeDateStr("$passportExpiry"),
+          "Emirates ID No": "$emiratesIdNo",
+          "Emirates ID Expiry": safeDateStr("$emiratesIdExpiry"),
+          "Basic Salary": "$basicSalary",
+          "Allowance (AED)": "$allowance",
+          "HRA (AED)": "$hra",
+          "ACCOMODATION ALLOWANCE": "$accommodationAllowance",
+          "VEHICHLE ALLOWANCE": "$vehicleAllowance",
+          "Total Salary (AED)": "$totalSalary",
+          "Visa Base": "$visaBase",
+          "Work Base": "$workBase",
           "Visa Company": "$visaCompany",
           "Work Permit Company": "$workPermitCompany",
           "Visa No": "$visaNo",
           "Visa File No": "$visaFileNo",
-          "Visa Expiry": {
-            $dateToString: { format: "%Y-%m-%d", date: "$visaExpiry" }
-          },
-          "Visa Base": "$visaBase",
-          "Work Base": "$workBase",
-          "Joining Date": {
-            $dateToString: { format: "%Y-%m-%d", date: "$joinDate" }
-          },
-          "Status": "$status"
+          "Visa Expiry": safeDateStr("$visaExpiry"),
+          "Accommodation": "$accommodation",
+          "Bank Name": "$bankName",
+          "IBAN": "$iban",
+          "Account Number": "$bankAccount",
+          "Agent ID (WPS)": "$agentId",
+          "Labor Card No": "$laborCardNumber",
+          "Probation End Date": safeDateStr("$probationEndDate"),
+          "Fixed Probation Increment Amount": "$fixedProbationIncrementAmount"
         }
       }
     ]);
 
     const worksheet = XLSX.utils.json_to_sheet(employees);
-    // Auto-width columns
-    const maxWidth = employees.reduce((w, r) => Math.max(w, r["Full Name"] ? r["Full Name"].length : 10), 10);
-    worksheet["!cols"] = [
-      { wch: 10 }, // ID
-      { wch: 25 }, // Name
-      { wch: 20 }, // Role
-      { wch: 15 }, // Dept
-      { wch: 15 }, // Branch
-      { wch: 20 }, // Company
-      { wch: 30 }, // Email
-      { wch: 15 }, // Phone
-      { wch: 12 }, // Visa Base
-      { wch: 12 }, // Work Base
-      { wch: 15 }, // Date
-      { wch: 10 }  // Status
-    ];
-
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
 
@@ -193,7 +217,7 @@ export const exportEmployees = async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    // console.error("Export Error:", error);
+    console.error("Export Error:", error);
     res.status(500).json({ message: "Export failed" });
   }
 };
@@ -1342,7 +1366,7 @@ export const importEmployees = async (req, res) => {
     });
 
   } catch (error) {
-    // console.error("Import Error:", error);
+    console.error("Import Error:", error);
     res.status(500).json({ message: "Server error during import" });
   }
 };
