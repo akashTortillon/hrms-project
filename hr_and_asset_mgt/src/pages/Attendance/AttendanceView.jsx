@@ -219,7 +219,9 @@ function Attendance() {
     try {
       setLoading(true);
       const res = await syncBiometrics();
-      toast.success(`Synced ${res.synced} records successfully`);
+      const created = res.data?.recordsCreated ?? 0;
+      const updated = res.data?.recordsUpdated ?? 0;
+      toast.success(`Synced successfully - ${created} created, ${updated} updated`);
       if (viewMode === "day") fetchAttendanceData();
       else fetchMonthlyData();
     } catch (error) {
