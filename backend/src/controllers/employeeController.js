@@ -1198,12 +1198,15 @@ export const importEmployees = async (req, res) => {
 
       // Resolves a WORK/VISA LOCATION value either as the name of a Branch nested under the
       // row's Company (e.g. "MAIN" - the primary, current convention), a legacy Company Code
-      // ID, or - common for visa sponsorship in a multi-license group - the full name of a
-      // DIFFERENT company entirely (the employee works at one company but their visa is
-      // sponsored by another). visaCompany/workPermitCompany store a Branch name when a
-      // Branch match is found; a Company match (by code or name) falls back to the Company
-      // name since no specific Branch can be determined from it. Fills in `branch` from a
-      // Branch match when the row didn't already specify one.
+      // ID, the full name of a DIFFERENT company entirely (visa sponsorship in a multi-license
+      // group - the employee works at one company but their visa is sponsored by another), or
+      // any Branch that exists ANYWHERE regardless of which company it's nested under (visa/
+      // work location is independent of the employee's own company/branch assignment - it's
+      // just recording where the visa or labor card is filed, which can be any real branch in
+      // the group). visaCompany/workPermitCompany always end up storing a Branch or Company
+      // name string, never an ID. Fills in `branch` from a Branch match ONLY when it's under
+      // the row's own company - a global cross-company branch match must never overwrite the
+      // employee's actual company/branch assignment.
       const resolveLocationCode = (code) => {
         if (company) {
           const companyId = companyIdByName.get(company.toLowerCase());
@@ -1217,6 +1220,8 @@ export const importEmployees = async (req, res) => {
         if (byCompanyCode) return { value: byCompanyCode };
         const byCompanyName = validCompanies.get(code.toLowerCase());
         if (byCompanyName) return { value: byCompanyName };
+        const byAnyBranch = validBranches.get(code.toLowerCase());
+        if (byAnyBranch) return { value: byAnyBranch };
         return null;
       };
 
