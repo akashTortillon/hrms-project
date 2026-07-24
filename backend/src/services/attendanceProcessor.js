@@ -64,14 +64,25 @@ class AttendanceProcessor {
       }
     }
 
-    // 2. Fetch employees by badgeNumber field for matching
-    const employeesList = await Employee.find({ badgeNumber: { $in: Array.from(employeeCodes) } });
+    // 2. Fetch employees by badgeNumber field for matching. Some employees never got
+    // badgeNumber backfilled and instead have the device's badge value sitting in `code`
+    // (e.g. code: "R106") - fall back to matching on `code` for those.
+    const codesArray = Array.from(employeeCodes);
+    const employeesList = await Employee.find({
+      $or: [
+        { badgeNumber: { $in: codesArray } },
+        { code: { $in: codesArray } }
+      ]
+    });
     const leaveMap = await getApprovedLeavesMap(employeesList);
 
     // 3. Process each grouped record
     for (const key in grouped) {
       const record = grouped[key];
-      const employee = employeesList.find(e => e.badgeNumber && e.badgeNumber.trim() === record.badgeNumber);
+      const employee = employeesList.find(e =>
+        (e.badgeNumber && e.badgeNumber.trim() === record.badgeNumber) ||
+        (e.code && e.code.trim() === record.badgeNumber)
+      );
 
       if (!employee) {
         console.warn(`[AttendanceProcessor] Employee with badge number ${record.badgeNumber} not found.`);
