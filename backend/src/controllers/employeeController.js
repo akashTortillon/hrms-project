@@ -1102,20 +1102,30 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 2. Duplicate Check
-      if (existingEmails.has(email.toLowerCase())) {
-        errors.push({ row: rowNum, email, message: "Email already exists" });
-        continue;
-      }
+      // 2. Duplicate Check - a row whose email already belongs to an employee UPDATES
+      // that employee instead of being rejected (re-uploading a corrected sheet after
+      // fixing Master data should apply the fix, not skip the row every time).
+      const existingEmployeeDoc = existingEmails.has(email.toLowerCase())
+        ? await Employee.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } })
+        : null;
+
+      // Phone/Code only block the row if they belong to a DIFFERENT employee than the
+      // one we're about to update (or a brand new one on create).
       if (phone && existingPhones.has(phone)) {
-        errors.push({ row: rowNum, email, message: "Phone number already exists" });
-        continue;
+        const phoneOwner = await Employee.findOne({ phone });
+        if (!existingEmployeeDoc || String(phoneOwner?._id) !== String(existingEmployeeDoc._id)) {
+          errors.push({ row: rowNum, email, message: "Phone number already exists" });
+          continue;
+        }
       }
 
       const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
       if (employeeCode && existingCodes.has(employeeCode)) {
-        errors.push({ row: rowNum, email, message: `Employee Code '${employeeCode}' already exists` });
-        continue;
+        const codeOwner = await Employee.findOne({ code: employeeCode });
+        if (!existingEmployeeDoc || String(codeOwner?._id) !== String(existingEmployeeDoc._id)) {
+          errors.push({ row: rowNum, email, message: `Employee Code '${employeeCode}' already exists` });
+          continue;
+        }
       }
 
       // 3. Strict Master Validation
@@ -1187,11 +1197,13 @@ export const importEmployees = async (req, res) => {
       if (contractType) contractType = validContractTypes.get(contractType.toLowerCase());
 
       // Resolves a WORK/VISA LOCATION value either as the name of a Branch nested under the
-      // row's Company (e.g. "MAIN" - the primary, current convention), or as a legacy Company
-      // Code ID. visaCompany/workPermitCompany store a Branch name, so a Branch match is
-      // preferred; a bare Company Code match falls back to the Company name since no specific
-      // Branch can be determined from it. Fills in `branch` from a Branch match when the row
-      // didn't already specify one.
+      // row's Company (e.g. "MAIN" - the primary, current convention), a legacy Company Code
+      // ID, or - common for visa sponsorship in a multi-license group - the full name of a
+      // DIFFERENT company entirely (the employee works at one company but their visa is
+      // sponsored by another). visaCompany/workPermitCompany store a Branch name when a
+      // Branch match is found; a Company match (by code or name) falls back to the Company
+      // name since no specific Branch can be determined from it. Fills in `branch` from a
+      // Branch match when the row didn't already specify one.
       const resolveLocationCode = (code) => {
         if (company) {
           const companyId = companyIdByName.get(company.toLowerCase());
@@ -1203,6 +1215,8 @@ export const importEmployees = async (req, res) => {
         }
         const byCompanyCode = companyByCode.get(code);
         if (byCompanyCode) return { value: byCompanyCode };
+        const byCompanyName = validCompanies.get(code.toLowerCase());
+        if (byCompanyName) return { value: byCompanyName };
         return null;
       };
 
@@ -1256,11 +1270,12 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 4. Employee Creation
+      // 4. Employee Creation / Update
       try {
-        lastCodeNum++;
-        const nextSystemCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
-        const finalCode = employeeCode || nextSystemCode;
+        const nextSystemCode = existingEmployeeDoc
+          ? existingEmployeeDoc.systemCode
+          : `EMP${String(++lastCodeNum).padStart(3, "0")}`;
+        const finalCode = employeeCode || (existingEmployeeDoc ? existingEmployeeDoc.code : nextSystemCode);
 
         // Date parsing helper. Rejects anything outside a sane year range instead of
         // storing it - a stray large number in a date column (e.g. a phone/ID number
@@ -1285,10 +1300,16 @@ export const importEmployees = async (req, res) => {
         const basicSalaryVal = row["Basic Salary (AED)"] ?? row["Basic Salary"];
         const ctcVal = row["MONTHLY CTC"] ?? row["CTC"] ?? row["Work Base"] ?? basicSalaryVal;
 
-        await Employee.create({
+        // A row's Status column only wins if it's one of the real enum values - a
+        // contaminated re-upload (e.g. a previous import-results export with its own
+        // "Status"/"Error" columns) can otherwise put error text here, which would
+        // reject the whole row on an enum-cast error instead of just keeping status as-is.
+        const validStatuses = ["Active", "Inactive", "On Leave", "Onboarding"];
+        const sheetStatus = validStatuses.includes(row["Status"]) ? row["Status"] : null;
+
+        const employeeFields = {
           name: row["Full Name"],
           code: finalCode,
-          systemCode: nextSystemCode,
           role: role,
           department: department,
           branch: branch,
@@ -1296,7 +1317,7 @@ export const importEmployees = async (req, res) => {
           email: email,
           phone: phone,
           joinDate: joinDate,
-          status: row["Status"] || "Onboarding",
+          status: sheetStatus || (existingEmployeeDoc ? existingEmployeeDoc.status : "Onboarding"),
           dob: parseExcelDate(row["Date of Birth"]),
           designation: designation || role,
           shift: row["Shift"] || "Day Shift",
@@ -1329,18 +1350,29 @@ export const importEmployees = async (req, res) => {
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
           visaExpiry: visaExpiry,
-          probationStartDate: joinDate,
-          probationEndDate: parseExcelDate(row["Probation End Date"]),
-          probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
-          fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"]),
-          salaryHistory: buildInitialSalaryHistory({
-            basicSalary: basicSalaryVal,
-            visaBase: row["Visa Base"] ?? basicSalaryVal,
-            workBase: row["Work Base"] ?? basicSalaryVal,
-            ctc: ctcVal,
-            joinDate
-          })
-        });
+          fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"])
+        };
+
+        if (existingEmployeeDoc) {
+          // Update path: never touch systemCode (immutable) or salaryHistory/probation
+          // confirmation state (real history, not something a re-upload should overwrite).
+          await Employee.findByIdAndUpdate(existingEmployeeDoc._id, employeeFields);
+        } else {
+          await Employee.create({
+            ...employeeFields,
+            systemCode: nextSystemCode,
+            probationStartDate: joinDate,
+            probationEndDate: parseExcelDate(row["Probation End Date"]),
+            probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
+            salaryHistory: buildInitialSalaryHistory({
+              basicSalary: basicSalaryVal,
+              visaBase: row["Visa Base"] ?? basicSalaryVal,
+              workBase: row["Work Base"] ?? basicSalaryVal,
+              ctc: ctcVal,
+              joinDate
+            })
+          });
+        }
 
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
