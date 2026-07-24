@@ -229,7 +229,7 @@ import {
  */
 export const syncBiometrics = async (req, res) => {
   try {
-    const { startDate, endDate } = req.body;
+    const { startDate, endDate } = req.body || {};
     const userId = req.user?._id;
 
     console.log(`[attendanceController] Manual sync triggered by user ${userId}. Range: ${startDate || "Default"} to ${endDate || "Default"}`);
