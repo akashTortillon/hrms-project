@@ -101,7 +101,7 @@ export const login = async (req, res) => {
     if (user.role === 'Admin') {
       permissions = ["ALL"];
     } else {
-      const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
+      const roleDef = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${user.role}$`, 'i') } });
       permissions = roleDef ? roleDef.permissions : [];
     }
 
@@ -224,7 +224,7 @@ export const getMe = async (req, res) => {
     if (user.role === "Admin") {
       permissions = ["ALL"];
     } else {
-      const roleDef = await Master.findOne({ type: "ROLE", name: user.role });
+      const roleDef = await Master.findOne({ type: "ROLE", name: { $regex: new RegExp(`^${user.role}$`, "i") } });
       permissions = roleDef ? roleDef.permissions || [] : [];
     }
 
