@@ -42,6 +42,28 @@ export const getAnnouncements = async (req, res) => {
     if (category) filter.category = category;
     if (audience) filter.audience = audience;
 
+    // Plain employees only see announcements actually targeted to them (audience ALL,
+    // or their own BRANCH/COMPANY/DEPARTMENT, or explicitly listed by employeeId) - the
+    // full unfiltered list is for admins managing announcements, who need to see and edit
+    // every targeting type regardless of their own branch/department.
+    const canManage = req.user.permissions?.includes("MANAGE_ANNOUNCEMENTS")
+      || req.user.permissions?.includes("ALL")
+      || req.user.role === "Admin";
+
+    if (!canManage) {
+      const employee = req.user.employeeId
+        ? await Employee.findById(req.user.employeeId).select("branch company department")
+        : null;
+
+      filter.$or = [
+        { audience: "ALL" },
+        { audience: "EMPLOYEE", employeeIds: req.user.employeeId || null },
+        ...(employee?.branch ? [{ audience: "BRANCH", branch: employee.branch }] : []),
+        ...(employee?.company ? [{ audience: "COMPANY", company: employee.company }] : []),
+        ...(employee?.department ? [{ audience: "DEPARTMENT", department: employee.department }] : [])
+      ];
+    }
+
     const announcements = await Announcement.find(filter).sort({ publishedAt: -1 });
     const withUrls = await Promise.all(announcements.map(attachSignedImageUrl));
     res.json(withUrls);

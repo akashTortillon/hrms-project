@@ -22,6 +22,9 @@ export const RoleProvider = ({ children }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(
+    localStorage.getItem("mustChangePassword") === "true"
+  );
 
   useEffect(() => {
     const syncFromStorage = () => {
@@ -31,6 +34,7 @@ export const RoleProvider = ({ children }) => {
       } catch {
         setPermissions([]);
       }
+      setMustChangePassword(localStorage.getItem("mustChangePassword") === "true");
     };
 
     window.addEventListener("storage", syncFromStorage);
@@ -51,15 +55,18 @@ export const RoleProvider = ({ children }) => {
 
         const nextRole = data?.role || "Employee";
         const nextPermissions = data?.permissions || [];
+        const nextMustChangePassword = Boolean(data?.mustChangePassword);
 
         localStorage.setItem("userRole", nextRole);
         localStorage.setItem("userPermissions", JSON.stringify(nextPermissions));
+        localStorage.setItem("mustChangePassword", String(nextMustChangePassword));
         if (data?.user) {
           localStorage.setItem("user", JSON.stringify(data.user));
         }
 
         setRole(nextRole);
         setPermissions(nextPermissions);
+        setMustChangePassword(nextMustChangePassword);
       } catch (error) {
         // Keep existing local storage values if sync fails
       } finally {
@@ -79,8 +86,16 @@ export const RoleProvider = ({ children }) => {
     return permissions.includes(requiredPermission);
   };
 
+  const clearMustChangePassword = () => {
+    localStorage.setItem("mustChangePassword", "false");
+    setMustChangePassword(false);
+  };
+
   return (
-    <RoleContext.Provider value={{ role, setRole, permissions, setPermissions, hasPermission, loading }}>
+    <RoleContext.Provider value={{
+      role, setRole, permissions, setPermissions, hasPermission, loading,
+      mustChangePassword, clearMustChangePassword
+    }}>
       {children}
     </RoleContext.Provider>
   );

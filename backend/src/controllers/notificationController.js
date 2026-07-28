@@ -3,6 +3,7 @@ import CompanyDocument from "../models/companyDocModel.js";
 import Request from "../models/requestModel.js";
 import Payroll from "../models/payrollModel.js";
 import User from "../models/userModel.js";
+import { getApprovalStageFilter } from "../utils/approvalStageFilter.js";
 
 /**
  * Get notifications for the logged-in user
@@ -41,8 +42,18 @@ export const getNotifications = async (req, res) => {
                 });
             }
 
-            // 2. AGGREGATED Pending Requests (Sync with "PENDING" status)
-            const pendingRequestsCount = await Request.countDocuments({ status: "PENDING" });
+            // 2. AGGREGATED Pending Requests - must match what /app/requests would actually
+            // show this viewer, not a raw status:"PENDING" count. A request's overall `status`
+            // stays "PENDING" through its entire Manager -> Finance -> HR lifecycle, so a naive
+            // count includes requests still sitting at a DIFFERENT stage/approver - inflating
+            // this badge above what the viewer's own approval queue shows. See
+            // getApprovalStageFilter for the shared scoping logic (also used by the dashboard's
+            // Pending Approvals widget and requestController's getPendingRequestsForAdmin).
+            const stageFilters = getApprovalStageFilter(req.user);
+
+            const pendingRequestsCount = stageFilters.length
+                ? await Request.countDocuments({ status: "PENDING", $or: stageFilters })
+                : 0;
             if (pendingRequestsCount > 0) {
                 summaryNotifications.push({
                     _id: "virtual-pending-requests",

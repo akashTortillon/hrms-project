@@ -8,6 +8,7 @@ import CompanyDocument from "../models/companyDocModel.js";
 import Attendance from "../models/attendanceModel.js";
 import EmployeeDocument from "../models/employeeDocumentModel.js";
 import { computeExpiryStatus } from "../utils/expiryStatus.js";
+import { getApprovalStageFilter } from "../utils/approvalStageFilter.js";
 
 /**
  * DASHBOARD SUMMARY (TOP CARDS)
@@ -24,11 +25,18 @@ export const getDashboardSummary = async (req, res) => {
       joinDate: { $gte: startOfMonth },
     });
 
-    const totalPending = await Request.countDocuments({ status: "PENDING" });
+    // Only count requests actually at this viewer's approval stage - a request's
+    // overall status stays "PENDING" through its whole Manager -> Finance -> HR
+    // lifecycle, so a naive status-only count inflates this above what's actually
+    // actionable (see getApprovalStageFilter for why).
+    const stageFilters = getApprovalStageFilter(req.user);
+    const pendingQuery = stageFilters.length ? { status: "PENDING", $or: stageFilters } : { _id: null };
+
+    const totalPending = await Request.countDocuments(pendingQuery);
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     const urgentApprovals = await Request.countDocuments({
-      status: "PENDING",
+      ...pendingQuery,
       submittedAt: { $lte: threeDaysAgo }
     });
 
@@ -152,7 +160,10 @@ export const getEmployeeVisaExpiries = async (req, res) => {
 export const getPendingApprovals = async (req, res) => {
   try {
     const { type } = req.query;
-    let query = { status: "PENDING" };
+    const stageFilters = getApprovalStageFilter(req.user);
+    let query = stageFilters.length
+      ? { status: "PENDING", $or: stageFilters }
+      : { _id: null };
 
     if (type) {
       // Allow flexible type matching (case-insensitive for convenience)
@@ -354,8 +365,11 @@ export const getMobileDashboardStats = async (req, res) => {
 
     const stats = attendanceStats[0] || { present: 0, late: 0, absent: 0, total: 0 };
 
-    // 2. Get Pending Requests Count
-    const pendingRequests = await Request.countDocuments({ status: "PENDING" });
+    // 2. Get Pending Requests Count (scoped to this viewer's actual approval stage)
+    const requestStageFilters = getApprovalStageFilter(req.user);
+    const pendingRequests = requestStageFilters.length
+      ? await Request.countDocuments({ status: "PENDING", $or: requestStageFilters })
+      : 0;
 
     res.status(200).json({
       present: stats.present,

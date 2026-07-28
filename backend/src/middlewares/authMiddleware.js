@@ -42,7 +42,7 @@ export const protect = async (req, res, next) => {
       if (user.role === "Admin") {
         permissions = ["ALL"];
       } else {
-        const roleData = await Master.findOne({ type: 'ROLE', name: user.role });
+        const roleData = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${user.role}$`, 'i') } });
         permissions = roleData ? roleData.permissions : [];
       }
 

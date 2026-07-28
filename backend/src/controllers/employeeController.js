@@ -352,7 +352,8 @@ export const addEmployee = async (req, res) => {
           email,
           phone: userPhone,
           password: hashedPassword,
-          role: role
+          role: role,
+          mustChangePassword: true
         });
         createdUser = true;
       } catch (uErr) {
@@ -529,12 +530,20 @@ export const getEmployeeById = async (req, res) => {
       return res.status(403).json({ message: "Access Denied: You cannot view this profile" });
     }
 
-    // Promote any future-dated transfer whose effective date has now arrived.
-    await applyDuePendingTransfers(employee);
+    // Promote any future-dated transfer whose effective date has now arrived. This is a
+    // background side effect of viewing the profile, not something the viewer asked for -
+    // if it fails (e.g. a legacy bad field on this employee trips validation on save), don't
+    // let it take down the whole detail view. The transfer just stays pending and gets
+    // retried next time this employee is viewed.
+    try {
+      await applyDuePendingTransfers(employee);
+    } catch (transferError) {
+      console.error("applyDuePendingTransfers failed for employee", id, ":", transferError);
+    }
 
     res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
-    // console.error("Get Employee By ID Error:", error);
+    console.error("Get Employee By ID Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -1267,7 +1276,8 @@ export const importEmployees = async (req, res) => {
             email: email,
             phone: userPhone,
             password: hashedPassword,
-            role: role
+            role: role,
+            mustChangePassword: true
           });
         }
       } catch (uErr) {
@@ -1447,6 +1457,7 @@ export const resetEmployeePassword = async (req, res) => {
 
     // Hash it and save
     user.password = await bcrypt.hash(newPassword, 10);
+    user.mustChangePassword = true;
     await user.save();
 
     // Email the employee

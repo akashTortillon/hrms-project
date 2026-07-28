@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema({
   },
   password: { type: String, required: true },
   role: { type: String, default: "Employee" },
+  // Forces the Change Password modal on next login/refresh - set true whenever an
+  // admin resets a password or a new account is created with a shared default
+  // password, cleared once the user successfully changes it themselves.
+  mustChangePassword: { type: Boolean, default: false },
   employeeId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Employee",

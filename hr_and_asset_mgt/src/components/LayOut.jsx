@@ -1,8 +1,9 @@
 import Sidebar from "./navigation/Sidebar.jsx";
 import NavigationBar from "./navigation/Navbar.jsx";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { RoleProvider } from "../contexts/RoleContext.jsx";
+import { RoleProvider, useRole } from "../contexts/RoleContext.jsx";
 import { useState } from "react";
+import ChangePasswordModal from "../pages/Authentication/ChangePasswordModal.jsx";
 
 import Dashboard from "../pages/Dashboard/DashboardView.jsx";
 import Employees from "../pages/Employees/EmployeesView.jsx";
@@ -24,7 +25,16 @@ import PoliciesView from "../pages/Policies/PoliciesView.jsx";
 import ActivityLogView from "../pages/ActivityLog/ActivityLogView.jsx";
 
 export default function Layout() {
+  return (
+    <RoleProvider>
+      <AppShell />
+    </RoleProvider>
+  );
+}
+
+function AppShell() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { mustChangePassword, clearMustChangePassword } = useRole();
 
   const toggleMobileSidebar = () => {
     setIsMobileSidebarOpen(!isMobileSidebarOpen);
@@ -35,7 +45,12 @@ export default function Layout() {
   };
 
   return (
-    <RoleProvider>
+    <>
+      <ChangePasswordModal
+        show={mustChangePassword}
+        forced
+        onClose={clearMustChangePassword}
+      />
       <div className={`app-shell ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""}`}>
         {/* Sidebar Backdrop for Mobile */}
         <div
@@ -76,6 +91,6 @@ export default function Layout() {
           </div>
         </div>
       </div>
-    </RoleProvider>
+    </>
   );
 }

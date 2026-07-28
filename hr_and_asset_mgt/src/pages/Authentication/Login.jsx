@@ -37,6 +37,7 @@ export default function Login() {
         localStorage.setItem("userRole", data.role);
         localStorage.setItem("userPermissions", JSON.stringify(data.permissions || []));
       }
+      localStorage.setItem("mustChangePassword", String(Boolean(data.mustChangePassword)));
       toast.success("Login successful 🎉");
       navigate("/app/dashboard", { replace: true });
     } catch (err) {
