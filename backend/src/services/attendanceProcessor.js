@@ -34,8 +34,14 @@ class AttendanceProcessor {
     for (const txn of transactions) {
       if (!txn.badgeNumber || !txn.timestamp) continue;
 
-      const dateStr = new Date(txn.timestamp).toISOString().split("T")[0];
-      const timeStr = new Date(txn.timestamp).toISOString().split("T")[1].substring(0, 5); // HH:MM
+      // The stored timestamp is a correct UTC instant (biometricSyncService anchors it to
+      // UAE +04:00 on ingest). Bucketing/display must use UAE LOCAL date+time, not UTC -
+      // otherwise a punch between 00:00-03:59 UAE time (20:00-23:59 UTC the day before)
+      // gets grouped onto the wrong calendar day. UAE has no DST, so a fixed +4h shift is
+      // enough - no timezone-database lookup needed.
+      const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
+      const dateStr = uaeTime.toISOString().split("T")[0];
+      const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5); // HH:MM, UAE local
       const code = txn.badgeNumber.trim();
       const key = `${code}_${dateStr}`;
 
@@ -116,27 +122,34 @@ class AttendanceProcessor {
       const shiftName = employee.shift || "Day Shift";
       const rules = await getShiftRules(shiftName);
 
-      // Determine Status
-      let status = "Absent";
-      let lateTier = 0;
-
-      if (record.checkIn) {
-        lateTier = calculateLateTier(record.checkIn, rules);
-        status = lateTier > 0 ? "Late" : "Present";
-      }
-
-      // Calculate Work Hours
-      const workHours = calculateDuration(record.checkIn, record.checkOut);
-
       // Check if updating is needed
       if (existingRecord) {
+        // A sync run only fetches transactions since its last cursor, so an employee's
+        // check-in and check-out for the same day routinely land in TWO SEPARATE calls
+        // to this function (checked in mid-morning, synced; checked out in the evening,
+        // synced later). `record` here only reflects whichever side THIS batch happened
+        // to contain - falling back to the existing saved value for whichever side is
+        // null in this batch prevents a checkout-only sync from wiping out an
+        // already-recorded check-in (and vice versa), which previously flipped a
+        // present/late day to "Absent" the moment the checkout synced.
+        const mergedCheckIn = record.checkIn ?? existingRecord.checkIn;
+        const mergedCheckOut = record.checkOut ?? existingRecord.checkOut;
+
+        let mergedStatus = "Absent";
+        let mergedLateTier = 0;
+        if (mergedCheckIn) {
+          mergedLateTier = calculateLateTier(mergedCheckIn, rules);
+          mergedStatus = mergedLateTier > 0 ? "Late" : "Present";
+        }
+        const mergedWorkHours = calculateDuration(mergedCheckIn, mergedCheckOut);
+
         // If times are already identical, skip to prevent unnecessary writes/triggers
         if (
-          existingRecord.checkIn === record.checkIn &&
-          existingRecord.checkOut === record.checkOut &&
-          existingRecord.status === status &&
-          existingRecord.lateTier === lateTier &&
-          existingRecord.workHours === workHours
+          existingRecord.checkIn === mergedCheckIn &&
+          existingRecord.checkOut === mergedCheckOut &&
+          existingRecord.status === mergedStatus &&
+          existingRecord.lateTier === mergedLateTier &&
+          existingRecord.workHours === mergedWorkHours
         ) {
           stats.skipped++;
           continue;
@@ -150,15 +163,25 @@ class AttendanceProcessor {
         }
 
         // Update existing record
-        existingRecord.checkIn = record.checkIn;
-        existingRecord.checkOut = record.checkOut;
-        existingRecord.status = status;
-        existingRecord.lateTier = lateTier;
-        existingRecord.workHours = workHours;
+        existingRecord.checkIn = mergedCheckIn;
+        existingRecord.checkOut = mergedCheckOut;
+        existingRecord.status = mergedStatus;
+        existingRecord.lateTier = mergedLateTier;
+        existingRecord.workHours = mergedWorkHours;
         existingRecord.shift = shiftName;
         await existingRecord.save();
         stats.updated++;
       } else {
+        // First transaction seen for this employee+date - no existing record to merge
+        // against, so record.checkIn/checkOut (whichever this batch has) is authoritative.
+        let status = "Absent";
+        let lateTier = 0;
+        if (record.checkIn) {
+          lateTier = calculateLateTier(record.checkIn, rules);
+          status = lateTier > 0 ? "Late" : "Present";
+        }
+        const workHours = calculateDuration(record.checkIn, record.checkOut);
+
         // Create new record
         await Attendance.create({
           employee: employee._id,

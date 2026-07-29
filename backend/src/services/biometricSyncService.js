@@ -6,6 +6,20 @@ import attendanceProcessor from "./attendanceProcessor.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// BioCloud sends VerifyTime as a naive "YYYY-MM-DDTHH:mm:ss" string with no timezone
+// offset (e.g. "2026-07-28T19:10:40"). `new Date(...)` on a string like that is parsed
+// as LOCAL time of whatever machine/process runs this code - NOT the device's actual
+// timezone (UAE, +04:00). If the server's own system timezone isn't also +04:00, the
+// resulting instant is silently wrong by the difference (e.g. a server on +02:00 turns
+// a real 19:10 UAE punch into 17:10 once re-displayed via toISOString()/UTC). Anchor
+// explicitly to +04:00 so the stored instant is correct no matter what timezone the
+// server process happens to run in.
+export const parseBioCloudTimestamp = (verifyTime) => {
+  if (!verifyTime) return null;
+  const hasOffset = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(verifyTime);
+  return new Date(hasOffset ? verifyTime : `${verifyTime}+04:00`);
+};
+
 class BiometricSyncService {
   constructor() {
     this.isSyncing = false;
@@ -143,7 +157,7 @@ class BiometricSyncService {
           const storedTxn = await BiometricTransaction.create({
             transactionId: txn.Id,
             badgeNumber: txn.BadgeNumber,
-            timestamp: new Date(txn.VerifyTime),  // Changed from txn.Timestamp
+            timestamp: parseBioCloudTimestamp(txn.VerifyTime),
             transactionType: txn.Status === "Check-In" ? "IN" : "OUT",  // Map Status to IN/OUT
             deviceId: txn.DeviceSerialNumber || null,  // Changed from txn.DeviceId
             rawData: txn
