@@ -6,6 +6,23 @@ import attendanceProcessor from "./attendanceProcessor.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Leptis attendance API sends authDateTime as a naive "YYYY-MM-DD HH:mm:ss[.SSSSSS]"
+// string with no timezone offset (e.g. "2026-07-28 10:57:23.000000"), and it's real
+// device-local time (Al Ain, UAE = +04:00, no DST). `new Date(str)` on that shape is
+// parsed as LOCAL time of whatever machine runs this code, not UAE time - if the server's
+// own system timezone isn't also +04:00, the stored instant silently comes out wrong by
+// the difference. Parse the components by hand and anchor to +04:00 explicitly so the
+// result is correct no matter what timezone the server process happens to run in.
+export const parseLeptisTimestamp = (authDateTime) => {
+  if (!authDateTime) return null;
+  const str = String(authDateTime).trim();
+  if (/[Zz]$|[+-]\d{2}:?\d{2}$/.test(str)) return new Date(str);
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return new Date(str);
+  const [y, mo, d, h, mi, s] = m.slice(1).map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, h, mi, s) - 4 * 60 * 60 * 1000);
+};
+
 class BiometricSyncService {
   constructor() {
     this.isSyncing = false;
@@ -123,7 +140,7 @@ class BiometricSyncService {
       // A manual sync with an endDate has no server-side upper bound (the API only
       // supports a `from` cursor), so cap the window client-side.
       if (endBoundary) {
-        transactions = transactions.filter((txn) => txn.authDateTime && new Date(txn.authDateTime) <= endBoundary);
+        transactions = transactions.filter((txn) => txn.authDateTime && parseLeptisTimestamp(txn.authDateTime) <= endBoundary);
       }
 
       const transactionsFetched = transactions.length;
@@ -146,7 +163,7 @@ class BiometricSyncService {
         if (txn.SLNO > highestTransactionId) {
           highestTransactionId = txn.SLNO;
         }
-        const authDateTime = new Date(txn.authDateTime);
+        const authDateTime = parseLeptisTimestamp(txn.authDateTime);
         if (!highestAuthDateTime || authDateTime > highestAuthDateTime) {
           highestAuthDateTime = authDateTime;
         }
