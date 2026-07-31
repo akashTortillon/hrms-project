@@ -128,12 +128,19 @@ class AttendanceProcessor {
         // check-in and check-out for the same day routinely land in TWO SEPARATE calls
         // to this function (checked in mid-morning, synced; checked out in the evening,
         // synced later). `record` here only reflects whichever side THIS batch happened
-        // to contain - falling back to the existing saved value for whichever side is
-        // null in this batch prevents a checkout-only sync from wiping out an
-        // already-recorded check-in (and vice versa), which previously flipped a
-        // present/late day to "Absent" the moment the checkout synced.
-        const mergedCheckIn = record.checkIn ?? existingRecord.checkIn;
-        const mergedCheckOut = record.checkOut ?? existingRecord.checkOut;
+        // to contain. Take the EARLIEST check-in and LATEST check-out seen across both
+        // this batch and the already-saved record - not "this batch wins if present" -
+        // otherwise a later batch whose checkIn reflects a second/duplicate punch (e.g. a
+        // lunch re-entry) silently overwrites the true, earlier check-in with a wrong
+        // later one, while checkout stays correct (same bug class that previously flipped
+        // present/late to Absent, just the mirror-image failure on the checkIn side).
+        const mergedCheckIn = [record.checkIn, existingRecord.checkIn]
+          .filter(Boolean)
+          .sort()[0] ?? null;
+        const mergedCheckOut = [record.checkOut, existingRecord.checkOut]
+          .filter(Boolean)
+          .sort()
+          .pop() ?? null;
 
         let mergedStatus = "Absent";
         let mergedLateTier = 0;
