@@ -8,6 +8,14 @@ export const getEmployees = async (params = {}) => {
   return res.data;
 };
 
+// Fetch the logged-in user's own employee profile via the dedicated /me endpoint.
+// More reliable than getEmployeeById("undefined") — works even when employeeId
+// is not yet stored in the User document.
+export const getMyProfile = async () => {
+  const res = await api.get(`${EMPLOYEE_API}/me`);
+  return res.data;
+};
+
 export const getEmployeeById = async (id) => {
   const res = await api.get(`${EMPLOYEE_API}/${id}`);
   return res.data;

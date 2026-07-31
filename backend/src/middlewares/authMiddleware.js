@@ -17,6 +17,7 @@ export const protect = async (req, res, next) => {
       // Fetch user without password
       const user = await User.findById(decoded.id).select("-password");
       if (!user) {
+        console.warn("⚠️ [Auth] User not found in DB for token user ID:", decoded.id);
         return res.status(401).json({ message: "User not found" });
       }
 
@@ -42,8 +43,9 @@ export const protect = async (req, res, next) => {
       if (user.role === "Admin") {
         permissions = ["ALL"];
       } else {
-        const roleData = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${user.role}$`, 'i') } });
-        permissions = roleData ? roleData.permissions : [];
+        const escapedRole = (user.role || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const roleData = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${escapedRole}$`, 'i') } });
+        permissions = roleData ? roleData.permissions || [] : [];
       }
 
       // Attach to request
@@ -52,10 +54,11 @@ export const protect = async (req, res, next) => {
 
       next();
     } catch (error) {
-      console.error("Auth Middleware Error:", error);
+      console.error("❌ [Auth] Token verification failed for request", req.originalUrl, ":", error.message);
       res.status(401).json({ message: "Not authorized, token failed" });
     }
   } else {
+    console.warn("⚠️ [Auth] No Authorization header / Bearer token provided for:", req.originalUrl);
     res.status(401).json({ message: "Not authorized, no token" });
   }
 };

@@ -37,7 +37,7 @@ const EditIcon = () => (
 );
 
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
 import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
@@ -77,18 +77,24 @@ export default function EmployeeDetail() {
     const navigate = useNavigate();
     const query = new URLSearchParams(window.location.search); // Parse query params
     const tabParam = query.get("tab");
-    const { hasPermission } = useRole();
+    const { hasPermission, currentUser } = useRole();
 
-    // Resolve "me" to logged-in user's employeeId
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
     const isSelf = id === "me";
-    const effectiveId = isSelf ? user.employeeId : id;
+
+    // For non-"me" routes, effectiveId is the URL param.
+    // For "me", it starts null and is populated from the server response after
+    // getMyProfile() returns — so all child fetches (docs, assets…) use the
+    // real employee _id and not a stale/missing value from localStorage.
+    const [resolvedEmployeeId, setResolvedEmployeeId] = useState(
+        isSelf ? (currentUser?.employeeId || null) : id
+    );
+    const effectiveId = isSelf ? resolvedEmployeeId : id;
 
     // Permissions
     const canEdit = hasPermission("MANAGE_EMPLOYEES");
     const canManageDocs = hasPermission("MANAGE_DOCUMENTS");
     const canManageAssets = hasPermission("MANAGE_ASSETS");
-    const canManageRepayments = hasPermission("APPROVE_REQUESTS") || hasPermission("ALL") || user?.role === "Admin";
+    const canManageRepayments = hasPermission("APPROVE_REQUESTS") || hasPermission("ALL") || currentUser?.role === "Admin";
 
 
 
@@ -150,22 +156,41 @@ export default function EmployeeDetail() {
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
-        if (!effectiveId) {
-            console.warn("No effective ID for profile view");
-            setError("No employee profile found for this user.");
-            setLoading(false);
-            return;
-        }
+        // Always reset state at the start of every fetch attempt so that a
+        // re-fetch (e.g. after effectiveId becomes available) clears old errors.
+        setLoading(true);
+        setError(null);
 
         try {
-            const data = await getEmployeeById(effectiveId);
+            let data;
+            if (isSelf) {
+                // Use the dedicated /employees/me endpoint — this resolves the employee
+                // by employeeId, email, or userId without needing the ID to be pre-stored
+                // in localStorage / context. Works for all account types out of the box.
+                data = await getMyProfile();
+                // Store the resolved _id so child tab fetches (documents, assets…)
+                // use the correct employee ID rather than an undefined value.
+                setResolvedEmployeeId(data._id);
+            } else {
+                if (!effectiveId) {
+                    setError("No employee profile found for this user.");
+                    setLoading(false);
+                    return;
+                }
+                data = await getEmployeeById(effectiveId);
+            }
             const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
             const passportExpiry = data.passportExpiry ? new Date(data.passportExpiry).toISOString().split("T")[0] : "N/A";
             const visaExpiry = data.visaExpiry ? new Date(data.visaExpiry).toISOString().split("T")[0] : "N/A";
             setEmployee({ ...data, dob, passportExpiry, visaExpiry });
         } catch (err) {
             console.error(err);
-            setError("Failed to load employee details");
+            // 404 from /employees/me means genuinely no linked employee record
+            if (err?.response?.status === 404) {
+                setError("No employee profile found for this user.");
+            } else {
+                setError(err?.response?.data?.message || "Failed to load employee details");
+            }
         } finally {
             setLoading(false);
         }
@@ -175,6 +200,7 @@ export default function EmployeeDetail() {
         fetchEmployee();
         loadDepartments();
     }, [effectiveId]);
+
 
     const handleAddAllowance = async ({ typeName, amount }) => {
         setAllowanceSubmitting(true);
@@ -486,8 +512,43 @@ export default function EmployeeDetail() {
     };
 
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
-    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
+    // Friendly state when the logged-in user has no linked Employee record
+    // (e.g. the primary Admin user who was created without an Employee entry).
+    // Still let them change their password from here.
+    if (error) {
+        const isNoProfile = !effectiveId || error === "No employee profile found for this user.";
+        return (
+            <div className="employee-detail-container">
+                <div className="employee-detail-header">
+                    <h1 className="employee-detail-title">My Profile</h1>
+                    <p className="employee-detail-subtitle">Manage your account settings</p>
+                </div>
+                <div className="employee-profile-card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '12px' }}>👤</div>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '18px', color: '#1f2937' }}>
+                        {isNoProfile ? 'No Employee Profile Linked' : 'Failed to Load Profile'}
+                    </h3>
+                    <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#6b7280' }}>
+                        {isNoProfile
+                            ? 'Your user account is not linked to an employee record. You can still manage your password below.'
+                            : error}
+                    </p>
+                    <button
+                        className="edit-profile-btn"
+                        onClick={() => setShowChangePasswordModal(true)}
+                        style={{ background: 'white', color: '#374151', border: '1px solid #d1d5db' }}
+                    >
+                        Change Password
+                    </button>
+                </div>
+                <ChangePasswordModal
+                    show={showChangePasswordModal}
+                    onClose={() => setShowChangePasswordModal(false)}
+                />
+            </div>
+        );
+    }
 
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
 
@@ -675,9 +736,19 @@ export default function EmployeeDetail() {
                                     </button>
                                 </>
                             )}
+                            {/* HR/Admin users can always change their own password */}
+                            {isSelf && (
+                                <button
+                                    className="edit-profile-btn"
+                                    onClick={() => setShowChangePasswordModal(true)}
+                                    style={{ background: 'white', color: '#374151', border: '1px solid #d1d5db' }}
+                                >
+                                    Change Password
+                                </button>
+                            )}
                         </>
                     )}
-                    {isSelf && (
+                    {!canEdit && isSelf && (
                         <button
                             className="edit-profile-btn"
                             onClick={() => setShowChangePasswordModal(true)}

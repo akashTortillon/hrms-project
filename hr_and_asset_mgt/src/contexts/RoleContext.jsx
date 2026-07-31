@@ -26,6 +26,17 @@ export const RoleProvider = ({ children }) => {
     localStorage.getItem("mustChangePassword") === "true"
   );
 
+  // Live reactive user object — includes employeeId once /auth/me resolves it.
+  // Seeded from localStorage so the value is available instantly on first render,
+  // then replaced with the fresh server response as soon as it arrives.
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null") || {};
+    } catch {
+      return {};
+    }
+  });
+
   useEffect(() => {
     const syncFromStorage = () => {
       try {
@@ -62,6 +73,9 @@ export const RoleProvider = ({ children }) => {
         localStorage.setItem("mustChangePassword", String(nextMustChangePassword));
         if (data?.user) {
           localStorage.setItem("user", JSON.stringify(data.user));
+          // Update reactive state so any component reading currentUser re-renders
+          // automatically once employeeId (or any other field) is resolved.
+          setCurrentUser(data.user);
         }
 
         setRole(nextRole);
@@ -94,7 +108,8 @@ export const RoleProvider = ({ children }) => {
   return (
     <RoleContext.Provider value={{
       role, setRole, permissions, setPermissions, hasPermission, loading,
-      mustChangePassword, clearMustChangePassword
+      mustChangePassword, clearMustChangePassword,
+      currentUser
     }}>
       {children}
     </RoleContext.Provider>

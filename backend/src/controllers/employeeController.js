@@ -86,12 +86,17 @@ const resolveFinanceManagerEmployeeId = async (designatedFinanceManager) => {
 };
 
 const attachSignedProfilePhotoUrl = async (employee) => {
+  if (!employee) return null;
   const item = employee.toObject ? employee.toObject() : { ...employee };
-  item.profilePhotoUrl = await getSignedFileUrl({
-    filePath: item.profilePhotoPath,
-    fileUrl: item.profilePhotoUrl,
-    storage: item.profilePhotoStorage
-  });
+  try {
+    item.profilePhotoUrl = await getSignedFileUrl({
+      filePath: item.profilePhotoPath,
+      fileUrl: item.profilePhotoUrl,
+      storage: item.profilePhotoStorage
+    });
+  } catch (err) {
+    console.error("Failed to sign profile photo URL:", err.message);
+  }
   return item;
 };
 
@@ -544,9 +549,72 @@ export const getEmployeeById = async (req, res) => {
     res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
     console.error("Get Employee By ID Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
+
+// GET /employees/me — Returns the employee record linked to the currently logged-in user.
+// Resolution order (most reliable → fallback):
+//   1. req.user.employeeId  — explicitly linked (set at login / auto-heal)
+//   2. email match          — case-insensitive, catches accounts created before the
+//                             employeeId link was introduced
+// Returns 404 (not 500) when no employee record exists so the frontend can show a
+// clean "no profile" state instead of a generic error.
+export const getMyEmployeeProfile = async (req, res) => {
+  console.log("🔍 [GET /api/employees/me] Request received from user:", req.user?._id, "| Email:", req.user?.email, "| Role:", req.user?.role, "| Stored employeeId:", req.user?.employeeId);
+  try {
+    const user = req.user;
+    let employee = null;
+
+    // 1. Try the stored employeeId first (fastest path)
+    if (user.employeeId) {
+      console.log("  ↳ Lookup strategy 1: Checking user.employeeId:", user.employeeId);
+      employee = await Employee.findById(user.employeeId);
+    }
+
+    // 2. Fall back to email match — escape special regex chars so an email like
+    //    "user+tag@domain.com" doesn't throw a bad-regex error.
+    if (!employee && user.email) {
+      console.log("  ↳ Lookup strategy 2: Searching employee by email:", user.email);
+      const escapedEmail = user.email.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      employee = await Employee.findOne({
+        email: { $regex: new RegExp(`^${escapedEmail}$`, "i") }
+      });
+    }
+
+    if (!employee) {
+      console.warn("  ⚠️ No employee profile matched for user email:", user.email);
+      return res.status(404).json({ message: "No employee profile found for this user." });
+    }
+
+    console.log("  ✅ Employee profile matched:", employee._id, "| Name:", employee.name);
+
+    // If we found via email but the User document wasn't linked yet, persist the link
+    // so future requests hit path 1 (fastest) and the middleware auto-heal also works.
+    if (!user.employeeId) {
+      try {
+        await User.findByIdAndUpdate(user._id, { employeeId: employee._id });
+        console.log("  🔗 Auto-linked employeeId to User record.");
+      } catch (linkError) {
+        console.warn("  ⚠️ Could not auto-link employeeId to user:", linkError.message);
+      }
+    }
+
+    try {
+      await applyDuePendingTransfers(employee);
+    } catch (transferError) {
+      console.error("  ⚠️ applyDuePendingTransfers failed for /me:", transferError);
+    }
+
+    const responseData = await attachSignedProfilePhotoUrl(employee);
+    console.log("  📤 Successfully returning profile for employee:", employee.name);
+    res.json(responseData);
+  } catch (error) {
+    console.error("❌ [GET /api/employees/me] ERROR:", error.stack || error);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
 
 
 export const updateEmployee = async (req, res) => {

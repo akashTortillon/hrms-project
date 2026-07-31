@@ -7,6 +7,7 @@ import {
   deleteEmployee,
   exportEmployees,
   getEmployeeById,
+  getMyEmployeeProfile,
   importEmployees,
   transferEmployee,
   getProbationReminders,
@@ -32,6 +33,10 @@ router.get("/probation/reminders", protect, hasPermission("MANAGE_EMPLOYEES"), g
 
 // ADD new employee
 router.post("/", protect, hasPermission("MANAGE_EMPLOYEES"), addEmployee);
+
+// GET logged-in user's own employee profile (must be before /:id to avoid
+// Express matching the literal string "me" as an ObjectId parameter).
+router.get("/me", protect, getMyEmployeeProfile);
 
 // GET single employee
 router.get("/:id", protect, getEmployeeById);
