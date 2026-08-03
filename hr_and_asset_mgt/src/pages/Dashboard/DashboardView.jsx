@@ -10,6 +10,7 @@ import { getDocumentStats } from "../../services/documentService.js";
 import { useRole } from "../../contexts/RoleContext.jsx";
 import EmployeeDashboard from "./EmployeeDashboard";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
+import MyPayslipsWidget from "../../components/employee/MyPayslipsWidget.jsx";
 
 import {
   fetchMetrics,
@@ -395,6 +396,15 @@ function Dashboard() {
             onActionClick={() => navigate("/app/attendance")}
             items={normalizedAttendance}
           />
+        </Col>
+      </Row>
+
+      {/* Self-service payslip access for admins/HR who are also a linked Employee record -
+          reuses the exact same widget EmployeeDashboard.jsx already has, so it's an empty
+          state (not an error) for admins with no linked employee. */}
+      <Row className="mt-4">
+        <Col md={12}>
+          <MyPayslipsWidget />
         </Col>
       </Row>
     </Container>

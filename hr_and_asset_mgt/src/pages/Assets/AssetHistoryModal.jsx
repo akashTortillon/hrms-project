@@ -250,7 +250,7 @@ export default function AssetHistoryModal({ onClose, asset }) {
   ];
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" style={{ maxWidth: "1200px", width: "95%" }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Asset History</h3>

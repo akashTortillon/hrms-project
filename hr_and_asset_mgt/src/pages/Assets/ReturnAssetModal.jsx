@@ -283,7 +283,7 @@ export default function ReturnAssetModal({ onClose, onReturn, asset }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Return Asset from Maintenance</h3>

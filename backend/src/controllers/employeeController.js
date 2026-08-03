@@ -7,11 +7,8 @@ import bcrypt from "bcryptjs";
 import { sendEmail } from "../utils/sendEmail.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
-
-const toNumber = (value) => {
-  if (value === null || value === undefined || value === "") return 0;
-  return Number(String(value).replace(/[^0-9.-]+/g, "")) || 0;
-};
+import { toNumber, computeTotalSalary, computeCtc } from "../utils/salaryCalc.js";
+import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
 
 const buildLaborCards = (payload = {}) => {
   if (Array.isArray(payload.laborCards) && payload.laborCards.length > 0) {
@@ -256,6 +253,10 @@ export const addEmployee = async (req, res) => {
       designation,
       contractType,
       basicSalary,
+      allowance,
+      hra,
+      accommodationAllowance,
+      vehicleAllowance,
       visaBase,
       workBase,
       ctc,
@@ -367,6 +368,12 @@ export const addEmployee = async (req, res) => {
       }
     }
 
+    // Total Salary / CTC are always server-computed from basic+allowance+hra (+accommodation/
+    // vehicle for CTC) - see backend/src/utils/salaryCalc.js - never trusted from the client.
+    const salaryInputs = { basicSalary, allowance, hra, accommodationAllowance, vehicleAllowance };
+    const computedTotalSalary = computeTotalSalary(salaryInputs);
+    const computedCtc = computeCtc(salaryInputs);
+
     // 5. Create Employee (Only if User valid)
     const employee = await Employee.create({
       name,
@@ -384,9 +391,14 @@ export const addEmployee = async (req, res) => {
       designation,
       contractType,
       basicSalary,
+      allowance: toNumber(allowance),
+      hra: toNumber(hra),
+      accommodationAllowance: toNumber(accommodationAllowance),
+      vehicleAllowance: toNumber(vehicleAllowance),
+      totalSalary: computedTotalSalary,
       visaBase: toNumber(visaBase || basicSalary),
       workBase: toNumber(workBase || basicSalary),
-      ctc: toNumber(ctc || workBase || basicSalary),
+      ctc: computedCtc,
       accommodation,
       visaCompany: visaCompany || "",
       workPermitCompany: workPermitCompany || "",
@@ -411,7 +423,7 @@ export const addEmployee = async (req, res) => {
         basicSalary,
         visaBase,
         workBase,
-        ctc,
+        ctc: computedCtc,
         joinDate
       })
     });
@@ -428,6 +440,16 @@ export const addEmployee = async (req, res) => {
         : "Employee added (User account already existed)",
       employee
     });
+
+    // Only when the employee is created directly with status "Onboarding" (today's
+    // Add Employee default) - an employee added as already-Active (e.g. inter-branch
+    // transfer) gets no checklist forced on them. Fire-and-forget: a template hiccup
+    // here shouldn't fail the employee-creation response that's already been sent.
+    if (employee.status === "Onboarding") {
+      createOnboardingWorkflowForEmployee(employee._id, req.user._id).catch((err) => {
+        console.error("Failed to auto-create onboarding workflow:", err.message);
+      });
+    }
 
     logActivity({
       req,
@@ -451,7 +473,7 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const { department, status, search, branch, company, designation } = req.query;
+    const { department, status, search, branch, company, designation, page, limit } = req.query;
 
     let matchStage = {};
 
@@ -501,6 +523,28 @@ export const getEmployees = async (req, res) => {
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
 
+    // Pagination is opt-in via ?page= - every existing caller (Add/Edit Employee
+    // pickers, Onboarding/Offboarding lists, asset-assignment dropdowns, etc.) calls
+    // this without `page` and keeps getting the full bare array exactly as before.
+    // Only the Employees list page passes `page`, so only it needs to handle the
+    // wrapped { employees, total, page, totalPages } shape.
+    if (page !== undefined) {
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+      const total = employees.length;
+      const pageEmployees = employees.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+      const signedEmployees = await Promise.all(
+        pageEmployees.map((employee) => attachSignedProfilePhotoUrl(employee))
+      );
+
+      return res.json({
+        employees: signedEmployees,
+        total,
+        page: pageNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum))
+      });
+    }
 
     const signedEmployees = await Promise.all(
       employees.map((employee) => attachSignedProfilePhotoUrl(employee))
@@ -705,6 +749,18 @@ export const updateEmployee = async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    // Total Salary / CTC are never trusted from the client - always recomputed from the
+    // persisted basic/allowance/hra(/accommodation/vehicle) fields after every update, so
+    // a stale client-typed value (or a caller that doesn't send them at all) can't desync
+    // them from the source fields (see backend/src/utils/salaryCalc.js).
+    const correctTotalSalary = computeTotalSalary(updatedEmployee);
+    const correctCtc = computeCtc(updatedEmployee);
+    if (updatedEmployee.totalSalary !== correctTotalSalary || updatedEmployee.ctc !== correctCtc) {
+      updatedEmployee.totalSalary = correctTotalSalary;
+      updatedEmployee.ctc = correctCtc;
+      await updatedEmployee.save();
+    }
+
     // Sync Role with User account
     if (role && updatedEmployee.email) {
       // Find linked User by email and update role
@@ -772,6 +828,42 @@ export const updateEmployee = async (req, res) => {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ message: error.message });
     }
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
+export const deleteAllowance = async (req, res) => {
+  try {
+    const { employeeId, allowanceId } = req.params;
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const allowance = employee.allowances.id(allowanceId);
+    if (!allowance) {
+      return res.status(404).json({ message: "Allowance not found" });
+    }
+
+    employee.allowances.pull(allowanceId);
+    // totalSalary/ctc never include allowances[] under the current formula (see
+    // salaryCalc.js), so removing one can't change either - recomputed anyway to stay
+    // self-healing against any employee whose stored values still predate that formula.
+    employee.totalSalary = computeTotalSalary(employee);
+    employee.ctc = computeCtc(employee);
+    await employee.save();
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "EMPLOYEE",
+      description: `Allowance "${allowance.typeName}" (AED ${allowance.amount}) removed from ${employee.name} (${employee.code})`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
+
+    res.json({ employee });
+  } catch (error) {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
@@ -1019,20 +1111,20 @@ export const confirmProbation = async (req, res) => {
     const currentBasic = toNumber(lastSalaryEntry?.basicSalary || employee.basicSalary);
     const currentVisaBase = toNumber(lastSalaryEntry?.visaBase || employee.visaBase || employee.basicSalary);
     const currentWorkBase = toNumber(lastSalaryEntry?.workBase || employee.workBase || employee.basicSalary);
-    const currentCtc = toNumber(lastSalaryEntry?.ctc || employee.ctc || employee.workBase || employee.basicSalary);
     const increment = toNumber(employee.fixedProbationIncrementAmount);
 
     if (increment > 0) {
       employee.basicSalary = String(currentBasic + increment);
       employee.visaBase = currentVisaBase + increment;
       employee.workBase = currentWorkBase + increment;
-      employee.ctc = currentCtc + increment;
+      employee.totalSalary = computeTotalSalary(employee);
+      employee.ctc = computeCtc(employee);
       employee.salaryHistory.push({
         salaryType: "PROBATION_INCREMENT",
         basicSalary: currentBasic + increment,
         visaBase: currentVisaBase + increment,
         workBase: currentWorkBase + increment,
-        ctc: currentCtc + increment,
+        ctc: employee.ctc,
         incrementAmount: increment,
         effectiveDate: employee.probationEndDate || new Date(),
         notes: remarks || "Probation increment applied",
@@ -1381,7 +1473,6 @@ export const importEmployees = async (req, res) => {
         let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
         const basicSalaryVal = row["Basic Salary (AED)"] ?? row["Basic Salary"];
-        const ctcVal = row["MONTHLY CTC"] ?? row["CTC"] ?? row["Work Base"] ?? basicSalaryVal;
 
         // A row's Status column only wins if it's one of the real enum values - a
         // contaminated re-upload (e.g. a previous import-results export with its own
@@ -1412,12 +1503,10 @@ export const importEmployees = async (req, res) => {
           basicSalary: basicSalaryVal != null ? String(basicSalaryVal) : "",
           allowance: toNumber(row["Allowance (AED)"]),
           hra: toNumber(row["HRA (AED)"]),
-          totalSalary: toNumber(row["Total Salary (AED)"] ?? ctcVal),
           accommodationAllowance: toNumber(row["ACCOMODATION ALLOWANCE"]),
           vehicleAllowance: toNumber(row["VEHICHLE ALLOWANCE"]),
           visaBase: toNumber(row["Visa Base"] ?? basicSalaryVal),
           workBase: toNumber(row["Work Base"] ?? basicSalaryVal),
-          ctc: toNumber(ctcVal),
           accommodation: row["Accommodation"] || "",
           visaCompany: visaCompanyName || row["Visa Company"] || "",
           workPermitCompany: workPermitCompanyName || row["work permit"] || row["Work Permit Company"] || "",
@@ -1436,6 +1525,11 @@ export const importEmployees = async (req, res) => {
           fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"])
         };
 
+        // Total Salary / CTC are always server-computed, never trusted from the sheet
+        // (a "Total Salary (AED)"/"CTC" column may carry stale or manually-typed values).
+        employeeFields.totalSalary = computeTotalSalary(employeeFields);
+        employeeFields.ctc = computeCtc(employeeFields);
+
         if (existingEmployeeDoc) {
           // Update path: never touch systemCode (immutable) or salaryHistory/probation
           // confirmation state (real history, not something a re-upload should overwrite).
@@ -1451,7 +1545,7 @@ export const importEmployees = async (req, res) => {
               basicSalary: basicSalaryVal,
               visaBase: row["Visa Base"] ?? basicSalaryVal,
               workBase: row["Work Base"] ?? basicSalaryVal,
-              ctc: ctcVal,
+              ctc: employeeFields.ctc,
               joinDate
             })
           });
@@ -1586,7 +1680,10 @@ export const getEmployeeGratuity = async (req, res) => {
     const accommodationAllowance = Number(employee.accommodationAllowance) || 0;
     const vehicleAllowance = Number(employee.vehicleAllowance) || 0;
     const fixedProbationIncrement = Number(employee.fixedProbationIncrementAmount) || 0;
-    const totalSalary = Number(employee.totalSalary) || (basicSalary + accommodationAllowance + vehicleAllowance);
+    // Gratuity cap uses full compensation (CTC), not the narrower Total Salary figure -
+    // employee.ctc is server-recomputed on every save (see updateEmployee), so it's
+    // always authoritative; computeCtc is the fallback for any employee predating that.
+    const totalSalary = Number(employee.ctc) || computeCtc(employee);
 
     // Calculate years of service
     const joinDate = employee.joinDate ? new Date(employee.joinDate) : null;

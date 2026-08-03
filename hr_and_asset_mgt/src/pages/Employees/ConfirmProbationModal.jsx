@@ -9,7 +9,7 @@ export default function ConfirmProbationModal({ employee, onClose, onConfirm, su
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3>Confirm Probation</h3>

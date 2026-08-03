@@ -73,7 +73,7 @@ export default function MaintenanceSchedulerModal({ onClose, onSchedule, asset }
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Schedule Maintenance</h3>

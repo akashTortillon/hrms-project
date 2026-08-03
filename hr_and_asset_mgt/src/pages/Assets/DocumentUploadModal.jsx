@@ -106,7 +106,7 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div
         className="modal-container"
         style={{ maxWidth: "700px" }}

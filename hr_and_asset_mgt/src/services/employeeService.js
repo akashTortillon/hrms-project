@@ -61,6 +61,12 @@ export const deleteEmployee = async (id) => {
   return res.data;
 };
 
+// DELETE a single ad-hoc allowance entry
+export const deleteAllowance = async (employeeId, allowanceId) => {
+  const res = await api.delete(`${EMPLOYEE_API}/${employeeId}/allowances/${allowanceId}`);
+  return res.data.employee;
+};
+
 // RESET PASSWORD
 export const resetEmployeePassword = async (id) => {
   const res = await api.put(`${EMPLOYEE_API}/${id}/reset-password`);

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import MastersCard from "../components/MastersCard.jsx"; // New Card Component
 import CustomButton from "../../../components/reusable/Button.jsx";
 import { RenderList } from "../components/RenderList.jsx";
@@ -41,6 +42,11 @@ export default function HRManagement() {
         setLeaveTypeState
     } = useHRManagement();
 
+    const [shiftSearch, setShiftSearch] = useState("");
+    const filteredShifts = shifts.filter(s =>
+        s.name.toLowerCase().includes(shiftSearch.toLowerCase())
+    );
+
     return (
         <div className="hr-management">
 
@@ -55,8 +61,11 @@ export default function HRManagement() {
                 <MastersCard
                     title="Shifts"
                     onAdd={() => handleOpenAdd("Shift")}
+                    search={shiftSearch}
+                    onSearchChange={setShiftSearch}
+                    searchPlaceholder="Search shifts..."
                 >
-                    <RenderList items={shifts} type="Shift" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                    <RenderList items={filteredShifts} type="Shift" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Employee Types */}

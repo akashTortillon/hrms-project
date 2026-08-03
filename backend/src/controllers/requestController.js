@@ -1307,6 +1307,7 @@ export const updateRequestStatus = async (req, res) => {
       if (isFinanceStage) {
         const financeAmountProvided = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== "";
         const financeRepaymentProvided = req.body.repaymentPeriod !== undefined && req.body.repaymentPeriod !== null && req.body.repaymentPeriod !== "";
+        const financeMonthlyProvided = req.body.monthlyRepaymentAmount !== undefined && req.body.monthlyRepaymentAmount !== null && req.body.monthlyRepaymentAmount !== "";
 
         if (request.requestType === "SALARY") {
           const requestedAmount = Number(request.details?.requestedAmount ?? request.details?.amount) || 0;
@@ -1319,6 +1320,13 @@ export const updateRequestStatus = async (req, res) => {
             financeApprovedRepaymentPeriod: financeRepaymentProvided
               ? Number(req.body.repaymentPeriod)
               : request.details?.financeApprovedRepaymentPeriod ?? request.details?.repaymentPeriod,
+            // Loans: monthly repayment amount now drives the term (see the HR-final-stage
+            // block below), replacing a directly-picked tenure. Kept alongside the older
+            // repaymentPeriod field above for backward compatibility with loans already
+            // in-flight when this changed.
+            financeApprovedMonthlyRepaymentAmount: financeMonthlyProvided
+              ? Number(req.body.monthlyRepaymentAmount)
+              : request.details?.financeApprovedMonthlyRepaymentAmount ?? request.details?.monthlyRepaymentAmount,
             financeApprovedAt: new Date(),
             financeApprovedBy: req.user.id
           };
@@ -1383,6 +1391,22 @@ export const updateRequestStatus = async (req, res) => {
 
         if (approvedRepaymentPeriod) {
           request.details.repaymentPeriod = Number(approvedRepaymentPeriod);
+        }
+
+        // Loans: term is derived from a monthly repayment amount instead of being picked
+        // directly - Math.ceil so a smaller final installment absorbs any remainder
+        // (payroll's existing Math.min(installment, remaining) already handles that).
+        // Falls back to the repaymentPeriod set just above for loans approved before
+        // this existed (no monthlyRepaymentAmount on file for them).
+        if (request.details?.subType === "loan") {
+          const approvedMonthlyRepaymentAmount = req.body.monthlyRepaymentAmount !== undefined && req.body.monthlyRepaymentAmount !== null && req.body.monthlyRepaymentAmount !== ""
+            ? Number(req.body.monthlyRepaymentAmount)
+            : (request.details?.financeApprovedMonthlyRepaymentAmount ?? request.details?.monthlyRepaymentAmount);
+
+          if (approvedMonthlyRepaymentAmount > 0) {
+            request.details.monthlyRepaymentAmount = approvedMonthlyRepaymentAmount;
+            request.details.repaymentPeriod = Math.ceil(totalRepayment / approvedMonthlyRepaymentAmount);
+          }
         }
 
         const startCurrentCycle = req.body.startCurrentCycle === true || req.body.startCurrentCycle === "true";

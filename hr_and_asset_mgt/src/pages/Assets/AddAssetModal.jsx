@@ -149,7 +149,7 @@ export default function AddAssetModal({
 
   /* -------------------- UI -------------------- */
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{isEditMode ? "Edit Asset" : "Add Asset"}</h3>

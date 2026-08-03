@@ -196,7 +196,44 @@ export const getEmployeeDocuments = async (req, res) => {
         }
 
         const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
-        res.json(await Promise.all(documents.map(attachSignedFileUrl)));
+        const signedDocuments = await Promise.all(documents.map(attachSignedFileUrl));
+
+        // Superset with the Dashboard's expiry widget (dashboardController.js's
+        // getEmployeeVisaExpiries): surface passport/visa/Emirates ID/labor-card expiry
+        // dates stored directly on the Employee record even when no file was ever
+        // uploaded for them - otherwise an expired date shows on the Dashboard but
+        // nowhere on this employee's own Documents tab. Skipped when a real uploaded
+        // document of that type already exists, to avoid a redundant duplicate row.
+        const employee = await Employee.findById(employeeId).select("visaExpiry passportExpiry emiratesIdExpiry laborCards");
+        // Match the Document Type master's own casing ("PASSPORT", "VISA", "EMIRATES ID",
+        // "LABOUR CARD") - this is what the Upload Document form's dropdown actually stores,
+        // so the synthetic label must match exactly both for the dedup check below and so
+        // the "Upload" button here can prefill that same dropdown correctly.
+        const uploadedTypes = new Set(signedDocuments.map((doc) => String(doc.documentType).toUpperCase()));
+        const syntheticSources = [
+            { documentType: "VISA", expiryDate: employee?.visaExpiry },
+            { documentType: "PASSPORT", expiryDate: employee?.passportExpiry },
+            { documentType: "EMIRATES ID", expiryDate: employee?.emiratesIdExpiry },
+            ...(employee?.laborCards || []).map((card) => ({
+                documentType: "LABOUR CARD",
+                expiryDate: card.expiryDate,
+                label: card.number ? `Card ${card.number}` : ""
+            }))
+        ];
+
+        const syntheticDocuments = syntheticSources
+            .filter((source) => source.expiryDate && !uploadedTypes.has(source.documentType))
+            .map((source) => ({
+                _id: `synthetic-${employeeId}-${source.documentType}-${source.label || ""}`,
+                employeeId,
+                documentType: source.documentType,
+                label: source.label || "",
+                expiryDate: source.expiryDate,
+                status: computeExpiryStatus(source.expiryDate),
+                noFileUploaded: true
+            }));
+
+        res.json([...signedDocuments, ...syntheticDocuments]);
     } catch (error) {
         // console.error("Get Employee Docs Error:", error);
         res.status(500).json({ message: "Server error" });

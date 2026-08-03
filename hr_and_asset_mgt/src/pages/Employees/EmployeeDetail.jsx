@@ -36,8 +36,18 @@ const EditIcon = () => (
     </svg>
 );
 
+const TrashIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+    </svg>
+);
 
-import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+
+import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity, deleteAllowance } from "../../services/employeeService";
 import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
@@ -120,6 +130,7 @@ export default function EmployeeDetail() {
     const [documents, setDocuments] = useState([]);
     const [workflowDocs, setWorkflowDocs] = useState([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
+    const [uploadPrefillType, setUploadPrefillType] = useState("");
 
     // Attendance & Training State
     const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, late: 0, total: 0 });
@@ -202,7 +213,7 @@ export default function EmployeeDetail() {
     }, [effectiveId]);
 
 
-    const handleAddAllowance = async ({ typeName, amount }) => {
+    const handleAddAllowance = async ({ typeName, amount, includeInPayroll }) => {
         setAllowanceSubmitting(true);
         try {
             const today = new Date().toISOString().slice(0, 10);
@@ -211,7 +222,8 @@ export default function EmployeeDetail() {
                 type: "ALLOWANCE",
                 allowanceTypeName: typeName,
                 amount,
-                effectiveDate: today
+                effectiveDate: today,
+                includeInPayroll
             });
             await fetchEmployee();
             setShowAddAllowanceModal(false);
@@ -220,6 +232,19 @@ export default function EmployeeDetail() {
             toast.error(err?.response?.data?.message || "Failed to apply allowance");
         } finally {
             setAllowanceSubmitting(false);
+        }
+    };
+
+    const handleDeleteAllowance = async (allowance) => {
+        if (!window.confirm(`Remove the "${allowance.typeName}" allowance (${Number(allowance.amount).toLocaleString()} AED)?`)) {
+            return;
+        }
+        try {
+            await deleteAllowance(effectiveId, allowance._id);
+            await fetchEmployee();
+            toast.success("Allowance removed");
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to remove allowance");
         }
     };
 
@@ -309,6 +334,7 @@ export default function EmployeeDetail() {
             await uploadEmployeeDocument(formData);
             toast.success("Document uploaded");
             setShowUploadModal(false);
+            setUploadPrefillType("");
             fetchDocuments();
         } catch (e) {
             console.error(e);
@@ -1019,7 +1045,7 @@ export default function EmployeeDetail() {
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Document Tracker</h3>
                             {canManageDocs && (
                                 <button
-                                    onClick={() => setShowUploadModal(true)}
+                                    onClick={() => { setUploadPrefillType(""); setShowUploadModal(true); }}
                                     style={{
                                         background: '#2563eb', color: 'white', border: 'none',
                                         padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer'
@@ -1049,21 +1075,38 @@ export default function EmployeeDetail() {
                                         }}>
                                             {doc.status}
                                         </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleViewEmployeeDocument(doc)}
-                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                        >
-                                            View
-                                        </button>
-                                        {canManageDocs && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDeleteEmployeeDocument(doc)}
-                                                style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                            >
-                                                Delete
-                                            </button>
+                                        {doc.noFileUploaded ? (
+                                            <>
+                                                <span style={{ fontSize: '12px', color: '#9ca3af' }}>No file uploaded</span>
+                                                {canManageDocs && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setUploadPrefillType(doc.documentType); setShowUploadModal(true); }}
+                                                        style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                    >
+                                                        Upload
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleViewEmployeeDocument(doc)}
+                                                    style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                >
+                                                    View
+                                                </button>
+                                                {canManageDocs && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteEmployeeDocument(doc)}
+                                                        style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -1286,10 +1329,28 @@ export default function EmployeeDetail() {
 
                                 {(employee.allowances || []).map((item) => (
                                     <div key={item._id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{item.typeName}</span>
-                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
-                                            {Number(item.amount).toLocaleString()} AED
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                                            {item.typeName}
+                                            {item.includeInPayroll === false && (
+                                                <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '600', color: '#b45309', background: '#fef3c7', padding: '2px 6px', borderRadius: '999px' }}>
+                                                    Excluded from payroll
+                                                </span>
+                                            )}
                                         </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                                {Number(item.amount).toLocaleString()} AED
+                                            </span>
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => handleDeleteAllowance(item)}
+                                                    title="Remove allowance"
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center', padding: '4px' }}
+                                                >
+                                                    <TrashIcon />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
 
@@ -1661,7 +1722,8 @@ export default function EmployeeDetail() {
             {showUploadModal && (
                 <UploadEmployeeDocumentModal
                     employeeId={effectiveId}
-                    onClose={() => setShowUploadModal(false)}
+                    initialDocumentType={uploadPrefillType}
+                    onClose={() => { setShowUploadModal(false); setUploadPrefillType(""); }}
                     onUpload={handleUploadDocument}
                 />
             )}

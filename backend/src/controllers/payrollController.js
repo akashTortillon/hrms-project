@@ -1137,7 +1137,10 @@ export const generatePayroll = async (req, res) => {
                             deductionAmount = remaining; // Full deduction
                         }
                     } else if (req.details?.subType === "loan") {
-                        const installment = totalPayable / period;
+                        // Prefer the monthly repayment amount fixed at approval time; fall back to
+                        // totalPayable/period division for loans approved before that field existed.
+                        const monthlyRepaymentAmount = Number(req.details?.monthlyRepaymentAmount) || 0;
+                        const installment = monthlyRepaymentAmount > 0 ? monthlyRepaymentAmount : (totalPayable / period);
                         deductionAmount = Math.min(installment, remaining);
                     }
 

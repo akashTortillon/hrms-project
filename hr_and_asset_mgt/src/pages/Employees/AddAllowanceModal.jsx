@@ -6,6 +6,7 @@ export default function AddAllowanceModal({ employee, onClose, onConfirm, submit
   const [allowanceTypes, setAllowanceTypes] = useState([]);
   const [typeName, setTypeName] = useState("");
   const [amount, setAmount] = useState("");
+  const [includeInPayroll, setIncludeInPayroll] = useState(true);
 
   useEffect(() => {
     getSettings()
@@ -20,11 +21,11 @@ export default function AddAllowanceModal({ employee, onClose, onConfirm, submit
   const newAmount = currentAmount + (Number.isFinite(parsedAmount) ? parsedAmount : 0);
 
   const handleSubmit = () => {
-    onConfirm({ typeName, amount: parsedAmount });
+    onConfirm({ typeName, amount: parsedAmount, includeInPayroll });
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3>Add / Increase Allowance</h3>
@@ -68,6 +69,23 @@ export default function AddAllowanceModal({ employee, onClose, onConfirm, submit
                 New amount: {newAmount.toLocaleString()} AED
               </div>
             )}
+
+            <div className="form-group full-width" style={{ gridColumn: "1 / -1" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: 500 }}>
+                <input
+                  type="checkbox"
+                  checked={includeInPayroll}
+                  onChange={(event) => setIncludeInPayroll(event.target.checked)}
+                  style={{ width: "16px", height: "16px", padding: 0, border: "1px solid #d1d5db", borderRadius: "4px", accentColor: "#c49a31", flex: "0 0 auto" }}
+                />
+                Include in payroll
+              </label>
+              {!includeInPayroll && (
+                <div style={{ fontSize: "12px", color: "#b45309", marginTop: "4px" }}>
+                  This allowance will be recorded on the employee's profile but excluded from payroll runs.
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

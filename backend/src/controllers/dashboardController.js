@@ -94,20 +94,25 @@ export const getEmployeeVisaExpiries = async (req, res) => {
       $or: [
         { visaExpiry: { $ne: null } },
         { passportExpiry: { $ne: null } },
-        { emiratesIdExpiry: { $ne: null } }
+        { emiratesIdExpiry: { $ne: null } },
+        { "laborCards.expiryDate": { $ne: null } }
       ]
     };
     if (restrictToSelf) employeeQuery._id = req.user.employeeId;
 
     const employees = await Employee.find(employeeQuery)
-      .select("name designation code visaExpiry passportExpiry emiratesIdExpiry");
+      .select("name designation code visaExpiry passportExpiry emiratesIdExpiry laborCards");
 
     const rows = [];
     employees.forEach((emp) => {
       [
         { documentType: "Visa", expiryDate: emp.visaExpiry },
         { documentType: "Passport", expiryDate: emp.passportExpiry },
-        { documentType: "Emirates ID", expiryDate: emp.emiratesIdExpiry }
+        { documentType: "Emirates ID", expiryDate: emp.emiratesIdExpiry },
+        ...(emp.laborCards || []).map((card) => ({
+          documentType: "Labor Card",
+          expiryDate: card.expiryDate
+        }))
       ].forEach(({ documentType, expiryDate }) => {
         if (!expiryDate) return;
         const status = computeExpiryStatus(expiryDate);

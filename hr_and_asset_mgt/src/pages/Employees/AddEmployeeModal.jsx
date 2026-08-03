@@ -181,7 +181,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
   };
 
   return (
-    <div className="modal-backdrop" onClick={requestClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Add Employee</h3>

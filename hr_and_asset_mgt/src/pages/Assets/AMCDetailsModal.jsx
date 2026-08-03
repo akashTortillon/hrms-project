@@ -92,7 +92,7 @@ export default function AMCDetailsModal({ onClose, onSave, asset }) {
   const daysUntilExpiry = getDaysUntilExpiry();
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{hasExistingAMC ? "Update" : "Add"} AMC Details</h3>

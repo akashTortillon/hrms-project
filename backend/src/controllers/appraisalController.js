@@ -3,16 +3,7 @@ import Appraisal from "../models/appraisalModel.js";
 import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
 import { createNotification } from "./notificationController.js";
-
-const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
-
-const computeTotalSalary = (employee) =>
-  toNumber(employee.basicSalary) +
-  toNumber(employee.allowance) +
-  toNumber(employee.hra) +
-  toNumber(employee.accommodationAllowance) +
-  toNumber(employee.vehicleAllowance) +
-  employee.allowances.reduce((sum, item) => sum + toNumber(item.amount), 0);
+import { toNumber, computeTotalSalary, computeCtc } from "../utils/salaryCalc.js";
 
 export const getAppraisalCycles = async (req, res) => {
   try {
@@ -130,6 +121,7 @@ export const approveAppraisal = async (req, res) => {
         });
       }
       employee.totalSalary = computeTotalSalary(employee);
+      employee.ctc = computeCtc(employee);
       await employee.save();
 
       if (linkedUser) {
@@ -146,24 +138,23 @@ export const approveAppraisal = async (req, res) => {
       const latestVisaBase = toNumber(employee.visaBase || employee.basicSalary);
       const latestWorkBase = toNumber(employee.workBase || employee.basicSalary);
       const latestBasic = toNumber(employee.basicSalary);
-      const latestCtc = toNumber(employee.ctc || employee.workBase || employee.basicSalary);
 
       employee.basicSalary = String(latestBasic + increment);
       employee.visaBase = latestVisaBase + increment;
       employee.workBase = latestWorkBase + increment;
-      employee.ctc = latestCtc + increment;
+      employee.totalSalary = computeTotalSalary(employee);
+      employee.ctc = computeCtc(employee);
       employee.salaryHistory.push({
         salaryType: "APPRAISAL",
         basicSalary: latestBasic + increment,
         visaBase: latestVisaBase + increment,
         workBase: latestWorkBase + increment,
-        ctc: latestCtc + increment,
+        ctc: employee.ctc,
         incrementAmount: increment,
         effectiveDate,
         notes: req.body.notes || "Approved through appraisal",
         createdBy: req.user._id
       });
-      employee.totalSalary = computeTotalSalary(employee);
       await employee.save();
 
       if (linkedUser) {

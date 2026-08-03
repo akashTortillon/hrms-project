@@ -53,17 +53,22 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
     }));
   }, [employee]);
 
-  // Handle auto-calculation of Total Salary
+  // Auto-calculated, read-only in the form below - Total Salary = Basic + Allowance + HRA;
+  // CTC = Total Salary + Accommodation + Vehicle (matches backend/src/utils/salaryCalc.js,
+  // which is the actual source of truth re-applied server-side on every save regardless
+  // of what's submitted here - this just keeps the UI in sync live).
   useEffect(() => {
     const basic = Number(form.basicSalary) || 0;
     const allowance = Number(form.allowance) || 0;
     const hra = Number(form.hra) || 0;
     const accommodation = Number(form.accommodationAllowance) || 0;
     const vehicle = Number(form.vehicleAllowance) || 0;
-    
+    const totalSalary = basic + allowance + hra;
+
     setForm(prev => ({
       ...prev,
-      totalSalary: basic + allowance + hra + accommodation + vehicle
+      totalSalary,
+      ctc: totalSalary + accommodation + vehicle
     }));
   }, [form.basicSalary, form.allowance, form.hra, form.accommodationAllowance, form.vehicleAllowance]);
 
@@ -164,7 +169,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
 
         <div className="modal-header">
@@ -774,7 +779,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
                 <div className="form-group">
                   <label>Total Salary (AED)</label>
-                  <input name="totalSalary" type="number" value={form.totalSalary || ''} onChange={handleChange} placeholder="Auto calculated" />
+                  <input name="totalSalary" type="number" value={form.totalSalary || ''} readOnly disabled placeholder="Auto calculated: Basic + Allowance + HRA" />
                 </div>
 
                 <div className="form-group">
@@ -789,7 +794,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
 
                 <div className="form-group">
                   <label>CTC</label>
-                  <input name="ctc" value={form.ctc || ''} onChange={handleChange} placeholder="Optional CTC" />
+                  <input name="ctc" value={form.ctc || ''} readOnly disabled placeholder="Auto calculated: Total Salary + Accommodation + Vehicle" />
                 </div>
                 </>
                 )}
