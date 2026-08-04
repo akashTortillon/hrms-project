@@ -374,6 +374,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                         height: "42px"
                       }}
                     >
+                      <option value="Onboarding">Onboarding</option>
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
                       <option value="On Leave">On Leave</option>

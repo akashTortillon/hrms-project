@@ -317,7 +317,7 @@ export default function EmployeeDetail() {
         for (const type of ["Onboarding", "Offboarding"]) {
             try {
                 const wf = await getEmployeeWorkflow(effectiveId, type);
-                (wf?.items || []).forEach((item) => {
+                (wf?.data?.items || []).forEach((item) => {
                     if (item.documentUrl) {
                         collected.push({ _id: item._id, name: item.name, type, documentUrl: item.documentUrl });
                     }
