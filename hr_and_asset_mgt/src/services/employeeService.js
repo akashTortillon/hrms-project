@@ -76,6 +76,22 @@ export const importEmployees = async (formData) => {
   return res.data;
 };
 
+// PREVIEW shift import (Excel) - Admin only
+export const previewShiftImport = async (formData) => {
+  const res = await api.post(EMPLOYEE_API + "/import-shifts/preview", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+// APPLY shift import (Excel) - Admin only
+export const applyShiftImport = async (formData) => {
+  const res = await api.post(EMPLOYEE_API + "/import-shifts/apply", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
 const DOC_API = "/employee-docs";
 
 export const getEmployeeDocuments = async (employeeId) => {

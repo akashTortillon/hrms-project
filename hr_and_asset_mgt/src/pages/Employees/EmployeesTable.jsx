@@ -15,7 +15,7 @@ const resolveUploadedAssetUrl = (url) => {
   return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
 };
 
-export default function EmployeesTable({ employees = [] }) {
+export default function EmployeesTable({ employees = [], page = 1, totalPages = 1, onPageChange }) {
   const navigate = useNavigate();
   const { hasPermission } = useRole();
 
@@ -115,6 +115,33 @@ export default function EmployeesTable({ employees = [] }) {
           </tbody>
         </table>
       </div>
+
+      {onPageChange && totalPages > 1 && (
+        <div
+          className="employees-pagination"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', padding: '12px 16px' }}
+        >
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+          >
+            Previous
+          </button>
+          <span style={{ fontSize: '13px', color: '#6b7280' }}>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div >
   );
 }

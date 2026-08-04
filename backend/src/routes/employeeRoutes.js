@@ -8,6 +8,8 @@ import {
   exportEmployees,
   getEmployeeById,
   importEmployees,
+  previewShiftImport,
+  applyShiftImport,
   transferEmployee,
   getProbationReminders,
   confirmProbation,
@@ -15,7 +17,7 @@ import {
   getEmployeeGratuity,
   uploadEmployeePhoto
 } from "../controllers/employeeController.js";
-import { protect, hasPermission } from "../middlewares/authMiddleware.js";
+import { protect, hasPermission, restrictTo } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -25,6 +27,10 @@ router.get("/export", protect, hasPermission("MANAGE_EMPLOYEES"), exportEmployee
 
 // IMPORT employees (Excel/CSV)
 router.post("/import", protect, hasPermission("MANAGE_EMPLOYEES"), upload.single("file"), importEmployees);
+
+// IMPORT shifts (Excel) - Admin only
+router.post("/import-shifts/preview", protect, restrictTo("Admin"), upload.single("file"), previewShiftImport);
+router.post("/import-shifts/apply", protect, restrictTo("Admin"), upload.single("file"), applyShiftImport);
 
 // GET all employees - Restricted to users with VIEW_ALL_EMPLOYEES permission
 router.get("/", protect, hasPermission("VIEW_ALL_EMPLOYEES"), getEmployees);

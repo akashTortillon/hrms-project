@@ -413,7 +413,7 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const { department, status, search, branch, company, designation } = req.query;
+    const { department, status, search, branch, company, designation, page, limit } = req.query;
 
     let matchStage = {};
 
@@ -463,6 +463,21 @@ export const getEmployees = async (req, res) => {
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
 
+    // Pagination is opt-in via `page` so existing callers (Add/Edit Employee pickers,
+    // asset-assignment modals, etc.) that expect a bare array are unaffected.
+    if (page) {
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+      const total = employees.length;
+      const totalPages = Math.max(1, Math.ceil(total / limitNum));
+      const paged = employees.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+      const signedEmployees = await Promise.all(
+        paged.map((employee) => attachSignedProfilePhotoUrl(employee))
+      );
+
+      return res.json({ employees: signedEmployees, total, page: pageNum, totalPages });
+    }
 
     const signedEmployees = await Promise.all(
       employees.map((employee) => attachSignedProfilePhotoUrl(employee))
@@ -1344,6 +1359,132 @@ export const importEmployees = async (req, res) => {
   } catch (error) {
     // console.error("Import Error:", error);
     res.status(500).json({ message: "Server error during import" });
+  }
+};
+
+// Parses a Shift-import sheet ("Employee Code" + "Shift" columns), matching each row
+// against existing Employees (by code) and Shift masters (by name), without writing anything.
+// Shared by previewShiftImport and applyShiftImport so both calls resolve rows identically.
+const parseShiftImportRows = async (buffer) => {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const data = XLSX.utils.sheet_to_json(sheet);
+
+  const employees = await Employee.find({}, { code: 1, name: 1, shift: 1 });
+  const employeeByCode = new Map(
+    employees.map((e) => [String(e.code || "").trim().toLowerCase(), e])
+  );
+
+  const shiftMasters = await Master.find({ type: "SHIFT", isActive: true });
+  const shiftByName = new Map(
+    shiftMasters.map((m) => [m.name.trim().toLowerCase(), m.name])
+  );
+
+  const rows = data.map((row, i) => {
+    const rowNum = i + 2; // Excel row number (1-based, +1 for header)
+    const employeeCode = row["Employee Code"] != null ? String(row["Employee Code"]).trim() : "";
+    const shiftName = row["Shift"] != null ? String(row["Shift"]).trim() : "";
+
+    if (!employeeCode || !shiftName) {
+      return {
+        row: rowNum,
+        employeeCode,
+        shiftName,
+        employee: null,
+        matchedShift: null,
+        status: "error",
+        message: "Missing required Employee Code or Shift"
+      };
+    }
+
+    const employee = employeeByCode.get(employeeCode.toLowerCase());
+    const matchedShift = shiftByName.get(shiftName.toLowerCase()) || null;
+
+    if (!employee) {
+      return {
+        row: rowNum,
+        employeeCode,
+        shiftName,
+        employee: null,
+        matchedShift,
+        status: "error",
+        message: `No employee found with code '${employeeCode}'`
+      };
+    }
+
+    if (!matchedShift) {
+      return {
+        row: rowNum,
+        employeeCode,
+        shiftName,
+        employee: { id: employee._id, name: employee.name, currentShift: employee.shift },
+        matchedShift: null,
+        status: "error",
+        message: `Unknown shift '${shiftName}' — no matching Shift master`
+      };
+    }
+
+    return {
+      row: rowNum,
+      employeeCode,
+      shiftName,
+      employee: { id: employee._id, name: employee.name, currentShift: employee.shift },
+      matchedShift,
+      status: "ok"
+    };
+  });
+
+  const summary = {
+    total: rows.length,
+    ok: rows.filter((r) => r.status === "ok").length,
+    errors: rows.filter((r) => r.status === "error").length
+  };
+
+  return { rows, summary };
+};
+
+export const previewShiftImport = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    const { rows, summary } = await parseShiftImportRows(req.file.buffer);
+    res.json({ rows, summary });
+  } catch (error) {
+    console.error("Preview shift import error:", error);
+    res.status(500).json({ message: "Server error during shift import preview" });
+  }
+};
+
+export const applyShiftImport = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    const { rows } = await parseShiftImportRows(req.file.buffer);
+
+    let updated = 0;
+    const errors = [];
+
+    for (const r of rows) {
+      if (r.status !== "ok") {
+        errors.push({ row: r.row, message: r.message || "Skipped" });
+        continue;
+      }
+      await Employee.updateOne({ _id: r.employee.id }, { $set: { shift: r.matchedShift } });
+      updated++;
+    }
+
+    res.json({
+      message: "Shift import complete",
+      updated,
+      skipped: errors.length,
+      errors
+    });
+  } catch (error) {
+    console.error("Apply shift import error:", error);
+    res.status(500).json({ message: "Server error during shift import" });
   }
 };
 

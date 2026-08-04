@@ -112,6 +112,7 @@ import EmployeesHeader from "./EmployeesHeader.jsx";
 import EmployeesTable from "./EmployeesTable.jsx";
 import AddEmployeeModal from "./AddEmployeeModal.jsx";
 import ImportEmployeeModal from "../../components/Employees/ImportEmployeeModal.jsx";
+import ImportShiftModal from "../../components/Employees/ImportShiftModal.jsx";
 
 import {
   getEmployees,
@@ -125,8 +126,10 @@ import { toast } from "react-toastify";
 import { getDepartments, getBranches, getCompanies, getDesignations } from "../../services/masterService";
 import { useRole } from "../../contexts/RoleContext";
 
+const PAGE_SIZE = 20;
+
 export default function Employees() {
-  const { hasPermission } = useRole();
+  const { hasPermission, role } = useRole();
   // 🔹 URL Filters (Source of Truth)
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -135,6 +138,7 @@ export default function Employees() {
   const filterValue = searchParams.get("filterValue") || "";
   const status = searchParams.get("status") || "All Status";
   const urlSearch = searchParams.get("search") || "";
+  const page = parseInt(searchParams.get("page"), 10) || 1;
 
   const department = filterField === "department" && filterValue ? filterValue : "All Departments";
   const branch = filterField === "branch" && filterValue ? filterValue : "All Branches";
@@ -150,8 +154,11 @@ export default function Employees() {
   const [companyOptions, setCompanyOptions] = useState([]);
   const [designationOptions, setDesignationOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportShiftsModal, setShowImportShiftsModal] = useState(false);
 
   const filterOptionsByField = {
     company: companyOptions,
@@ -172,6 +179,7 @@ export default function Employees() {
         setSearchParams((prev) => {
           if (searchInput) prev.set("search", searchInput);
           else prev.delete("search");
+          prev.delete("page");
           return prev;
         });
       }
@@ -250,11 +258,16 @@ export default function Employees() {
         company,
         designation,
         status,
-        search: urlSearch
+        search: urlSearch,
+        page,
+        limit: PAGE_SIZE
       };
 
       const response = await getEmployees(params);
-      const employeesArray = Array.isArray(response) ? response : [];
+      const employeesArray = Array.isArray(response) ? response : (response?.employees || []);
+
+      setTotalEmployees(Array.isArray(response) ? employeesArray.length : (response?.total ?? employeesArray.length));
+      setTotalPages(Array.isArray(response) ? 1 : (response?.totalPages ?? 1));
 
       const formattedEmployees = employeesArray.map((emp) => ({
         _id: emp._id,
@@ -285,6 +298,7 @@ export default function Employees() {
     setSearchParams(prev => {
       prev.set("filterField", field);
       prev.delete("filterValue");
+      prev.delete("page");
       return prev;
     });
   };
@@ -293,6 +307,7 @@ export default function Employees() {
     setSearchParams(prev => {
       if (val) prev.set("filterValue", val);
       else prev.delete("filterValue");
+      prev.delete("page");
       return prev;
     });
   };
@@ -300,6 +315,15 @@ export default function Employees() {
   const handleSetStatus = (val) => {
     setSearchParams(prev => {
       prev.set("status", val);
+      prev.delete("page");
+      return prev;
+    });
+  };
+
+  const handleSetPage = (nextPage) => {
+    setSearchParams(prev => {
+      if (nextPage > 1) prev.set("page", String(nextPage));
+      else prev.delete("page");
       return prev;
     });
   };
@@ -400,12 +424,16 @@ export default function Employees() {
             }
             : () => console.log("Import permission denied or missing")
         }
-        count={employees.length}
+        onImportShifts={role === 'Admin' ? () => setShowImportShiftsModal(true) : null}
+        count={totalEmployees}
       />
 
       {/* TABLE - Use 'employees' directly as it is now filtered from backend */}
       <EmployeesTable
         employees={employees}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={handleSetPage}
         // onDelete={handleDeleteEmployee}
       />
 
@@ -427,6 +455,13 @@ export default function Employees() {
           // Optional: keep modal open to show results, or close it?
           // The modal handles displaying results, so let's just refresh data
         }}
+      />
+
+      {/* IMPORT SHIFTS MODAL */}
+      <ImportShiftModal
+        isOpen={showImportShiftsModal}
+        onClose={() => setShowImportShiftsModal(false)}
+        onSuccess={() => fetchEmployees()}
       />
     </div>
   );

@@ -31,6 +31,7 @@ export default function EmployeesHeader({
   setSearch,
   onExport,
   onImport,
+  onImportShifts,
   count = 0
 }) {
   const currentOptions = filterOptionsByField[filterField] || [];
@@ -57,6 +58,13 @@ export default function EmployeesHeader({
             <button className="employees-utility-btn" onClick={onImport}>
               <SvgIcon name="upload" size={16} />
               Import
+            </button>
+          )}
+
+          {onImportShifts && (
+            <button className="employees-utility-btn" onClick={onImportShifts}>
+              <SvgIcon name="upload" size={16} />
+              Import Shifts
             </button>
           )}
 
