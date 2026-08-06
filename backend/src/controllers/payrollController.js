@@ -43,8 +43,19 @@ const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month)
 
 // Midnight-normalized day formatter/parser — periods are whole days, so all
 // period-boundary comparisons happen at day granularity, not exact timestamps.
-const toDayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
-const toDayEnd = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+// parseCalendarDay reads "YYYY-MM-DD" strings via the local Date(y,m,d) constructor
+// (not `new Date(string)`, which parses date-only strings as UTC) so the calendar
+// day the user typed is preserved exactly regardless of server timezone — mixing
+// UTC string-parsing with local getters/setters is what caused a saved date to
+// silently shift back a day on read.
+const parseCalendarDay = (d) => {
+    if (d instanceof Date) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const match = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return new Date(d);
+};
+const toDayStart = (d) => { const x = parseCalendarDay(d); x.setHours(0, 0, 0, 0); return x; };
+const toDayEnd = (d) => { const x = parseCalendarDay(d); x.setHours(23, 59, 59, 999); return x; };
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const formatYMD = (d) => {
     const yyyy = d.getFullYear();
@@ -63,34 +74,59 @@ const getLatestFinalizedCycle = async () => {
     // ANCHOR_SET entries participate too — an admin-set starting anchor moves the
     // lockout cursor exactly like a real finalize would, without any actual
     // Payroll records existing for it.
-    const finalized = await PayrollAudit
+    const entries = await PayrollAudit
         .find({ action: { $in: ["FINALIZED", "ANCHOR_SET"] } })
-        .select("month year periodStart periodEnd createdAt");
+        .select("action month year periodStart periodEnd createdAt")
+        .sort({ createdAt: -1 });
 
-    if (!finalized.length) return null;
+    if (!entries.length) return null;
 
-    return finalized.reduce((latest, entry) => {
+    const toResult = (entry) => {
         const periodEnd = entry.periodEnd
             ? toDayEnd(entry.periodEnd)
             : toDayEnd(new Date(Number(entry.year), Number(entry.month), 0));
-        if (!latest || periodEnd > latest.periodEnd) {
-            const periodStart = entry.periodStart ? toDayStart(entry.periodStart) : null;
-            return {
-                month: Number(entry.month),
-                year: Number(entry.year),
-                periodStart,
-                periodEnd,
-                // Plain "YYYY-MM-DD" strings alongside the Date objects — lets the
-                // frontend compare against its own date-input state directly instead
-                // of reconstructing Date objects client-side (browser/server timezone
-                // drift risk otherwise).
-                periodStartStr: periodStart ? formatYMD(periodStart) : null,
-                periodEndStr: formatYMD(periodEnd),
-                finalizedAt: entry.createdAt
-            };
-        }
-        return latest;
-    }, null);
+        const periodStart = entry.periodStart ? toDayStart(entry.periodStart) : null;
+        return {
+            month: Number(entry.month),
+            year: Number(entry.year),
+            periodStart,
+            periodEnd,
+            // Plain "YYYY-MM-DD" strings alongside the Date objects — lets the
+            // frontend compare against its own date-input state directly instead
+            // of reconstructing Date objects client-side (browser/server timezone
+            // drift risk otherwise).
+            periodStartStr: periodStart ? formatYMD(periodStart) : null,
+            periodEndStr: formatYMD(periodEnd),
+            finalizedAt: entry.createdAt
+        };
+    };
+
+    // FINALIZED entries can legitimately land out of order (a later period gets
+    // finalized before an earlier gap is backfilled), so among those the
+    // furthest-out periodEnd always wins — the lockout must never silently move
+    // backward past real, already-processed payroll.
+    //
+    // ANCHOR_SET is different: it's an explicit admin correction tool (Masters >
+    // System Settings > Set Anchor). Each click is a fresh override of wherever
+    // the anchor currently sits, so only the MOST RECENTLY SET anchor should ever
+    // count — not whichever historical anchor-set happens to have the latest
+    // periodEnd. Without this, correcting the anchor to an earlier date than a
+    // prior (possibly mistaken) anchor-set would silently keep showing the old
+    // value after refresh, which is exactly the reported bug.
+    const latestAnchorSet = entries.find((e) => e.action === "ANCHOR_SET");
+    const latestFinalized = entries
+        .filter((e) => e.action === "FINALIZED")
+        .reduce((latest, entry) => {
+            const candidate = toResult(entry);
+            if (!latest || candidate.periodEnd > latest.periodEnd) return candidate;
+            return latest;
+        }, null);
+
+    const anchorResult = latestAnchorSet ? toResult(latestAnchorSet) : null;
+
+    if (!anchorResult) return latestFinalized;
+    if (!latestFinalized) return anchorResult;
+    return anchorResult.periodEnd >= latestFinalized.periodEnd ? anchorResult : latestFinalized;
 };
 
 const hasScheduledSkip = (details = {}, month, year) => {

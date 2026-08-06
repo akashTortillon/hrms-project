@@ -65,6 +65,7 @@ import {
   getPendingRequestsForAdmin,
   updateRequestStatus,
   updateSalaryRepaymentSchedule,
+  revokeLeave,
   approveDocumentRequest,
   rejectDocumentRequest,
   downloadDocument,
@@ -117,6 +118,14 @@ router.patch(
   "/:requestId/repayment-schedule",
   protect,
   updateSalaryRepaymentSchedule
+);
+
+// Revoke an already-APPROVED leave request (reverses attendance + leave wallet)
+// PATCH /api/requests/:requestId/revoke
+router.patch(
+  "/:requestId/revoke",
+  protect,
+  revokeLeave
 );
 
 // Get requests for a specific employee

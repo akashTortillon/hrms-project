@@ -6,7 +6,8 @@ import {
   setAllocationOverride,
   grantAdvanceLeave,
   clearPendingRefund,
-  createMigrationEntry
+  createMigrationEntry,
+  adjustBalance
 } from "../../services/leaveWalletService.js";
 import { useRole } from "../../contexts/RoleContext.jsx";
 
@@ -26,6 +27,7 @@ export default function LeaveWalletTab({ employeeId }) {
   const [overrideModal, setOverrideModal] = useState(null); // { leaveTypeId, leaveTypeName, value }
   const [advanceModal, setAdvanceModal] = useState(null); // { leaveTypeId, leaveTypeName, days, remarks }
   const [migrationModal, setMigrationModal] = useState(null); // { leaveTypeId, leaveTypeName, openingCredit, usedDays, remarks }
+  const [adjustModal, setAdjustModal] = useState(null); // { leaveTypeId, leaveTypeName, days, reason }
   const [saving, setSaving] = useState(false);
 
   const loadWallets = async () => {
@@ -121,6 +123,31 @@ export default function LeaveWalletTab({ employeeId }) {
     }
   };
 
+  const handleSaveAdjustment = async () => {
+    const delta = Number(adjustModal.days);
+    if (!adjustModal.days || delta === 0 || Number.isNaN(delta)) {
+      return toast.warning("Enter a non-zero number of days (use a negative number to deduct)");
+    }
+    if (!adjustModal.reason || !adjustModal.reason.trim()) {
+      return toast.warning("A reason is required for a manual adjustment");
+    }
+    setSaving(true);
+    try {
+      const res = await adjustBalance(employeeId, {
+        leaveTypeId: adjustModal.leaveTypeId,
+        days: delta,
+        reason: adjustModal.reason
+      });
+      toast.success(res.message || "Balance adjusted");
+      setAdjustModal(null);
+      loadWallets();
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to adjust balance");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleClearRefund = async (leaveTypeId) => {
     try {
       await clearPendingRefund(employeeId, leaveTypeId);
@@ -206,6 +233,12 @@ export default function LeaveWalletTab({ employeeId }) {
                       style={{ fontSize: "11px", color: tc, background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}
                     >
                       Migrate Balance
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setAdjustModal({ leaveTypeId: w.leaveTypeId, leaveTypeName: w.leaveTypeName, days: "", reason: "" }); }}
+                      style={{ fontSize: "11px", color: tc, background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}
+                    >
+                      Adjust Balance
                     </button>
                   </div>
                 )}
@@ -304,6 +337,39 @@ export default function LeaveWalletTab({ employeeId }) {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
               <button onClick={() => setMigrationModal(null)} style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Cancel</button>
               <button onClick={handleSaveMigration} disabled={saving} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563eb", color: "#fff", cursor: "pointer" }}>
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {adjustModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", borderRadius: "12px", padding: "24px", width: "380px" }}>
+            <h4 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Adjust Balance — {adjustModal.leaveTypeName}</h4>
+            <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "14px" }}>
+              For ongoing operational corrections to the current balance — not a historical
+              migration. Use a positive number to credit days, negative to deduct.
+            </p>
+            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Days (e.g. 2 or -1)</label>
+            <input
+              type="number"
+              value={adjustModal.days}
+              onChange={(e) => setAdjustModal({ ...adjustModal, days: e.target.value })}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "12px" }}
+            />
+            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Reason</label>
+            <textarea
+              rows={2}
+              value={adjustModal.reason}
+              onChange={(e) => setAdjustModal({ ...adjustModal, reason: e.target.value })}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "16px" }}
+              placeholder="Required — e.g. Correction for missed check-in on public holiday"
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button onClick={() => setAdjustModal(null)} style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleSaveAdjustment} disabled={saving} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563eb", color: "#fff", cursor: "pointer" }}>
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>

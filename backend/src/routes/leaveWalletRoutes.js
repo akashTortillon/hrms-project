@@ -7,6 +7,7 @@ import {
   createMigrationEntry,
   setAllocationOverride,
   grantAdvanceLeave,
+  adjustBalance,
   clearPendingRefund,
   downloadBulkImportTemplate,
   bulkImportBalances
@@ -47,6 +48,9 @@ router.put("/:employeeId/override", protect, hasPermission("MANAGE_EMPLOYEES"), 
 
 // POST /api/leave-wallet/:employeeId/advance
 router.post("/:employeeId/advance", protect, hasPermission("MANAGE_EMPLOYEES"), grantAdvanceLeave);
+
+// PATCH /api/leave-wallet/:employeeId/adjust
+router.patch("/:employeeId/adjust", protect, hasPermission("MANAGE_EMPLOYEES"), adjustBalance);
 
 // PATCH /api/leave-wallet/:employeeId/clear-refund
 router.patch("/:employeeId/clear-refund", protect, hasPermission("MANAGE_PAYROLL"), clearPendingRefund);

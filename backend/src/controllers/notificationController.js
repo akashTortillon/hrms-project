@@ -89,10 +89,13 @@ export const getNotifications = async (req, res) => {
                 (n) => !dismissedIds.includes(n._id)
             );
 
-            // Remove individual REQUEST notifications for Admin to avoid duplicate noise/double-counting
-            const nonRequestDBNotifications = notifications.filter(n => n.type !== "REQUEST");
-
-            return res.json([...activeSummaryNotifications, ...nonRequestDBNotifications]);
+            // Individual REQUEST notifications (e.g. "X submitted a leave request") are kept
+            // alongside the aggregate "N Pending Requests" summary above - they used to be
+            // stripped out here entirely, which meant an Admin/HR viewer never saw WHO
+            // submitted a request, only an anonymous count (the notification was created
+            // correctly by notifyAdmins/createNotification at submission time, it just never
+            // reached this response).
+            return res.json([...activeSummaryNotifications, ...notifications]);
         }
 
         // For Employees: Only show individual notifications if they are not system-level virtuals
@@ -127,11 +130,12 @@ export const getUnreadCount = async (req, res) => {
             if (pendingReqs > 0 && !dismissedIds.includes("virtual-pending-requests")) virtualCount++;
             if (draftPayroll && !dismissedIds.includes("virtual-payroll-due")) virtualCount++;
 
-            // DB unread count (excluding requests which are handled via summary)
+            // Individual REQUEST notifications are shown again in getNotifications
+            // (alongside the aggregate summary), so they count toward unread here too -
+            // otherwise the badge would undercount relative to what's actually listed.
             const dbUnread = await Notification.countDocuments({
                 recipient: req.user.id,
-                isRead: false,
-                type: { $ne: "REQUEST" }
+                isRead: false
             });
 
             return res.json({ unreadCount: virtualCount + dbUnread });

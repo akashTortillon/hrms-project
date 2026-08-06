@@ -16,6 +16,52 @@ const isDocumentManager = (user = {}) =>
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Maps a Document Type master label to the bare Employee field the Dashboard's
+// "Employee Visa/ID Expiries" card reads directly (dashboardController.js's
+// getEmployeeVisaExpiries). Uploading a new document via the Documents tab only
+// ever created an EmployeeDocument row - it never touched this bare field, so the
+// Dashboard kept showing the old expiry indefinitely even after a valid new
+// document was uploaded. Labour Card is handled separately below since it's an
+// array of cards, not a single field.
+const BARE_EXPIRY_FIELD_BY_TYPE = {
+    VISA: "visaExpiry",
+    PASSPORT: "passportExpiry",
+    "EMIRATES ID": "emiratesIdExpiry"
+};
+
+// Syncs a newly-uploaded document's expiry back onto the corresponding bare
+// Employee field (or labor card entry), and marks any prior EmployeeDocument of
+// the same employeeId+documentType as superseded so it stops surfacing as
+// "expired" on the Dashboard/Documents tab once a newer one exists.
+const syncEmployeeExpiryAndSupersedePrior = async ({ employeeId, documentType, expiryDate, documentNumber, newDocumentId }) => {
+    const typeUpper = String(documentType || "").toUpperCase();
+
+    await EmployeeDocument.updateMany(
+        { employeeId, documentType, _id: { $ne: newDocumentId } },
+        { $set: { isActive: false } }
+    );
+
+    if (!expiryDate) return;
+
+    const bareField = BARE_EXPIRY_FIELD_BY_TYPE[typeUpper];
+    if (bareField) {
+        await Employee.findByIdAndUpdate(employeeId, { [bareField]: expiryDate });
+        return;
+    }
+
+    if (typeUpper === "LABOUR CARD" || typeUpper === "LABOR CARD") {
+        const employee = await Employee.findById(employeeId).select("laborCards");
+        if (!employee) return;
+        const cards = employee.laborCards || [];
+        let target = documentNumber ? cards.find((c) => c.number === documentNumber) : null;
+        if (!target && cards.length === 1) target = cards[0];
+        if (target) {
+            target.expiryDate = expiryDate;
+            await employee.save();
+        }
+    }
+};
+
 const resolveEmployeeIdForUser = async (user) => {
     if (user.employeeId) return user.employeeId;
 
@@ -95,6 +141,14 @@ export const addDocument = async (req, res) => {
             uploadedBy: req.user?._id || null
         });
 
+        await syncEmployeeExpiryAndSupersedePrior({
+            employeeId,
+            documentType,
+            expiryDate,
+            documentNumber,
+            newDocumentId: newDoc._id
+        });
+
         res.status(201).json(newDoc);
 
         logActivity({
@@ -163,6 +217,14 @@ export const uploadMyDocument = async (req, res) => {
             uploadedBy: user._id
         });
 
+        await syncEmployeeExpiryAndSupersedePrior({
+            employeeId,
+            documentType,
+            expiryDate,
+            documentNumber,
+            newDocumentId: document._id
+        });
+
         if (!user.employeeId) {
             await User.findByIdAndUpdate(user._id, { employeeId });
         }
@@ -195,7 +257,7 @@ export const getEmployeeDocuments = async (req, res) => {
             return res.status(403).json({ message: "You can only view your own documents" });
         }
 
-        const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
+        const documents = await EmployeeDocument.find({ employeeId, isActive: { $ne: false } }).sort({ createdAt: -1 });
         const signedDocuments = await Promise.all(documents.map(attachSignedFileUrl));
 
         // Superset with the Dashboard's expiry widget (dashboardController.js's
@@ -305,7 +367,7 @@ export const getMyDocuments = async (req, res) => {
             return res.status(200).json([]);
         }
 
-        const documents = await EmployeeDocument.find({ employeeId }).sort({ createdAt: -1 });
+        const documents = await EmployeeDocument.find({ employeeId, isActive: { $ne: false } }).sort({ createdAt: -1 });
         // console.log(`[DEBUG] Found ${documents.length} documents for employee ${employeeId}`);
         res.json(await Promise.all(documents.map(attachSignedFileUrl)));
     } catch (error) {

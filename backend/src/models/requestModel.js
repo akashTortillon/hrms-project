@@ -68,7 +68,7 @@ const requestSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["PENDING", "MANAGER_APPROVED", "FINANCE_APPROVED", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN"],
+      enum: ["PENDING", "MANAGER_APPROVED", "FINANCE_APPROVED", "APPROVED", "REJECTED", "COMPLETED", "WITHDRAWN", "REVOKED"],
       default: "PENDING"
     },
     submittedAt: {
@@ -100,6 +100,22 @@ const requestSchema = new mongoose.Schema(
     withdrawnAt: {
       type: Date,
       default: null
+    },
+    // Soft-revoke of an already-APPROVED leave (see requestController.js's revokeLeave) -
+    // keeps the record + its full approval history intact instead of a hard delete, which
+    // would silently orphan the attendance/leave-wallet reversal this action performs.
+    revokedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    revokedAt: {
+      type: Date,
+      default: null
+    },
+    revokedReason: {
+      type: String,
+      default: ""
     },
     rejectionReason: {
       type: String,

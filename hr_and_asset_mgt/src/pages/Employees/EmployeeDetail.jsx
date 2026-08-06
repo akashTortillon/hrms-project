@@ -58,6 +58,7 @@ import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
 import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
+import AdjustLoanModal from "./AdjustLoanModal.jsx";
 import AddAllowanceModal from "./AddAllowanceModal.jsx";
 import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
@@ -150,6 +151,9 @@ export default function EmployeeDetail() {
     const [gratuityLoading, setGratuityLoading] = useState(false);
     const [selectedLoanForSkip, setSelectedLoanForSkip] = useState(null);
     const [savingLoanSkip, setSavingLoanSkip] = useState(false);
+    const [showAdjustLoanModal, setShowAdjustLoanModal] = useState(false);
+    const [selectedLoanForAdjust, setSelectedLoanForAdjust] = useState(null);
+    const [savingLoanAdjust, setSavingLoanAdjust] = useState(false);
 
     // Leave Summary State
     const [leaveSummary, setLeaveSummary] = useState([]);
@@ -506,6 +510,27 @@ export default function EmployeeDetail() {
             toast.error(error.response?.data?.message || "Failed to save repayment skip");
         } finally {
             setSavingLoanSkip(false);
+        }
+    };
+
+    const handleOpenAdjustLoanModal = (loan) => {
+        setSelectedLoanForAdjust(loan);
+        setShowAdjustLoanModal(true);
+    };
+
+    const handleAdjustLoan = async (requestId, payload) => {
+        try {
+            setSavingLoanAdjust(true);
+            await updateRepaymentSchedule(requestId, payload);
+            toast.success("Loan adjustment saved successfully");
+            setShowAdjustLoanModal(false);
+            setSelectedLoanForAdjust(null);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Loan adjustment failed", error);
+            toast.error(error.response?.data?.message || "Failed to save loan adjustment");
+        } finally {
+            setSavingLoanAdjust(false);
         }
     };
 
@@ -1512,7 +1537,7 @@ export default function EmployeeDetail() {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                                         <div>
                                             <div style={{ fontWeight: '600', color: '#111827', fontSize: '15px' }}>
-                                                {loan.subType === 'loan' ? 'Company Loan' : 'Salary Advance'}
+                                                {(loan.details?.subType || loan.subType) === 'loan' ? 'Company Loan' : 'Salary Advance'}
                                                 <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '400', marginLeft: '8px' }}>
                                                     #{loan.requestId}
                                                 </span>
@@ -1564,7 +1589,7 @@ export default function EmployeeDetail() {
                                     </div>
 
                                     {canManageRepayments && !loan.isFullyPaid && (
-                                        <div style={{ marginBottom: '14px' }}>
+                                        <div style={{ marginBottom: '14px', display: 'flex', gap: '8px' }}>
                                             <button
                                                 type="button"
                                                 onClick={() => handleOpenSkipLoanModal(loan)}
@@ -1581,6 +1606,24 @@ export default function EmployeeDetail() {
                                             >
                                                 Skip One Month
                                             </button>
+                                            {(loan.details?.subType || loan.subType) === 'loan' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenAdjustLoanModal(loan)}
+                                                    style={{
+                                                        border: '1px solid #2563eb',
+                                                        background: '#eff6ff',
+                                                        color: '#1d4ed8',
+                                                        borderRadius: '8px',
+                                                        padding: '8px 12px',
+                                                        fontSize: '13px',
+                                                        fontWeight: '600',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    Adjust Loan
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 
@@ -1764,6 +1807,19 @@ export default function EmployeeDetail() {
                     }}
                     onSubmit={handleSkipLoanMonth}
                     submitting={savingLoanSkip}
+                />
+            )}
+
+            {showAdjustLoanModal && (
+                <AdjustLoanModal
+                    show={showAdjustLoanModal}
+                    request={selectedLoanForAdjust}
+                    onClose={() => {
+                        setShowAdjustLoanModal(false);
+                        setSelectedLoanForAdjust(null);
+                    }}
+                    onSubmit={handleAdjustLoan}
+                    submitting={savingLoanAdjust}
                 />
             )}
 

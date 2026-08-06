@@ -308,6 +308,54 @@ export const bulkImportBalances = async (req, res) => {
   }
 };
 
+// PATCH /api/leave-wallet/:employeeId/adjust — HR adjusts a balance by +/-N days with a
+// required reason, for ongoing operational corrections (as opposed to "Migrate Balance",
+// which is framed as a one-time onboarding entry setting opening credit + used days
+// separately). Reuses the same credit/debit + ledger machinery those other actions use -
+// this just gives a plain +/-N adjustment its own honestly-labeled entry point instead of
+// overloading the migration endpoint's semantics.
+// Body: { leaveTypeId, days, reason } — days is signed (positive credits, negative debits)
+export const adjustBalance = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { leaveTypeId, days, reason } = req.body;
+
+    if (!leaveTypeId || days === undefined || days === null || Number(days) === 0 || Number.isNaN(Number(days))) {
+      return res.status(400).json({ success: false, message: "leaveTypeId and a non-zero days value are required" });
+    }
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, message: "A reason is required for a manual balance adjustment" });
+    }
+
+    const delta = Number(days);
+    const wallet = delta > 0
+      ? await leaveWalletService.creditWallet({
+        employeeId,
+        leaveTypeId,
+        days: delta,
+        transactionType: "MANUAL_CORRECTION",
+        remarks: reason.trim(),
+        createdBy: req.user.id
+      })
+      : await leaveWalletService.debitWallet({
+        employeeId,
+        leaveTypeId,
+        days: Math.abs(delta),
+        transactionType: "MANUAL_CORRECTION",
+        remarks: reason.trim(),
+        createdBy: req.user.id
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: `Balance adjusted by ${delta > 0 ? "+" : ""}${delta} day(s)`,
+      data: wallet
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to adjust leave balance" });
+  }
+};
+
 // PATCH /api/leave-wallet/:employeeId/clear-refund — HR marks pending refund as paid
 export const clearPendingRefund = async (req, res) => {
   try {

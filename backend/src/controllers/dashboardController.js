@@ -129,7 +129,12 @@ export const getEmployeeVisaExpiries = async (req, res) => {
       });
     });
 
-    const docQuery = { expiryDate: { $ne: null } };
+    // isActive filter excludes documents superseded by a newer upload of the same
+    // type (see employeeDocumentController.js's syncEmployeeExpiryAndSupersedePrior)
+    // - otherwise an old expired upload keeps surfacing here even after a valid
+    // new one exists. $ne:false (not isActive:true) so documents created before
+    // this field existed are still treated as active.
+    const docQuery = { expiryDate: { $ne: null }, isActive: { $ne: false } };
     if (restrictToSelf) docQuery.employeeId = req.user.employeeId;
 
     const uploadedDocs = await EmployeeDocument.find(docQuery)
