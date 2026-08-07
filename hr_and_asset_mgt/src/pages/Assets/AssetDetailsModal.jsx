@@ -40,7 +40,7 @@ export default function AssetDetailsModal({ onClose, asset }) {
   ];
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div
         className="modal-container"
         style={{ maxWidth: "900px", width: "95%" }}

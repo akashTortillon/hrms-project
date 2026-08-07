@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { changePassword } from '../../api/authService';
 import { toast } from 'react-toastify';
 
-export default function ChangePasswordModal({ show, onClose }) {
+export default function ChangePasswordModal({ show, onClose, forced = false }) {
     const [formData, setFormData] = useState({
         oldPassword: '',
         newPassword: '',
@@ -42,7 +42,12 @@ export default function ChangePasswordModal({ show, onClose }) {
             background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
             <div style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%' }}>
-                <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: 'bold' }}>Change Password</h3>
+                <h3 style={{ margin: forced ? '0 0 8px 0' : '0 0 20px 0', fontSize: '18px', fontWeight: 'bold' }}>Change Password</h3>
+                {forced && (
+                    <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#6b7280' }}>
+                        Your password was reset. Set a new one to continue.
+                    </p>
+                )}
                 <form onSubmit={handleSubmit}>
                     <div style={{ marginBottom: '15px' }}>
                         <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px', fontWeight: '500' }}>Old Password</label>
@@ -78,13 +83,15 @@ export default function ChangePasswordModal({ show, onClose }) {
                         />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            style={{ padding: '8px 16px', background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer' }}
-                        >
-                            Cancel
-                        </button>
+                        {!forced && (
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                style={{ padding: '8px 16px', background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer' }}
+                            >
+                                Cancel
+                            </button>
+                        )}
                         <button
                             type="submit"
                             disabled={loading}

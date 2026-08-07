@@ -101,7 +101,7 @@ export const login = async (req, res) => {
     if (user.role === 'Admin') {
       permissions = ["ALL"];
     } else {
-      const roleDef = await Master.findOne({ type: 'ROLE', name: user.role });
+      const roleDef = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${user.role}$`, 'i') } });
       permissions = roleDef ? roleDef.permissions : [];
     }
 
@@ -136,6 +136,7 @@ export const login = async (req, res) => {
       token: accessToken,
       role: user.role,
       permissions,
+      mustChangePassword: user.mustChangePassword,
       user: {
         id: user._id,
         name: user.name,
@@ -224,7 +225,7 @@ export const getMe = async (req, res) => {
     if (user.role === "Admin") {
       permissions = ["ALL"];
     } else {
-      const roleDef = await Master.findOne({ type: "ROLE", name: user.role });
+      const roleDef = await Master.findOne({ type: "ROLE", name: { $regex: new RegExp(`^${user.role}$`, "i") } });
       permissions = roleDef ? roleDef.permissions || [] : [];
     }
 
@@ -239,6 +240,7 @@ export const getMe = async (req, res) => {
     res.json({
       role: user.role,
       permissions,
+      mustChangePassword: user.mustChangePassword,
       user: {
         id: user._id,
         name: user.name,
@@ -287,6 +289,7 @@ export const changePassword = async (req, res) => {
 
     // Hash New Password
     user.password = await bcrypt.hash(newPassword, 10);
+    user.mustChangePassword = false;
     await user.save();
 
     res.json({ message: "Password updated successfully" });

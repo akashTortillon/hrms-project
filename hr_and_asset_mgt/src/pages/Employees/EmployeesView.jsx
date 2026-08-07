@@ -138,7 +138,8 @@ export default function Employees() {
   const filterValue = searchParams.get("filterValue") || "";
   const status = searchParams.get("status") || "All Status";
   const urlSearch = searchParams.get("search") || "";
-  const page = parseInt(searchParams.get("page"), 10) || 1;
+  const page = Math.max(1, parseInt(searchParams.get("page"), 10) || 1);
+  const PAGE_SIZE = 50;
 
   const department = filterField === "department" && filterValue ? filterValue : "All Departments";
   const branch = filterField === "branch" && filterValue ? filterValue : "All Branches";
@@ -264,10 +265,10 @@ export default function Employees() {
       };
 
       const response = await getEmployees(params);
+      // Passing `page` always triggers the paginated { employees, total, page, totalPages }
+      // shape server-side (see employeeController.js's getEmployees) - the bare-array
+      // response only happens for callers that don't pass page/limit at all.
       const employeesArray = Array.isArray(response) ? response : (response?.employees || []);
-
-      setTotalEmployees(Array.isArray(response) ? employeesArray.length : (response?.total ?? employeesArray.length));
-      setTotalPages(Array.isArray(response) ? 1 : (response?.totalPages ?? 1));
 
       const formattedEmployees = employeesArray.map((emp) => ({
         _id: emp._id,
@@ -286,10 +287,14 @@ export default function Employees() {
       }));
 
       setEmployees(formattedEmployees);
+      setTotalEmployees(Array.isArray(response) ? formattedEmployees.length : (response?.total ?? formattedEmployees.length));
+      setTotalPages(Array.isArray(response) ? 1 : (response?.totalPages ?? 1));
     } catch (error) {
       console.error("Failed to fetch employees", error);
       toast.error("Failed to load employees");
       setEmployees([]);
+      setTotalEmployees(0);
+      setTotalPages(1);
     }
   };
 
@@ -424,7 +429,6 @@ export default function Employees() {
             }
             : () => console.log("Import permission denied or missing")
         }
-        onImportShifts={role === 'Admin' ? () => setShowImportShiftsModal(true) : null}
         count={totalEmployees}
       />
 
@@ -433,6 +437,8 @@ export default function Employees() {
         employees={employees}
         page={page}
         totalPages={totalPages}
+        totalCount={totalEmployees}
+        pageSize={PAGE_SIZE}
         onPageChange={handleSetPage}
         // onDelete={handleDeleteEmployee}
       />

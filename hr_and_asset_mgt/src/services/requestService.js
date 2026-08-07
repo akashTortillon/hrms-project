@@ -108,6 +108,15 @@ export const updateRepaymentSchedule = async (id, payload) => {
   return response.data;
 };
 
+// ✅ Admin – revoke an already-approved leave (reverses attendance + leave wallet)
+export const revokeLeaveRequest = async (id, reason) => {
+  const response = await api.patch(
+    `${REQUEST_API}/${id}/revoke`,
+    { reason }
+  );
+  return response.data;
+};
+
 // Get requests for a specific employee
 export const getEmployeeRequests = async (employeeId, params = {}) => {
   const response = await api.get(`${REQUEST_API}/employee/${employeeId}`, { params });

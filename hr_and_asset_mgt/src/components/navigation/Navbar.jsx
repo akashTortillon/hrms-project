@@ -11,6 +11,7 @@ import SvgIcon from "../svgIcon/svgView.jsx";
 import QuickActionMenu from "../reusable/QuickActionMenu";
 import NotificationDropdown from "../reusable/NotificationDropdown";
 import ProfileDropdown from "../reusable/ProfileDropdown";
+import ChangePasswordModal from "../../pages/Authentication/ChangePasswordModal.jsx";
 import "../../style/Profile.css";
 import { useRole } from "../../contexts/RoleContext.jsx";
 import { logoutUser } from "../../api/authService";
@@ -35,6 +36,7 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [badgeCount, setBadgeCount] = useState(0);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   const { role, setRole, hasPermission } = useRole();
   const canUseGlobalSearch = role && role !== "Employee";
@@ -106,6 +108,7 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
   };
 
   return (
+    <>
     <Navbar className="topbar" bg="white" expand="lg">
       <Container fluid className="topbar-container">
         <div className="brand">
@@ -188,6 +191,10 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
               onRoleChange={setRole}
               onClose={() => setProfileOpen(false)}
               onProfile={() => navigate("/app/employees/me")}
+              onChangePassword={() => {
+                setProfileOpen(false);
+                setShowChangePasswordModal(true);
+              }}
               onLogout={handleLogout}
               anchorRef={profileAnchorRef}
             />
@@ -196,5 +203,11 @@ export default function NavigationBar({ toggleSidebar, isSidebarOpen }) {
         </div>
       </Container>
     </Navbar>
+
+    <ChangePasswordModal
+      show={showChangePasswordModal}
+      onClose={() => setShowChangePasswordModal(false)}
+    />
+    </>
   );
 }

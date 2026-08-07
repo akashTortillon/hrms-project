@@ -36,8 +36,18 @@ const EditIcon = () => (
     </svg>
 );
 
+const TrashIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+    </svg>
+);
 
-import { getEmployeeById, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity } from "../../services/employeeService";
+
+import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity, deleteAllowance } from "../../services/employeeService";
 import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
@@ -48,6 +58,7 @@ import UploadEmployeeDocumentModal from "./UploadEmployeeDocumentModal.jsx";
 import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
 import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
+import AdjustLoanModal from "./AdjustLoanModal.jsx";
 import AddAllowanceModal from "./AddAllowanceModal.jsx";
 import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
@@ -77,18 +88,24 @@ export default function EmployeeDetail() {
     const navigate = useNavigate();
     const query = new URLSearchParams(window.location.search); // Parse query params
     const tabParam = query.get("tab");
-    const { hasPermission } = useRole();
+    const { hasPermission, currentUser } = useRole();
 
-    // Resolve "me" to logged-in user's employeeId
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
     const isSelf = id === "me";
-    const effectiveId = isSelf ? user.employeeId : id;
+
+    // For non-"me" routes, effectiveId is the URL param.
+    // For "me", it starts null and is populated from the server response after
+    // getMyProfile() returns — so all child fetches (docs, assets…) use the
+    // real employee _id and not a stale/missing value from localStorage.
+    const [resolvedEmployeeId, setResolvedEmployeeId] = useState(
+        isSelf ? (currentUser?.employeeId || null) : id
+    );
+    const effectiveId = isSelf ? resolvedEmployeeId : id;
 
     // Permissions
     const canEdit = hasPermission("MANAGE_EMPLOYEES");
     const canManageDocs = hasPermission("MANAGE_DOCUMENTS");
     const canManageAssets = hasPermission("MANAGE_ASSETS");
-    const canManageRepayments = hasPermission("APPROVE_REQUESTS") || hasPermission("ALL") || user?.role === "Admin";
+    const canManageRepayments = hasPermission("APPROVE_REQUESTS") || hasPermission("ALL") || currentUser?.role === "Admin";
 
 
 
@@ -114,6 +131,7 @@ export default function EmployeeDetail() {
     const [documents, setDocuments] = useState([]);
     const [workflowDocs, setWorkflowDocs] = useState([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
+    const [uploadPrefillType, setUploadPrefillType] = useState("");
 
     // Attendance & Training State
     const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, late: 0, total: 0 });
@@ -133,6 +151,9 @@ export default function EmployeeDetail() {
     const [gratuityLoading, setGratuityLoading] = useState(false);
     const [selectedLoanForSkip, setSelectedLoanForSkip] = useState(null);
     const [savingLoanSkip, setSavingLoanSkip] = useState(false);
+    const [showAdjustLoanModal, setShowAdjustLoanModal] = useState(false);
+    const [selectedLoanForAdjust, setSelectedLoanForAdjust] = useState(null);
+    const [savingLoanAdjust, setSavingLoanAdjust] = useState(false);
 
     // Leave Summary State
     const [leaveSummary, setLeaveSummary] = useState([]);
@@ -150,22 +171,41 @@ export default function EmployeeDetail() {
 
     // Fetch Employee Data
     const fetchEmployee = async () => {
-        if (!effectiveId) {
-            console.warn("No effective ID for profile view");
-            setError("No employee profile found for this user.");
-            setLoading(false);
-            return;
-        }
+        // Always reset state at the start of every fetch attempt so that a
+        // re-fetch (e.g. after effectiveId becomes available) clears old errors.
+        setLoading(true);
+        setError(null);
 
         try {
-            const data = await getEmployeeById(effectiveId);
+            let data;
+            if (isSelf) {
+                // Use the dedicated /employees/me endpoint — this resolves the employee
+                // by employeeId, email, or userId without needing the ID to be pre-stored
+                // in localStorage / context. Works for all account types out of the box.
+                data = await getMyProfile();
+                // Store the resolved _id so child tab fetches (documents, assets…)
+                // use the correct employee ID rather than an undefined value.
+                setResolvedEmployeeId(data._id);
+            } else {
+                if (!effectiveId) {
+                    setError("No employee profile found for this user.");
+                    setLoading(false);
+                    return;
+                }
+                data = await getEmployeeById(effectiveId);
+            }
             const dob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "N/A";
             const passportExpiry = data.passportExpiry ? new Date(data.passportExpiry).toISOString().split("T")[0] : "N/A";
             const visaExpiry = data.visaExpiry ? new Date(data.visaExpiry).toISOString().split("T")[0] : "N/A";
             setEmployee({ ...data, dob, passportExpiry, visaExpiry });
         } catch (err) {
             console.error(err);
-            setError("Failed to load employee details");
+            // 404 from /employees/me means genuinely no linked employee record
+            if (err?.response?.status === 404) {
+                setError("No employee profile found for this user.");
+            } else {
+                setError(err?.response?.data?.message || "Failed to load employee details");
+            }
         } finally {
             setLoading(false);
         }
@@ -176,7 +216,8 @@ export default function EmployeeDetail() {
         loadDepartments();
     }, [effectiveId]);
 
-    const handleAddAllowance = async ({ typeName, amount }) => {
+
+    const handleAddAllowance = async ({ typeName, amount, includeInPayroll }) => {
         setAllowanceSubmitting(true);
         try {
             const today = new Date().toISOString().slice(0, 10);
@@ -185,7 +226,8 @@ export default function EmployeeDetail() {
                 type: "ALLOWANCE",
                 allowanceTypeName: typeName,
                 amount,
-                effectiveDate: today
+                effectiveDate: today,
+                includeInPayroll
             });
             await fetchEmployee();
             setShowAddAllowanceModal(false);
@@ -194,6 +236,19 @@ export default function EmployeeDetail() {
             toast.error(err?.response?.data?.message || "Failed to apply allowance");
         } finally {
             setAllowanceSubmitting(false);
+        }
+    };
+
+    const handleDeleteAllowance = async (allowance) => {
+        if (!window.confirm(`Remove the "${allowance.typeName}" allowance (${Number(allowance.amount).toLocaleString()} AED)?`)) {
+            return;
+        }
+        try {
+            await deleteAllowance(effectiveId, allowance._id);
+            await fetchEmployee();
+            toast.success("Allowance removed");
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to remove allowance");
         }
     };
 
@@ -266,7 +321,7 @@ export default function EmployeeDetail() {
         for (const type of ["Onboarding", "Offboarding"]) {
             try {
                 const wf = await getEmployeeWorkflow(effectiveId, type);
-                (wf?.items || []).forEach((item) => {
+                (wf?.data?.items || []).forEach((item) => {
                     if (item.documentUrl) {
                         collected.push({ _id: item._id, name: item.name, type, documentUrl: item.documentUrl });
                     }
@@ -283,6 +338,7 @@ export default function EmployeeDetail() {
             await uploadEmployeeDocument(formData);
             toast.success("Document uploaded");
             setShowUploadModal(false);
+            setUploadPrefillType("");
             fetchDocuments();
         } catch (e) {
             console.error(e);
@@ -457,6 +513,27 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handleOpenAdjustLoanModal = (loan) => {
+        setSelectedLoanForAdjust(loan);
+        setShowAdjustLoanModal(true);
+    };
+
+    const handleAdjustLoan = async (requestId, payload) => {
+        try {
+            setSavingLoanAdjust(true);
+            await updateRepaymentSchedule(requestId, payload);
+            toast.success("Loan adjustment saved successfully");
+            setShowAdjustLoanModal(false);
+            setSelectedLoanForAdjust(null);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Loan adjustment failed", error);
+            toast.error(error.response?.data?.message || "Failed to save loan adjustment");
+        } finally {
+            setSavingLoanAdjust(false);
+        }
+    };
+
     const handleViewEmployeeDocument = async (document) => {
         try {
             if (document.fileUrl) {
@@ -486,8 +563,43 @@ export default function EmployeeDetail() {
     };
 
     if (loading) return <div className="p-8 text-center">Loading profile...</div>;
-    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
+    // Friendly state when the logged-in user has no linked Employee record
+    // (e.g. the primary Admin user who was created without an Employee entry).
+    // Still let them change their password from here.
+    if (error) {
+        const isNoProfile = !effectiveId || error === "No employee profile found for this user.";
+        return (
+            <div className="employee-detail-container">
+                <div className="employee-detail-header">
+                    <h1 className="employee-detail-title">My Profile</h1>
+                    <p className="employee-detail-subtitle">Manage your account settings</p>
+                </div>
+                <div className="employee-profile-card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '12px' }}>👤</div>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '18px', color: '#1f2937' }}>
+                        {isNoProfile ? 'No Employee Profile Linked' : 'Failed to Load Profile'}
+                    </h3>
+                    <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#6b7280' }}>
+                        {isNoProfile
+                            ? 'Your user account is not linked to an employee record. You can still manage your password below.'
+                            : error}
+                    </p>
+                    <button
+                        className="edit-profile-btn"
+                        onClick={() => setShowChangePasswordModal(true)}
+                        style={{ background: 'white', color: '#374151', border: '1px solid #d1d5db' }}
+                    >
+                        Change Password
+                    </button>
+                </div>
+                <ChangePasswordModal
+                    show={showChangePasswordModal}
+                    onClose={() => setShowChangePasswordModal(false)}
+                />
+            </div>
+        );
+    }
 
     if (!employee) return <div className="p-8 text-center">Employee not found</div>;
 
@@ -675,9 +787,19 @@ export default function EmployeeDetail() {
                                     </button>
                                 </>
                             )}
+                            {/* HR/Admin users can always change their own password */}
+                            {isSelf && (
+                                <button
+                                    className="edit-profile-btn"
+                                    onClick={() => setShowChangePasswordModal(true)}
+                                    style={{ background: 'white', color: '#374151', border: '1px solid #d1d5db' }}
+                                >
+                                    Change Password
+                                </button>
+                            )}
                         </>
                     )}
-                    {isSelf && (
+                    {!canEdit && isSelf && (
                         <button
                             className="edit-profile-btn"
                             onClick={() => setShowChangePasswordModal(true)}
@@ -948,7 +1070,7 @@ export default function EmployeeDetail() {
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Document Tracker</h3>
                             {canManageDocs && (
                                 <button
-                                    onClick={() => setShowUploadModal(true)}
+                                    onClick={() => { setUploadPrefillType(""); setShowUploadModal(true); }}
                                     style={{
                                         background: '#2563eb', color: 'white', border: 'none',
                                         padding: '8px 16px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer'
@@ -978,21 +1100,38 @@ export default function EmployeeDetail() {
                                         }}>
                                             {doc.status}
                                         </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleViewEmployeeDocument(doc)}
-                                            style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                        >
-                                            View
-                                        </button>
-                                        {canManageDocs && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDeleteEmployeeDocument(doc)}
-                                                style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                            >
-                                                Delete
-                                            </button>
+                                        {doc.noFileUploaded ? (
+                                            <>
+                                                <span style={{ fontSize: '12px', color: '#9ca3af' }}>No file uploaded</span>
+                                                {canManageDocs && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setUploadPrefillType(doc.documentType); setShowUploadModal(true); }}
+                                                        style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                    >
+                                                        Upload
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleViewEmployeeDocument(doc)}
+                                                    style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                >
+                                                    View
+                                                </button>
+                                                {canManageDocs && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteEmployeeDocument(doc)}
+                                                        style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -1215,10 +1354,28 @@ export default function EmployeeDetail() {
 
                                 {(employee.allowances || []).map((item) => (
                                     <div key={item._id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>{item.typeName}</span>
-                                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
-                                            {Number(item.amount).toLocaleString()} AED
+                                        <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                                            {item.typeName}
+                                            {item.includeInPayroll === false && (
+                                                <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '600', color: '#b45309', background: '#fef3c7', padding: '2px 6px', borderRadius: '999px' }}>
+                                                    Excluded from payroll
+                                                </span>
+                                            )}
                                         </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                                                {Number(item.amount).toLocaleString()} AED
+                                            </span>
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => handleDeleteAllowance(item)}
+                                                    title="Remove allowance"
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center', padding: '4px' }}
+                                                >
+                                                    <TrashIcon />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
 
@@ -1380,7 +1537,7 @@ export default function EmployeeDetail() {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                                         <div>
                                             <div style={{ fontWeight: '600', color: '#111827', fontSize: '15px' }}>
-                                                {loan.subType === 'loan' ? 'Company Loan' : 'Salary Advance'}
+                                                {(loan.details?.subType || loan.subType) === 'loan' ? 'Company Loan' : 'Salary Advance'}
                                                 <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '400', marginLeft: '8px' }}>
                                                     #{loan.requestId}
                                                 </span>
@@ -1432,7 +1589,7 @@ export default function EmployeeDetail() {
                                     </div>
 
                                     {canManageRepayments && !loan.isFullyPaid && (
-                                        <div style={{ marginBottom: '14px' }}>
+                                        <div style={{ marginBottom: '14px', display: 'flex', gap: '8px' }}>
                                             <button
                                                 type="button"
                                                 onClick={() => handleOpenSkipLoanModal(loan)}
@@ -1449,6 +1606,24 @@ export default function EmployeeDetail() {
                                             >
                                                 Skip One Month
                                             </button>
+                                            {(loan.details?.subType || loan.subType) === 'loan' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenAdjustLoanModal(loan)}
+                                                    style={{
+                                                        border: '1px solid #2563eb',
+                                                        background: '#eff6ff',
+                                                        color: '#1d4ed8',
+                                                        borderRadius: '8px',
+                                                        padding: '8px 12px',
+                                                        fontSize: '13px',
+                                                        fontWeight: '600',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    Adjust Loan
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 
@@ -1590,7 +1765,8 @@ export default function EmployeeDetail() {
             {showUploadModal && (
                 <UploadEmployeeDocumentModal
                     employeeId={effectiveId}
-                    onClose={() => setShowUploadModal(false)}
+                    initialDocumentType={uploadPrefillType}
+                    onClose={() => { setShowUploadModal(false); setUploadPrefillType(""); }}
                     onUpload={handleUploadDocument}
                 />
             )}
@@ -1631,6 +1807,19 @@ export default function EmployeeDetail() {
                     }}
                     onSubmit={handleSkipLoanMonth}
                     submitting={savingLoanSkip}
+                />
+            )}
+
+            {showAdjustLoanModal && (
+                <AdjustLoanModal
+                    show={showAdjustLoanModal}
+                    request={selectedLoanForAdjust}
+                    onClose={() => {
+                        setShowAdjustLoanModal(false);
+                        setSelectedLoanForAdjust(null);
+                    }}
+                    onSubmit={handleAdjustLoan}
+                    submitting={savingLoanAdjust}
                 />
             )}
 

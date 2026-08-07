@@ -57,7 +57,7 @@ export default function AssignAssetToEmployeeModal({ onClose, onAssign, employee
     };
 
     return (
-        <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-backdrop">
             <div className="modal-container" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>Assign Asset to Employee</h3>

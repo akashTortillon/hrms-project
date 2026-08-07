@@ -3,7 +3,7 @@ import "../../style/SubmitRequestModal.css";
 
 import SvgIcon from "../../components/svgIcon/svgView";
 import { createRequest } from "../../services/requestService.js";
-import { leaveTypeService, repaymentPeriodService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
+import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
 import { getMyWallets } from "../../services/leaveWalletService.js";
 import { toast } from "react-toastify";
 
@@ -12,7 +12,6 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]); // ✅ NEW: Leave types state
   const [walletBalances, setWalletBalances] = useState([]); // leaveTypeId -> balanceDays
-  const [repaymentPeriods, setRepaymentPeriods] = useState([]);
   const [medicalFile, setMedicalFile] = useState(null);
 
   // ✅ NEW: SubType state for Salary requests
@@ -32,22 +31,19 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
   const [salaryForm, setSalaryForm] = useState({
     amount: "",
-    repaymentPeriod: "",
+    monthlyRepaymentAmount: "",
     reason: ""
   });
 
-  const fallbackRepaymentPeriods = [
-    { _id: "fallback-1", name: "1 Month", metadata: { months: 1 } },
-    { _id: "fallback-3", name: "3 Months", metadata: { months: 3 } },
-    { _id: "fallback-6", name: "6 Months", metadata: { months: 6 } },
-    { _id: "fallback-12", name: "12 Months", metadata: { months: 12 } }
-  ];
-
-  const repaymentPeriodOptions = repaymentPeriods.length > 0 ? repaymentPeriods : fallbackRepaymentPeriods;
-  const getRepaymentMonths = (period) => {
-    const months = Number(period.metadata?.months ?? period.value ?? parseInt(period.name, 10));
-    return Number.isFinite(months) && months > 0 ? months : 1;
-  };
+  // Loan term is derived from the monthly repayment amount (rounded up, so a smaller
+  // final installment absorbs any remainder) instead of being picked from a duration
+  // list - mirrors the same calculation used in the approval modal.
+  const loanTermMonths = (() => {
+    const amount = parseFloat(salaryForm.amount) || 0;
+    const monthly = parseFloat(salaryForm.monthlyRepaymentAmount) || 0;
+    if (amount <= 0 || monthly <= 0) return null;
+    return Math.ceil(amount / monthly);
+  })();
 
   const [documentForm, setDocumentForm] = useState({
     documentType: "Salary Certificate",
@@ -87,29 +83,6 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
   const selectedBalance = walletBalances.find(w => w.leaveTypeId === leaveForm.leaveTypeId);
 
-  useEffect(() => {
-    const fetchRepaymentPeriods = async () => {
-      try {
-        const data = await repaymentPeriodService.getAll();
-        const periods = Array.isArray(data) ? data : [];
-        setRepaymentPeriods(periods);
-        const firstPeriod = periods[0] || fallbackRepaymentPeriods[1];
-        setSalaryForm(prev => ({
-          ...prev,
-          repaymentPeriod: String(getRepaymentMonths(firstPeriod))
-        }));
-      } catch (error) {
-        console.error("Failed to fetch repayment periods:", error);
-        setRepaymentPeriods([]);
-        setSalaryForm(prev => ({
-          ...prev,
-          repaymentPeriod: String(getRepaymentMonths(fallbackRepaymentPeriods[1]))
-        }));
-      }
-    };
-    fetchRepaymentPeriods();
-  }, []);
-
   const handleSubmit = async () => {
     try {
       setLoading(true);
@@ -145,13 +118,19 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
           setLoading(false);
           return;
         }
+        if (salarySubType === "loan" && !salaryForm.monthlyRepaymentAmount) {
+          toast.error("Please enter a monthly repayment amount");
+          setLoading(false);
+          return;
+        }
         // ✅ NEW: Include subType for salary requests
         requestData = {
           requestType: "SALARY",
           subType: salarySubType,
           details: {
           amount: salaryForm.amount,
-          repaymentPeriod: salarySubType === "salary_advance" ? "1" : salaryForm.repaymentPeriod,
+          repaymentPeriod: salarySubType === "salary_advance" ? "1" : String(loanTermMonths || 1),
+          monthlyRepaymentAmount: salarySubType === "loan" ? salaryForm.monthlyRepaymentAmount : undefined,
           reason: salaryForm.reason
           }
         };
@@ -187,7 +166,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
         });
         setSalaryForm({
           amount: "",
-          repaymentPeriod: String(getRepaymentMonths(repaymentPeriodOptions[0] || fallbackRepaymentPeriods[1])),
+          monthlyRepaymentAmount: "",
           reason: ""
         });
         setDocumentForm({
@@ -216,7 +195,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div className="request-modal-overlay" onClick={onClose}>
+    <div className="request-modal-overlay">
       <div
         className="request-modal"
         onClick={(e) => e.stopPropagation()}
@@ -482,13 +461,16 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
 
             {salarySubType === "loan" && (
               <div>
-                <label>Repayment Period (Months)</label>
-                <select
-                  value={salaryForm.repaymentPeriod}
+                <label>Monthly Repayment Amount (AED)</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="500"
+                  value={salaryForm.monthlyRepaymentAmount}
                   onChange={(e) =>
                     setSalaryForm({
                       ...salaryForm,
-                      repaymentPeriod: e.target.value
+                      monthlyRepaymentAmount: e.target.value
                     })
                   }
                   style={{
@@ -496,21 +478,13 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                     padding: "10px",
                     borderRadius: "8px",
                     border: "1px solid #d1d5db",
-                    backgroundColor: "white",
                     fontSize: "14px",
                     height: "42px"
                   }}
-                >
-                  <option value="" disabled>Select Period</option>
-                  {repaymentPeriodOptions.map((period) => {
-                    const months = getRepaymentMonths(period);
-                    return (
-                      <option key={period._id || period.name} value={months}>
-                        {period.name || `${months} Month${months > 1 ? "s" : ""}`}
-                      </option>
-                    );
-                  })}
-                </select>
+                />
+                <p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                  Repayment term: <strong>{loanTermMonths ? `${loanTermMonths} month${loanTermMonths > 1 ? "s" : ""}` : "enter amount and monthly repayment"}</strong>
+                </p>
               </div>
             )}
 

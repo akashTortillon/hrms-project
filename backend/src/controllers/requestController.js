@@ -450,6 +450,15 @@ const getLeaveDays = (details = {}) => {
   return Math.max(1, diffDays);
 };
 
+// Mirrors markLeaveAttendance's own date iteration (new Date(string) + setDate +
+// toISOString().split) so an approved-days override stays internally consistent
+// with how attendance rows actually get marked for the resulting range.
+const addDaysToYMD = (ymd, days) => {
+  const d = new Date(ymd);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+};
+
 const parsePayrollCycle = (month, year) => {
   const parsedMonth = Number(month);
   const parsedYear = Number(year);
@@ -1184,6 +1193,16 @@ export const getPendingRequestsForAdmin = async (req, res) => {
         stageFilters.push({ currentApprovalStage: "FINANCE" });
       }
 
+      // HR/Admin also gets COMPLETED-stage (already-decided) requests in this same
+      // default fetch - the frontend's "Requests History" panel (AdminRequests.jsx)
+      // reads its history list from this same query with no `stage` param, so without
+      // this the panel's search/type/status filters render but the list underneath is
+      // always empty for HR/Admin (every finished request's currentApprovalStage is
+      // "COMPLETED", which none of the active-stage filters above ever match).
+      if (canApproveHr) {
+        stageFilters.push({ currentApprovalStage: "COMPLETED" });
+      }
+
       query.$and = query.$and || [];
       query.$and.push({
         $or: stageFilters
@@ -1307,6 +1326,7 @@ export const updateRequestStatus = async (req, res) => {
       if (isFinanceStage) {
         const financeAmountProvided = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== "";
         const financeRepaymentProvided = req.body.repaymentPeriod !== undefined && req.body.repaymentPeriod !== null && req.body.repaymentPeriod !== "";
+        const financeMonthlyProvided = req.body.monthlyRepaymentAmount !== undefined && req.body.monthlyRepaymentAmount !== null && req.body.monthlyRepaymentAmount !== "";
 
         if (request.requestType === "SALARY") {
           const requestedAmount = Number(request.details?.requestedAmount ?? request.details?.amount) || 0;
@@ -1319,6 +1339,13 @@ export const updateRequestStatus = async (req, res) => {
             financeApprovedRepaymentPeriod: financeRepaymentProvided
               ? Number(req.body.repaymentPeriod)
               : request.details?.financeApprovedRepaymentPeriod ?? request.details?.repaymentPeriod,
+            // Loans: monthly repayment amount now drives the term (see the HR-final-stage
+            // block below), replacing a directly-picked tenure. Kept alongside the older
+            // repaymentPeriod field above for backward compatibility with loans already
+            // in-flight when this changed.
+            financeApprovedMonthlyRepaymentAmount: financeMonthlyProvided
+              ? Number(req.body.monthlyRepaymentAmount)
+              : request.details?.financeApprovedMonthlyRepaymentAmount ?? request.details?.monthlyRepaymentAmount,
             financeApprovedAt: new Date(),
             financeApprovedBy: req.user.id
           };
@@ -1385,6 +1412,22 @@ export const updateRequestStatus = async (req, res) => {
           request.details.repaymentPeriod = Number(approvedRepaymentPeriod);
         }
 
+        // Loans: term is derived from a monthly repayment amount instead of being picked
+        // directly - Math.ceil so a smaller final installment absorbs any remainder
+        // (payroll's existing Math.min(installment, remaining) already handles that).
+        // Falls back to the repaymentPeriod set just above for loans approved before
+        // this existed (no monthlyRepaymentAmount on file for them).
+        if (request.details?.subType === "loan") {
+          const approvedMonthlyRepaymentAmount = req.body.monthlyRepaymentAmount !== undefined && req.body.monthlyRepaymentAmount !== null && req.body.monthlyRepaymentAmount !== ""
+            ? Number(req.body.monthlyRepaymentAmount)
+            : (request.details?.financeApprovedMonthlyRepaymentAmount ?? request.details?.monthlyRepaymentAmount);
+
+          if (approvedMonthlyRepaymentAmount > 0) {
+            request.details.monthlyRepaymentAmount = approvedMonthlyRepaymentAmount;
+            request.details.repaymentPeriod = Math.ceil(totalRepayment / approvedMonthlyRepaymentAmount);
+          }
+        }
+
         const startCurrentCycle = req.body.startCurrentCycle === true || req.body.startCurrentCycle === "true";
         const startCycle = startCurrentCycle
           ? {
@@ -1422,6 +1465,29 @@ export const updateRequestStatus = async (req, res) => {
       request.approvedAt = new Date();
 
       if (request.requestType === "LEAVE") {
+        // HR can override the number of days actually being approved (e.g. approve 2 of
+        // a requested 3 days) instead of always granting whatever was submitted. Applied
+        // BEFORE markLeaveAttendance/debitWallet below, which both trust numberOfDays/
+        // toDate off request.details unconditionally - landing the override after those
+        // calls would silently mark/debit the wrong day count.
+        const approvedDaysOverride = req.body.approvedDays !== undefined && req.body.approvedDays !== null && req.body.approvedDays !== ""
+          ? Number(req.body.approvedDays)
+          : null;
+
+        if (approvedDaysOverride && approvedDaysOverride > 0 && !request.details.isHalfDay
+          && approvedDaysOverride !== request.details.numberOfDays) {
+          // Reassign the whole `details` object (not a nested in-place mutation) - `details`
+          // is a Mongoose Mixed field, so mutating a nested property alone isn't reliably
+          // detected as a change and can silently fail to persist on save().
+          request.details = {
+            ...request.details,
+            toDate: addDaysToYMD(request.details.fromDate, approvedDaysOverride - 1),
+            numberOfDays: approvedDaysOverride,
+            approvedDaysAdjustedBy: req.user.id,
+            approvedDaysAdjustedAt: new Date()
+          };
+        }
+
         const { fromDate, toDate, leaveType, leaveTypeId, numberOfDays, isPaid, isHalfDay, leavePayStatus } = request.details;
         if (fromDate && toDate) {
           await markLeaveAttendance(
@@ -1556,10 +1622,128 @@ export const updateRequestStatus = async (req, res) => {
   }
 };
 
+// Revokes an already-APPROVED leave request. Unlike a raw `requests.deleteOne`,
+// this reverses the two side effects the original approval made (see the LEAVE
+// branch of updateRequestStatus above) instead of leaving them dangling:
+//   1. Attendance rows the approval marked "On Leave" are cleared back to unmarked,
+//      but ONLY if they're still "On Leave" - if something else has since
+//      overwritten that day (a biometric sync, a manual correction), it's left
+//      alone rather than clobbering newer, real data.
+//   2. The leave wallet is credited back the days that were debited, with a
+//      LEAVE_REVOKED ledger entry documenting the reversal.
+// The Request document itself is soft-revoked (status: "REVOKED", revokedBy/At/
+// Reason set) rather than deleted, so the full approval history stays intact and
+// auditable.
+export const revokeLeave = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, message: "A reason is required to revoke an approved leave." });
+    }
+
+    if (!isHrApprover(req.user)) {
+      return res.status(403).json({ success: false, message: "Only HR/Admin can revoke an approved leave." });
+    }
+
+    const request = await Request.findById(requestId);
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Request not found" });
+    }
+
+    if (request.requestType !== "LEAVE") {
+      return res.status(400).json({ success: false, message: "Only leave requests can be revoked." });
+    }
+
+    if (request.status !== "APPROVED") {
+      return res.status(400).json({ success: false, message: `Cannot revoke a request with status ${request.status} - only an APPROVED leave can be revoked.` });
+    }
+
+    const { fromDate, toDate, leaveTypeId, numberOfDays } = request.details || {};
+
+    const employeeUser = await User.findById(request.userId);
+    const employee = employeeUser?.employeeId
+      ? await Employee.findById(employeeUser.employeeId)
+      : (employeeUser?.email ? await Employee.findOne({ email: employeeUser.email }) : null);
+
+    let attendanceCleared = 0;
+    if (employee && fromDate && toDate) {
+      const start = new Date(fromDate);
+      const end = new Date(toDate);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split("T")[0];
+        const cleared = await Attendance.findOneAndDelete({
+          employee: employee._id,
+          date: dateStr,
+          status: "On Leave"
+        });
+        if (cleared) attendanceCleared++;
+      }
+    }
+
+    let walletCredited = false;
+    if (employee && leaveTypeId && numberOfDays) {
+      await leaveWalletService.creditWallet({
+        employeeId: employee._id,
+        leaveTypeId,
+        days: numberOfDays,
+        transactionType: "LEAVE_REVOKED",
+        remarks: `Leave request ${request.requestId} revoked: ${reason.trim()}`,
+        requestId: request._id,
+        createdBy: req.user.id
+      });
+      walletCredited = true;
+    }
+
+    request.status = "REVOKED";
+    request.revokedBy = req.user.id;
+    request.revokedAt = new Date();
+    request.revokedReason = reason.trim();
+    await request.save();
+
+    try {
+      await createNotification({
+        recipient: request.userId,
+        title: "Approved leave revoked",
+        message: `Your approved leave request ${request.requestId} has been revoked by HR: ${reason.trim()}`,
+        type: "REQUEST",
+        link: "/app/requests"
+      });
+    } catch (notifErr) {
+      console.error("Failed to notify employee of leave revocation:", notifErr);
+    }
+
+    const populatedRequest = await Request.findById(request._id)
+      .populate("userId", "name email department avatar role")
+      .populate("revokedBy", "name role");
+
+    res.json({
+      success: true,
+      message: "Leave revoked",
+      attendanceCleared,
+      walletCredited,
+      data: populatedRequest
+    });
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "REQUESTS",
+      description: `Leave request ${request.requestId} revoked by ${req.user?.name}: ${reason.trim()}`,
+      targetId: request._id,
+      targetName: request.requestId
+    }).catch(() => {});
+  } catch (err) {
+    console.error("Revoke leave error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 export const updateSalaryRepaymentSchedule = async (req, res) => {
   try {
     const { requestId } = req.params;
-    const { action, month, year, reason = "" } = req.body;
+    const { action, month, year, reason = "", monthlyRepaymentAmount } = req.body;
 
     const canManageSchedule = req.user.role === "Admin"
       || req.user.permissions?.includes("ALL")
@@ -1572,18 +1756,10 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       });
     }
 
-    if (action !== "SKIP_MONTH") {
+    if (!["SKIP_MONTH", "ADJUST"].includes(action)) {
       return res.status(400).json({
         success: false,
         message: "Invalid repayment schedule action."
-      });
-    }
-
-    const cycle = parsePayrollCycle(month, year);
-    if (!cycle) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid payroll month and year are required."
       });
     }
 
@@ -1613,6 +1789,93 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "This request is already fully repaid."
+      });
+    }
+
+    if (action === "ADJUST") {
+      const requestSubType = request.details?.subType || request.subType;
+      if (requestSubType !== "loan") {
+        return res.status(400).json({
+          success: false,
+          message: "Only loans support a monthly-repayment-amount adjustment."
+        });
+      }
+
+      const newMonthlyRepaymentAmount = Number(monthlyRepaymentAmount);
+      if (!(newMonthlyRepaymentAmount > 0)) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid new monthly repayment amount is required."
+        });
+      }
+
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "A reason is required to adjust a loan."
+        });
+      }
+
+      const details = request.details || {};
+      const totalPayable = Number(details.totalRepaymentAmount) || Number(details.amount) || 0;
+      const existingDeductions = Array.isArray(request.payrollDeductions) ? request.payrollDeductions : [];
+      const alreadyPaid = existingDeductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      const remainingBalance = Math.max(0, totalPayable - alreadyPaid);
+
+      // repaymentPeriod is the loan's total duration (already-deducted months + however
+      // many more the new monthly amount takes to clear the remaining balance) - not just
+      // the months left, so it stays comparable to the value stored at original approval
+      // (see Item D / the HR-final-approval SALARY branch above, which computes it the
+      // same way: Math.ceil(total / monthly)).
+      const additionalMonths = remainingBalance > 0 ? Math.ceil(remainingBalance / newMonthlyRepaymentAmount) : 0;
+      const newRepaymentPeriod = existingDeductions.length + additionalMonths;
+
+      const adjustmentEntry = {
+        previousMonthlyRepaymentAmount: details.monthlyRepaymentAmount ?? null,
+        newMonthlyRepaymentAmount,
+        previousRepaymentPeriod: details.repaymentPeriod ?? null,
+        newRepaymentPeriod,
+        remainingBalanceAtAdjustment: remainingBalance,
+        reason: reason.trim(),
+        adjustedBy: req.user._id,
+        adjustedAt: new Date()
+      };
+
+      request.details = {
+        ...details,
+        monthlyRepaymentAmount: newMonthlyRepaymentAmount,
+        repaymentPeriod: newRepaymentPeriod,
+        adjustmentHistory: [...(details.adjustmentHistory || []), adjustmentEntry]
+      };
+
+      await request.save();
+
+      createNotification({
+        recipient: request.userId,
+        title: "Loan repayment adjusted",
+        message: `Your loan ${request.requestId}'s monthly repayment was adjusted to ${newMonthlyRepaymentAmount} AED: ${reason.trim()}`,
+        type: "REQUEST",
+        link: "/app/requests"
+      }).catch((error) => console.error("Notification error:", error));
+
+      const populatedForAdjust = await Request.findById(request._id)
+        .populate("approvedBy", "name role")
+        .populate("managerApproval.actedBy", "name role")
+        .populate("financeApproval.actedBy", "name role")
+        .populate("hrApproval.actedBy", "name role");
+
+      return res.status(200).json({
+        success: true,
+        message: `Monthly repayment adjusted to ${newMonthlyRepaymentAmount} AED.`,
+        data: populatedForAdjust
+      });
+    }
+
+    const cycle = parsePayrollCycle(month, year);
+    if (!cycle) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid payroll month and year are required."
       });
     }
 

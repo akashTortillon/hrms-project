@@ -10,10 +10,12 @@ import {
   updateRequestStatus,
   approveDocumentRequest,
   rejectDocumentRequest,
+  revokeLeaveRequest,
 } from "../../services/requestService";
 import "../../style/myRequests.css";
 import DocumentApproveModal from "./DocumentApproveModal.jsx";
 import SalaryApproveModal from "./SalaryApproveModal.jsx";
+import LeaveApproveModal from "./LeaveApproveModal.jsx";
 
 export default function AdminRequests() {
   const [requests, setRequests] = useState([]);
@@ -29,12 +31,22 @@ export default function AdminRequests() {
   const [showSalaryModal, setShowSalaryModal] = useState(false);
   const [selectedSalaryReq, setSelectedSalaryReq] = useState(null);
 
+  // ✅ Leave approval modal states (HR final-approval stage only — lets HR override
+  // the number of days actually granted for a partial approval)
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [selectedLeaveReq, setSelectedLeaveReq] = useState(null);
+
   // Rejection dialog states
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showRejectReason, setShowRejectReason] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [selectedRequestId, setSelectedRequestId] = useState(null);
   const [isDocumentRequest, setIsDocumentRequest] = useState(false);
+
+  // Revoke-approved-leave dialog states
+  const [showRevokeReason, setShowRevokeReason] = useState(false);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [revokeRequestId, setRevokeRequestId] = useState(null);
 
   // History filters
   const [search, setSearch] = useState("");
@@ -131,8 +143,14 @@ export default function AdminRequests() {
       // Open salary modal for both Finance (level 1) and HR (final sanction)
       setSelectedSalaryReq(request);
       setShowSalaryModal(true);
+    } else if (request.requestType === "LEAVE" && request.currentApprovalStage === "HR") {
+      // Open leave modal at the final HR-approval stage only — this is where the
+      // approved-days override actually takes effect server-side. A manager-stage
+      // leave approval (forwarding to HR) stays a direct one-click approve.
+      setSelectedLeaveReq(request);
+      setShowLeaveModal(true);
     } else {
-      // Direct approval for LEAVE (and others if any)
+      // Direct approval for LEAVE at manager stage (and others if any)
       try {
         setProcessing(true);
         await updateRequestStatus(request._id, { action: "APPROVE" });
@@ -160,6 +178,25 @@ export default function AdminRequests() {
       setSelectedSalaryReq(null);
     } catch (err) {
       console.error("Failed to approve salary request", err);
+      alert("Failed to approve request. Please try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // ✅ Leave approval handler (HR final stage, with optional approved-days override)
+  const handleLeaveApprove = async (requestId, data) => {
+    try {
+      setProcessing(true);
+      await updateRequestStatus(requestId, {
+        action: "APPROVE",
+        approvedDays: data.approvedDays
+      });
+      await fetchRequests();
+      setShowLeaveModal(false);
+      setSelectedLeaveReq(null);
+    } catch (err) {
+      console.error("Failed to approve leave request", err);
       alert("Failed to approve request. Please try again.");
     } finally {
       setProcessing(false);
@@ -236,6 +273,41 @@ export default function AdminRequests() {
     setIsDocumentRequest(false);
   };
 
+  // ✅ Revoke an already-approved leave — opens straight to the reason dialog
+  // (no separate yes/no confirm step, matching the destructiveness already being
+  // gated by the required reason + HR-only visibility on the button itself).
+  const handleRevokeClick = (request) => {
+    setRevokeRequestId(request._id);
+    setShowRevokeReason(true);
+  };
+
+  const submitRevoke = async () => {
+    if (!revokeReason.trim()) {
+      alert("Please provide a reason for revoking this leave");
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      await revokeLeaveRequest(revokeRequestId, revokeReason.trim());
+      setShowRevokeReason(false);
+      setRevokeReason("");
+      setRevokeRequestId(null);
+      await fetchRequests();
+    } catch (err) {
+      console.error("Failed to revoke leave", err);
+      alert(err.response?.data?.message || "Failed to revoke leave. Please try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const cancelRevoke = () => {
+    setShowRevokeReason(false);
+    setRevokeReason("");
+    setRevokeRequestId(null);
+  };
+
   /* =========================
      DATA SEGREGATION
   ========================= */
@@ -243,7 +315,7 @@ export default function AdminRequests() {
   const pendingRequests = requests.filter((r) => ["PENDING", "MANAGER_APPROVED", "FINANCE_APPROVED"].includes(r.status));
 
   const historyRequests = requests.filter((r) =>
-    ["WITHDRAWN", "APPROVED", "REJECTED", "COMPLETED"].includes(r.status)
+    ["WITHDRAWN", "APPROVED", "REJECTED", "COMPLETED", "REVOKED"].includes(r.status)
   );
 
   /* =========================
@@ -265,8 +337,20 @@ export default function AdminRequests() {
     if (req.status === "APPROVED") return "Approved";
     if (req.status === "REJECTED") return "Rejected";
     if (req.status === "COMPLETED") return "Completed";
+    if (req.status === "REVOKED") return "Revoked";
     return null;
   };
+
+  const getRevokeMessage = (req) => {
+    if (req.status !== "REVOKED") return null;
+    const name = req.revokedBy?.name || "HR";
+    const time = req.revokedAt ? new Date(req.revokedAt).toLocaleString() : "";
+    return `Revoked by ${name}${time ? ` at ${time}` : ""}${req.revokedReason ? ` — ${req.revokedReason}` : ""}`;
+  };
+
+  const canRevoke = (req) => (
+    req.requestType === "LEAVE" && req.status === "APPROVED" && canActAsHr
+  );
 
   /* =========================
      REQUEST DETAILS RENDERER
@@ -523,6 +607,7 @@ export default function AdminRequests() {
                           <option value="REJECTED">Rejected</option>
                           <option value="COMPLETED">Completed</option>
                           <option value="WITHDRAWN">Withdrawn</option>
+                          <option value="REVOKED">Revoked</option>
                         </select>
                       </div>
                     </div>
@@ -542,6 +627,7 @@ export default function AdminRequests() {
                     <ListGroup variant="flush" className="requests-list">
                       {filteredHistoryRequests.map((req) => {
                         const withdrawMsg = getWithdrawMessage(req);
+                        const revokeMsg = getRevokeMessage(req);
                         const statusDisplay = getStatusDisplay(req);
 
                         return (
@@ -553,16 +639,30 @@ export default function AdminRequests() {
                               {renderRequestDetails(req)}
                             </div>
 
-                            <div className="request-actions">
+                            <div className="request-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                               {withdrawMsg ? (
                                 <div className="request-withdraw-message">
                                   {withdrawMsg}
+                                </div>
+                              ) : revokeMsg ? (
+                                <div className="request-withdraw-message">
+                                  {revokeMsg}
                                 </div>
                               ) : statusDisplay ? (
                                 <div className="request-status-display">
                                   {statusDisplay}
                                 </div>
                               ) : null}
+                              {canRevoke(req) && (
+                                <AppButton
+                                  variant="danger"
+                                  onClick={() => handleRevokeClick(req)}
+                                  disabled={processing}
+                                  style={{ fontSize: '12px', padding: '4px 10px' }}
+                                >
+                                  Revoke
+                                </AppButton>
+                              )}
                             </div>
                           </ListGroup.Item>
                         );
@@ -587,6 +687,41 @@ export default function AdminRequests() {
         onApprove={handleDocumentApprove}
       />
 
+      {/* REVOKE REASON */}
+      {showRevokeReason && (
+        <div className="dialog-overlay">
+          <div className="dialog-box">
+            <h3 className="dialog-title">Revoke Approved Leave</h3>
+            <p className="dialog-message">
+              This reverses the marked attendance and credits the leave balance back.
+              Please provide a reason:
+            </p>
+            <textarea
+              className="rejection-textarea"
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              placeholder="Enter reason here..."
+              rows={5}
+            />
+            <div className="dialog-actions">
+              <button
+                className="dialog-btn dialog-btn-cancel"
+                onClick={cancelRevoke}
+              >
+                Cancel
+              </button>
+              <button
+                className="dialog-btn dialog-btn-submit"
+                onClick={submitRevoke}
+                disabled={processing}
+              >
+                {processing ? "Revoking..." : "Revoke Leave"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SALARY APPROVE MODAL */}
       <SalaryApproveModal
         show={showSalaryModal}
@@ -596,6 +731,17 @@ export default function AdminRequests() {
           setSelectedSalaryReq(null);
         }}
         onApprove={handleSalaryApprove}
+      />
+
+      {/* LEAVE APPROVE MODAL */}
+      <LeaveApproveModal
+        show={showLeaveModal}
+        request={selectedLeaveReq}
+        onClose={() => {
+          setShowLeaveModal(false);
+          setSelectedLeaveReq(null);
+        }}
+        onApprove={handleLeaveApprove}
       />
 
       {/* REJECT CONFIRM */}

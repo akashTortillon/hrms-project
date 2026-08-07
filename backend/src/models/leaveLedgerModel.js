@@ -21,7 +21,8 @@ const leaveLedgerSchema = new mongoose.Schema({
       "ADVANCE_LEAVE",
       "REFUND",
       "MANUAL_CORRECTION",
-      "MIGRATION_ENTRY"
+      "MIGRATION_ENTRY",
+      "LEAVE_REVOKED"
     ],
     required: true
   },

@@ -132,7 +132,7 @@ export const getDocStats = async (req, res) => {
         companyDocs.forEach(d => bump(d.expiryDate));
 
         if (req.query.scope !== "company") {
-            const employeeDocs = await EmployeeDocument.find({}, { expiryDate: 1 });
+            const employeeDocs = await EmployeeDocument.find({ isActive: { $ne: false } }, { expiryDate: 1 });
             employeeDocs.forEach(d => bump(d.expiryDate));
 
             const employees = await Employee.find(

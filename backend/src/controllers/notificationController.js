@@ -3,6 +3,7 @@ import CompanyDocument from "../models/companyDocModel.js";
 import Request from "../models/requestModel.js";
 import Payroll from "../models/payrollModel.js";
 import User from "../models/userModel.js";
+import { getApprovalStageFilter } from "../utils/approvalStageFilter.js";
 
 /**
  * Get notifications for the logged-in user
@@ -41,8 +42,18 @@ export const getNotifications = async (req, res) => {
                 });
             }
 
-            // 2. AGGREGATED Pending Requests (Sync with "PENDING" status)
-            const pendingRequestsCount = await Request.countDocuments({ status: "PENDING" });
+            // 2. AGGREGATED Pending Requests - must match what /app/requests would actually
+            // show this viewer, not a raw status:"PENDING" count. A request's overall `status`
+            // stays "PENDING" through its entire Manager -> Finance -> HR lifecycle, so a naive
+            // count includes requests still sitting at a DIFFERENT stage/approver - inflating
+            // this badge above what the viewer's own approval queue shows. See
+            // getApprovalStageFilter for the shared scoping logic (also used by the dashboard's
+            // Pending Approvals widget and requestController's getPendingRequestsForAdmin).
+            const stageFilters = getApprovalStageFilter(req.user);
+
+            const pendingRequestsCount = stageFilters.length
+                ? await Request.countDocuments({ status: "PENDING", $or: stageFilters })
+                : 0;
             if (pendingRequestsCount > 0) {
                 summaryNotifications.push({
                     _id: "virtual-pending-requests",
@@ -78,10 +89,13 @@ export const getNotifications = async (req, res) => {
                 (n) => !dismissedIds.includes(n._id)
             );
 
-            // Remove individual REQUEST notifications for Admin to avoid duplicate noise/double-counting
-            const nonRequestDBNotifications = notifications.filter(n => n.type !== "REQUEST");
-
-            return res.json([...activeSummaryNotifications, ...nonRequestDBNotifications]);
+            // Individual REQUEST notifications (e.g. "X submitted a leave request") are kept
+            // alongside the aggregate "N Pending Requests" summary above - they used to be
+            // stripped out here entirely, which meant an Admin/HR viewer never saw WHO
+            // submitted a request, only an anonymous count (the notification was created
+            // correctly by notifyAdmins/createNotification at submission time, it just never
+            // reached this response).
+            return res.json([...activeSummaryNotifications, ...notifications]);
         }
 
         // For Employees: Only show individual notifications if they are not system-level virtuals
@@ -116,11 +130,12 @@ export const getUnreadCount = async (req, res) => {
             if (pendingReqs > 0 && !dismissedIds.includes("virtual-pending-requests")) virtualCount++;
             if (draftPayroll && !dismissedIds.includes("virtual-payroll-due")) virtualCount++;
 
-            // DB unread count (excluding requests which are handled via summary)
+            // Individual REQUEST notifications are shown again in getNotifications
+            // (alongside the aggregate summary), so they count toward unread here too -
+            // otherwise the badge would undercount relative to what's actually listed.
             const dbUnread = await Notification.countDocuments({
                 recipient: req.user.id,
-                isRead: false,
-                type: { $ne: "REQUEST" }
+                isRead: false
             });
 
             return res.json({ unreadCount: virtualCount + dbUnread });

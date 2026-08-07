@@ -3,9 +3,9 @@ import { documentTypeService } from "../../services/masterService";
 import "../../style/AddEmployeeModal.css"; // Reuse existing styles
 
 
-export default function UploadEmployeeDocumentModal({ onClose, onUpload, employeeId }) {
+export default function UploadEmployeeDocumentModal({ onClose, onUpload, employeeId, initialDocumentType = "" }) {
     const [form, setForm] = useState({
-        documentType: "",
+        documentType: initialDocumentType,
         label: "",
         documentNumber: "",
         expiryDate: "",
@@ -54,7 +54,7 @@ export default function UploadEmployeeDocumentModal({ onClose, onUpload, employe
     };
 
     return (
-        <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-backdrop">
             <div className="modal-container" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>Upload Document</h3>

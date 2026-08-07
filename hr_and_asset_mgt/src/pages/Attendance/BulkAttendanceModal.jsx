@@ -79,7 +79,6 @@ export default function BulkAttendanceModal({ isOpen, onClose, onSuccess }) {
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
         zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
       }}
-      onClick={onClose}
     >
       <div
         style={{

@@ -18,6 +18,11 @@ const employeeDocumentSchema = new mongoose.Schema({
         enum: ["Valid", "Expiring Soon", "Expired"],
         default: "Valid"
     },
+    // Set false when a newer document of the same employeeId+documentType is uploaded,
+    // so stale/expired prior uploads stop surfacing on the Dashboard and Documents tab
+    // once superseded. Missing on documents created before this field existed - those
+    // are treated as active (see the `{ isActive: { $ne: false } }` read-side filters).
+    isActive: { type: Boolean, default: true },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     uploadedAt: { type: Date, default: Date.now }
 }, { timestamps: true });

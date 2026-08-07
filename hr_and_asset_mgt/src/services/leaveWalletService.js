@@ -19,5 +19,8 @@ export const setAllocationOverride = async (employeeId, payload) =>
 export const grantAdvanceLeave = async (employeeId, payload) =>
   (await api.post(`${BASE}/${employeeId}/advance`, payload)).data;
 
+export const adjustBalance = async (employeeId, payload) =>
+  (await api.patch(`${BASE}/${employeeId}/adjust`, payload)).data;
+
 export const clearPendingRefund = async (employeeId, leaveTypeId) =>
   (await api.patch(`${BASE}/${employeeId}/clear-refund`, { leaveTypeId })).data;

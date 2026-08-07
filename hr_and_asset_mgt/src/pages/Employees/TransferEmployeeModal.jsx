@@ -51,7 +51,7 @@ export default function TransferEmployeeModal({ employee, onClose, onSubmit }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3>Transfer Employee</h3>

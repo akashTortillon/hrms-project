@@ -22,6 +22,20 @@ export const RoleProvider = ({ children }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(
+    localStorage.getItem("mustChangePassword") === "true"
+  );
+
+  // Live reactive user object — includes employeeId once /auth/me resolves it.
+  // Seeded from localStorage so the value is available instantly on first render,
+  // then replaced with the fresh server response as soon as it arrives.
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null") || {};
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     const syncFromStorage = () => {
@@ -31,6 +45,7 @@ export const RoleProvider = ({ children }) => {
       } catch {
         setPermissions([]);
       }
+      setMustChangePassword(localStorage.getItem("mustChangePassword") === "true");
     };
 
     window.addEventListener("storage", syncFromStorage);
@@ -51,15 +66,21 @@ export const RoleProvider = ({ children }) => {
 
         const nextRole = data?.role || "Employee";
         const nextPermissions = data?.permissions || [];
+        const nextMustChangePassword = Boolean(data?.mustChangePassword);
 
         localStorage.setItem("userRole", nextRole);
         localStorage.setItem("userPermissions", JSON.stringify(nextPermissions));
+        localStorage.setItem("mustChangePassword", String(nextMustChangePassword));
         if (data?.user) {
           localStorage.setItem("user", JSON.stringify(data.user));
+          // Update reactive state so any component reading currentUser re-renders
+          // automatically once employeeId (or any other field) is resolved.
+          setCurrentUser(data.user);
         }
 
         setRole(nextRole);
         setPermissions(nextPermissions);
+        setMustChangePassword(nextMustChangePassword);
       } catch (error) {
         // Keep existing local storage values if sync fails
       } finally {
@@ -79,8 +100,17 @@ export const RoleProvider = ({ children }) => {
     return permissions.includes(requiredPermission);
   };
 
+  const clearMustChangePassword = () => {
+    localStorage.setItem("mustChangePassword", "false");
+    setMustChangePassword(false);
+  };
+
   return (
-    <RoleContext.Provider value={{ role, setRole, permissions, setPermissions, hasPermission, loading }}>
+    <RoleContext.Provider value={{
+      role, setRole, permissions, setPermissions, hasPermission, loading,
+      mustChangePassword, clearMustChangePassword,
+      currentUser
+    }}>
       {children}
     </RoleContext.Provider>
   );

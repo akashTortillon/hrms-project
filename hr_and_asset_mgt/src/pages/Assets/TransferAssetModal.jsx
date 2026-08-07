@@ -626,7 +626,7 @@ export default function TransferAssetModal({ onClose, onTransfer, asset }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Transfer Asset</h3>

@@ -5,6 +5,7 @@ export default function ProfileDropdown({
   isOpen,
   onClose,
   onProfile,
+  onChangePassword,
   onSettings,
   onLogout,
   anchorRef,
@@ -53,6 +54,13 @@ export default function ProfileDropdown({
           onClick={() => onProfile?.()}
         >
           My Profile
+        </button>
+        <button
+          className="profile-dropdown__item"
+          type="button"
+          onClick={() => onChangePassword?.()}
+        >
+          Change Password
         </button>
         {onSettings && (
           <button

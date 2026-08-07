@@ -7,6 +7,7 @@ import {
   deleteEmployee,
   exportEmployees,
   getEmployeeById,
+  getMyEmployeeProfile,
   importEmployees,
   previewShiftImport,
   applyShiftImport,
@@ -15,7 +16,8 @@ import {
   confirmProbation,
   resetEmployeePassword,
   getEmployeeGratuity,
-  uploadEmployeePhoto
+  uploadEmployeePhoto,
+  deleteAllowance
 } from "../controllers/employeeController.js";
 import { protect, hasPermission, restrictTo } from "../middlewares/authMiddleware.js";
 
@@ -39,6 +41,10 @@ router.get("/probation/reminders", protect, hasPermission("MANAGE_EMPLOYEES"), g
 // ADD new employee
 router.post("/", protect, hasPermission("MANAGE_EMPLOYEES"), addEmployee);
 
+// GET logged-in user's own employee profile (must be before /:id to avoid
+// Express matching the literal string "me" as an ObjectId parameter).
+router.get("/me", protect, getMyEmployeeProfile);
+
 // GET single employee
 router.get("/:id", protect, getEmployeeById);
 
@@ -51,6 +57,9 @@ router.post("/:id/photo", protect, upload.single("photo"), uploadEmployeePhoto);
 router.post("/:id/transfer", protect, hasPermission("MANAGE_EMPLOYEES"), transferEmployee);
 router.post("/:id/confirm-probation", protect, hasPermission("MANAGE_EMPLOYEES"), confirmProbation);
 router.put("/:id/reset-password", protect, hasPermission("MANAGE_EMPLOYEES"), resetEmployeePassword);
+
+// DELETE a single ad-hoc allowance entry (Employee.allowances[] subdocument)
+router.delete("/:employeeId/allowances/:allowanceId", protect, hasPermission("MANAGE_PAYROLL"), deleteAllowance);
 
 // DELETE employee
 router.delete("/:id", protect, hasPermission("MANAGE_EMPLOYEES"), deleteEmployee);

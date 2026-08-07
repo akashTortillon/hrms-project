@@ -1,27 +1,12 @@
 import { useState, useEffect } from "react";
 import AppButton from "../../components/reusable/Button.jsx";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
-import { repaymentPeriodService } from "../../services/masterService.js";
 
 export default function SalaryApproveModal({ show, request, onClose, onApprove }) {
-    const [tenure, setTenure] = useState(1);
+    const [monthlyRepaymentAmount, setMonthlyRepaymentAmount] = useState(0);
     const [amount, setAmount] = useState(0);
     const [approving, setApproving] = useState(false);
     const [startCurrentCycle, setStartCurrentCycle] = useState(false);
-    const [repaymentPeriods, setRepaymentPeriods] = useState([]);
-
-    const fallbackPeriods = [
-        { _id: "fallback-1", name: "1 Month", metadata: { months: 1 } },
-        { _id: "fallback-3", name: "3 Months", metadata: { months: 3 } },
-        { _id: "fallback-6", name: "6 Months", metadata: { months: 6 } },
-        { _id: "fallback-12", name: "12 Months", metadata: { months: 12 } }
-    ];
-
-    const periodOptions = repaymentPeriods.length > 0 ? repaymentPeriods : fallbackPeriods;
-    const getPeriodMonths = (period) => {
-        const months = Number(period.metadata?.months ?? period.value ?? parseInt(period.name, 10));
-        return Number.isFinite(months) && months > 0 ? months : 1;
-    };
 
     const getCycleLabel = (useCurrentCycle) => {
         const base = new Date();
@@ -35,29 +20,25 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     };
 
     useEffect(() => {
-        const fetchRepaymentPeriods = async () => {
-            try {
-                const data = await repaymentPeriodService.getAll();
-                setRepaymentPeriods(Array.isArray(data) ? data : []);
-            } catch (error) {
-                console.error("Failed to fetch repayment periods:", error);
-                setRepaymentPeriods([]);
-            }
-        };
-        fetchRepaymentPeriods();
-    }, []);
-
-    useEffect(() => {
         if (request && request.details) {
             const defaultAmount = request.currentApprovalStage === "HR"
                 ? request.details.financeApprovedAmount ?? request.details.amount
                 : request.details.amount;
-            const defaultTenure = request.currentApprovalStage === "HR"
+            // Prefer an already-set monthly repayment amount; for a loan that predates this
+            // field, derive a starting value from its existing amount/repaymentPeriod so the
+            // approver sees something sensible instead of a blank/zero field.
+            const existingMonthly = request.currentApprovalStage === "HR"
+                ? request.details.financeApprovedMonthlyRepaymentAmount ?? request.details.monthlyRepaymentAmount
+                : request.details.monthlyRepaymentAmount;
+            const existingPeriod = request.currentApprovalStage === "HR"
                 ? request.details.financeApprovedRepaymentPeriod ?? request.details.repaymentPeriod
                 : request.details.repaymentPeriod;
+            const parsedAmount = parseFloat(defaultAmount) || 0;
+            const derivedMonthly = existingMonthly
+                ?? (existingPeriod > 0 ? parsedAmount / existingPeriod : 0);
 
-            setAmount(parseFloat(defaultAmount) || 0);
-            setTenure(parseInt(defaultTenure) || 1);
+            setAmount(parsedAmount);
+            setMonthlyRepaymentAmount(Math.round((derivedMonthly || 0) * 100) / 100);
             setStartCurrentCycle(false);
         }
     }, [request]);
@@ -67,7 +48,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
             setApproving(true);
             await onApprove(request._id, {
                 amount: parseFloat(amount),
-                repaymentPeriod: isLoan ? parseInt(tenure) : 1,
+                monthlyRepaymentAmount: isLoan ? parseFloat(monthlyRepaymentAmount) : undefined,
                 startCurrentCycle
             });
         } catch (error) {
@@ -82,10 +63,14 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
         return principal.toFixed(2);
     };
 
-    const calculateMonthly = () => {
+    // Term is derived from the monthly repayment amount (rounded up, so a smaller final
+    // installment absorbs any remainder), not picked directly - mirrors the same
+    // Math.ceil the backend uses when it stores the actual repaymentPeriod on approval.
+    const calculateTermMonths = () => {
         const total = parseFloat(calculateTotal());
-        const months = parseInt(tenure) || 1;
-        return (total / months).toFixed(2);
+        const monthly = parseFloat(monthlyRepaymentAmount) || 0;
+        if (monthly <= 0) return null;
+        return Math.ceil(total / monthly);
     };
 
     if (!request) return null;
@@ -103,7 +88,7 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
             <AppButton variant="secondary" onClick={onClose}>
                 Cancel
             </AppButton>
-            <AppButton variant="success" onClick={handleSubmit} disabled={approving}>
+            <AppButton variant="success" onClick={handleSubmit} disabled={approving || (isLoan && !(parseFloat(monthlyRepaymentAmount) > 0))}>
                 {approving ? "Processing..." : "Confirm Approval"}
             </AppButton>
         </div>
@@ -179,35 +164,27 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                         </small>
                     </div>
 
-                    {/* Tenure (Loans Only) */}
+                    {/* Monthly Repayment Amount (Loans Only) - term is derived, not picked */}
                     {isLoan && (
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                                Approved Tenure (Months)
+                                Monthly Repayment Amount (AED)
                             </label>
-                            <select
+                            <input
+                                type="number"
+                                min="0"
                                 className="form-control"
                                 style={{
                                     width: '100%',
                                     padding: '8px 12px',
                                     border: '1px solid #ced4da',
-                                    borderRadius: '4px',
-                                    backgroundColor: '#fff'
+                                    borderRadius: '4px'
                                 }}
-                                value={tenure}
-                                onChange={(e) => setTenure(e.target.value)}
-                            >
-                                {periodOptions.map((period) => {
-                                    const months = getPeriodMonths(period);
-                                    return (
-                                        <option key={period._id || period.name} value={months}>
-                                            {period.name || `${months} Month${months > 1 ? "s" : ""}`}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                                value={monthlyRepaymentAmount}
+                                onChange={(e) => setMonthlyRepaymentAmount(e.target.value)}
+                            />
                             <small style={{ color: '#6c757d', display: 'block', marginTop: '4px' }}>
-                                Requested: {request.details.repaymentPeriod || 'N/A'}
+                                Requested tenure: {request.details.repaymentPeriod || 'N/A'} month(s).
                             </small>
                         </div>
                     )}
@@ -237,7 +214,11 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                                     marginTop: '8px'
                                 }}>
                                     <span>Monthly Deduction:</span>
-                                    <strong style={{ color: '#0d6efd' }}>{calculateMonthly()} / month</strong>
+                                    <strong style={{ color: '#0d6efd' }}>{parseFloat(monthlyRepaymentAmount || 0).toFixed(2)} / month</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+                                    <span>Repayment Term:</span>
+                                    <strong>{calculateTermMonths() ? `${calculateTermMonths()} month(s)` : 'Enter a monthly amount'}</strong>
                                 </div>
                             </>
                         )}

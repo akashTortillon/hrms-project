@@ -15,7 +15,7 @@ const resolveUploadedAssetUrl = (url) => {
   return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
 };
 
-export default function EmployeesTable({ employees = [], page = 1, totalPages = 1, onPageChange }) {
+export default function EmployeesTable({ employees = [], page = 1, totalPages = 1, totalCount = 0, pageSize = 50, onPageChange }) {
   const navigate = useNavigate();
   const { hasPermission } = useRole();
 
@@ -116,30 +116,30 @@ export default function EmployeesTable({ employees = [], page = 1, totalPages = 
         </table>
       </div>
 
-      {onPageChange && totalPages > 1 && (
-        <div
-          className="employees-pagination"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', padding: '12px 16px' }}
-        >
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
-          >
-            Previous
-          </button>
-          <span style={{ fontSize: '13px', color: '#6b7280' }}>
-            Page {page} of {totalPages}
+      {onPageChange && totalCount > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 4px 4px', fontSize: '13px', color: '#6b7280' }}>
+          <span>
+            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount}
           </span>
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages}
-          >
-            Next
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => onPageChange(page - 1)}
+              disabled={page <= 1}
+              style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: page <= 1 ? '#f3f4f6' : '#fff', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+            >
+              Prev
+            </button>
+            <span>Page {page} of {totalPages}</span>
+            <button
+              type="button"
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages}
+              style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: page >= totalPages ? '#f3f4f6' : '#fff', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div >

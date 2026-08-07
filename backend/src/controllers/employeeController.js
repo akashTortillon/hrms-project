@@ -7,11 +7,8 @@ import bcrypt from "bcryptjs";
 import { sendEmail } from "../utils/sendEmail.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
-
-const toNumber = (value) => {
-  if (value === null || value === undefined || value === "") return 0;
-  return Number(String(value).replace(/[^0-9.-]+/g, "")) || 0;
-};
+import { toNumber, computeTotalSalary, computeCtc } from "../utils/salaryCalc.js";
+import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
 
 const buildLaborCards = (payload = {}) => {
   if (Array.isArray(payload.laborCards) && payload.laborCards.length > 0) {
@@ -86,14 +83,45 @@ const resolveFinanceManagerEmployeeId = async (designatedFinanceManager) => {
 };
 
 const attachSignedProfilePhotoUrl = async (employee) => {
+  if (!employee) return null;
   const item = employee.toObject ? employee.toObject() : { ...employee };
-  item.profilePhotoUrl = await getSignedFileUrl({
-    filePath: item.profilePhotoPath,
-    fileUrl: item.profilePhotoUrl,
-    storage: item.profilePhotoStorage
-  });
+  try {
+    item.profilePhotoUrl = await getSignedFileUrl({
+      filePath: item.profilePhotoPath,
+      fileUrl: item.profilePhotoUrl,
+      storage: item.profilePhotoStorage
+    });
+  } catch (err) {
+    console.error("Failed to sign profile photo URL:", err.message);
+  }
   return item;
 };
+
+// Legacy records can have a date field stored as a plain string (from data that predates
+// the Date schema type, or a bad import) - $convert guards that. Some also hold a real Date
+// with a garbage year (e.g. a bad Excel-serial import producing year 20024) - $dateToString's
+// %Y only supports 0-9999, so also bail out via $year before formatting. Either case degrades
+// to "" instead of crashing the whole export.
+const safeDateStr = (path) => ({
+  $let: {
+    vars: {
+      d: { $convert: { input: path, to: "date", onError: null, onNull: null } }
+    },
+    in: {
+      $cond: [
+        {
+          $or: [
+            { $eq: ["$$d", null] },
+            { $lt: [{ $year: "$$d" }, 0] },
+            { $gt: [{ $year: "$$d" }, 9999] }
+          ]
+        },
+        "",
+        { $dateToString: { format: "%Y-%m-%d", date: "$$d" } }
+      ]
+    }
+  }
+});
 
 export const exportEmployees = async (req, res) => {
   try {
@@ -134,55 +162,61 @@ export const exportEmployees = async (req, res) => {
       ];
     }
 
+    // Column headers match the ones importEmployees() reads, so an exported file
+    // can be re-imported as-is.
     const employees = await Employee.aggregate([
       { $match: matchStage },
       { $sort: { code: 1 } },
       {
         $project: {
           _id: 0,
-          "Employee ID": "$code",
+          "Employee Code": "$code",
           "Full Name": "$name",
           "Role": "$role",
           "Department": "$department",
-          "Branch": "$branch",
           "Company": "$company",
+          "Branch": "$branch",
+          "Designation": "$designation",
+          "Employee Type": "$contractType",
           "Email": "$email",
           "Contact Number": "$phone",
+          "Status": "$status",
+          "Shift": "$shift",
+          "Joining Date": safeDateStr("$joinDate"),
+          "Date of Birth": safeDateStr("$dob"),
+          "Nationality": "$nationality",
+          "UAE Address": "$address",
+          "Personal ID (14 Digit)": "$personalId",
+          "Passport No": "$passportNo",
+          "Passport Expiry": safeDateStr("$passportExpiry"),
+          "Emirates ID No": "$emiratesIdNo",
+          "Emirates ID Expiry": safeDateStr("$emiratesIdExpiry"),
+          "Basic Salary": "$basicSalary",
+          "Allowance (AED)": "$allowance",
+          "HRA (AED)": "$hra",
+          "ACCOMODATION ALLOWANCE": "$accommodationAllowance",
+          "VEHICHLE ALLOWANCE": "$vehicleAllowance",
+          "Total Salary (AED)": "$totalSalary",
+          "Visa Base": "$visaBase",
+          "Work Base": "$workBase",
           "Visa Company": "$visaCompany",
           "Work Permit Company": "$workPermitCompany",
           "Visa No": "$visaNo",
           "Visa File No": "$visaFileNo",
-          "Visa Expiry": {
-            $dateToString: { format: "%Y-%m-%d", date: "$visaExpiry" }
-          },
-          "Visa Base": "$visaBase",
-          "Work Base": "$workBase",
-          "Joining Date": {
-            $dateToString: { format: "%Y-%m-%d", date: "$joinDate" }
-          },
-          "Status": "$status"
+          "Visa Expiry": safeDateStr("$visaExpiry"),
+          "Accommodation": "$accommodation",
+          "Bank Name": "$bankName",
+          "IBAN": "$iban",
+          "Account Number": "$bankAccount",
+          "Agent ID (WPS)": "$agentId",
+          "Labor Card No": "$laborCardNumber",
+          "Probation End Date": safeDateStr("$probationEndDate"),
+          "Fixed Probation Increment Amount": "$fixedProbationIncrementAmount"
         }
       }
     ]);
 
     const worksheet = XLSX.utils.json_to_sheet(employees);
-    // Auto-width columns
-    const maxWidth = employees.reduce((w, r) => Math.max(w, r["Full Name"] ? r["Full Name"].length : 10), 10);
-    worksheet["!cols"] = [
-      { wch: 10 }, // ID
-      { wch: 25 }, // Name
-      { wch: 20 }, // Role
-      { wch: 15 }, // Dept
-      { wch: 15 }, // Branch
-      { wch: 20 }, // Company
-      { wch: 30 }, // Email
-      { wch: 15 }, // Phone
-      { wch: 12 }, // Visa Base
-      { wch: 12 }, // Work Base
-      { wch: 15 }, // Date
-      { wch: 10 }  // Status
-    ];
-
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
 
@@ -193,7 +227,7 @@ export const exportEmployees = async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    // console.error("Export Error:", error);
+    console.error("Export Error:", error);
     res.status(500).json({ message: "Export failed" });
   }
 };
@@ -219,6 +253,10 @@ export const addEmployee = async (req, res) => {
       designation,
       contractType,
       basicSalary,
+      allowance,
+      hra,
+      accommodationAllowance,
+      vehicleAllowance,
       visaBase,
       workBase,
       ctc,
@@ -320,7 +358,8 @@ export const addEmployee = async (req, res) => {
           email,
           phone: userPhone,
           password: hashedPassword,
-          role: role
+          role: role,
+          mustChangePassword: true
         });
         createdUser = true;
       } catch (uErr) {
@@ -328,6 +367,12 @@ export const addEmployee = async (req, res) => {
         return res.status(500).json({ message: "Failed to create User account. Employee not added." });
       }
     }
+
+    // Total Salary / CTC are always server-computed from basic+allowance+hra (+accommodation/
+    // vehicle for CTC) - see backend/src/utils/salaryCalc.js - never trusted from the client.
+    const salaryInputs = { basicSalary, allowance, hra, accommodationAllowance, vehicleAllowance };
+    const computedTotalSalary = computeTotalSalary(salaryInputs);
+    const computedCtc = computeCtc(salaryInputs);
 
     // 5. Create Employee (Only if User valid)
     const employee = await Employee.create({
@@ -346,9 +391,14 @@ export const addEmployee = async (req, res) => {
       designation,
       contractType,
       basicSalary,
+      allowance: toNumber(allowance),
+      hra: toNumber(hra),
+      accommodationAllowance: toNumber(accommodationAllowance),
+      vehicleAllowance: toNumber(vehicleAllowance),
+      totalSalary: computedTotalSalary,
       visaBase: toNumber(visaBase || basicSalary),
       workBase: toNumber(workBase || basicSalary),
-      ctc: toNumber(ctc || workBase || basicSalary),
+      ctc: computedCtc,
       accommodation,
       visaCompany: visaCompany || "",
       workPermitCompany: workPermitCompany || "",
@@ -373,7 +423,7 @@ export const addEmployee = async (req, res) => {
         basicSalary,
         visaBase,
         workBase,
-        ctc,
+        ctc: computedCtc,
         joinDate
       })
     });
@@ -390,6 +440,16 @@ export const addEmployee = async (req, res) => {
         : "Employee added (User account already existed)",
       employee
     });
+
+    // Only when the employee is created directly with status "Onboarding" (today's
+    // Add Employee default) - an employee added as already-Active (e.g. inter-branch
+    // transfer) gets no checklist forced on them. Fire-and-forget: a template hiccup
+    // here shouldn't fail the employee-creation response that's already been sent.
+    if (employee.status === "Onboarding") {
+      createOnboardingWorkflowForEmployee(employee._id, req.user._id).catch((err) => {
+        console.error("Failed to auto-create onboarding workflow:", err.message);
+      });
+    }
 
     logActivity({
       req,
@@ -463,20 +523,27 @@ export const getEmployees = async (req, res) => {
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
 
-    // Pagination is opt-in via `page` so existing callers (Add/Edit Employee pickers,
-    // asset-assignment modals, etc.) that expect a bare array are unaffected.
-    if (page) {
+    // Pagination is opt-in via ?page= - every existing caller (Add/Edit Employee
+    // pickers, Onboarding/Offboarding lists, asset-assignment dropdowns, etc.) calls
+    // this without `page` and keeps getting the full bare array exactly as before.
+    // Only the Employees list page passes `page`, so only it needs to handle the
+    // wrapped { employees, total, page, totalPages } shape.
+    if (page !== undefined) {
       const pageNum = Math.max(1, parseInt(page, 10) || 1);
-      const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+      const limitNum = Math.max(1, parseInt(limit, 10) || 50);
       const total = employees.length;
-      const totalPages = Math.max(1, Math.ceil(total / limitNum));
-      const paged = employees.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+      const pageEmployees = employees.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
       const signedEmployees = await Promise.all(
-        paged.map((employee) => attachSignedProfilePhotoUrl(employee))
+        pageEmployees.map((employee) => attachSignedProfilePhotoUrl(employee))
       );
 
-      return res.json({ employees: signedEmployees, total, page: pageNum, totalPages });
+      return res.json({
+        employees: signedEmployees,
+        total,
+        page: pageNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum))
+      });
     }
 
     const signedEmployees = await Promise.all(
@@ -512,15 +579,86 @@ export const getEmployeeById = async (req, res) => {
       return res.status(403).json({ message: "Access Denied: You cannot view this profile" });
     }
 
-    // Promote any future-dated transfer whose effective date has now arrived.
-    await applyDuePendingTransfers(employee);
+    // Promote any future-dated transfer whose effective date has now arrived. This is a
+    // background side effect of viewing the profile, not something the viewer asked for -
+    // if it fails (e.g. a legacy bad field on this employee trips validation on save), don't
+    // let it take down the whole detail view. The transfer just stays pending and gets
+    // retried next time this employee is viewed.
+    try {
+      await applyDuePendingTransfers(employee);
+    } catch (transferError) {
+      console.error("applyDuePendingTransfers failed for employee", id, ":", transferError);
+    }
 
     res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
-    // console.error("Get Employee By ID Error:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get Employee By ID Error:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
+
+// GET /employees/me — Returns the employee record linked to the currently logged-in user.
+// Resolution order (most reliable → fallback):
+//   1. req.user.employeeId  — explicitly linked (set at login / auto-heal)
+//   2. email match          — case-insensitive, catches accounts created before the
+//                             employeeId link was introduced
+// Returns 404 (not 500) when no employee record exists so the frontend can show a
+// clean "no profile" state instead of a generic error.
+export const getMyEmployeeProfile = async (req, res) => {
+  console.log("🔍 [GET /api/employees/me] Request received from user:", req.user?._id, "| Email:", req.user?.email, "| Role:", req.user?.role, "| Stored employeeId:", req.user?.employeeId);
+  try {
+    const user = req.user;
+    let employee = null;
+
+    // 1. Try the stored employeeId first (fastest path)
+    if (user.employeeId) {
+      console.log("  ↳ Lookup strategy 1: Checking user.employeeId:", user.employeeId);
+      employee = await Employee.findById(user.employeeId);
+    }
+
+    // 2. Fall back to email match — escape special regex chars so an email like
+    //    "user+tag@domain.com" doesn't throw a bad-regex error.
+    if (!employee && user.email) {
+      console.log("  ↳ Lookup strategy 2: Searching employee by email:", user.email);
+      const escapedEmail = user.email.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      employee = await Employee.findOne({
+        email: { $regex: new RegExp(`^${escapedEmail}$`, "i") }
+      });
+    }
+
+    if (!employee) {
+      console.warn("  ⚠️ No employee profile matched for user email:", user.email);
+      return res.status(404).json({ message: "No employee profile found for this user." });
+    }
+
+    console.log("  ✅ Employee profile matched:", employee._id, "| Name:", employee.name);
+
+    // If we found via email but the User document wasn't linked yet, persist the link
+    // so future requests hit path 1 (fastest) and the middleware auto-heal also works.
+    if (!user.employeeId) {
+      try {
+        await User.findByIdAndUpdate(user._id, { employeeId: employee._id });
+        console.log("  🔗 Auto-linked employeeId to User record.");
+      } catch (linkError) {
+        console.warn("  ⚠️ Could not auto-link employeeId to user:", linkError.message);
+      }
+    }
+
+    try {
+      await applyDuePendingTransfers(employee);
+    } catch (transferError) {
+      console.error("  ⚠️ applyDuePendingTransfers failed for /me:", transferError);
+    }
+
+    const responseData = await attachSignedProfilePhotoUrl(employee);
+    console.log("  📤 Successfully returning profile for employee:", employee.name);
+    res.json(responseData);
+  } catch (error) {
+    console.error("❌ [GET /api/employees/me] ERROR:", error.stack || error);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
 
 
 export const updateEmployee = async (req, res) => {
@@ -611,6 +749,18 @@ export const updateEmployee = async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    // Total Salary / CTC are never trusted from the client - always recomputed from the
+    // persisted basic/allowance/hra(/accommodation/vehicle) fields after every update, so
+    // a stale client-typed value (or a caller that doesn't send them at all) can't desync
+    // them from the source fields (see backend/src/utils/salaryCalc.js).
+    const correctTotalSalary = computeTotalSalary(updatedEmployee);
+    const correctCtc = computeCtc(updatedEmployee);
+    if (updatedEmployee.totalSalary !== correctTotalSalary || updatedEmployee.ctc !== correctCtc) {
+      updatedEmployee.totalSalary = correctTotalSalary;
+      updatedEmployee.ctc = correctCtc;
+      await updatedEmployee.save();
+    }
+
     // Sync Role with User account
     if (role && updatedEmployee.email) {
       // Find linked User by email and update role
@@ -678,6 +828,42 @@ export const updateEmployee = async (req, res) => {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ message: error.message });
     }
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
+export const deleteAllowance = async (req, res) => {
+  try {
+    const { employeeId, allowanceId } = req.params;
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const allowance = employee.allowances.id(allowanceId);
+    if (!allowance) {
+      return res.status(404).json({ message: "Allowance not found" });
+    }
+
+    employee.allowances.pull(allowanceId);
+    // totalSalary/ctc never include allowances[] under the current formula (see
+    // salaryCalc.js), so removing one can't change either - recomputed anyway to stay
+    // self-healing against any employee whose stored values still predate that formula.
+    employee.totalSalary = computeTotalSalary(employee);
+    employee.ctc = computeCtc(employee);
+    await employee.save();
+
+    logActivity({
+      req,
+      action: "UPDATE",
+      module: "EMPLOYEE",
+      description: `Allowance "${allowance.typeName}" (AED ${allowance.amount}) removed from ${employee.name} (${employee.code})`,
+      targetId: employee._id,
+      targetName: employee.name
+    }).catch(() => {});
+
+    res.json({ employee });
+  } catch (error) {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
@@ -925,20 +1111,20 @@ export const confirmProbation = async (req, res) => {
     const currentBasic = toNumber(lastSalaryEntry?.basicSalary || employee.basicSalary);
     const currentVisaBase = toNumber(lastSalaryEntry?.visaBase || employee.visaBase || employee.basicSalary);
     const currentWorkBase = toNumber(lastSalaryEntry?.workBase || employee.workBase || employee.basicSalary);
-    const currentCtc = toNumber(lastSalaryEntry?.ctc || employee.ctc || employee.workBase || employee.basicSalary);
     const increment = toNumber(employee.fixedProbationIncrementAmount);
 
     if (increment > 0) {
       employee.basicSalary = String(currentBasic + increment);
       employee.visaBase = currentVisaBase + increment;
       employee.workBase = currentWorkBase + increment;
-      employee.ctc = currentCtc + increment;
+      employee.totalSalary = computeTotalSalary(employee);
+      employee.ctc = computeCtc(employee);
       employee.salaryHistory.push({
         salaryType: "PROBATION_INCREMENT",
         basicSalary: currentBasic + increment,
         visaBase: currentVisaBase + increment,
         workBase: currentWorkBase + increment,
-        ctc: currentCtc + increment,
+        ctc: employee.ctc,
         incrementAmount: increment,
         effectiveDate: employee.probationEndDate || new Date(),
         notes: remarks || "Probation increment applied",
@@ -1085,20 +1271,30 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 2. Duplicate Check
-      if (existingEmails.has(email.toLowerCase())) {
-        errors.push({ row: rowNum, email, message: "Email already exists" });
-        continue;
-      }
+      // 2. Duplicate Check - a row whose email already belongs to an employee UPDATES
+      // that employee instead of being rejected (re-uploading a corrected sheet after
+      // fixing Master data should apply the fix, not skip the row every time).
+      const existingEmployeeDoc = existingEmails.has(email.toLowerCase())
+        ? await Employee.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } })
+        : null;
+
+      // Phone/Code only block the row if they belong to a DIFFERENT employee than the
+      // one we're about to update (or a brand new one on create).
       if (phone && existingPhones.has(phone)) {
-        errors.push({ row: rowNum, email, message: "Phone number already exists" });
-        continue;
+        const phoneOwner = await Employee.findOne({ phone });
+        if (!existingEmployeeDoc || String(phoneOwner?._id) !== String(existingEmployeeDoc._id)) {
+          errors.push({ row: rowNum, email, message: "Phone number already exists" });
+          continue;
+        }
       }
 
       const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
       if (employeeCode && existingCodes.has(employeeCode)) {
-        errors.push({ row: rowNum, email, message: `Employee Code '${employeeCode}' already exists` });
-        continue;
+        const codeOwner = await Employee.findOne({ code: employeeCode });
+        if (!existingEmployeeDoc || String(codeOwner?._id) !== String(existingEmployeeDoc._id)) {
+          errors.push({ row: rowNum, email, message: `Employee Code '${employeeCode}' already exists` });
+          continue;
+        }
       }
 
       // 3. Strict Master Validation
@@ -1170,11 +1366,16 @@ export const importEmployees = async (req, res) => {
       if (contractType) contractType = validContractTypes.get(contractType.toLowerCase());
 
       // Resolves a WORK/VISA LOCATION value either as the name of a Branch nested under the
-      // row's Company (e.g. "MAIN" - the primary, current convention), or as a legacy Company
-      // Code ID. visaCompany/workPermitCompany store a Branch name, so a Branch match is
-      // preferred; a bare Company Code match falls back to the Company name since no specific
-      // Branch can be determined from it. Fills in `branch` from a Branch match when the row
-      // didn't already specify one.
+      // row's Company (e.g. "MAIN" - the primary, current convention), a legacy Company Code
+      // ID, the full name of a DIFFERENT company entirely (visa sponsorship in a multi-license
+      // group - the employee works at one company but their visa is sponsored by another), or
+      // any Branch that exists ANYWHERE regardless of which company it's nested under (visa/
+      // work location is independent of the employee's own company/branch assignment - it's
+      // just recording where the visa or labor card is filed, which can be any real branch in
+      // the group). visaCompany/workPermitCompany always end up storing a Branch or Company
+      // name string, never an ID. Fills in `branch` from a Branch match ONLY when it's under
+      // the row's own company - a global cross-company branch match must never overwrite the
+      // employee's actual company/branch assignment.
       const resolveLocationCode = (code) => {
         if (company) {
           const companyId = companyIdByName.get(company.toLowerCase());
@@ -1186,6 +1387,10 @@ export const importEmployees = async (req, res) => {
         }
         const byCompanyCode = companyByCode.get(code);
         if (byCompanyCode) return { value: byCompanyCode };
+        const byCompanyName = validCompanies.get(code.toLowerCase());
+        if (byCompanyName) return { value: byCompanyName };
+        const byAnyBranch = validBranches.get(code.toLowerCase());
+        if (byAnyBranch) return { value: byAnyBranch };
         return null;
       };
 
@@ -1231,7 +1436,8 @@ export const importEmployees = async (req, res) => {
             email: email,
             phone: userPhone,
             password: hashedPassword,
-            role: role
+            role: role,
+            mustChangePassword: true
           });
         }
       } catch (uErr) {
@@ -1239,19 +1445,26 @@ export const importEmployees = async (req, res) => {
         continue;
       }
 
-      // 4. Employee Creation
+      // 4. Employee Creation / Update
       try {
-        lastCodeNum++;
-        const nextSystemCode = `EMP${String(lastCodeNum).padStart(3, "0")}`;
-        const finalCode = employeeCode || nextSystemCode;
+        const nextSystemCode = existingEmployeeDoc
+          ? existingEmployeeDoc.systemCode
+          : `EMP${String(++lastCodeNum).padStart(3, "0")}`;
+        const finalCode = employeeCode || (existingEmployeeDoc ? existingEmployeeDoc.code : nextSystemCode);
 
-        // Date parsing helper
+        // Date parsing helper. Rejects anything outside a sane year range instead of
+        // storing it - a stray large number in a date column (e.g. a phone/ID number
+        // mistaken for an Excel serial) previously produced garbage dates like year
+        // 20024, which later crashed the export's $dateToString (only supports 0-9999).
         const parseExcelDate = (val) => {
           if (!val) return null;
-          if (typeof val === 'number') {
-            return new Date(Math.round((val - 25569) * 86400 * 1000));
-          }
-          return new Date(val);
+          const date = typeof val === 'number'
+            ? new Date(Math.round((val - 25569) * 86400 * 1000))
+            : new Date(val);
+          if (isNaN(date.getTime())) return null;
+          const year = date.getFullYear();
+          if (year < 1900 || year > 2200) return null;
+          return date;
         };
 
         let joinDate = parseExcelDate(row["Joining Date"]) || new Date();
@@ -1260,12 +1473,17 @@ export const importEmployees = async (req, res) => {
         let visaExpiry = parseExcelDate(row["Visa Expiry"]);
 
         const basicSalaryVal = row["Basic Salary (AED)"] ?? row["Basic Salary"];
-        const ctcVal = row["MONTHLY CTC"] ?? row["CTC"] ?? row["Work Base"] ?? basicSalaryVal;
 
-        await Employee.create({
+        // A row's Status column only wins if it's one of the real enum values - a
+        // contaminated re-upload (e.g. a previous import-results export with its own
+        // "Status"/"Error" columns) can otherwise put error text here, which would
+        // reject the whole row on an enum-cast error instead of just keeping status as-is.
+        const validStatuses = ["Active", "Inactive", "On Leave", "Onboarding"];
+        const sheetStatus = validStatuses.includes(row["Status"]) ? row["Status"] : null;
+
+        const employeeFields = {
           name: row["Full Name"],
           code: finalCode,
-          systemCode: nextSystemCode,
           role: role,
           department: department,
           branch: branch,
@@ -1273,7 +1491,7 @@ export const importEmployees = async (req, res) => {
           email: email,
           phone: phone,
           joinDate: joinDate,
-          status: row["Status"] || "Onboarding",
+          status: sheetStatus || (existingEmployeeDoc ? existingEmployeeDoc.status : "Onboarding"),
           dob: parseExcelDate(row["Date of Birth"]),
           designation: designation || role,
           shift: row["Shift"] || "Day Shift",
@@ -1285,12 +1503,10 @@ export const importEmployees = async (req, res) => {
           basicSalary: basicSalaryVal != null ? String(basicSalaryVal) : "",
           allowance: toNumber(row["Allowance (AED)"]),
           hra: toNumber(row["HRA (AED)"]),
-          totalSalary: toNumber(row["Total Salary (AED)"] ?? ctcVal),
           accommodationAllowance: toNumber(row["ACCOMODATION ALLOWANCE"]),
           vehicleAllowance: toNumber(row["VEHICHLE ALLOWANCE"]),
           visaBase: toNumber(row["Visa Base"] ?? basicSalaryVal),
           workBase: toNumber(row["Work Base"] ?? basicSalaryVal),
-          ctc: toNumber(ctcVal),
           accommodation: row["Accommodation"] || "",
           visaCompany: visaCompanyName || row["Visa Company"] || "",
           workPermitCompany: workPermitCompanyName || row["work permit"] || row["Work Permit Company"] || "",
@@ -1306,18 +1522,34 @@ export const importEmployees = async (req, res) => {
           passportExpiry: passportExpiry,
           emiratesIdExpiry: emiratesIdExpiry,
           visaExpiry: visaExpiry,
-          probationStartDate: joinDate,
-          probationEndDate: parseExcelDate(row["Probation End Date"]),
-          probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
-          fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"]),
-          salaryHistory: buildInitialSalaryHistory({
-            basicSalary: basicSalaryVal,
-            visaBase: row["Visa Base"] ?? basicSalaryVal,
-            workBase: row["Work Base"] ?? basicSalaryVal,
-            ctc: ctcVal,
-            joinDate
-          })
-        });
+          fixedProbationIncrementAmount: toNumber(row["Fixed Probation Increment Amount"])
+        };
+
+        // Total Salary / CTC are always server-computed, never trusted from the sheet
+        // (a "Total Salary (AED)"/"CTC" column may carry stale or manually-typed values).
+        employeeFields.totalSalary = computeTotalSalary(employeeFields);
+        employeeFields.ctc = computeCtc(employeeFields);
+
+        if (existingEmployeeDoc) {
+          // Update path: never touch systemCode (immutable) or salaryHistory/probation
+          // confirmation state (real history, not something a re-upload should overwrite).
+          await Employee.findByIdAndUpdate(existingEmployeeDoc._id, employeeFields);
+        } else {
+          await Employee.create({
+            ...employeeFields,
+            systemCode: nextSystemCode,
+            probationStartDate: joinDate,
+            probationEndDate: parseExcelDate(row["Probation End Date"]),
+            probationStatus: getProbationStatus({ probationEndDate: parseExcelDate(row["Probation End Date"]) }),
+            salaryHistory: buildInitialSalaryHistory({
+              basicSalary: basicSalaryVal,
+              visaBase: row["Visa Base"] ?? basicSalaryVal,
+              workBase: row["Work Base"] ?? basicSalaryVal,
+              ctc: employeeFields.ctc,
+              joinDate
+            })
+          });
+        }
 
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
@@ -1357,7 +1589,7 @@ export const importEmployees = async (req, res) => {
     });
 
   } catch (error) {
-    // console.error("Import Error:", error);
+    console.error("Import Error:", error);
     res.status(500).json({ message: "Server error during import" });
   }
 };
@@ -1513,6 +1745,7 @@ export const resetEmployeePassword = async (req, res) => {
 
     // Hash it and save
     user.password = await bcrypt.hash(newPassword, 10);
+    user.mustChangePassword = true;
     await user.save();
 
     // Email the employee
@@ -1573,7 +1806,10 @@ export const getEmployeeGratuity = async (req, res) => {
     const accommodationAllowance = Number(employee.accommodationAllowance) || 0;
     const vehicleAllowance = Number(employee.vehicleAllowance) || 0;
     const fixedProbationIncrement = Number(employee.fixedProbationIncrementAmount) || 0;
-    const totalSalary = Number(employee.totalSalary) || (basicSalary + accommodationAllowance + vehicleAllowance);
+    // Gratuity cap uses full compensation (CTC), not the narrower Total Salary figure -
+    // employee.ctc is server-recomputed on every save (see updateEmployee), so it's
+    // always authoritative; computeCtc is the fallback for any employee predating that.
+    const totalSalary = Number(employee.ctc) || computeCtc(employee);
 
     // Calculate years of service
     const joinDate = employee.joinDate ? new Date(employee.joinDate) : null;

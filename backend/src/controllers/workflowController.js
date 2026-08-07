@@ -82,6 +82,38 @@ const normalizeWorkflowItems = (existingItems = [], templateItems = []) => {
     return normalized;
 };
 
+// Auto-creates an Onboarding checklist Workflow for a freshly-added employee, reusing the
+// same default-items/template-merge logic as the manual get-or-create below (getEmployeeWorkflow)
+// so a new hire's checklist is populated immediately instead of only appearing once HR
+// separately opens the Onboarding page. Called from employeeController.js's addEmployee
+// when the employee is created with status "Onboarding" - never overwrites an existing
+// workflow (defensive no-op if one somehow already exists for this employee).
+export const createOnboardingWorkflowForEmployee = async (employeeId, createdBy) => {
+    const type = "Onboarding";
+    const existing = await Workflow.findOne({ employee: employeeId, type });
+    if (existing) return existing;
+
+    let template = await Master.findOne({ type: "WORKFLOW_TEMPLATE", name: type });
+    const initialItems = template?.metadata?.steps?.length
+        ? mergeTemplateSteps(ONBOARDING_ITEMS, template.metadata.steps)
+        : ONBOARDING_ITEMS;
+
+    if (!template && initialItems.length > 0) {
+        try {
+            template = await Master.create({
+                type: "WORKFLOW_TEMPLATE",
+                name: type,
+                metadata: { steps: initialItems },
+                isActive: true
+            });
+        } catch (err) {
+            console.warn("Auto-create master template failed (likely race condition):", err.message);
+        }
+    }
+
+    return Workflow.create({ employee: employeeId, type, items: initialItems, createdBy });
+};
+
 // Get or Create Workflow
 export const getEmployeeWorkflow = async (req, res) => {
     try {

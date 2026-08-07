@@ -40,7 +40,7 @@ export default function DisposalModal({ onClose, onDispose, asset }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Dispose Asset</h3>

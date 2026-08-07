@@ -60,7 +60,7 @@ export default function UploadDocumentModal({ onClose, onUpload }) {
     };
 
     return (
-        <div className="upload-docs-modal-backdrop" onClick={onClose}>
+        <div className="upload-docs-modal-backdrop">
             <div className="upload-docs-modal-container" onClick={(e) => e.stopPropagation()}>
                 <div className="upload-docs-modal-header">
                     <h3>Upload Company Document</h3>

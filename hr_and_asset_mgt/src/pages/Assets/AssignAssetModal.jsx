@@ -51,7 +51,7 @@ export default function AssignAssetModal({ onClose, onAssign, asset }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Assign Asset</h3>
