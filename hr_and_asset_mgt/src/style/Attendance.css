@@ -492,6 +492,11 @@
   border: 1px solid #d8b4fe !important;
 }
 
+.status-pill.status-incomplete {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+}
+
 /* Edited Badge (blends with table) */
 .status-edited {
   display: inline-flex;

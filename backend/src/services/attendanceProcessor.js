@@ -9,6 +9,16 @@ import {
   isLeave
 } from "../utils/attendanceUtils.js";
 
+// UAE local "today" as YYYY-MM-DD, matching the +4h anchor this file already uses to
+// bucket transactions onto a calendar day. A lone check-in on TODAY just means the
+// employee hasn't left yet (mid-shift, not an error) - it only becomes a genuine
+// "missing checkout" data problem once the day itself has passed with no checkout ever
+// recorded, so this is compared against `record.date` before ever assigning Incomplete.
+const getUaeTodayDateStr = () => {
+  const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+  return uaeNow.toISOString().split("T")[0];
+};
+
 class AttendanceProcessor {
   /**
    * Processes an array of raw biometric transactions into Attendance records
@@ -96,9 +106,14 @@ class AttendanceProcessor {
         continue;
       }
 
-      // Sync employee name from BioCloud if available and different
-      if (record.employeeName && record.employeeName.trim() !== employee.name.trim()) {
-        console.log(`[AttendanceProcessor] Updating employee name: "${employee.name}" → "${record.employeeName}" for badge ${record.badgeNumber} (${employee.code})`);
+      // HRMS is the source of truth for employee name - only auto-fill from BioCloud
+      // when the HRMS record has no name at all (e.g. a brand-new employee whose
+      // profile hasn't been filled in yet). Never overwrite a name HR has already
+      // set: this used to fire on every sync whenever the two differed at all,
+      // which silently reverted deliberate name edits (including case changes)
+      // back to whatever the device has on file the next time that employee badged in.
+      if (record.employeeName && !employee.name?.trim()) {
+        console.log(`[AttendanceProcessor] Filling blank employee name from BioCloud: "${record.employeeName}" for badge ${record.badgeNumber} (${employee.code})`);
         employee.name = record.employeeName.trim();
         await employee.save();
       }
@@ -147,6 +162,11 @@ class AttendanceProcessor {
         if (mergedCheckIn) {
           mergedLateTier = calculateLateTier(mergedCheckIn, rules);
           mergedStatus = mergedLateTier > 0 ? "Late" : "Present";
+          // A checked-in employee with no checkout on a day that's already over never
+          // came back to badge out - flag it instead of quietly calling it Present/Late.
+          if (!mergedCheckOut && record.date < getUaeTodayDateStr()) {
+            mergedStatus = "Incomplete";
+          }
         }
         const mergedWorkHours = calculateDuration(mergedCheckIn, mergedCheckOut);
 
@@ -186,6 +206,9 @@ class AttendanceProcessor {
         if (record.checkIn) {
           lateTier = calculateLateTier(record.checkIn, rules);
           status = lateTier > 0 ? "Late" : "Present";
+          if (!record.checkOut && record.date < getUaeTodayDateStr()) {
+            status = "Incomplete";
+          }
         }
         const workHours = calculateDuration(record.checkIn, record.checkOut);
 

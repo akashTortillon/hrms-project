@@ -37,6 +37,8 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
         return "status-leave";
       case "Present":
         return "status-present";
+      case "Incomplete":
+        return "status-incomplete";
       case "Weekend":
         return "status-weekend"; // New class for Sundays
       case "Holiday":
@@ -50,6 +52,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
     if (status === "Present") return "P";
     if (status === "Late") return "L";
     if (status === "Absent") return "A";
+    if (status === "Incomplete") return "I";
     if (status === "On Leave" || status === "Leave") return "OL";
     if (status === "Weekend") return "W";
     if (status === "Holiday") return "H";
@@ -124,6 +127,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       if (status === 'Present') { color = '#16a34a'; bg = '#dcfce7'; }
                       else if (status === 'Absent') { color = '#dc2626'; bg = '#fee2e2'; }
                       else if (status === 'Late') { color = '#d97706'; bg = '#fef3c7'; }
+                      else if (status === 'Incomplete') { color = '#ea580c'; bg = '#ffedd5'; }
                       else if (status === 'Weekend') { color = '#9ca3af'; bg = '#f3f4f6'; }
                       else if (status === 'Holiday') { color = '#7c3aed'; bg = '#f3e8ff'; }
                       else if (status === 'On Leave') { color = '#ca8a04'; bg = '#fef9c3'; }

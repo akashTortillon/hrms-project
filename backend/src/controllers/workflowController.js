@@ -236,7 +236,12 @@ export const updateWorkflowItem = async (req, res) => {
 
         // Handle File Upload
         if (file) {
-            item.documentUrl = `/uploads/workflows/${file.filename}`;
+            // `file.filename` only exists for multer.diskStorage - this route's
+            // upload middleware uses multerS3, whose req.file instead sets
+            // `location` (the full public S3 URL) and `key`. Using `.filename`
+            // here always produced "/uploads/workflows/undefined" - the file
+            // landed in S3 fine, but nothing ever pointed at it.
+            item.documentUrl = file.location;
             item.status = "Completed"; // Auto-complete on upload logic? User preference: Maybe yes for now.
         }
 

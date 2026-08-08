@@ -275,13 +275,36 @@ export const getDailyAttendance = async (req, res) => {
 
     // Get employees (Personalized for users without VIEW_ALL_ATTENDANCE permission)
     const canViewAllAttendance = req.user.role === "Admin" || (req.user.permissions && (req.user.permissions.includes("ALL") || req.user.permissions.includes("VIEW_ALL_ATTENDANCE")));
-    const employeeQuery = { status: "Active" };
+    let employeeQuery = {};
 
-    if (!canViewAllAttendance) {
+    if (canViewAllAttendance) {
+      employeeQuery.status = "Active";
+    } else {
       if (!req.user.employeeId) {
         return res.status(403).json({ message: "Access Denied: No employee profile linked" });
       }
-      employeeQuery._id = req.user.employeeId;
+
+      // A Manager has neither ALL nor VIEW_ALL_ATTENDANCE, so previously fell into the
+      // self-only branch below - meaning they could only ever see their OWN attendance,
+      // never their direct reports'. Widen their scope to themselves + whoever they're
+      // designatedManager for (same [user._id, user.employeeId] scope pattern used
+      // elsewhere for manager-routing checks).
+      const isManagerRole = req.user.role === "Manager" || req.user.permissions?.includes("APPROVE_MANAGER_REQUESTS");
+      if (isManagerRole) {
+        employeeQuery.status = "Active";
+        const scope = [req.user._id, req.user.employeeId].filter(Boolean);
+        const reports = await Employee.find({ designatedManager: { $in: scope } }).select("_id");
+        employeeQuery._id = { $in: [req.user.employeeId, ...reports.map((r) => r._id)] };
+      } else {
+        // Pure self-view: show the employee's own attendance regardless of their
+        // current Employee.status ("On Leave", "Onboarding", etc). The status
+        // filter's purpose is to keep broad/admin lists to active staff only - it
+        // was never meant to gate someone from seeing their own record, but doing
+        // so unconditionally meant anyone whose status wasn't exactly "Active"
+        // (e.g. a Manager-role employee marked something other than Active) got an
+        // empty attendance view with no explanation.
+        employeeQuery._id = req.user.employeeId;
+      }
     }
 
     // Fetch ALL relevant employees to calculate global stats correctly
@@ -420,14 +443,29 @@ export const getMonthlyAttendance = async (req, res) => {
 
     // Get employees (Personalized for users without VIEW_ALL_ATTENDANCE permission)
     const canViewAll = req.user.role === "Admin" || req.user.permissions.includes("ALL") || req.user.permissions.includes("VIEW_ALL_ATTENDANCE");
-    const employeeQuery = { status: "Active" };
+    let employeeQuery = {};
 
-    if (!canViewAll) {
+    if (canViewAll) {
+      employeeQuery.status = "Active";
+    } else {
       if (!req.user.employeeId) {
         // Return graceful empty array instead of 403 to prevent frontend crashing
         return res.status(200).json([]);
       }
-      employeeQuery._id = req.user.employeeId;
+
+      // See getDailyAttendance's identical comments - a Manager was previously stuck
+      // in the self-only branch and could never see their reports' monthly attendance;
+      // a pure self-view was previously gated by Employee.status, hiding an employee's
+      // own attendance whenever their profile status wasn't exactly "Active".
+      const isManagerRole = req.user.role === "Manager" || req.user.permissions?.includes("APPROVE_MANAGER_REQUESTS");
+      if (isManagerRole) {
+        employeeQuery.status = "Active";
+        const scope = [req.user._id, req.user.employeeId].filter(Boolean);
+        const reports = await Employee.find({ designatedManager: { $in: scope } }).select("_id");
+        employeeQuery._id = { $in: [req.user.employeeId, ...reports.map((r) => r._id)] };
+      } else {
+        employeeQuery._id = req.user.employeeId;
+      }
     }
 
     const employees = await Employee.find(employeeQuery).sort({ code: 1 });

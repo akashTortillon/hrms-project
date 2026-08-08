@@ -1660,6 +1660,33 @@ export default function EmployeeDetail() {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Adjustment History - written by the "Adjust Loan" flow above; was already
+                                        being recorded on the request but never rendered anywhere, so Finance/HR
+                                        had no way to review past adjustments when deciding on a new one. */}
+                                    {loan.details?.adjustmentHistory && loan.details.adjustmentHistory.length > 0 && (
+                                        <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #e5e7eb' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px' }}>ADJUSTMENT HISTORY</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {loan.details.adjustmentHistory.map((entry, idx) => (
+                                                    <div key={idx} style={{ fontSize: '13px', color: '#374151', padding: '8px 10px', background: '#f9fafb', borderRadius: '6px' }}>
+                                                        <div>
+                                                            <strong>{entry.previousMonthlyRepaymentAmount ?? 'N/A'} AED/mo</strong>
+                                                            {' → '}
+                                                            <strong style={{ color: '#2563eb' }}>{entry.newMonthlyRepaymentAmount} AED/mo</strong>
+                                                            {' '}({entry.previousRepaymentPeriod ?? 'N/A'} → {entry.newRepaymentPeriod} months)
+                                                        </div>
+                                                        <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                            Remaining balance at time: {entry.remainingBalanceAtAdjustment} AED
+                                                        </div>
+                                                        <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                            "{entry.reason}" — {entry.adjustedByName || 'Unknown'}, {entry.adjustedAt ? new Date(entry.adjustedAt).toLocaleString() : ''}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                             {loans.length === 0 && (

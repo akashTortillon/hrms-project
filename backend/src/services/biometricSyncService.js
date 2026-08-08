@@ -6,6 +6,24 @@ import attendanceProcessor from "./attendanceProcessor.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// BioCloud's `Status` field isn't limited to the two literal strings "Check-In" /
+// "Check-Out" - it also sends variants like "Overtime-In" for a late/after-hours punch.
+// The previous mapping (`txn.Status === "Check-In" ? "IN" : "OUT"`) only recognized the
+// exact "Check-In" literal, so "Overtime-In" (and anything else that isn't that one exact
+// string, including a missing/undefined Status) silently fell through to "OUT" - turning
+// a real check-in into a checkout with no check-in recorded, which then produces a
+// checkIn:null / checkOut:<time> Attendance row and status "Absent" for someone who
+// actually showed up. Match on "in"/"out" appearing anywhere in the (case-insensitive)
+// status text instead of requiring an exact match, and log anything that matches neither
+// so a genuinely new BioCloud status vocabulary word doesn't silently misclassify again.
+export const classifyPunchDirection = (rawStatus, transactionId) => {
+  const normalized = String(rawStatus || "").trim().toLowerCase();
+  if (normalized.includes("in")) return "IN";
+  if (normalized.includes("out")) return "OUT";
+  console.warn(`[BiometricSyncService] Unrecognized punch Status "${rawStatus}" (transaction ${transactionId}) - defaulting to OUT. Update classifyPunchDirection if BioCloud added a new status word.`);
+  return "OUT";
+};
+
 // BioCloud sends VerifyTime as a naive "YYYY-MM-DDTHH:mm:ss" string with no timezone
 // offset (e.g. "2026-07-28T19:10:40"). `new Date(...)` on a string like that is parsed
 // as LOCAL time of whatever machine/process runs this code - NOT the device's actual
@@ -158,7 +176,7 @@ class BiometricSyncService {
             transactionId: txn.Id,
             badgeNumber: txn.BadgeNumber,
             timestamp: parseBioCloudTimestamp(txn.VerifyTime),
-            transactionType: txn.Status === "Check-In" ? "IN" : "OUT",  // Map Status to IN/OUT
+            transactionType: classifyPunchDirection(txn.Status, txn.Id),
             deviceId: txn.DeviceSerialNumber || null,  // Changed from txn.DeviceId
             rawData: txn
           });

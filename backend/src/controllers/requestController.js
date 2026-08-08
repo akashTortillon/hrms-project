@@ -531,24 +531,45 @@ const formatPayrollCycle = (month, year) => {
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Finds the User account for a manager/finance-manager referenced by their
+// Employee._id, falling back to an email match (and healing the link) when their
+// User document never got `employeeId` populated - this happens for anyone
+// onboarded via bulk Excel import, which creates Employee records but never
+// creates/links a User account, unlike the single "Add Employee" form. Without
+// this fallback, an otherwise-correct designatedManager/designatedFinanceManager
+// assignment silently fails to route anything to them until they personally log
+// in once (which only heals their own session, not other people's requests).
+const resolveUserByEmployeeIdWithEmailFallback = async (designatedEmployeeId) => {
+  if (!designatedEmployeeId) return null;
+
+  const directUser = await User.findById(designatedEmployeeId).select("_id name role employeeId");
+  if (directUser) return directUser;
+
+  const linkedUser = await User.findOne({ employeeId: designatedEmployeeId }).select("_id name role employeeId");
+  if (linkedUser) return linkedUser;
+
+  const designatedEmployee = await Employee.findById(designatedEmployeeId).select("email");
+  if (!designatedEmployee?.email) return null;
+
+  const byEmail = await User.findOne({
+    email: { $regex: new RegExp(`^${escapeRegex(designatedEmployee.email)}$`, "i") }
+  }).select("_id name role employeeId email");
+  if (byEmail && !byEmail.employeeId) {
+    byEmail.employeeId = designatedEmployeeId;
+    await byEmail.save();
+  }
+  return byEmail;
+};
+
 const resolveManagerRecipient = async (employee) => {
   if (!employee?.designatedManager) return null;
-
-  const directUser = await User.findById(employee.designatedManager).select("_id name role employeeId");
-  if (directUser) {
-    return directUser;
-  }
-
-  return User.findOne({ employeeId: employee.designatedManager }).select("_id name role employeeId");
+  return resolveUserByEmployeeIdWithEmailFallback(employee.designatedManager);
 };
 
 const resolveFinanceRecipient = async (employee) => {
   if (employee?.designatedFinanceManager) {
-    const directUser = await User.findById(employee.designatedFinanceManager).select("_id name role employeeId");
-    if (directUser) return directUser;
-
-    const linkedUser = await User.findOne({ employeeId: employee.designatedFinanceManager }).select("_id name role employeeId");
-    if (linkedUser) return linkedUser;
+    const financeUser = await resolveUserByEmployeeIdWithEmailFallback(employee.designatedFinanceManager);
+    if (financeUser) return financeUser;
   }
 
   // No explicit designatedFinanceManager - fall back to a role holder. Prefer roles that are
@@ -1838,6 +1859,10 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
         remainingBalanceAtAdjustment: remainingBalance,
         reason: reason.trim(),
         adjustedBy: req.user._id,
+        // adjustmentHistory lives inside `details`, a Mixed field Mongoose can't ref-populate
+        // at read time the way managerApproval.actedBy etc. are - snapshot the name directly
+        // so the approval modal's audit trail can show "by whom" without an extra lookup.
+        adjustedByName: req.user.name || "",
         adjustedAt: new Date()
       };
 

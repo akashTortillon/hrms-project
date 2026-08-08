@@ -476,6 +476,7 @@ export const getEmployees = async (req, res) => {
     const { department, status, search, branch, company, designation, page, limit } = req.query;
 
     let matchStage = {};
+    const andFilters = [];
 
     // Filter by Branch
     if (branch && branch !== "All Branches") {
@@ -504,10 +505,42 @@ export const getEmployees = async (req, res) => {
 
     // Filter by Search (Name, Code)
     if (search) {
-      matchStage.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { code: { $regex: search, $options: "i" } }
-      ];
+      andFilters.push({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } }
+        ]
+      });
+    }
+
+    // Manager/Finance Manager both carry VIEW_ALL_EMPLOYEES (see config/db.js's default
+    // role permissions) so they can use employee pickers/assignment dropdowns - that
+    // permission was never meant to expose the entire company's employee list to them.
+    // Admin/HR keep unrestricted access; a Manager/Finance Manager who isn't also one of
+    // those gets scoped to their own direct reports (by designatedManager/
+    // designatedFinanceManager) plus their own record.
+    const requester = req.user || {};
+    const hasFullAccess = requester.role === "Admin"
+      || /^HR/i.test(requester.role || "")
+      || requester.permissions?.includes("ALL")
+      || requester.permissions?.includes("APPROVE_REQUESTS");
+
+    if (!hasFullAccess) {
+      const isManager = requester.role === "Manager" || requester.permissions?.includes("APPROVE_MANAGER_REQUESTS");
+      const isFinanceManager = requester.role === "Finance Manager" || requester.permissions?.includes("APPROVE_FINANCE_REQUESTS");
+
+      if (isManager || isFinanceManager) {
+        const scope = [requester._id, requester.employeeId].filter(Boolean);
+        const scopeOr = [];
+        if (requester.employeeId) scopeOr.push({ _id: requester.employeeId });
+        if (isManager) scopeOr.push({ designatedManager: { $in: scope } });
+        if (isFinanceManager) scopeOr.push({ designatedFinanceManager: { $in: scope } });
+        andFilters.push({ $or: scopeOr.length ? scopeOr : [{ _id: null }] });
+      }
+    }
+
+    if (andFilters.length) {
+      matchStage.$and = andFilters;
     }
 
     const employees = await Employee.find(matchStage).lean();
