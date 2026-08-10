@@ -167,6 +167,12 @@ class AttendanceProcessor {
           if (!mergedCheckOut && record.date < getUaeTodayDateStr()) {
             mergedStatus = "Incomplete";
           }
+        } else if (mergedCheckOut && record.date < getUaeTodayDateStr()) {
+          // Mirror image of the above: a checkout with no matching check-in ever
+          // recorded (missed/failed IN punch, or a mis-synced OUT-only device event).
+          // Previously fell through to the "Absent" default, which is wrong - the
+          // employee clearly was here. Flag it the same way as the check-in-only case.
+          mergedStatus = "Incomplete";
         }
         const mergedWorkHours = calculateDuration(mergedCheckIn, mergedCheckOut);
 
@@ -209,6 +215,11 @@ class AttendanceProcessor {
           if (!record.checkOut && record.date < getUaeTodayDateStr()) {
             status = "Incomplete";
           }
+        } else if (record.checkOut && record.date < getUaeTodayDateStr()) {
+          // Checkout with no check-in ever recorded - same "clearly not Absent" case
+          // as the merge-branch above, just for the first transaction seen for this
+          // employee+date (no existing record to merge against yet).
+          status = "Incomplete";
         }
         const workHours = calculateDuration(record.checkIn, record.checkOut);
 

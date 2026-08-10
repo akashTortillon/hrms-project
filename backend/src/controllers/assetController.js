@@ -159,6 +159,7 @@ import fs from "fs";
 import path from "path";
 import XLSX from "xlsx";
 import { deleteStoredFile, getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
+import { isManagerOfEmployee } from "../utils/managerScopeUtils.js";
 
 // Generate next asset code (AST001, AST002, etc.)
 const generateAssetCode = async () => {
@@ -1120,9 +1121,23 @@ export const getAssetAlerts = async (req, res) => {
 };
 
 // ✅ GET EMPLOYEE'S ASSETS
+// Route no longer hard-gates this on MANAGE_ASSETS (see assetRoutes.js) - authorization
+// lives here instead so an employee can see their own assets and their designated
+// manager can see them read-only, without either needing full asset-management access.
 export const getEmployeeAssets = async (req, res) => {
   try {
     const { employeeId } = req.params;
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    const isSelf = req.user.employeeId && req.user.employeeId.toString() === employeeId;
+    const canManage = req.user.role === "Admin" || req.user.permissions?.includes("MANAGE_ASSETS");
+    const isAssignedManager = isManagerOfEmployee(req.user, employee);
+
+    if (!isSelf && !canManage && !isAssignedManager) {
+      return res.status(403).json({ message: "Access Denied: You do not have access to this employee's assets" });
+    }
 
     const assets = await Asset.find({
       "custodian.employee": employeeId,

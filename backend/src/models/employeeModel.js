@@ -102,6 +102,12 @@ const employeeSchema = new mongoose.Schema({
   // Other
   accommodation: { type: String },
   shift: { type: String, default: "Day Shift" },
+  // Per-employee weekly off day (0=Sunday ... 6=Saturday). Defaults to Sunday so
+  // existing employees keep today's behavior on rollout; retail/other sections with a
+  // different rostered off-day can override per employee. Falls back to
+  // SystemSettings.defaultWeekOffDay when unset at the company level (see isWeekOff()
+  // in attendanceUtils.js).
+  weekOffDay: { type: Number, min: 0, max: 6, default: 0 },
   laborCardNumber: { type: String },
   laborCards: { type: [laborCardSchema], default: [] },
   personalId: { type: String },

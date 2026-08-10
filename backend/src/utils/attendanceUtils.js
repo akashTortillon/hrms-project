@@ -74,22 +74,48 @@ export const calculateLateTier = (checkInTime, rules) => {
   return 3; // > Buf3
 };
 
+// Builds a Set of "YYYY-MM-DD" strings from a SystemSettings.holidays array. Pulled out
+// as a pure function (no DB call) so payrollController can reuse it against a
+// `settings` object it already fetched, instead of re-deriving this Set with its own
+// copy of the date-matching logic.
+//
+// Uses getUTC* getters, not local-timezone getters. holidays[].date is a bare
+// "YYYY-MM-DD" from a <input type="date">, which the JS Date parser reads as UTC
+// midnight - reading it back with local getters is only correct if the server
+// process's OS timezone happens to be UTC-or-later-same-day, and silently mislabels
+// the holiday by one day otherwise. This is NOT the same situation as real biometric
+// punch timestamps elsewhere in this codebase (see biometricSyncService.js's
+// parseBioCloudTimestamp / this file's own UAE +4h anchor for those) - those are true
+// moments-in-time that need a +4h shift to land on the correct UAE calendar day. A
+// holiday date is already normalized to UTC midnight with no "real" time-of-day
+// component, so a plain UTC read is both correct and simpler - do not add a +4h shift
+// here, that would incorrectly push it a day in the other direction.
+export const holidaySetFromHolidays = (holidays = []) => {
+  const holidaySet = new Set();
+  holidays.forEach(h => {
+    if (h.date) {
+      const d = new Date(h.date);
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      holidaySet.add(`${yyyy}-${mm}-${dd}`);
+    }
+  });
+  return holidaySet;
+};
+
 // Helper: Get Holidays Set
 export const getHolidaysSet = async () => {
   const settings = await SystemSettings.findOne();
-  const holidaySet = new Set();
-  if (settings && settings.holidays) {
-    settings.holidays.forEach(h => {
-      if (h.date) {
-        const d = new Date(h.date);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        holidaySet.add(`${yyyy}-${mm}-${dd}`);
-      }
-    });
-  }
-  return holidaySet;
+  return holidaySetFromHolidays(settings?.holidays || []);
+};
+
+// True if `dateObj` falls on the given employee's weekly off day (per-employee
+// weekOffDay, falling back to the company-wide SystemSettings.defaultWeekOffDay, falling
+// back to Sunday). 0=Sunday ... 6=Saturday, matching Date#getDay().
+export const isWeekOff = (dateObj, employee, systemDefault) => {
+  const offDay = employee?.weekOffDay ?? systemDefault ?? 0;
+  return dateObj.getDay() === offDay;
 };
 
 // Get Map of Approved Leaves for Multiple Employees

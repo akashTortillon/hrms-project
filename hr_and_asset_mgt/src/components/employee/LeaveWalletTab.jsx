@@ -10,6 +10,9 @@ import {
   adjustBalance
 } from "../../services/leaveWalletService.js";
 import { useRole } from "../../contexts/RoleContext.jsx";
+import CustomModal from "../reusable/CustomModal.jsx";
+import AppButton from "../reusable/Button.jsx";
+import "../../style/LeaveWalletTab.css";
 
 const CARD_COLORS = ["#eff6ff", "#f0fdf4", "#fefce8", "#fdf4ff", "#fff7ed", "#f0f9ff"];
 const CARD_TEXT = ["#1d4ed8", "#15803d", "#a16207", "#7e22ce", "#c2410c", "#0c4a6e"];
@@ -174,40 +177,53 @@ export default function LeaveWalletTab({ employeeId }) {
             const bg = CARD_COLORS[idx % CARD_COLORS.length];
             const tc = CARD_TEXT[idx % CARD_TEXT.length];
             const isSelected = selectedType?.leaveTypeId === w.leaveTypeId;
+            // Progress = fraction of the credited allowance already used. A negative
+            // balance (advance leave) shows a full/overflowing bar in the danger color
+            // instead of a meaningless >100% width.
+            const progressPct = w.creditedDays > 0
+              ? Math.min(100, Math.max(0, (w.usedDays / w.creditedDays) * 100))
+              : (w.balanceDays < 0 ? 100 : 0);
+            const progressColor = w.balanceDays < 0 ? "#dc2626" : tc;
+
             return (
               <div
                 key={w.leaveTypeId}
                 onClick={() => setSelectedType(w)}
-                style={{
-                  background: bg, borderRadius: "12px", padding: "18px",
-                  border: isSelected ? `2px solid ${tc}` : `1px solid ${bg}`,
-                  cursor: "pointer"
-                }}
+                className={`wallet-card${isSelected ? " selected" : ""}`}
+                style={{ background: bg, border: `1px solid ${bg}` }}
               >
-                <div style={{ fontSize: "13px", color: tc, fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>
+                <div className="wallet-card-title" style={{ color: tc }}>
                   {w.leaveTypeName} {!w.isPaid && <span style={{ fontWeight: 500 }}>(Unpaid)</span>}
                 </div>
-                <div style={{ fontSize: "30px", fontWeight: "800", color: w.balanceDays < 0 ? "#dc2626" : tc }}>
-                  {w.balanceDays}
+
+                <div className="wallet-progress-track">
+                  <div className="wallet-progress-fill" style={{ width: `${progressPct}%`, background: progressColor }} />
                 </div>
-                <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
+
+                <div className="wallet-balance-row">
+                  <span className="wallet-balance-number" style={{ color: w.balanceDays < 0 ? "#dc2626" : tc }}>
+                    {w.balanceDays}
+                  </span>
+                  <span className="wallet-balance-label">days remaining</span>
+                </div>
+                <div className="wallet-meta">
                   {w.creditedDays} credited · {w.usedDays} used
                 </div>
                 {w.overrideDays != null && (
-                  <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "4px" }}>Custom allocation: {w.overrideDays}/cycle</div>
+                  <div className="wallet-override-note">Custom allocation: {w.overrideDays}/cycle</div>
                 )}
                 {w.pendingDeductionAmount > 0 && (
-                  <div style={{ marginTop: "8px", padding: "6px 8px", background: "#fff", borderRadius: "6px", fontSize: "12px", color: "#991b1b" }}>
-                    Salary deduction owed: <strong>{w.pendingDeductionAmount.toFixed(2)}</strong> ({w.pendingDeductionDays}d) — apply via Payroll
+                  <div className="wallet-banner owed">
+                    <span>Salary deduction owed: <strong>{w.pendingDeductionAmount.toFixed(2)}</strong> ({w.pendingDeductionDays}d) — apply via Payroll</span>
                   </div>
                 )}
                 {w.pendingRefundAmount > 0 && (
-                  <div style={{ marginTop: "8px", padding: "6px 8px", background: "#fff", borderRadius: "6px", fontSize: "12px", color: "#166534", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px" }}>
+                  <div className="wallet-banner refund">
                     <span>Refund pending: <strong>{w.pendingRefundAmount.toFixed(2)}</strong> ({w.pendingRefundDays}d)</span>
                     {canManage && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleClearRefund(w.leaveTypeId); }}
-                        style={{ fontSize: "11px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+                        className="wallet-pill-btn"
                       >
                         Mark Paid
                       </button>
@@ -215,28 +231,28 @@ export default function LeaveWalletTab({ employeeId }) {
                   </div>
                 )}
                 {canManage && (
-                  <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                  <div className="wallet-actions">
                     <button
                       onClick={(e) => { e.stopPropagation(); setOverrideModal({ leaveTypeId: w.leaveTypeId, leaveTypeName: w.leaveTypeName, value: w.overrideDays ?? "" }); }}
-                      style={{ fontSize: "11px", color: tc, background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}
+                      className="wallet-action-btn"
                     >
                       Override
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setAdvanceModal({ leaveTypeId: w.leaveTypeId, leaveTypeName: w.leaveTypeName, days: "", remarks: "" }); }}
-                      style={{ fontSize: "11px", color: tc, background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}
+                      className="wallet-action-btn"
                     >
                       Grant Advance
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setMigrationModal({ leaveTypeId: w.leaveTypeId, leaveTypeName: w.leaveTypeName, openingCredit: "", usedDays: "", remarks: "" }); }}
-                      style={{ fontSize: "11px", color: tc, background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}
+                      className="wallet-action-btn"
                     >
                       Migrate Balance
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setAdjustModal({ leaveTypeId: w.leaveTypeId, leaveTypeName: w.leaveTypeName, days: "", reason: "" }); }}
-                      style={{ fontSize: "11px", color: tc, background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}
+                      className="wallet-action-btn"
                     >
                       Adjust Balance
                     </button>
@@ -260,153 +276,192 @@ export default function LeaveWalletTab({ employeeId }) {
               No transactions yet.
             </div>
           ) : (
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
-              {ledger.map((entry) => (
-                <div
-                  key={entry._id}
-                  style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "10px 14px", borderBottom: "1px solid #f1f5f9", fontSize: "13px"
-                  }}
-                >
-                  <div>
-                    <span style={{ color: "#1f2937", fontWeight: 600 }}>{entry.transactionType.replace(/_/g, " ")}</span>
-                    <span style={{ color: "#9ca3af", marginLeft: "10px" }}>
-                      {new Date(entry.transactionDate).toLocaleDateString()}
-                    </span>
-                    {entry.remarks && <div style={{ color: "#6b7280", fontSize: "12px", marginTop: "2px" }}>{entry.remarks}</div>}
+            <div className="wallet-timeline">
+              {ledger.map((entry, idx) => {
+                const isCredit = entry.days >= 0;
+                return (
+                  <div key={entry._id} className="wallet-timeline-entry">
+                    <div className="wallet-timeline-rail">
+                      <div className={`wallet-timeline-dot ${isCredit ? "credit" : "debit"}`} />
+                      {idx < ledger.length - 1 && <div className="wallet-timeline-line" />}
+                    </div>
+                    <div className="wallet-timeline-content">
+                      <div className="wallet-timeline-header">
+                        <span className="wallet-timeline-type">{entry.transactionType.replace(/_/g, " ")}</span>
+                        <span className={`wallet-timeline-days ${isCredit ? "credit" : "debit"}`}>
+                          {isCredit ? "+" : ""}{entry.days}
+                        </span>
+                      </div>
+                      <div className="wallet-timeline-date">{new Date(entry.transactionDate).toLocaleDateString()}</div>
+                      {entry.remarks && <div className="wallet-timeline-remarks">{entry.remarks}</div>}
+                    </div>
                   </div>
-                  <div style={{ fontWeight: 700, color: entry.days >= 0 ? "#166534" : "#991b1b" }}>
-                    {entry.days >= 0 ? "+" : ""}{entry.days}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {overrideModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "12px", padding: "24px", width: "360px" }}>
-            <h4 style={{ margin: "0 0 14px 0", fontSize: "16px" }}>Allocation Override — {overrideModal.leaveTypeName}</h4>
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Custom days per cycle (blank = use default)</label>
-            <input
-              type="number"
-              value={overrideModal.value}
-              onChange={(e) => setOverrideModal({ ...overrideModal, value: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "16px" }}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button onClick={() => setOverrideModal(null)} style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSaveOverride} disabled={saving} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563eb", color: "#fff", cursor: "pointer" }}>
-                {saving ? "Saving..." : "Save"}
-              </button>
+      <CustomModal
+        show={!!overrideModal}
+        title={`Allocation Override — ${overrideModal?.leaveTypeName || ""}`}
+        onClose={() => setOverrideModal(null)}
+        width="380px"
+        footer={overrideModal && (
+          <>
+            <AppButton variant="secondary" onClick={() => setOverrideModal(null)}>Cancel</AppButton>
+            <AppButton variant="primary" onClick={handleSaveOverride} disabled={saving}>{saving ? "Saving..." : "Save"}</AppButton>
+          </>
+        )}
+      >
+        {overrideModal && (
+          <div className="wallet-modal-body">
+            <div className="modal-form-group">
+              <label className="modal-label">Custom days per cycle (blank = use default)</label>
+              <input
+                type="number"
+                className="modal-input"
+                value={overrideModal.value}
+                onChange={(e) => setOverrideModal({ ...overrideModal, value: e.target.value })}
+              />
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </CustomModal>
 
-      {migrationModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "12px", padding: "24px", width: "380px" }}>
-            <h4 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Migrate Excel Balance — {migrationModal.leaveTypeName}</h4>
-            <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "14px" }}>One-time entry to bring the employee's historical balance from Excel into the wallet.</p>
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Opening Credit (total days ever earned)</label>
-            <input
-              type="number"
-              value={migrationModal.openingCredit}
-              onChange={(e) => setMigrationModal({ ...migrationModal, openingCredit: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "12px" }}
-            />
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Used Days (already taken historically)</label>
-            <input
-              type="number"
-              value={migrationModal.usedDays}
-              onChange={(e) => setMigrationModal({ ...migrationModal, usedDays: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "12px" }}
-            />
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Remarks</label>
-            <textarea
-              rows={2}
-              value={migrationModal.remarks}
-              onChange={(e) => setMigrationModal({ ...migrationModal, remarks: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "16px" }}
-              placeholder="e.g. Migrated from Excel — joined 12 Jul 2022"
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button onClick={() => setMigrationModal(null)} style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSaveMigration} disabled={saving} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563eb", color: "#fff", cursor: "pointer" }}>
-                {saving ? "Saving..." : "Save"}
-              </button>
+      <CustomModal
+        show={!!migrationModal}
+        title={`Migrate Excel Balance — ${migrationModal?.leaveTypeName || ""}`}
+        onClose={() => setMigrationModal(null)}
+        width="400px"
+        footer={migrationModal && (
+          <>
+            <AppButton variant="secondary" onClick={() => setMigrationModal(null)}>Cancel</AppButton>
+            <AppButton variant="primary" onClick={handleSaveMigration} disabled={saving}>{saving ? "Saving..." : "Save"}</AppButton>
+          </>
+        )}
+      >
+        {migrationModal && (
+          <div className="wallet-modal-body">
+            <p className="modal-help-text">One-time entry to bring the employee's historical balance from Excel into the wallet.</p>
+            <div className="modal-form-group">
+              <label className="modal-label">Opening Credit (total days ever earned)</label>
+              <input
+                type="number"
+                className="modal-input"
+                value={migrationModal.openingCredit}
+                onChange={(e) => setMigrationModal({ ...migrationModal, openingCredit: e.target.value })}
+              />
+            </div>
+            <div className="modal-form-group">
+              <label className="modal-label">Used Days (already taken historically)</label>
+              <input
+                type="number"
+                className="modal-input"
+                value={migrationModal.usedDays}
+                onChange={(e) => setMigrationModal({ ...migrationModal, usedDays: e.target.value })}
+              />
+            </div>
+            <div className="modal-form-group">
+              <label className="modal-label">Remarks</label>
+              <textarea
+                rows={2}
+                className="modal-input"
+                value={migrationModal.remarks}
+                onChange={(e) => setMigrationModal({ ...migrationModal, remarks: e.target.value })}
+                placeholder="e.g. Migrated from Excel — joined 12 Jul 2022"
+                style={{ resize: "vertical" }}
+              />
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </CustomModal>
 
-      {adjustModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "12px", padding: "24px", width: "380px" }}>
-            <h4 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Adjust Balance — {adjustModal.leaveTypeName}</h4>
-            <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "14px" }}>
+      <CustomModal
+        show={!!adjustModal}
+        title={`Adjust Balance — ${adjustModal?.leaveTypeName || ""}`}
+        onClose={() => setAdjustModal(null)}
+        width="400px"
+        footer={adjustModal && (
+          <>
+            <AppButton variant="secondary" onClick={() => setAdjustModal(null)}>Cancel</AppButton>
+            <AppButton variant="primary" onClick={handleSaveAdjustment} disabled={saving}>{saving ? "Saving..." : "Save"}</AppButton>
+          </>
+        )}
+      >
+        {adjustModal && (
+          <div className="wallet-modal-body">
+            <p className="modal-help-text">
               For ongoing operational corrections to the current balance — not a historical
               migration. Use a positive number to credit days, negative to deduct.
             </p>
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Days (e.g. 2 or -1)</label>
-            <input
-              type="number"
-              value={adjustModal.days}
-              onChange={(e) => setAdjustModal({ ...adjustModal, days: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "12px" }}
-            />
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Reason</label>
-            <textarea
-              rows={2}
-              value={adjustModal.reason}
-              onChange={(e) => setAdjustModal({ ...adjustModal, reason: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "16px" }}
-              placeholder="Required — e.g. Correction for missed check-in on public holiday"
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button onClick={() => setAdjustModal(null)} style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSaveAdjustment} disabled={saving} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563eb", color: "#fff", cursor: "pointer" }}>
-                {saving ? "Saving..." : "Save"}
-              </button>
+            <div className="modal-form-group">
+              <label className="modal-label">Days (e.g. 2 or -1)</label>
+              <input
+                type="number"
+                className="modal-input"
+                value={adjustModal.days}
+                onChange={(e) => setAdjustModal({ ...adjustModal, days: e.target.value })}
+              />
+            </div>
+            <div className="modal-form-group">
+              <label className="modal-label">Reason</label>
+              <textarea
+                rows={2}
+                className="modal-input"
+                value={adjustModal.reason}
+                onChange={(e) => setAdjustModal({ ...adjustModal, reason: e.target.value })}
+                placeholder="Required — e.g. Correction for missed check-in on public holiday"
+                style={{ resize: "vertical" }}
+              />
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </CustomModal>
 
-      {advanceModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "12px", padding: "24px", width: "380px" }}>
-            <h4 style={{ margin: "0 0 14px 0", fontSize: "16px" }}>Grant Advance Leave — {advanceModal.leaveTypeName}</h4>
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Days</label>
-            <input
-              type="number"
-              value={advanceModal.days}
-              onChange={(e) => setAdvanceModal({ ...advanceModal, days: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "12px" }}
-            />
-            <label style={{ fontSize: "13px", color: "#374151", display: "block", marginBottom: "6px" }}>Remarks</label>
-            <textarea
-              rows={2}
-              value={advanceModal.remarks}
-              onChange={(e) => setAdvanceModal({ ...advanceModal, remarks: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "8px" }}
-            />
-            <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "16px" }}>
-              This grants leave before eligibility — wallet balance will go negative. The salary deduction (days × current daily rate) is calculated and locked automatically; apply it via Payroll's manual adjustment for this employee's current cycle. When eligibility is reached, the exact same amount is flagged for refund.
-            </p>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button onClick={() => setAdvanceModal(null)} style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleGrantAdvance} disabled={saving} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563eb", color: "#fff", cursor: "pointer" }}>
-                {saving ? "Saving..." : "Grant"}
-              </button>
+      <CustomModal
+        show={!!advanceModal}
+        title={`Grant Advance Leave — ${advanceModal?.leaveTypeName || ""}`}
+        onClose={() => setAdvanceModal(null)}
+        width="400px"
+        footer={advanceModal && (
+          <>
+            <AppButton variant="secondary" onClick={() => setAdvanceModal(null)}>Cancel</AppButton>
+            <AppButton variant="warning" onClick={handleGrantAdvance} disabled={saving}>{saving ? "Saving..." : "Grant"}</AppButton>
+          </>
+        )}
+      >
+        {advanceModal && (
+          <div className="wallet-modal-body">
+            <div className="modal-form-group">
+              <label className="modal-label">Days</label>
+              <input
+                type="number"
+                className="modal-input"
+                value={advanceModal.days}
+                onChange={(e) => setAdvanceModal({ ...advanceModal, days: e.target.value })}
+              />
             </div>
+            <div className="modal-form-group">
+              <label className="modal-label">Remarks</label>
+              <textarea
+                rows={2}
+                className="modal-input"
+                value={advanceModal.remarks}
+                onChange={(e) => setAdvanceModal({ ...advanceModal, remarks: e.target.value })}
+                style={{ resize: "vertical" }}
+              />
+            </div>
+            <p className="modal-help-text">
+              This grants leave before eligibility — wallet balance will go negative. The salary
+              deduction (days × current daily rate) is calculated and locked automatically; apply
+              it via Payroll's manual adjustment for this employee's current cycle. When
+              eligibility is reached, the exact same amount is flagged for refund.
+            </p>
           </div>
-        </div>
-      )}
+        )}
+      </CustomModal>
     </div>
   );
 }

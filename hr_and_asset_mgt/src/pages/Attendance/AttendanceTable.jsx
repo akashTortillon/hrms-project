@@ -110,15 +110,15 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       // Construct key yyyy-mm-dd
                       const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                       const record = emp.attendance[dateKey] || {};
-                      let status = record.status;
+                      const status = record.status;
 
-                      // Check for Sunday
+                      // Week-off day is per-employee now (not always Sunday), and the
+                      // backend already resolves Weekend/Holiday/On Leave priority
+                      // correctly per employee per day - trust record.status instead of
+                      // re-deriving/overriding it here (this used to force every Sunday
+                      // to "Weekend" even when the backend had correctly said "Holiday").
                       const dateObj = new Date(year, month - 1, d);
                       const isSunday = dateObj.getDay() === 0;
-
-                      if (isSunday) {
-                        status = "Weekend";
-                      }
 
                       // Define styles for the letter itself
                       let color = '#374151'; // default gray

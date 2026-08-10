@@ -15,6 +15,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { holidaySetFromHolidays, isWeekOff } from "../utils/attendanceUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -306,18 +307,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
     logs.forEach(l => logMap[l.date] = l);
 
     const settings = preFetchedSettings || await SystemSettings.findOne();
-    const holidaySet = new Set();
-    if (settings && settings.holidays) {
-        settings.holidays.forEach(h => {
-            if (h.date) {
-                const d = new Date(h.date);
-                const yyyy = d.getFullYear();
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                holidaySet.add(`${yyyy}-${mm}-${dd}`);
-            }
-        });
-    }
+    const holidaySet = holidaySetFromHolidays(settings?.holidays || []);
 
     // --- PHASE 1: BUILD DAY-BY-DAY STATUS ARRAY ---
     const dayStatuses = []; // Index 0 = first day of period
@@ -335,7 +325,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         const day = i + 1;
         const dateObj = addDays(rangeStart, i);
         const dateStr = formatYMD(dateObj);
-        const dayOfWeek = dateObj.getDay(); // 0 = Sun
+        const isEmployeeWeekOff = isWeekOff(dateObj, employee, settings?.defaultWeekOffDay);
 
         let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, HALF_PAID_LEAVE, UNPAID_LEAVE
         let isLate = false;
@@ -381,10 +371,11 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
             }
         }
 
-        // C. Fallbacks (Weekend/Holiday/Absent)
+        // C. Fallbacks (Holiday/Weekend/Absent) — Holiday takes precedence over Weekend
+        // so a company holiday landing on someone's off-day still reads as "Holiday".
         if (status === 'UNKNOWN') {
-            if (dayOfWeek === 0) status = 'WEEKEND'; // Sunday
-            else if (holidaySet.has(dateStr)) status = 'HOLIDAY';
+            if (holidaySet.has(dateStr)) status = 'HOLIDAY';
+            else if (isEmployeeWeekOff) status = 'WEEKEND';
             else status = 'ABSENT';
         }
 
@@ -410,7 +401,6 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         const m = String(dObj.getMonth() + 1).padStart(2, '0');
         const d = String(dObj.getDate()).padStart(2, '0');
         const dStr = `${y}-${m}-${d}`;
-        const dayOfWeek = dObj.getDay();
 
         // 1. Check Log
         if (logMap[dStr]) {
@@ -438,19 +428,12 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
             return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules);
         }
 
-        // 3. Fallback
-        if (dayOfWeek === 0) return 'WEEKEND';
-        // Need to check settings.holidays for this specific date
-        // 'holidaySet' only has current month? 
-        // We should check 'settings.holidays' raw array if available
-        if (settings && settings.holidays) {
-            const isHol = settings.holidays.some(h => {
-                if (!h.date) return false;
-                const hd = new Date(h.date);
-                return hd.getFullYear() === y && hd.getMonth() === dObj.getMonth() && hd.getDate() === dObj.getDate();
-            });
-            if (isHol) return 'HOLIDAY';
-        }
+        // 3. Fallback — Holiday takes precedence over Weekend (same reasoning as the
+        // main loop above). Reuses the same `holidaySet` built once per getAttendanceStats
+        // call instead of re-scanning `settings.holidays` a third time — `dStr` here is
+        // computed with local getters same as `formatYMD` produces, so the keys line up.
+        if (holidaySet.has(dStr)) return 'HOLIDAY';
+        if (isWeekOff(dObj, employee, settings?.defaultWeekOffDay)) return 'WEEKEND';
 
         return 'ABSENT'; // Default fallback if no logs/rules
     };
@@ -2112,14 +2095,27 @@ export const downloadPayslip = async (req, res) => {
             }
         }
 
-        const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year } = payroll;
+        const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year, periodStart, periodEnd } = payroll;
         const companyName = employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
         const companyMaster = companyName
             ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
             : null;
         const companyLogoPath = resolveCompanyLogoPath(companyMaster?.image || process.env.COMPANY_LOGO);
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-        const periodStr = `${monthName} ${year}`;
+        // "Period" used to always show just periodEnd's calendar month/year (e.g.
+        // "August 2026"), even when the actual pay period (this app uses a rolling,
+        // force-contiguous period system - see generatePayroll - not fixed calendar
+        // months) spans back into an earlier month, or several. That made the
+        // Attendance Summary's "Total Days" look wrong/impossible (e.g. 67) next to a
+        // label implying a single ~30-day month. Show the true date range whenever the
+        // period doesn't fall entirely within one calendar month.
+        const periodsSpanOneMonth = periodStart && periodEnd
+            && new Date(periodStart).getUTCFullYear() === new Date(periodEnd).getUTCFullYear()
+            && new Date(periodStart).getUTCMonth() === new Date(periodEnd).getUTCMonth();
+        const formatShortDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+        const periodStr = (!periodStart || !periodEnd || periodsSpanOneMonth)
+            ? `${monthName} ${year}`
+            : `${formatShortDate(periodStart)} – ${formatShortDate(periodEnd)}`;
         const totalAllowances = payroll.totalAllowances || 0;
 
         // Hide "Salary Advance" from the itemized list, but keep its value subtracted from Net Salary.
@@ -2163,15 +2159,31 @@ export const downloadPayslip = async (req, res) => {
                 console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
             }
         }
-        doc.fontSize(12).fillColor("#182d54").text(companyName, centerX - 140, 138, { align: "center", width: 280 });
-        doc.fontSize(16).fillColor("#404040").text("PAYSLIP", centerX - 50, 155, { align: "center", width: 100 }); // Moved down to Y=155pt (approx 55mm)
-        // doc.text(text, x, y, options)
+        // Company name/PAYSLIP/Period/employee-details box used to sit at hardcoded
+        // absolute Y coordinates with only ~17pt of clearance below the company name -
+        // a long company name wrapping to 2 lines would overlap "PAYSLIP" below it.
+        // Measure each block's actual rendered height (doc.heightOfString respects the
+        // currently-active font/size, so call it right after setting fontSize) and
+        // derive the next element's Y from it instead, so nothing overlaps regardless
+        // of how long the company name is.
+        const companyNameY = 138;
+        doc.fontSize(12).fillColor("#182d54");
+        const companyNameHeight = doc.heightOfString(companyName, { width: 280, align: "center" });
+        doc.text(companyName, centerX - 140, companyNameY, { align: "center", width: 280 });
 
-        doc.fontSize(12).fillColor("#646464").text(`Period: ${periodStr}`, centerX - 100, 175, { align: "center", width: 200 }); // Y=175pt (approx 61mm)
-        // doc.moveDown(2); // Since we set exact Y, we don't need this moveDown
+        const payslipY = companyNameY + companyNameHeight + 8;
+        doc.fontSize(16).fillColor("#404040");
+        const payslipHeight = doc.heightOfString("PAYSLIP", { width: 100, align: "center" });
+        doc.text("PAYSLIP", centerX - 50, payslipY, { align: "center", width: 100 });
+
+        const periodY = payslipY + payslipHeight + 4;
+        const periodText = `Period: ${periodStr}`;
+        doc.fontSize(12).fillColor("#646464");
+        const periodHeight = doc.heightOfString(periodText, { width: 200, align: "center" });
+        doc.text(periodText, centerX - 100, periodY, { align: "center", width: 200 });
 
         // Employee Details Box, use Y to continue flow but reset after explicit positioning
-        doc.y = 200; // Reset Y to 200pt (approx 70mm)
+        doc.y = periodY + periodHeight + 9;
         const startY = doc.y;
         doc.rect(40, startY, pageWidth - 80, 70).fill("#FAFAFA");
         doc.fillColor("#000000");

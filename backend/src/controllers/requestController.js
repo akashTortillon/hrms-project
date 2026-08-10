@@ -421,6 +421,7 @@ import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile }
 import { logActivity } from "../utils/activityLogger.js";
 import LeaveWallet from "../models/leaveWalletModel.js";
 import leaveWalletService from "../services/leaveWalletService.js";
+import { isManagerOfEmployee } from "../utils/managerScopeUtils.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -1764,7 +1765,7 @@ export const revokeLeave = async (req, res) => {
 export const updateSalaryRepaymentSchedule = async (req, res) => {
   try {
     const { requestId } = req.params;
-    const { action, month, year, reason = "", monthlyRepaymentAmount } = req.body;
+    const { action, month, year, reason = "", monthlyRepaymentAmount, extraPaymentAmount } = req.body;
 
     const canManageSchedule = req.user.role === "Admin"
       || req.user.permissions?.includes("ALL")
@@ -1777,7 +1778,7 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       });
     }
 
-    if (!["SKIP_MONTH", "ADJUST"].includes(action)) {
+    if (!["SKIP_MONTH", "ADJUST", "EXTRA_PAYMENT"].includes(action)) {
       return res.status(400).json({
         success: false,
         message: "Invalid repayment schedule action."
@@ -1893,6 +1894,101 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
         success: true,
         message: `Monthly repayment adjusted to ${newMonthlyRepaymentAmount} AED.`,
         data: populatedForAdjust
+      });
+    }
+
+    if (action === "EXTRA_PAYMENT") {
+      const requestSubType = request.details?.subType || request.subType;
+      if (requestSubType !== "loan") {
+        return res.status(400).json({
+          success: false,
+          message: "Only loans support recording an extra payment."
+        });
+      }
+
+      const amount = Number(extraPaymentAmount);
+      if (!(amount > 0)) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid extra payment amount is required."
+        });
+      }
+
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "A reason is required to record an extra payment."
+        });
+      }
+
+      const details = request.details || {};
+      const totalPayable = Number(details.totalRepaymentAmount) || Number(details.amount) || 0;
+      const existingDeductions = Array.isArray(request.payrollDeductions) ? request.payrollDeductions : [];
+      const payrollPaid = existingDeductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      // Kept as a SEPARATE array from payrollDeductions (not appended to it) - the
+      // monthly EMI job (payrollController.js generatePayroll) dedupes payrollDeductions
+      // entries by month/year to decide whether that cycle's regular EMI was already
+      // taken. Pushing an extra payment in there would make the job think the current
+      // month's real EMI was already deducted and silently skip it - an extra payment
+      // should be additive to the schedule, not a substitute for it.
+      const existingExtraPayments = Array.isArray(details.extraPayments) ? details.extraPayments : [];
+      const extraPaidSoFar = existingExtraPayments.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const remainingBefore = Math.max(0, totalPayable - payrollPaid - extraPaidSoFar);
+
+      if (amount > remainingBefore + 0.01) {
+        return res.status(400).json({
+          success: false,
+          message: `Extra payment (${amount} AED) cannot exceed the remaining balance (${remainingBefore.toFixed(2)} AED).`
+        });
+      }
+
+      const remainingAfter = Math.max(0, remainingBefore - amount);
+      const monthlyRepayment = Number(details.monthlyRepaymentAmount) || 0;
+      const additionalMonths = (remainingAfter > 0 && monthlyRepayment > 0) ? Math.ceil(remainingAfter / monthlyRepayment) : 0;
+      const newRepaymentPeriod = existingDeductions.length + additionalMonths;
+
+      const extraPaymentEntry = {
+        amount,
+        reason: reason.trim(),
+        remainingBalanceAfter: remainingAfter,
+        recordedBy: req.user._id,
+        recordedByName: req.user.name || "",
+        recordedAt: new Date()
+      };
+
+      request.details = {
+        ...details,
+        extraPayments: [...existingExtraPayments, extraPaymentEntry],
+        repaymentPeriod: newRepaymentPeriod
+      };
+
+      if (remainingAfter <= 0) {
+        request.isFullyPaid = true;
+        request.status = "COMPLETED";
+      }
+
+      await request.save();
+
+      createNotification({
+        recipient: request.userId,
+        title: "Extra loan payment recorded",
+        message: `An extra payment of ${amount} AED was recorded against your loan ${request.requestId}: ${reason.trim()}${remainingAfter <= 0 ? " — loan fully repaid." : ""}`,
+        type: "REQUEST",
+        link: "/app/requests"
+      }).catch((error) => console.error("Notification error:", error));
+
+      const populatedForExtraPayment = await Request.findById(request._id)
+        .populate("approvedBy", "name role")
+        .populate("managerApproval.actedBy", "name role")
+        .populate("financeApproval.actedBy", "name role")
+        .populate("hrApproval.actedBy", "name role");
+
+      return res.status(200).json({
+        success: true,
+        message: remainingAfter <= 0
+          ? `Extra payment of ${amount} AED recorded — loan fully repaid.`
+          : `Extra payment of ${amount} AED recorded. Remaining balance: ${remainingAfter.toFixed(2)} AED.`,
+        data: populatedForExtraPayment
       });
     }
 
@@ -2219,22 +2315,27 @@ export const getEmployeeRequests = async (req, res) => {
     const { employeeId } = req.params;
     console.log(`[getEmployeeRequests] Fetching for Employee ID: ${employeeId}`);
 
-    // Access Control: Allow if Self OR has Permission
+    // Access Control: Allow if Self OR has Permission OR is the employee's designated
+    // manager (view-only, restricted to LEAVE/SALARY below - see isAssignedManager).
     let isSelf = req.user.employeeId && req.user.employeeId.toString() === employeeId;
+    let targetEmployeeForScope = null;
 
     // Fallback: If ID link is missing, verify identity via Email
     if (!isSelf) {
-      const targetEmployee = await Employee.findById(employeeId);
-      if (targetEmployee && targetEmployee.email && req.user.email) {
-        if (targetEmployee.email.trim().toLowerCase() === req.user.email.trim().toLowerCase()) {
+      targetEmployeeForScope = await Employee.findById(employeeId);
+      if (targetEmployeeForScope && targetEmployeeForScope.email && req.user.email) {
+        if (targetEmployeeForScope.email.trim().toLowerCase() === req.user.email.trim().toLowerCase()) {
           isSelf = true;
         }
       }
     }
 
     const canManage = req.user.role === 'Admin' || (req.user.permissions && req.user.permissions.includes("MANAGE_EMPLOYEES"));
+    const isAssignedManager = !isSelf && !canManage
+      && targetEmployeeForScope
+      && isManagerOfEmployee(req.user, targetEmployeeForScope);
 
-    if (!isSelf && !canManage) {
+    if (!isSelf && !canManage && !isAssignedManager) {
       return res.status(403).json({
         success: false,
         message: "Access Denied: You can only view your own requests."
@@ -2279,7 +2380,14 @@ export const getEmployeeRequests = async (req, res) => {
     const { type, status } = req.query;
 
     const query = { userId: user._id };
-    if (type) query.requestType = type;
+    if (isAssignedManager) {
+      // Manager access here is view-only and intentionally scoped to leave/loan data
+      // only - not a free pass to page through a direct report's other request types
+      // (documents, resignations, warnings, etc) via this same generic endpoint.
+      query.requestType = type && ["LEAVE", "SALARY"].includes(type) ? type : { $in: ["LEAVE", "SALARY"] };
+    } else if (type) {
+      query.requestType = type;
+    }
 
     if (status) {
       if (status.includes(',')) {
@@ -2356,10 +2464,6 @@ export const getLeaveSummary = async (req, res) => {
         success: true,
         data: [],
         totals: {
-          sick: 0,
-          casual: 0,
-          annual: 0,
-          unpaid: 0,
           approvedDays: 0,
           pendingRequests: 0
         },
@@ -2412,15 +2516,14 @@ export const getLeaveSummary = async (req, res) => {
       totalDays += days;
     }
 
-    const totals = Object.values(summary).reduce((acc, item) => {
-      const normalized = String(item.type || "").toLowerCase();
-      if (normalized.includes("sick")) acc.sick += item.totalDays;
-      else if (normalized.includes("casual")) acc.casual += item.totalDays;
-      else if (normalized.includes("annual")) acc.annual += item.totalDays;
-      else if (normalized.includes("unpaid")) acc.unpaid += item.totalDays;
-      acc.approvedDays += item.totalDays;
-      return acc;
-    }, { sick: 0, casual: 0, annual: 0, unpaid: 0, approvedDays: 0, pendingRequests });
+    // Previously bucketed into hardcoded sick/casual/annual/unpaid tiles via substring
+    // matching on the leave type name - any Leave Type Master whose name didn't
+    // literally contain one of those 4 words (e.g. "Maternity Leave") silently fell
+    // through: its days counted toward approvedDays but never appeared in any tile.
+    // `data` (below) already breaks totals down per actual leave type correctly and is
+    // the source of truth for the type breakdown - `totals` now only carries the two
+    // aggregates that never depended on name-matching.
+    const totals = { approvedDays: totalDays, pendingRequests };
 
     res.json({
       success: true,

@@ -405,6 +405,32 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                   </select>
                 </div>
 
+                <div className="form-group">
+                  <label>Week Off Day</label>
+                  <select
+                    name="weekOffDay"
+                    value={form.weekOffDay ?? ""}
+                    onChange={handleChange}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      backgroundColor: "white",
+                      fontSize: "14px",
+                      height: "42px"
+                    }}
+                  >
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                  </select>
+                </div>
+
                 {showManagerFields && (
                 <div className="form-group">
                   <label>Designated Manager</label>

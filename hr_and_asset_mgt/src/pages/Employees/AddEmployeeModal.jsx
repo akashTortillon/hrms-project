@@ -42,6 +42,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     workBase: "",
     ctc: "",
     shift: "",
+    weekOffDay: "",
     laborCardNumber: "",
     laborCards: [{ number: "", expiryDate: "", issueDate: "", notes: "", isPrimary: true }],
     agentId: "",
@@ -435,6 +436,32 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 {shifts.map(s => (
                   <option key={s.name} value={s.name}>{s.name}</option>
                 ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Week Off Day</label>
+              <select
+                name="weekOffDay"
+                value={form.weekOffDay ?? ""}
+                onChange={handleChange}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "white",
+                  fontSize: "14px",
+                  height: "42px"
+                }}
+              >
+                <option value="">Sunday (default)</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
               </select>
             </div>
 

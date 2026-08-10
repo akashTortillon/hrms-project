@@ -220,7 +220,9 @@ import {
   getHolidaysSet,
   getApprovedLeavesMap,
   getApprovedLeaves,
-  isLeave
+  isLeave,
+  isWeekOff,
+  holidaySetFromHolidays
 } from "../utils/attendanceUtils.js";
 
 /**
@@ -473,8 +475,10 @@ export const getMonthlyAttendance = async (req, res) => {
       date: { $regex: regex }
     }).populate("editedBy", "name"); // ✅ Populate Editor
 
-    // Get Holidays
-    const holidaySet = await getHolidaysSet();
+    // Get Holidays + company-wide default week-off day
+    const settingsForWeekOff = await SystemSettings.findOne().select("holidays defaultWeekOffDay");
+    const holidaySet = holidaySetFromHolidays(settingsForWeekOff?.holidays || []);
+    const defaultWeekOffDay = settingsForWeekOff?.defaultWeekOffDay;
     // ✅ NEW: Get Leave Map
     const leaveMap = await getApprovedLeavesMap(employees);
 
@@ -500,7 +504,7 @@ export const getMonthlyAttendance = async (req, res) => {
       days.forEach(day => {
         const record = empAttendance[day];
         const dateObj = new Date(day);
-        const isSunday = dateObj.getDay() === 0;
+        const isWeekend = isWeekOff(dateObj, emp, defaultWeekOffDay);
         const isHoliday = holidaySet.has(day);
 
         let status;
@@ -508,15 +512,18 @@ export const getMonthlyAttendance = async (req, res) => {
         if (record) {
           status = record.status;
         } else {
-          // ✅ Updated Priority Logic
+          // ✅ Updated Priority Logic — Holiday takes precedence over Weekend so a
+          // company holiday that happens to land on someone's off-day still reads as
+          // "Holiday" (more informative for audit/reporting) rather than being
+          // silently absorbed into "Weekend".
           if (emp.status === "On Leave") {
             status = "On Leave";
           } else if (isLeave(emp._id, day, leaveMap)) { // Check approved leave requests
             status = "On Leave";
-          } else if (isSunday) {
-            status = "Weekend";
           } else if (isHoliday) {
             status = "Holiday";
+          } else if (isWeekend) {
+            status = "Weekend";
           } else {
             status = "Absent";
           }
@@ -592,9 +599,14 @@ export const markAttendanceBulk = async (req, res) => {
     const rules = await getShiftRules(shift || "Day Shift");
     const results = [];
 
+    // Was hardcoded Sat+Sun, inconsistent with every other weekend check in this
+    // codebase (Sunday-only, or now this employee's own weekOffDay). Align it so
+    // "skip weekends" means the same thing everywhere.
+    const bulkEmployee = skipWeekends ? await Employee.findById(employeeId).select("weekOffDay") : null;
+    const bulkSettings = skipWeekends ? await SystemSettings.findOne().select("defaultWeekOffDay") : null;
+
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay(); // 0 = Sunday, 6 = Saturday
-      if (skipWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) continue;
+      if (skipWeekends && isWeekOff(d, bulkEmployee, bulkSettings?.defaultWeekOffDay)) continue;
 
       const dateStr = d.toISOString().split("T")[0];
 
@@ -762,6 +774,7 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     const records = await Attendance.find({ employee: employeeId });
 
     const holidaySet = await getHolidaysSet();
+    const statsSettings = await SystemSettings.findOne().select("defaultWeekOffDay");
     // ✅ NEW: Get Leave Map for this employee
     const leaveMap = await getApprovedLeavesMap([employee]);
 
@@ -779,7 +792,7 @@ export const getEmployeeAttendanceStats = async (req, res) => {
       const day = String(currentDate.getDate()).padStart(2, "0");
       const dateStr = `${year}-${month}-${day}`;
 
-      const isSunday = currentDate.getDay() === 0;
+      const isEmployeeWeekOff = isWeekOff(currentDate, employee, statsSettings?.defaultWeekOffDay);
       const isHoliday = holidaySet.has(dateStr);
       const record = recordMap[dateStr];
 
@@ -790,11 +803,12 @@ export const getEmployeeAttendanceStats = async (req, res) => {
         else if (record.status === "Absent") absent++;
       } else {
         // No record -> Implicit Status
-        // Only count implicit absent if typically a working day (not Sunday, not Holiday)
+        // Only count implicit absent if typically a working day (not this employee's
+        // week-off, not Holiday)
         // ✅ Check for Leave
         if (isLeave(employee._id, dateStr, leaveMap)) {
           leave++;
-        } else if (!isSunday && !isHoliday) {
+        } else if (!isEmployeeWeekOff && !isHoliday) {
           absent++;
         }
       }
@@ -841,6 +855,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
     });
 
     const holidaySet = await getHolidaysSet();
+    const historySettings = await SystemSettings.findOne().select("defaultWeekOffDay");
     // ✅ NEW: Leave Map
     const leaveMap = await getApprovedLeavesMap([employee]);
 
@@ -858,7 +873,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
       const dateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const dateObj = new Date(dateStr);
 
-      const isSunday = dateObj.getDay() === 0;
+      const isEmployeeWeekOff = isWeekOff(dateObj, employee, historySettings?.defaultWeekOffDay);
       const isHoliday = holidaySet.has(dateStr);
       const record = attendanceMap[dateStr];
 
@@ -867,11 +882,12 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
       if (record) {
         status = record.status;
       } else {
+        // Holiday takes precedence over Weekend (see getMonthlyAttendance for why).
         if (dateObj > today) status = "-"; // Future
         else if (employee.status === "On Leave") status = "On Leave";
         else if (isLeave(employee._id, dateStr, leaveMap)) status = "On Leave"; // ✅ Check Approved Leaves
-        else if (isSunday) status = "Weekend";
         else if (isHoliday) status = "Holiday";
+        else if (isEmployeeWeekOff) status = "Weekend";
         else status = "Absent";
       }
 
@@ -929,6 +945,7 @@ export const exportAttendance = async (req, res) => {
 
       const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
       const holidaySet = await getHolidaysSet();
+      const exportSettings = await SystemSettings.findOne().select("defaultWeekOffDay");
       // ✅ NEW: Leave Map
       const leaveMap = await getApprovedLeavesMap(employees);
 
@@ -958,7 +975,7 @@ export const exportAttendance = async (req, res) => {
           const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const record = empAttendance[dateKey];
           const dateObj = new Date(dateKey);
-          const isSunday = dateObj.getDay() === 0;
+          const isEmployeeWeekOff = isWeekOff(dateObj, emp, exportSettings?.defaultWeekOffDay);
           const isHoliday = holidaySet.has(dateKey);
 
           let status = "";
@@ -971,10 +988,11 @@ export const exportAttendance = async (req, res) => {
                 record.status === "Absent" ? "A" :
                   record.status === "On Leave" ? "OL" : record.status;
           } else {
+            // Holiday takes precedence over Weekend (see getMonthlyAttendance for why).
             if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
             else if (isLeave(emp._id, dateKey, leaveMap)) { status = "On Leave"; cellValue = "OL"; } // ✅ Checked
-            else if (isSunday) { status = "Weekend"; cellValue = "W"; }
             else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
+            else if (isEmployeeWeekOff) { status = "Weekend"; cellValue = "W"; }
             else { status = "Absent"; cellValue = "A"; }
           }
 

@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import AppButton from "../../components/reusable/Button.jsx";
 
-export default function AdjustLoanModal({ show, request, onClose, onSubmit, submitting = false }) {
-    const [monthlyRepaymentAmount, setMonthlyRepaymentAmount] = useState("");
+export default function ExtraPaymentModal({ show, request, onClose, onSubmit, submitting = false }) {
+    const [extraPaymentAmount, setExtraPaymentAmount] = useState("");
     const [reason, setReason] = useState("");
 
     useEffect(() => {
         if (show && request) {
-            setMonthlyRepaymentAmount(request.details?.monthlyRepaymentAmount || "");
+            setExtraPaymentAmount("");
             setReason("");
         }
     }, [show, request?._id]);
@@ -21,29 +21,26 @@ export default function AdjustLoanModal({ show, request, onClose, onSubmit, subm
         return Math.max(0, totalPayable - alreadyPaid);
     }, [request]);
 
-    const projectedAdditionalMonths = useMemo(() => {
-        const monthly = parseFloat(monthlyRepaymentAmount) || 0;
-        if (monthly <= 0 || remainingBalance <= 0) return null;
-        return Math.ceil(remainingBalance / monthly);
-    }, [monthlyRepaymentAmount, remainingBalance]);
+    const amountValue = parseFloat(extraPaymentAmount) || 0;
+    const remainingAfter = Math.max(0, remainingBalance - amountValue);
+    const willFullyClear = amountValue > 0 && remainingAfter <= 0;
+    const isValid = amountValue > 0 && amountValue <= remainingBalance + 0.01 && reason.trim();
 
     const handleSubmit = async () => {
-        if (!(parseFloat(monthlyRepaymentAmount) > 0) || !reason.trim()) return;
+        if (!isValid) return;
         await onSubmit(request._id, {
-            action: "ADJUST",
-            monthlyRepaymentAmount: parseFloat(monthlyRepaymentAmount),
+            action: "EXTRA_PAYMENT",
+            extraPaymentAmount: amountValue,
             reason: reason.trim()
         });
     };
 
     if (!show || !request) return null;
 
-    const monthsAlreadyDeducted = (request.payrollDeductions || []).length;
-
     return (
         <CustomModal
             show={show}
-            title="Adjust EMI"
+            title="Record Extra Payment"
             onClose={onClose}
             footer={(
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", width: "100%" }}>
@@ -51,11 +48,11 @@ export default function AdjustLoanModal({ show, request, onClose, onSubmit, subm
                         Cancel
                     </AppButton>
                     <AppButton
-                        variant="warning"
+                        variant="success"
                         onClick={handleSubmit}
-                        disabled={submitting || !(parseFloat(monthlyRepaymentAmount) > 0) || !reason.trim()}
+                        disabled={submitting || !isValid}
                     >
-                        {submitting ? "Saving..." : "Save Adjustment"}
+                        {submitting ? "Saving..." : "Record Payment"}
                     </AppButton>
                 </div>
             )}
@@ -69,27 +66,29 @@ export default function AdjustLoanModal({ show, request, onClose, onSubmit, subm
                     color: "#334155",
                     fontSize: "14px"
                 }}>
-                    Remaining balance: <strong>{remainingBalance.toFixed(2)} AED</strong> ({monthsAlreadyDeducted} deduction{monthsAlreadyDeducted === 1 ? "" : "s"} already made).
-                    Changing the monthly amount recalculates how many more months are needed to clear it —
-                    already-deducted months are untouched.
+                    Remaining balance: <strong>{remainingBalance.toFixed(2)} AED</strong>.
+                    This records a lump-sum payment the employee made outside their normal payroll deduction —
+                    it reduces the balance directly and doesn't change or skip the regular monthly EMI.
                 </div>
 
                 <div>
                     <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, color: "#1f2937" }}>
-                        New Monthly Repayment Amount (AED)
+                        Extra Payment Amount (AED)
                     </label>
                     <input
                         type="number"
                         min="0"
-                        value={monthlyRepaymentAmount}
-                        onChange={(e) => setMonthlyRepaymentAmount(e.target.value)}
+                        max={remainingBalance}
+                        value={extraPaymentAmount}
+                        onChange={(e) => setExtraPaymentAmount(e.target.value)}
                         className="form-control"
                         style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1d5db" }}
                     />
-                    {projectedAdditionalMonths !== null && (
-                        <div style={{ marginTop: "8px", fontSize: "13px", color: "#6b7280" }}>
-                            {projectedAdditionalMonths} more month{projectedAdditionalMonths === 1 ? "" : "s"} needed at this rate
-                            ({monthsAlreadyDeducted + projectedAdditionalMonths} month{(monthsAlreadyDeducted + projectedAdditionalMonths) === 1 ? "" : "s"} total).
+                    {amountValue > 0 && (
+                        <div style={{ marginTop: "8px", fontSize: "13px", color: willFullyClear ? "#166534" : "#6b7280" }}>
+                            {willFullyClear
+                                ? "This fully clears the remaining balance — the loan will be marked as completed."
+                                : `Balance after this payment: ${remainingAfter.toFixed(2)} AED.`}
                         </div>
                     )}
                 </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import "../../style/Payroll.css";
-import { downloadPayslipPdf, getPayslipBranding } from "./payslipPdf.js";
+import { downloadPayslipPdf, getPayslipBranding, formatPeriodLabel } from "./payslipPdf.js";
 
 export default function PayslipModal({ show, onClose, record, companies = [] }) {
     if (!record) return null;
@@ -10,7 +10,7 @@ export default function PayslipModal({ show, onClose, record, companies = [] }) 
     const { companyName, companyLogoSrc } = getPayslipBranding(record, companies);
     
     const monthName = record.month ? new Date(2000, record.month - 1).toLocaleString('default', { month: 'long' }) : '';
-    const periodStr = `${monthName} ${record.year}`;
+    const periodStr = formatPeriodLabel(record, monthName);
 
     // Calculate Totals visually modifying hidden advances
     const totalAllowances = record.totalAllowances || 0;

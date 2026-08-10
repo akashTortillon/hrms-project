@@ -59,6 +59,7 @@ import TransferEmployeeModal from "./TransferEmployeeModal.jsx";
 import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
 import AdjustLoanModal from "./AdjustLoanModal.jsx";
+import ExtraPaymentModal from "./ExtraPaymentModal.jsx";
 import AddAllowanceModal from "./AddAllowanceModal.jsx";
 import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
@@ -154,14 +155,13 @@ export default function EmployeeDetail() {
     const [showAdjustLoanModal, setShowAdjustLoanModal] = useState(false);
     const [selectedLoanForAdjust, setSelectedLoanForAdjust] = useState(null);
     const [savingLoanAdjust, setSavingLoanAdjust] = useState(false);
+    const [showExtraPaymentModal, setShowExtraPaymentModal] = useState(false);
+    const [selectedLoanForExtraPayment, setSelectedLoanForExtraPayment] = useState(null);
+    const [savingExtraPayment, setSavingExtraPayment] = useState(false);
 
     // Leave Summary State
     const [leaveSummary, setLeaveSummary] = useState([]);
     const [leaveSummaryTotals, setLeaveSummaryTotals] = useState({
-        sick: 0,
-        casual: 0,
-        annual: 0,
-        unpaid: 0,
         approvedDays: 0,
         pendingRequests: 0
     });
@@ -531,6 +531,27 @@ export default function EmployeeDetail() {
             toast.error(error.response?.data?.message || "Failed to save loan adjustment");
         } finally {
             setSavingLoanAdjust(false);
+        }
+    };
+
+    const handleOpenExtraPaymentModal = (loan) => {
+        setSelectedLoanForExtraPayment(loan);
+        setShowExtraPaymentModal(true);
+    };
+
+    const handleExtraPayment = async (requestId, payload) => {
+        try {
+            setSavingExtraPayment(true);
+            await updateRepaymentSchedule(requestId, payload);
+            toast.success("Extra payment recorded successfully");
+            setShowExtraPaymentModal(false);
+            setSelectedLoanForExtraPayment(null);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Extra payment failed", error);
+            toast.error(error.response?.data?.message || "Failed to record extra payment");
+        } finally {
+            setSavingExtraPayment(false);
         }
     };
 
@@ -1621,7 +1642,25 @@ export default function EmployeeDetail() {
                                                         cursor: 'pointer'
                                                     }}
                                                 >
-                                                    Adjust Loan
+                                                    Adjust EMI
+                                                </button>
+                                            )}
+                                            {(loan.details?.subType || loan.subType) === 'loan' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenExtraPaymentModal(loan)}
+                                                    style={{
+                                                        border: '1px solid #16a34a',
+                                                        background: '#f0fdf4',
+                                                        color: '#15803d',
+                                                        borderRadius: '8px',
+                                                        padding: '8px 12px',
+                                                        fontSize: '13px',
+                                                        fontWeight: '600',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    Record Extra Payment
                                                 </button>
                                             )}
                                         </div>
@@ -1630,7 +1669,8 @@ export default function EmployeeDetail() {
                                     {/* Progress Bar */}
                                     {(() => {
                                         const total = loan.details.totalRepaymentAmount || loan.details.amount;
-                                        const paid = (loan.payrollDeductions || []).reduce((acc, curr) => acc + curr.amount, 0);
+                                        const paid = (loan.payrollDeductions || []).reduce((acc, curr) => acc + curr.amount, 0)
+                                            + (loan.details?.extraPayments || []).reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
                                         const progress = Math.min((paid / total) * 100, 100);
 
                                         return (
@@ -1687,6 +1727,26 @@ export default function EmployeeDetail() {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Extra Payment History - written by the "Record Extra Payment" flow above */}
+                                    {loan.details?.extraPayments && loan.details.extraPayments.length > 0 && (
+                                        <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #e5e7eb' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px' }}>EXTRA PAYMENT HISTORY</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {loan.details.extraPayments.map((entry, idx) => (
+                                                    <div key={idx} style={{ fontSize: '13px', color: '#374151', padding: '8px 10px', background: '#f0fdf4', borderRadius: '6px' }}>
+                                                        <div>
+                                                            <strong style={{ color: '#15803d' }}>+{entry.amount} AED</strong>
+                                                            {' '}(balance after: {entry.remainingBalanceAfter} AED)
+                                                        </div>
+                                                        <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                            "{entry.reason}" — {entry.recordedByName || 'Unknown'}, {entry.recordedAt ? new Date(entry.recordedAt).toLocaleString() : ''}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                             {loans.length === 0 && (
@@ -1724,12 +1784,11 @@ export default function EmployeeDetail() {
                             </div>
                         </div>
 
+                        {/* Only the two type-agnostic aggregates here - the per-leave-type
+                            breakdown (any number of leave types, not just 4 hardcoded ones)
+                            is the dynamic grid below, which is the source of truth. */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '18px' }}>
                             {[
-                                ["Sick Leave", leaveSummaryTotals.sick, "#e0f2fe", "#0369a1"],
-                                ["Casual Leave", leaveSummaryTotals.casual, "#dcfce7", "#166534"],
-                                ["Annual Leave", leaveSummaryTotals.annual, "#fef3c7", "#92400e"],
-                                ["Unpaid Leave", leaveSummaryTotals.unpaid, "#fee2e2", "#991b1b"],
                                 ["Approved Days", leaveSummaryTotals.approvedDays, "#ede9fe", "#5b21b6"],
                                 ["Pending Requests", leaveSummaryTotals.pendingRequests, "#f1f5f9", "#334155"]
                             ].map(([label, value, bg, color]) => (
@@ -1847,6 +1906,19 @@ export default function EmployeeDetail() {
                     }}
                     onSubmit={handleAdjustLoan}
                     submitting={savingLoanAdjust}
+                />
+            )}
+
+            {showExtraPaymentModal && (
+                <ExtraPaymentModal
+                    show={showExtraPaymentModal}
+                    request={selectedLoanForExtraPayment}
+                    onClose={() => {
+                        setShowExtraPaymentModal(false);
+                        setSelectedLoanForExtraPayment(null);
+                    }}
+                    onSubmit={handleExtraPayment}
+                    submitting={savingExtraPayment}
                 />
             )}
 

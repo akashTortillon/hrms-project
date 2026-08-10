@@ -71,6 +71,24 @@ const loadImageAsPngDataUrl = async ({ src, apiPath }) => {
   }
 };
 
+// Payroll periods here are a rolling, force-contiguous window (see backend
+// generatePayroll) - not fixed calendar months - so periodStart can land in an
+// earlier month than periodEnd (or several, after a skipped-cycle catch-up run).
+// Showing only "{monthName} {year}" in that case makes attendanceSummary.totalDays
+// look wrong/impossible next to a label implying a single ~30-day month (e.g. 67
+// days shown under "August 2026"). Fall back to the true date range whenever the
+// period doesn't fall entirely within one calendar month.
+export const formatPeriodLabel = (record, monthName) => {
+  const { periodStart, periodEnd, year } = record || {};
+  if (!periodStart || !periodEnd) return `${monthName} ${year}`;
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+  const sameMonth = start.getUTCFullYear() === end.getUTCFullYear() && start.getUTCMonth() === end.getUTCMonth();
+  if (sameMonth) return `${monthName} ${year}`;
+  const fmt = (d) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  return `${fmt(start)} – ${fmt(end)}`;
+};
+
 export const getPayslipBranding = (record, companies = []) => {
   const companyName = record?.employee?.company || "LEPTIS HYPERMARKET LLC";
   const dynamicCompany = companies.find((company) => company.name === companyName);
@@ -90,7 +108,7 @@ export const downloadPayslipPdf = async (record, companies = []) => {
   const monthName = record.month
     ? new Date(2000, record.month - 1).toLocaleString("default", { month: "long" })
     : "";
-  const periodStr = `${monthName} ${record.year}`;
+  const periodStr = formatPeriodLabel(record, monthName);
   const totalAllowances = record.totalAllowances || 0;
 
   let displayDeductions = [];
@@ -178,6 +196,22 @@ export const downloadPayslipPdf = async (record, companies = []) => {
     ["DEPARTMENT", employee?.department || "N/A"],
   ];
 
+  // This box is a fixed-height (68pt) single-line row, and jsPDF's doc.text() never
+  // wraps or truncates on its own - a long value (e.g. "MOHAMMED SHAFI") just draws
+  // straight through the fixed column width into the next column's text, overlapping
+  // it (seen with Employee Name running into Employee ID). Wrapping to 2 lines isn't
+  // an option here (the box has no room for it), so truncate with an ellipsis to
+  // whatever actually fits in this column instead.
+  const columnWidth = (infoBoxW - 32) / 4 - 10; // -10 leaves a small gutter before the next column
+  const truncateToWidth = (text, maxWidth) => {
+    if (doc.getTextWidth(text) <= maxWidth) return text;
+    let truncated = text;
+    while (truncated.length > 1 && doc.getTextWidth(`${truncated}…`) > maxWidth) {
+      truncated = truncated.slice(0, -1);
+    }
+    return `${truncated}…`;
+  };
+
   identityItems.forEach(([label, value], index) => {
     const colX = infoBoxX + 16 + index * ((infoBoxW - 32) / 4);
     doc.setTextColor(100, 116, 139);
@@ -187,7 +221,7 @@ export const downloadPayslipPdf = async (record, companies = []) => {
     doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
-    doc.text(String(value), colX, infoBoxY + 48);
+    doc.text(truncateToWidth(String(value), columnWidth), colX, infoBoxY + 48);
   });
 
   doc.setTextColor(30, 41, 59);

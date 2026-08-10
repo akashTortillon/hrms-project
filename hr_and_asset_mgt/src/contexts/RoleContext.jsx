@@ -90,8 +90,30 @@ export const RoleProvider = ({ children }) => {
 
     fetchCurrentUser();
 
+    // RoleProvider mounts once per app load, so without this, a permission change
+    // an admin makes in Masters (e.g. granting MANAGE_PAYROLL) never reaches an
+    // already-open tab — the user appears "still blocked" until they hard-refresh
+    // or log out/in, even though the backend already resolves the new permission
+    // correctly on every request. Refetch whenever the tab regains focus/visibility
+    // so a granted permission takes effect without requiring a manual reload.
+    //
+    // "focus" firing at all already means this tab is the one being looked at, so it
+    // doesn't need a visibilityState check (tested: visibilityState can report "hidden"
+    // in some embedded/automated browser contexts even while focus is genuine - gating
+    // on it there made the refresh silently never fire). visibilitychange is the one
+    // that needs the check, since it also fires on the way OUT (tab backgrounded),
+    // and refetching then would just be a wasted request.
+    const handleFocus = () => fetchCurrentUser();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") fetchCurrentUser();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
