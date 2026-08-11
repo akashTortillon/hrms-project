@@ -3,6 +3,7 @@ import { roleService, employeeTypeService, getDesignations, shiftService, getBra
 import { getEmployees } from "../../services/employeeService";
 import { COUNTRY_CODES, splitPhone } from "../../constants/countryCodes.js";
 import { useRole } from "../../contexts/RoleContext";
+import SearchableSelect from "../../components/reusable/SearchableSelect.jsx";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -452,42 +453,28 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 {showManagerFields && (
                 <div className="form-group">
                   <label>Designated Manager</label>
-                  <select
+                  <SearchableSelect
                     name="designatedManager"
                     value={form.designatedManager || ''}
                     onChange={handleChange}
-                    style={{
-                      width: "100%",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      border: "1px solid #d1d5db",
-                      backgroundColor: "white",
-                      fontSize: "14px",
-                      height: "42px"
-                    }}
-                  >
-                    <option value="">Select Manager</option>
-                    {managers.map(manager => (
-                      <option key={manager._id} value={manager._id}>{manager.name}</option>
-                    ))}
-                  </select>
+                    emptyLabel="Select Manager"
+                    placeholder="Search managers..."
+                    options={managers.map(manager => ({ value: manager._id, label: manager.name }))}
+                  />
                 </div>
                 )}
 
                 {showManagerFields && (
                 <div className="form-group">
                   <label>Finance Manager</label>
-                  <select
+                  <SearchableSelect
                     name="designatedFinanceManager"
                     value={form.designatedFinanceManager || ''}
                     onChange={handleChange}
-                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
-                  >
-                    <option value="">Select Finance Manager</option>
-                    {managers.map(manager => (
-                      <option key={`finance-basic-${manager._id}`} value={manager._id}>{manager.name}</option>
-                    ))}
-                  </select>
+                    emptyLabel="Select Finance Manager"
+                    placeholder="Search managers..."
+                    options={managers.map(manager => ({ value: manager._id, label: manager.name }))}
+                  />
                 </div>
                 )}
               </>
@@ -912,34 +899,28 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 {showManagerFields && (
                 <div className="form-group">
                   <label>Designated Manager</label>
-                  <select
+                  <SearchableSelect
                     name="designatedManager"
                     value={form.designatedManager || ''}
                     onChange={handleChange}
-                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
-                  >
-                    <option value="">Select Manager</option>
-                    {managers.map(manager => (
-                      <option key={manager._id} value={manager._id}>{manager.name}</option>
-                    ))}
-                  </select>
+                    emptyLabel="Select Manager"
+                    placeholder="Search managers..."
+                    options={managers.map(manager => ({ value: manager._id, label: manager.name }))}
+                  />
                 </div>
                 )}
 
                 {showManagerFields && (
                 <div className="form-group">
                   <label>Finance Manager</label>
-                  <select
+                  <SearchableSelect
                     name="designatedFinanceManager"
                     value={form.designatedFinanceManager || ''}
                     onChange={handleChange}
-                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", backgroundColor: "white", fontSize: "14px", height: "42px" }}
-                  >
-                    <option value="">Select Finance Manager</option>
-                    {managers.map(manager => (
-                      <option key={`finance-employment-${manager._id}`} value={manager._id}>{manager.name}</option>
-                    ))}
-                  </select>
+                    emptyLabel="Select Finance Manager"
+                    placeholder="Search managers..."
+                    options={managers.map(manager => ({ value: manager._id, label: manager.name }))}
+                  />
                 </div>
                 )}
 
