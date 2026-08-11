@@ -127,10 +127,16 @@ function Attendance() {
     setLoading(true);
     try {
       // ✅ Pass pagination and filters
+      // Self scope filters client-side over whatever page is loaded - with the
+      // normal page size, a manager's own row can sit past page 1 for teams
+      // bigger than `limit` and never get fetched, so "Self" would render an
+      // empty table even though the record exists. Pull the whole scoped team
+      // in one page when Self is active so the client-side filter always has
+      // the manager's own row available regardless of team size.
       const response = await getDailyAttendance({
         date: selectedDate,
-        page,
-        limit,
+        page: selfOnly ? 1 : page,
+        limit: selfOnly ? 1000 : limit,
         status: selectedStatus,
         search: searchQuery,
         department: selectedDepartment,
@@ -298,6 +304,36 @@ function Attendance() {
     }
   };
 
+  // ✅ Remove Client-Side Filter for Daily View, but Keep for Monthly
+  const baseRecords = viewMode === "day" ? attendanceRecords : monthlyRecords.filter(record => {
+    const deptMatch = !selectedDepartment || record.department === selectedDepartment;
+    const shiftMatch = !selectedShift || record.shift === selectedShift;
+    const branchMatch = !selectedBranch || record.branch === selectedBranch;
+    return deptMatch && shiftMatch && branchMatch;
+  });
+
+  // "Self" scope - daily rows key off `employeeId`, monthly rows key off `_id`
+  // (attendanceController.js's two endpoints shape rows differently) - check both.
+  const visibleRecords = baseRecords.filter(record => {
+    if (!selfOnly || !currentUser?.employeeId) return true;
+    const recordEmployeeId = record.employeeId || record._id;
+    return String(recordEmployeeId) === String(currentUser.employeeId);
+  });
+
+  // The backend summary/pagination reflect the manager's whole scoped team,
+  // not the client-side Self filter above - re-tally from what's actually on
+  // screen so the stat cards and record count never contradict the table.
+  const displayStats = (selfOnly && viewMode === "day")
+    ? visibleRecords.reduce((acc, r) => {
+        acc.total++;
+        if (r.status === "Present") acc.present++;
+        else if (r.status === "Late") acc.late++;
+        else if (r.status === "Absent") acc.absent++;
+        else if (r.status === "On Leave") acc.leave++;
+        return acc;
+      }, { present: 0, late: 0, absent: 0, leave: 0, total: 0 })
+    : stats;
+
   return (
     <div>
       <AttendanceHeader
@@ -310,7 +346,7 @@ function Attendance() {
         selfOnly={selfOnly}
         setSelfOnly={(v) => updateParams({ scope: v ? "self" : "" })}
       />
-      <AttendanceStats stats={stats} />
+      <AttendanceStats stats={displayStats} />
 
       <AttendanceFilters
         viewMode={viewMode}
@@ -343,19 +379,7 @@ function Attendance() {
 
       <AttendanceTable
         date={selectedDate}
-        // ✅ Remove Client-Side Filter for Daily View, but Keep for Monthly
-        records={(viewMode === "day" ? attendanceRecords : monthlyRecords.filter(record => {
-          const deptMatch = !selectedDepartment || record.department === selectedDepartment;
-          const shiftMatch = !selectedShift || record.shift === selectedShift;
-          const branchMatch = !selectedBranch || record.branch === selectedBranch;
-          return deptMatch && shiftMatch && branchMatch;
-        })).filter(record => {
-          // "Self" scope - daily rows key off `employeeId`, monthly rows key off `_id`
-          // (attendanceController.js's two endpoints shape rows differently) - check both.
-          if (!selfOnly || !currentUser?.employeeId) return true;
-          const recordEmployeeId = record.employeeId || record._id;
-          return String(recordEmployeeId) === String(currentUser.employeeId);
-        })}
+        records={visibleRecords}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
         onEdit={hasPermission("MANAGE_ATTENDANCE") ? openAttendanceModal : null}
@@ -364,8 +388,8 @@ function Attendance() {
         month={selectedMonth}
       />
 
-      {/* ✅ Pagination Controls (Only for Daily View) */}
-      {viewMode === "day" && (
+      {/* ✅ Pagination Controls (Only for Daily View, not while Self-filtered) */}
+      {viewMode === "day" && !selfOnly && (
         <Pagination
           currentPage={page}
           totalPages={paginationInfo.totalPages}

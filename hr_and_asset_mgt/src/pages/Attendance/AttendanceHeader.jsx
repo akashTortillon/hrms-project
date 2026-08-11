@@ -29,9 +29,9 @@ export default function AttendanceHeader({ viewMode, setViewMode, onSync, loadin
 
           {setSelfOnly && (
             <button
-              className={`attendance-tab ${selfOnly ? "active" : ""}`}
+              className={`attendance-tab self-tab ${selfOnly ? "active" : ""}`}
               onClick={() => setSelfOnly(!selfOnly)}
-              title="Show only my own attendance"
+              title="Filter to only my own attendance"
             >
               Self
             </button>
