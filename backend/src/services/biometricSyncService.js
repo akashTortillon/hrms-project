@@ -158,7 +158,17 @@ class BiometricSyncService {
       // `transactionId` index is expected and treated as "already synced" rather than a
       // fatal error that aborts the whole sync with a 500.
       for (const txn of transactions) {
-        if (!txn.SLNO || !txn.authDateTime) continue;
+        if (!txn.SLNO || !txn.authDateTime) {
+          // Silent before this - a malformed record from the API (missing SLNO or
+          // authDateTime) vanished with zero trace: not stored, not errored, not even
+          // counted anywhere queryable. Confirmed happening at least once (SLNO 49328,
+          // 2026-08-11) via a fetched/stored count mismatch in SyncHistory with no
+          // other explanation - only found by manually diffing raw punches against
+          // what actually landed in the DB. Logging it here means the next occurrence
+          // shows up immediately instead of requiring that same forensic dig.
+          console.warn(`[BiometricSyncService] Skipping malformed record from Attendance API - missing SLNO or authDateTime: ${JSON.stringify(txn)}`);
+          continue;
+        }
 
         // Track highest ID and cursor timestamp
         if (txn.SLNO > highestTransactionId) {
