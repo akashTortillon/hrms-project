@@ -1,5 +1,6 @@
 import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
+import BiometricTransaction from "../models/biometricTransactionModel.js";
 import badgeNumberCache from "./badgeNumberCache.js";
 import {
   getShiftRules,
@@ -64,7 +65,12 @@ class AttendanceProcessor {
       return shiftRulesCache.get(shiftName);
     };
 
-    // 2. Group transactions by Employee Code (Badge Number) + shift day
+    // 2. Determine which employee+shift-day buckets this batch touches. Only the *set*
+    //    of buckets is needed here - actual checkIn/checkOut values are re-derived fresh
+    //    from the full raw transaction log in step 3 (see _recomputeShiftDay), not
+    //    tracked from this batch alone, so a partial batch can never overwrite an
+    //    already-correct value with a worse one (see step 3's comment for why that
+    //    used to happen).
     const grouped = {};
 
     for (const txn of transactions) {
@@ -94,30 +100,8 @@ class AttendanceProcessor {
         grouped[key] = {
           badgeNumber: code,
           employeeName: txn.rawData?.personName || null, // Capture name from Attendance API
-          date: shiftDate,
-          checkIn: null,
-          checkInAt: null,  // actual instant behind checkIn, for cross-midnight comparison
-          checkOut: null,
-          checkOutAt: null  // actual instant behind checkOut, for cross-midnight comparison
+          date: shiftDate
         };
-      }
-
-      // An overnight shift-day bucket can hold punches from two different calendar
-      // dates (an evening OUT and an early-morning-next-day OUT), so "latest"/"earliest"
-      // must compare true chronological instants, not the derived HH:MM strings -
-      // "22:00" > "01:00" as strings even though 01:00 the next day is later in reality.
-      const txnAt = new Date(txn.timestamp).getTime();
-      const g = grouped[key];
-      if (txn.transactionType === "IN") {
-        if (g.checkInAt === null || txnAt < g.checkInAt) {
-          g.checkIn = timeStr;
-          g.checkInAt = txnAt;
-        }
-      } else if (txn.transactionType === "OUT") {
-        if (g.checkOutAt === null || txnAt > g.checkOutAt) {
-          g.checkOut = timeStr;
-          g.checkOutAt = txnAt;
-        }
       }
     }
 
@@ -163,50 +147,35 @@ class AttendanceProcessor {
       const shiftName = employee.shift || "Day Shift";
       const rules = await getRulesCached(shiftName);
 
-      // Check if updating is needed
+      // Re-derive checkIn/checkOut fresh from EVERY raw punch for this employee+shift-day
+      // instead of merging this batch's partial view with whatever was saved before. A
+      // sync run only fetches transactions since its last cursor, so an employee's
+      // earlier punches for the same shift-day are typically NOT in this batch - the old
+      // "this batch's value wins if present, else fall back to the saved value" logic
+      // trusted PRESENCE, not CHRONOLOGY, so a later isolated punch (e.g. a third IN
+      // arriving in its own batch) could silently overwrite an already-correct earlier
+      // check-in. BiometricTransaction is the actual source of truth; re-deriving from
+      // it every time sidesteps the whole "reconcile partial batches" problem.
+      const { checkIn, checkOut } = await this._recomputeShiftDay(record.badgeNumber, record.date, rules);
+
+      let status = "Absent";
+      let lateTier = 0;
+      if (checkIn) {
+        lateTier = calculateLateTier(checkIn, rules);
+        status = lateTier > 0 ? "Late" : "Present";
+        // A checked-in employee with no checkout on a day that's already over never
+        // came back to badge out - flag it instead of quietly calling it Present/Late.
+        if (!checkOut && record.date < getUaeTodayDateStr()) {
+          status = "Incomplete";
+        }
+      } else if (checkOut && record.date < getUaeTodayDateStr()) {
+        // Checkout with no check-in ever recorded (missed/failed IN punch, or a
+        // mis-synced OUT-only device event) - clearly not Absent.
+        status = "Incomplete";
+      }
+      const workHours = calculateDuration(checkIn, checkOut);
+
       if (existingRecord) {
-        // A sync run only fetches transactions since its last cursor, so an employee's
-        // check-in and check-out for the same day routinely land in TWO SEPARATE calls
-        // to this function (checked in mid-morning, synced; checked out in the evening,
-        // synced later). `record` here only reflects whichever side THIS batch happened
-        // to contain - falling back to the existing saved value for whichever side is
-        // null in this batch prevents a checkout-only sync from wiping out an
-        // already-recorded check-in (and vice versa), which previously flipped a
-        // present/late day to "Absent" the moment the checkout synced.
-        const mergedCheckIn = record.checkIn ?? existingRecord.checkIn;
-        const mergedCheckOut = record.checkOut ?? existingRecord.checkOut;
-
-        let mergedStatus = "Absent";
-        let mergedLateTier = 0;
-        if (mergedCheckIn) {
-          mergedLateTier = calculateLateTier(mergedCheckIn, rules);
-          mergedStatus = mergedLateTier > 0 ? "Late" : "Present";
-          // A checked-in employee with no checkout on a day that's already over never
-          // came back to badge out - flag it instead of quietly calling it Present/Late.
-          if (!mergedCheckOut && record.date < getUaeTodayDateStr()) {
-            mergedStatus = "Incomplete";
-          }
-        } else if (mergedCheckOut && record.date < getUaeTodayDateStr()) {
-          // Mirror image of the above: a checkout with no matching check-in ever
-          // recorded (missed/failed IN punch, or a mis-synced OUT-only device event).
-          // Previously fell through to the "Absent" default, which is wrong - the
-          // employee clearly was here. Flag it the same way as the check-in-only case.
-          mergedStatus = "Incomplete";
-        }
-        const mergedWorkHours = calculateDuration(mergedCheckIn, mergedCheckOut);
-
-        // If times are already identical, skip to prevent unnecessary writes/triggers
-        if (
-          existingRecord.checkIn === mergedCheckIn &&
-          existingRecord.checkOut === mergedCheckOut &&
-          existingRecord.status === mergedStatus &&
-          existingRecord.lateTier === mergedLateTier &&
-          existingRecord.workHours === mergedWorkHours
-        ) {
-          stats.skipped++;
-          continue;
-        }
-
         // If manually edited, preserve manual edit details
         if (existingRecord.isManuallyEdited) {
           console.log(`[AttendanceProcessor SKIP] ${record.badgeNumber} on ${record.date} was manually edited. Skipping.`);
@@ -214,41 +183,33 @@ class AttendanceProcessor {
           continue;
         }
 
-        // Update existing record
-        existingRecord.checkIn = mergedCheckIn;
-        existingRecord.checkOut = mergedCheckOut;
-        existingRecord.status = mergedStatus;
-        existingRecord.lateTier = mergedLateTier;
-        existingRecord.workHours = mergedWorkHours;
+        // If values are already identical, skip to prevent unnecessary writes/triggers
+        if (
+          existingRecord.checkIn === checkIn &&
+          existingRecord.checkOut === checkOut &&
+          existingRecord.status === status &&
+          existingRecord.lateTier === lateTier &&
+          existingRecord.workHours === workHours
+        ) {
+          stats.skipped++;
+          continue;
+        }
+
+        existingRecord.checkIn = checkIn;
+        existingRecord.checkOut = checkOut;
+        existingRecord.status = status;
+        existingRecord.lateTier = lateTier;
+        existingRecord.workHours = workHours;
         existingRecord.shift = shiftName;
         await existingRecord.save();
         stats.updated++;
       } else {
-        // First transaction seen for this employee+date - no existing record to merge
-        // against, so record.checkIn/checkOut (whichever this batch has) is authoritative.
-        let status = "Absent";
-        let lateTier = 0;
-        if (record.checkIn) {
-          lateTier = calculateLateTier(record.checkIn, rules);
-          status = lateTier > 0 ? "Late" : "Present";
-          if (!record.checkOut && record.date < getUaeTodayDateStr()) {
-            status = "Incomplete";
-          }
-        } else if (record.checkOut && record.date < getUaeTodayDateStr()) {
-          // Checkout with no check-in ever recorded - same "clearly not Absent" case
-          // as the merge-branch above, just for the first transaction seen for this
-          // employee+date (no existing record to merge against yet).
-          status = "Incomplete";
-        }
-        const workHours = calculateDuration(record.checkIn, record.checkOut);
-
-        // Create new record
         await Attendance.create({
           employee: employee._id,
           date: record.date,
           shift: shiftName,
-          checkIn: record.checkIn,
-          checkOut: record.checkOut,
+          checkIn,
+          checkOut,
           status,
           lateTier,
           workHours
@@ -263,6 +224,43 @@ class AttendanceProcessor {
       skipped: stats.skipped,
       unmappedBadges: Array.from(stats.unmappedBadges)
     };
+  }
+
+  /**
+   * Re-derives checkIn/checkOut for one employee+shift-day directly from every raw
+   * BiometricTransaction on file, instead of merging partial sync-batch views (see the
+   * comment in processTransactions() for why that was unsafe). The query window is
+   * generous - 24h before the shift-day's calendar start through 48h after - so it
+   * safely covers an overnight shift's tail into the next calendar date without needing
+   * to know in advance which raw punches belong to this bucket; computeShiftDayBucket
+   * then filters to exactly the ones that do.
+   */
+  async _recomputeShiftDay(badgeCode, shiftDate, rules) {
+    const dayStart = new Date(`${shiftDate}T00:00:00Z`);
+    const from = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
+    const to = new Date(dayStart.getTime() + 48 * 60 * 60 * 1000);
+
+    const txns = await BiometricTransaction.find({
+      badgeNumber: badgeCode,
+      timestamp: { $gte: from, $lte: to }
+    }).sort({ timestamp: 1 }).lean();
+
+    let checkIn = null;
+    let checkOut = null;
+    for (const txn of txns) {
+      const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
+      const dateStr = uaeTime.toISOString().split("T")[0];
+      const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5);
+      const bucket = computeShiftDayBucket(dateStr, timeStr, txn.transactionType, rules);
+      if (bucket !== shiftDate) continue;
+
+      if (txn.transactionType === "IN") {
+        if (!checkIn) checkIn = timeStr; // txns sorted ascending - first IN is earliest
+      } else if (txn.transactionType === "OUT") {
+        checkOut = timeStr; // every OUT overwrites - last one wins as latest
+      }
+    }
+    return { checkIn, checkOut };
   }
 }
 
