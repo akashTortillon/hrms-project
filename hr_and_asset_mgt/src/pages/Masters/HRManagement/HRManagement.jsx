@@ -616,6 +616,50 @@ export default function HRManagement() {
                         <p className="text-xs text-gray-500">
                             Yearly types (e.g. Casual/Sick Leave) credit every Jan 1. Home Leave / Annual types credit once per year, on each employee's own joining-date anniversary. Both run via the nightly accrual job. Per-employee overrides can be set from the employee's Leave Wallet screen.
                         </p>
+
+                        {leaveTypeState.name.trim().toLowerCase().includes("sick") && (
+                            <div className="form-group">
+                                <label className="modal-form-label">Sick Leave Pay Tiers (cumulative per calendar year)</label>
+                                <p className="tier-editor-hint">
+                                    Days are counted cumulatively across all of an employee's approved Sick Leave requests within the same calendar year — not reset per request.
+                                </p>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Fully Paid up to (days)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="modal-form-input"
+                                            value={leaveTypeState.paidThresholdDays}
+                                            onChange={(e) => setLeaveTypeState({ ...leaveTypeState, paidThresholdDays: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Half Paid up to (days)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="modal-form-input"
+                                            value={leaveTypeState.halfPaidThresholdDays}
+                                            onChange={(e) => setLeaveTypeState({ ...leaveTypeState, halfPaidThresholdDays: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Medical Doc Required After (days)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="modal-form-input"
+                                            value={leaveTypeState.medicalDocRequiredAfterDays}
+                                            onChange={(e) => setLeaveTypeState({ ...leaveTypeState, medicalDocRequiredAfterDays: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-500" style={{ marginTop: '6px' }}>
+                                    Beyond the half-paid threshold, remaining days are unpaid — no further cutoff. A sick leave longer than the "Medical Doc Required After" threshold will be rejected at submission unless a medical document is attached.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 ) : modalType === "Workflow Template" ? (
                     <div className="space-y-4">

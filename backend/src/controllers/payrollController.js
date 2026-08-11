@@ -15,6 +15,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { holidaySetFromHolidays, isWeekOff, applyMonthlyFlexQuota } from "../utils/attendanceUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -169,7 +170,7 @@ const isEmployeeOnProbation = (employee, dateStr) => {
     return checkDate <= new Date(employee.probationEndDate);
 };
 
-const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}) => {
+const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}, sickLeaveConfig = {}) => {
     if (!leaveInfo) return null;
 
     if (isEmployeeOnProbation(employee, dateStr)) {
@@ -181,15 +182,27 @@ const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}) =>
     const currentDate = new Date(dateStr);
 
     if (normalizedType.includes("sick")) {
-        const dayIndex = Math.floor((currentDate - new Date(leaveInfo.start)) / (1000 * 60 * 60 * 24)) + 1;
-        const totalDays = Number(leaveInfo.numberOfDays || dayIndex || 1);
+        // Configurable via the Sick Leave master's metadata (Masters > HR Management >
+        // Leave Types), falling back to the previously-hardcoded values if unset.
+        const paidThresholdDays = Number(sickLeaveConfig.paidThresholdDays) || 15;
+        const halfPaidThresholdDays = Number(sickLeaveConfig.halfPaidThresholdDays) || 45;
+        const medicalDocRequiredAfterDays = Number(sickLeaveConfig.medicalDocRequiredAfterDays);
+        const docThreshold = Number.isFinite(medicalDocRequiredAfterDays) ? medicalDocRequiredAfterDays : 1;
 
-        if (!leaveInfo.hasMedicalDocument && totalDays > 1 && dayIndex >= 2) {
+        // `rawDayIndex` is this day's position within THIS leave request. `dayIndex` adds
+        // in every sick day already used earlier in the same calendar year (see
+        // getApprovedLeavesMap's priorSickDaysThisYear) so the pay tiers are cumulative
+        // per year, not reset every time a new sick leave is submitted.
+        const rawDayIndex = Math.floor((currentDate - new Date(leaveInfo.start)) / (1000 * 60 * 60 * 24)) + 1;
+        const dayIndex = (leaveInfo.priorSickDaysThisYear || 0) + rawDayIndex;
+        const totalDays = Number(leaveInfo.numberOfDays || rawDayIndex || 1);
+
+        if (!leaveInfo.hasMedicalDocument && totalDays > docThreshold && rawDayIndex > docThreshold) {
             return "UNPAID_LEAVE";
         }
 
-        if (dayIndex <= 15) return "PAID_LEAVE";
-        if (dayIndex <= 45) return "HALF_PAID_LEAVE";
+        if (dayIndex <= paidThresholdDays) return "PAID_LEAVE";
+        if (dayIndex <= halfPaidThresholdDays) return "HALF_PAID_LEAVE";
         return "UNPAID_LEAVE";
     }
 
@@ -256,6 +269,23 @@ const getApprovedLeavesMap = async (employees) => {
             }
         }
     });
+
+    // Sick leave pay tiers are cumulative per calendar year (not reset per request) -
+    // for each employee's sick-leave ranges, stamp how many sick days they'd already
+    // used earlier in that same calendar year, so resolveLeaveDayStatus can offset its
+    // day-index instead of starting fresh at day 1 for every separate request.
+    Object.values(map).forEach(ranges => {
+        const sickRanges = ranges
+            .filter(r => String(r.leaveType || "").toLowerCase().includes("sick"))
+            .sort((a, b) => a.start - b.start);
+        const usedByYear = {};
+        sickRanges.forEach(r => {
+            const year = r.start.getFullYear();
+            r.priorSickDaysThisYear = usedByYear[year] || 0;
+            usedByYear[year] = (usedByYear[year] || 0) + Number(r.numberOfDays || 1);
+        });
+    });
+
     return map;
 };
 
@@ -284,7 +314,7 @@ const parseHours = (timeStr) => {
 };
 
 // --- HELPER: Calculate Attendance Stats ---
-const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}) => {
+const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSettings = null, shiftMap = {}, debugInfo = null, leaveMap = {}, leaveRules = {}, sickLeaveConfig = {}) => {
     const employeeId = employee._id;
     // 1. Setup Date Range — periodStart/periodEnd are the actual pay-period
     // boundaries (rolling window, not necessarily a calendar month).
@@ -306,18 +336,8 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
     logs.forEach(l => logMap[l.date] = l);
 
     const settings = preFetchedSettings || await SystemSettings.findOne();
-    const holidaySet = new Set();
-    if (settings && settings.holidays) {
-        settings.holidays.forEach(h => {
-            if (h.date) {
-                const d = new Date(h.date);
-                const yyyy = d.getFullYear();
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                holidaySet.add(`${yyyy}-${mm}-${dd}`);
-            }
-        });
-    }
+    const holidaySet = holidaySetFromHolidays(settings?.holidays || []);
+    const workingDayDefault = { workingDayType: settings?.defaultWorkingDayType, weekOffDays: settings?.defaultWeekOffDays };
 
     // --- PHASE 1: BUILD DAY-BY-DAY STATUS ARRAY ---
     const dayStatuses = []; // Index 0 = first day of period
@@ -335,7 +355,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         const day = i + 1;
         const dateObj = addDays(rangeStart, i);
         const dateStr = formatYMD(dateObj);
-        const dayOfWeek = dateObj.getDay(); // 0 = Sun
+        const isEmployeeWeekOff = isWeekOff(dateObj, employee, workingDayDefault);
 
         let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, HALF_PAID_LEAVE, UNPAID_LEAVE
         let isLate = false;
@@ -364,7 +384,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
             } else if (recStatus === 'On Leave') {
                 const mappedLeaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
                 if (mappedLeaveInfo) {
-                    status = resolveLeaveDayStatus(employee, mappedLeaveInfo, dateStr, leaveRules);
+                    status = resolveLeaveDayStatus(employee, mappedLeaveInfo, dateStr, leaveRules, sickLeaveConfig);
                 } else if (record.leavePayStatus === "HALF_PAID") status = 'HALF_PAID_LEAVE';
                 else if (record.isPaid === false || record.leavePayStatus === "UNPAID") status = 'UNPAID_LEAVE';
                 else status = 'PAID_LEAVE';
@@ -377,14 +397,15 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         if (status === 'UNKNOWN' || status === 'ABSENT') {
             const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
             if (leaveInfo) {
-                status = resolveLeaveDayStatus(employee, leaveInfo, dateStr, leaveRules);
+                status = resolveLeaveDayStatus(employee, leaveInfo, dateStr, leaveRules, sickLeaveConfig);
             }
         }
 
-        // C. Fallbacks (Weekend/Holiday/Absent)
+        // C. Fallbacks (Holiday/Weekend/Absent) — Holiday takes precedence over Weekend
+        // so a company holiday landing on someone's off-day still reads as "Holiday".
         if (status === 'UNKNOWN') {
-            if (dayOfWeek === 0) status = 'WEEKEND'; // Sunday
-            else if (holidaySet.has(dateStr)) status = 'HOLIDAY';
+            if (holidaySet.has(dateStr)) status = 'HOLIDAY';
+            else if (isEmployeeWeekOff) status = 'WEEKEND';
             else status = 'ABSENT';
         }
 
@@ -410,7 +431,6 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         const m = String(dObj.getMonth() + 1).padStart(2, '0');
         const d = String(dObj.getDate()).padStart(2, '0');
         const dStr = `${y}-${m}-${d}`;
-        const dayOfWeek = dObj.getDay();
 
         // 1. Check Log
         if (logMap[dStr]) {
@@ -419,7 +439,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
             if (r.status === 'On Leave') {
                 const mappedLeaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
                 if (mappedLeaveInfo) {
-                    return resolveLeaveDayStatus(employee, mappedLeaveInfo, dStr, leaveRules);
+                    return resolveLeaveDayStatus(employee, mappedLeaveInfo, dStr, leaveRules, sickLeaveConfig);
                 }
                 if (r.leavePayStatus === "HALF_PAID") return 'HALF_PAID_LEAVE';
                 return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
@@ -435,22 +455,15 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         // So safe to assume we have it.
         const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
         if (leaveInfo) {
-            return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules);
+            return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules, sickLeaveConfig);
         }
 
-        // 3. Fallback
-        if (dayOfWeek === 0) return 'WEEKEND';
-        // Need to check settings.holidays for this specific date
-        // 'holidaySet' only has current month? 
-        // We should check 'settings.holidays' raw array if available
-        if (settings && settings.holidays) {
-            const isHol = settings.holidays.some(h => {
-                if (!h.date) return false;
-                const hd = new Date(h.date);
-                return hd.getFullYear() === y && hd.getMonth() === dObj.getMonth() && hd.getDate() === dObj.getDate();
-            });
-            if (isHol) return 'HOLIDAY';
-        }
+        // 3. Fallback — Holiday takes precedence over Weekend (same reasoning as the
+        // main loop above). Reuses the same `holidaySet` built once per getAttendanceStats
+        // call instead of re-scanning `settings.holidays` a third time — `dStr` here is
+        // computed with local getters same as `formatYMD` produces, so the keys line up.
+        if (holidaySet.has(dStr)) return 'HOLIDAY';
+        if (isWeekOff(dObj, employee, workingDayDefault)) return 'WEEKEND';
 
         return 'ABSENT'; // Default fallback if no logs/rules
     };
@@ -524,6 +537,16 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         }
     }
 
+    // Working Day Type 2 = a flexible monthly allowance (any 2 days, no fixed
+    // weekday, no leave request needed) rather than a structural per-day weekend -
+    // isWeekOff() above deliberately never marks a day off for this type, so any
+    // day that has no record and isn't leave/holiday still resolved to plain ABSENT
+    // in the loop. Convert the employee's first `quotaDays` such days per period
+    // into FLEX_OFF (paid, not deducted) now, before Phase 3 tallies them.
+    if (employee.workingDayType === 2) {
+        applyMonthlyFlexQuota(dayStatuses, 2);
+    }
+
     // --- PHASE 3: CALCULATE METRICS ---
     let paidDays = 0;
     let lopDays = 0;
@@ -557,6 +580,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
                 break;
             case 'WEEKEND':
             case 'HOLIDAY':
+            case 'FLEX_OFF':
                 paidDays++;
                 console.log(`[DEBUG] Day ${d.day} is ${d.status} (+Paid)`);
                 break;
@@ -802,6 +826,16 @@ export const generatePayroll = async (req, res) => {
             }
         });
 
+        // Sick Leave pay tiers, configurable via Masters > HR Management > Leave Types
+        // (see resolveLeaveDayStatus) - falls back to the historical hardcoded values
+        // if the Sick Leave master hasn't been configured with these fields yet.
+        const sickLeaveMaster = masterLeaveTypes.find(t => String(t.name || "").toLowerCase().includes("sick"));
+        const sickLeaveConfig = {
+            paidThresholdDays: sickLeaveMaster?.metadata?.paidThresholdDays,
+            halfPaidThresholdDays: sickLeaveMaster?.metadata?.halfPaidThresholdDays,
+            medicalDocRequiredAfterDays: sickLeaveMaster?.metadata?.medicalDocRequiredAfterDays
+        };
+
         // ✅ NEW: Fetch Approved Leave Map
         const approvedLeaveMap = await getApprovedLeavesMap(employees);
 
@@ -832,7 +866,8 @@ export const generatePayroll = async (req, res) => {
                 settings, shiftMap,
                 { code: emp.code },
                 approvedLeaveMap,
-                leaveRulesMap
+                leaveRulesMap,
+                sickLeaveConfig
             );
 
             if (stats.halfPaidLeaves > 0) {
@@ -2112,14 +2147,27 @@ export const downloadPayslip = async (req, res) => {
             }
         }
 
-        const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year } = payroll;
+        const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year, periodStart, periodEnd } = payroll;
         const companyName = employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
         const companyMaster = companyName
             ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
             : null;
         const companyLogoPath = resolveCompanyLogoPath(companyMaster?.image || process.env.COMPANY_LOGO);
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-        const periodStr = `${monthName} ${year}`;
+        // "Period" used to always show just periodEnd's calendar month/year (e.g.
+        // "August 2026"), even when the actual pay period (this app uses a rolling,
+        // force-contiguous period system - see generatePayroll - not fixed calendar
+        // months) spans back into an earlier month, or several. That made the
+        // Attendance Summary's "Total Days" look wrong/impossible (e.g. 67) next to a
+        // label implying a single ~30-day month. Show the true date range whenever the
+        // period doesn't fall entirely within one calendar month.
+        const periodsSpanOneMonth = periodStart && periodEnd
+            && new Date(periodStart).getUTCFullYear() === new Date(periodEnd).getUTCFullYear()
+            && new Date(periodStart).getUTCMonth() === new Date(periodEnd).getUTCMonth();
+        const formatShortDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+        const periodStr = (!periodStart || !periodEnd || periodsSpanOneMonth)
+            ? `${monthName} ${year}`
+            : `${formatShortDate(periodStart)} – ${formatShortDate(periodEnd)}`;
         const totalAllowances = payroll.totalAllowances || 0;
 
         // Hide "Salary Advance" from the itemized list, but keep its value subtracted from Net Salary.
@@ -2163,15 +2211,31 @@ export const downloadPayslip = async (req, res) => {
                 console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
             }
         }
-        doc.fontSize(12).fillColor("#182d54").text(companyName, centerX - 140, 138, { align: "center", width: 280 });
-        doc.fontSize(16).fillColor("#404040").text("PAYSLIP", centerX - 50, 155, { align: "center", width: 100 }); // Moved down to Y=155pt (approx 55mm)
-        // doc.text(text, x, y, options)
+        // Company name/PAYSLIP/Period/employee-details box used to sit at hardcoded
+        // absolute Y coordinates with only ~17pt of clearance below the company name -
+        // a long company name wrapping to 2 lines would overlap "PAYSLIP" below it.
+        // Measure each block's actual rendered height (doc.heightOfString respects the
+        // currently-active font/size, so call it right after setting fontSize) and
+        // derive the next element's Y from it instead, so nothing overlaps regardless
+        // of how long the company name is.
+        const companyNameY = 138;
+        doc.fontSize(12).fillColor("#182d54");
+        const companyNameHeight = doc.heightOfString(companyName, { width: 280, align: "center" });
+        doc.text(companyName, centerX - 140, companyNameY, { align: "center", width: 280 });
 
-        doc.fontSize(12).fillColor("#646464").text(`Period: ${periodStr}`, centerX - 100, 175, { align: "center", width: 200 }); // Y=175pt (approx 61mm)
-        // doc.moveDown(2); // Since we set exact Y, we don't need this moveDown
+        const payslipY = companyNameY + companyNameHeight + 8;
+        doc.fontSize(16).fillColor("#404040");
+        const payslipHeight = doc.heightOfString("PAYSLIP", { width: 100, align: "center" });
+        doc.text("PAYSLIP", centerX - 50, payslipY, { align: "center", width: 100 });
+
+        const periodY = payslipY + payslipHeight + 4;
+        const periodText = `Period: ${periodStr}`;
+        doc.fontSize(12).fillColor("#646464");
+        const periodHeight = doc.heightOfString(periodText, { width: 200, align: "center" });
+        doc.text(periodText, centerX - 100, periodY, { align: "center", width: 200 });
 
         // Employee Details Box, use Y to continue flow but reset after explicit positioning
-        doc.y = 200; // Reset Y to 200pt (approx 70mm)
+        doc.y = periodY + periodHeight + 9;
         const startY = doc.y;
         doc.rect(40, startY, pageWidth - 80, 70).fill("#FAFAFA");
         doc.fillColor("#000000");

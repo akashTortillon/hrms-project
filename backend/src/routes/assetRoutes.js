@@ -64,9 +64,11 @@ router.post("/return", protect, hasPermission("MANAGE_ASSETS"), returnAssetToSto
 // ALERTS & REPORTS (must be before /:id)
 router.get("/alerts/all", protect, hasPermission("MANAGE_ASSETS"), getAssetAlerts);
 
-// EMPLOYEE ASSETS (must be before /:id) - Usually employees can see their own, so maybe no hasPermission here OR check in controller
-// For now, shielding with MANAGE_ASSETS if it's the admin view
-router.get("/employee/:employeeId", protect, hasPermission("MANAGE_ASSETS"), getEmployeeAssets);
+// EMPLOYEE ASSETS (must be before /:id) - self, the employee's designated manager
+// (view-only), or MANAGE_ASSETS holders can see this; getEmployeeAssets itself
+// enforces which of those applies, same protect-only pattern requestRoutes.js uses
+// for getEmployeeRequests.
+router.get("/employee/:employeeId", protect, getEmployeeAssets);
 
 // GET asset history (must be before /:id)
 router.get("/:id/history", protect, hasPermission("MANAGE_ASSETS"), getAssetHistory);

@@ -81,6 +81,8 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
     const requestedAmount = request.details?.requestedAmount ?? request.details?.amount;
     const financeApprovedAmount = request.details?.financeApprovedAmount;
     const stageLabel = isFinanceStage ? "Finance Confirmation (Level 1)" : "HR Final Approval";
+    const adjustmentHistory = request.details?.adjustmentHistory || [];
+    const paymentHistory = request.payrollDeductions || [];
 
     // Footer Actions
     const modalFooter = (
@@ -262,6 +264,63 @@ export default function SalaryApproveModal({ show, request, onClose, onApprove }
                             </div>
                         </label>
                     </div>
+
+                    {/* Audit Trail - only relevant when this same loan has already been
+                        through an approval/adjustment/payment cycle before (e.g. a
+                        re-submitted or previously-adjusted loan reaching approval again) */}
+                    {isLoan && (adjustmentHistory.length > 0 || paymentHistory.length > 0) && (
+                        <div style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '10px',
+                            padding: '14px 16px'
+                        }}>
+                            <div style={{ fontWeight: '600', color: '#1f2937', marginBottom: '10px' }}>
+                                Loan Audit Trail
+                            </div>
+
+                            {adjustmentHistory.length > 0 && (
+                                <div style={{ marginBottom: paymentHistory.length > 0 ? '14px' : 0 }}>
+                                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#6b7280', marginBottom: '6px' }}>
+                                        Adjustments
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {adjustmentHistory.map((entry, idx) => (
+                                            <div key={idx} style={{ fontSize: '13px', padding: '8px 10px', background: '#f8f9fa', borderRadius: '6px' }}>
+                                                <div>
+                                                    <strong>{entry.previousMonthlyRepaymentAmount ?? 'N/A'} AED/mo</strong>
+                                                    {' → '}
+                                                    <strong style={{ color: '#0d6efd' }}>{entry.newMonthlyRepaymentAmount} AED/mo</strong>
+                                                    {' '}({entry.previousRepaymentPeriod ?? 'N/A'} → {entry.newRepaymentPeriod} months)
+                                                </div>
+                                                <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                    Remaining balance at time: {entry.remainingBalanceAtAdjustment} AED
+                                                </div>
+                                                <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                    "{entry.reason}" — {entry.adjustedByName || 'Unknown'}, {entry.adjustedAt ? new Date(entry.adjustedAt).toLocaleString() : ''}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {paymentHistory.length > 0 && (
+                                <div>
+                                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#6b7280', marginBottom: '6px' }}>
+                                        Payment History
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {paymentHistory.map((deduction, idx) => (
+                                            <div key={idx} style={{ fontSize: '13px', display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                                <span>{deduction.month}/{deduction.year}</span>
+                                                <strong>{deduction.amount} AED</strong>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                 </div>
             </div>

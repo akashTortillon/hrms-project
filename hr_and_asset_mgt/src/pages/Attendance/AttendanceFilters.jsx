@@ -136,6 +136,7 @@ export default function AttendanceFilters({
             <option value="Present">Present</option>
             <option value="Absent">Absent</option>
             <option value="Late">Late</option>
+            <option value="Incomplete">Incomplete</option>
             <option value="On Leave">On Leave</option>
           </select>
         </div>

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import CustomModal from "../../components/reusable/CustomModal.jsx";
+import AppButton from "../../components/reusable/Button.jsx";
 import { toast } from 'react-toastify';
 import { payrollService } from "../../services/payrollService";
 import SvgIcon from "../../components/svgIcon/svgView";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal";
+import "../../style/AdjustmentModal.css";
 
 export default function AdjustmentModal({ show, onClose, employees = [], onSuccess, initialRecord, isFinalized }) {
     const [formData, setFormData] = useState({
@@ -105,7 +107,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
 
     return (
         <CustomModal show={show} onClose={onClose} title={displayTitle} width="500px">
-            <div style={{ padding: '0 8px' }}>
+            <div className="adjustment-modal-body" style={{ padding: '0 8px' }}>
 
                 {/* Header Actions - Toggle History */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
@@ -168,21 +170,21 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
 
                         {/* Existing Adjustments Display */}
                         {selectedRecord && (
-                            <div style={{ marginBottom: '16px', background: '#f9fafb', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>Current Adjustments</h4>
+                            <div className="current-adjustments">
+                                <h4 className="current-adjustments-title">Current Adjustments</h4>
 
                                 {/* Allowances */}
                                 <div style={{ marginBottom: '8px' }}>
-                                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#059669' }}>Allowances</span>
+                                    <span className="adjustment-group-label allowance">Allowances</span>
                                     {selectedRecord.allowances && selectedRecord.allowances.length > 0 ? (
                                         <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0 0' }}>
                                             {selectedRecord.allowances.map(item => (
-                                                <li key={item._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '4px 0', borderBottom: '1px dashed #e5e7eb' }}>
+                                                <li key={item._id} className="adjustment-item">
                                                     <span>{item.name} ({item.amount})</span>
                                                     {!isFinalized && (
                                                         <button
                                                             onClick={() => handleRemoveClick(item._id, 'ALLOWANCE', item.name)}
-                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
+                                                            className="adjustment-remove-btn"
                                                             title="Remove Allowance"
                                                         >
                                                             <SvgIcon name="delete" size={14} />
@@ -191,21 +193,21 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                                 </li>
                                             ))}
                                         </ul>
-                                    ) : <div style={{ fontSize: '12px', color: '#9ca3af' }}>No allowances</div>}
+                                    ) : <div className="adjustment-item-empty">No allowances</div>}
                                 </div>
 
                                 {/* Deductions */}
                                 <div>
-                                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#dc2626' }}>Deductions</span>
+                                    <span className="adjustment-group-label deduction">Deductions</span>
                                     {selectedRecord.deductions && selectedRecord.deductions.length > 0 ? (
                                         <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0 0' }}>
                                             {selectedRecord.deductions.map(item => (
-                                                <li key={item._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '4px 0', borderBottom: '1px dashed #e5e7eb' }}>
+                                                <li key={item._id} className="adjustment-item">
                                                     <span>{item.name} ({item.amount})</span>
                                                     {!isFinalized && (
                                                         <button
                                                             onClick={() => handleRemoveClick(item._id, 'DEDUCTION', item.name)}
-                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
+                                                            className="adjustment-remove-btn"
                                                             title="Remove Deduction"
                                                         >
                                                             <SvgIcon name="delete" size={14} />
@@ -214,7 +216,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                                 </li>
                                             ))}
                                         </ul>
-                                    ) : <div style={{ fontSize: '12px', color: '#9ca3af' }}>No deductions</div>}
+                                    ) : <div className="adjustment-item-empty">No deductions</div>}
                                 </div>
                             </div>
                         )}
@@ -280,8 +282,8 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
 
                         {/* Actions */}
                         <div className="modal-actions">
-                            <button onClick={onClose} className="btn btn-secondary">{isFinalized ? "Close" : "Cancel"}</button>
-                            {!isFinalized && <button onClick={handleSubmit} className="btn btn-primary">Save Adjustment</button>}
+                            <AppButton variant="secondary" onClick={onClose}>{isFinalized ? "Close" : "Cancel"}</AppButton>
+                            {!isFinalized && <AppButton variant="primary" onClick={handleSubmit}>Save Adjustment</AppButton>}
                         </div>
                     </>
                 )}

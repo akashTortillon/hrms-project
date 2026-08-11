@@ -16,6 +16,22 @@ const isDocumentManager = (user = {}) =>
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// A Manager has no MANAGE_DOCUMENTS/isDocumentManager permission, so before this they
+// could only ever see their OWN documents, never their direct reports' - even though
+// the whole point of assigning them as designatedManager is that they oversee that
+// person. Mirrors the [user._id, user.employeeId] scope pattern used in
+// approvalStageFilter.js / requestController.js's manager-routing checks.
+const isManagerOfEmployee = async (user, employeeId) => {
+    const isManagerRole = user?.role === "Manager" || user?.permissions?.includes("APPROVE_MANAGER_REQUESTS");
+    if (!isManagerRole) return false;
+
+    const scope = [user._id, user.employeeId].filter(Boolean).map(String);
+    if (!scope.length) return false;
+
+    const target = await Employee.findById(employeeId).select("designatedManager");
+    return Boolean(target?.designatedManager && scope.includes(String(target.designatedManager)));
+};
+
 // Maps a Document Type master label to the bare Employee field the Dashboard's
 // "Employee Visa/ID Expiries" card reads directly (dashboardController.js's
 // getEmployeeVisaExpiries). Uploading a new document via the Documents tab only
@@ -252,8 +268,9 @@ export const getEmployeeDocuments = async (req, res) => {
         const canManage = isDocumentManager(req.user);
         const ownEmployeeId = await resolveEmployeeIdForUser(req.user);
         const isSelf = ownEmployeeId && ownEmployeeId.toString() === employeeId;
+        const isManaging = !canManage && !isSelf && await isManagerOfEmployee(req.user, employeeId);
 
-        if (!canManage && !isSelf) {
+        if (!canManage && !isSelf && !isManaging) {
             return res.status(403).json({ message: "You can only view your own documents" });
         }
 

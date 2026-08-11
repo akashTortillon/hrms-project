@@ -3,7 +3,7 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import AppButton from "../../components/reusable/Button";
 import "../../style/Attendance.css";
 
-export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading, onExport, onBulkMark }) {
+export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading, onExport, onBulkMark, selfOnly, setSelfOnly }) {
   return (
     <div className="attendance-header">
       <div className="attendance-header-left">
@@ -26,6 +26,16 @@ export default function AttendanceHeader({ viewMode, setViewMode, onSync, loadin
           >
             Monthly View
           </button>
+
+          {setSelfOnly && (
+            <button
+              className={`attendance-tab self-tab ${selfOnly ? "active" : ""}`}
+              onClick={() => setSelfOnly(!selfOnly)}
+              title="Filter to only my own attendance"
+            >
+              Self
+            </button>
+          )}
         </div>
       </div>
 

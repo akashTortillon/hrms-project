@@ -9,7 +9,12 @@ import leptisIcon from "../../assets/images/logo-leptis.png";
 // All navigation items with their access roles
 const allNavItems = [
   { path: "/app/dashboard", icon: "dashboard", label: "Dashboard", permission: "VIEW_DASHBOARD" },
-  { path: "/app/employees", icon: "users", label: "Employees", permission: "MANAGE_EMPLOYEES" },
+  // VIEW_ALL_EMPLOYEES (not MANAGE_EMPLOYEES) - the default "Manager" role only has
+  // VIEW_ALL_EMPLOYEES (see config/db.js), and getEmployees() itself already scopes
+  // the list to a Manager's own direct reports. Gating the nav link on MANAGE_EMPLOYEES
+  // left Managers with no click-path to any report's page at all, even though the
+  // list endpoint behind it was already correctly scoped for them.
+  { path: "/app/employees", icon: "users", label: "Employees", permission: "VIEW_ALL_EMPLOYEES" },
   { path: "/app/probation", icon: "clock (1)", label: "Probation", permission: "MANAGE_EMPLOYEES" },
   { path: "/app/onboarding", icon: "clipboard-list", label: "Onboarding", permission: "MANAGE_ONBOARDING" }, // New Onboarding
   { path: "/app/offboarding", icon: "briefcase", label: "Offboarding", permission: "MANAGE_OFFBOARDING" }, // New Offboarding

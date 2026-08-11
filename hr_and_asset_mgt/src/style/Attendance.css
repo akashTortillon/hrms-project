@@ -66,6 +66,21 @@
   color: #2563eb;
 }
 
+/* "Self" is a filter layered on top of Daily/Monthly, not a competing third
+   tab - give it its own color so it never looks like a tri-state selector
+   glitch when it's active alongside Daily View or Monthly View. */
+.attendance-tab.self-tab {
+  margin-left: 6px;
+  border-left: 1px solid #d1d5db;
+  padding-left: 18px;
+}
+
+.attendance-tab.self-tab.active {
+  background: #fef3c7;
+  border-color: #b45309;
+  color: #b45309;
+}
+
 /* Mobile: Equal width segmented control */
 @media (max-width: 768px) {
   .attendance-tabs {
@@ -95,6 +110,17 @@
     background: #2563eb;
     color: #ffffff;
     z-index: 1;
+  }
+
+  .attendance-tab.self-tab {
+    margin-left: 0;
+    border-left: 1px solid #d1d5db;
+    padding-left: 8px;
+  }
+
+  .attendance-tab.self-tab.active {
+    background: #b45309;
+    color: #ffffff;
   }
 }
 
@@ -490,6 +516,17 @@
   background: #f3e8ff !important;
   color: #7e22ce !important;
   border: 1px solid #d8b4fe !important;
+}
+
+.status-pill.status-incomplete {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+}
+
+.status-pill.status-flex-off {
+  background: #cffafe !important;
+  color: #0e7490 !important;
+  border: 1px solid #a5f3fc !important;
 }
 
 /* Edited Badge (blends with table) */

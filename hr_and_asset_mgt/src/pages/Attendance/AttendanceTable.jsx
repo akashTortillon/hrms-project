@@ -37,10 +37,14 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
         return "status-leave";
       case "Present":
         return "status-present";
+      case "Incomplete":
+        return "status-incomplete";
       case "Weekend":
         return "status-weekend"; // New class for Sundays
       case "Holiday":
         return "status-holiday";
+      case "Flex Off":
+        return "status-flex-off"; // Working Day Type 2's flexible monthly allowance
       default:
         return "";
     }
@@ -50,9 +54,11 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
     if (status === "Present") return "P";
     if (status === "Late") return "L";
     if (status === "Absent") return "A";
+    if (status === "Incomplete") return "I";
     if (status === "On Leave" || status === "Leave") return "OL";
     if (status === "Weekend") return "W";
     if (status === "Holiday") return "H";
+    if (status === "Flex Off") return "F";
     return "-";
   };
 
@@ -107,15 +113,15 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       // Construct key yyyy-mm-dd
                       const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                       const record = emp.attendance[dateKey] || {};
-                      let status = record.status;
+                      const status = record.status;
 
-                      // Check for Sunday
+                      // Week-off day is per-employee now (not always Sunday), and the
+                      // backend already resolves Weekend/Holiday/On Leave priority
+                      // correctly per employee per day - trust record.status instead of
+                      // re-deriving/overriding it here (this used to force every Sunday
+                      // to "Weekend" even when the backend had correctly said "Holiday").
                       const dateObj = new Date(year, month - 1, d);
                       const isSunday = dateObj.getDay() === 0;
-
-                      if (isSunday) {
-                        status = "Weekend";
-                      }
 
                       // Define styles for the letter itself
                       let color = '#374151'; // default gray
@@ -124,8 +130,10 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       if (status === 'Present') { color = '#16a34a'; bg = '#dcfce7'; }
                       else if (status === 'Absent') { color = '#dc2626'; bg = '#fee2e2'; }
                       else if (status === 'Late') { color = '#d97706'; bg = '#fef3c7'; }
+                      else if (status === 'Incomplete') { color = '#ea580c'; bg = '#ffedd5'; }
                       else if (status === 'Weekend') { color = '#9ca3af'; bg = '#f3f4f6'; }
                       else if (status === 'Holiday') { color = '#7c3aed'; bg = '#f3e8ff'; }
+                      else if (status === 'Flex Off') { color = '#0891b2'; bg = '#cffafe'; }
                       else if (status === 'On Leave') { color = '#ca8a04'; bg = '#fef9c3'; }
 
                       const abbr = status ? getStatusAbbr(status) : "-";

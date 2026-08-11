@@ -102,6 +102,19 @@ const employeeSchema = new mongoose.Schema({
   // Other
   accommodation: { type: String },
   shift: { type: String, default: "Day Shift" },
+  // Working Day Type - how many days off per month this employee gets, and how.
+  //   0 = no days off, works the full period.
+  //   2 = a flexible monthly allowance: any 2 days, not tied to a weekday, no leave
+  //       request needed (see applyMonthlyFlexQuota() in attendanceUtils.js).
+  //   4 = one recurring weekday off (~4/month) - which weekday(s) is `weekOffDays`.
+  //   8 = two recurring weekdays off (~8/month, e.g. Sat+Sun) - same `weekOffDays`.
+  // Replaces the earlier single fixed-weekday `weekOffDay` model, which couldn't
+  // express the flexible/monthly-quota case at all.
+  workingDayType: { type: Number, enum: [0, 2, 4, 8], default: 4 },
+  // Which weekday(s) (0=Sunday ... 6=Saturday) recur as off-days - only meaningful
+  // when workingDayType is 4 or 8; ignored for 0 and 2. Falls back to
+  // SystemSettings.defaultWeekOffDays when empty (see isWeekOff() in attendanceUtils.js).
+  weekOffDays: { type: [Number], default: [0] },
   laborCardNumber: { type: String },
   laborCards: { type: [laborCardSchema], default: [] },
   personalId: { type: String },

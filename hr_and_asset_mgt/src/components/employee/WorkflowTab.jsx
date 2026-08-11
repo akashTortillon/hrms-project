@@ -5,6 +5,16 @@ import Button from "../reusable/Button";
 import SvgIcon from "../svgIcon/svgView";
 import "../../style/Workflow.css"; // We will create this style next
 
+// documentUrl is a full S3 URL for newly-uploaded files, but old records may still
+// carry the pre-S3-migration relative "/uploads/workflows/..." path - only prefix
+// with the API origin when it isn't already absolute.
+const resolveDocumentUrl = (url) => {
+    if (!url) return "";
+    if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+    const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:3005";
+    return `${apiBase.replace(/\/api\/?$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
+};
+
 const WorkflowTab = ({ employeeId, type }) => {
     const [workflow, setWorkflow] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -136,7 +146,7 @@ const WorkflowTab = ({ employeeId, type }) => {
                             {/* File Link if Uploaded */}
                             {item.documentUrl && (
                                 <a
-                                    href={`${(import.meta.env.VITE_API_BASE || "http://localhost:3005").replace(/\/api\/?$/, "")}${item.documentUrl}`}
+                                    href={resolveDocumentUrl(item.documentUrl)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="view-doc-link"

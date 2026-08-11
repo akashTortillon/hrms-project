@@ -49,7 +49,13 @@ export default function useHRManagement() {
         allocationType: 'YEARLY', // YEARLY | SERVICE_ANNIVERSARY | POLICY_BASED
         daysPerCycle: '',
         carryForward: true,
-        tiers: [] // [{ afterYears, days }] — optional service-year step-up, overrides daysPerCycle once met
+        tiers: [], // [{ afterYears, days }] — optional service-year step-up, overrides daysPerCycle once met
+        // Sick-leave pay tiers, cumulative per calendar year (only consumed when this
+        // leave type's name contains "sick" - see resolveLeaveDayStatus in
+        // payrollController.js). Defaults match the previously-hardcoded values.
+        paidThresholdDays: 15,
+        halfPaidThresholdDays: 45,
+        medicalDocRequiredAfterDays: 1
     });
 
     const [shifts, setShifts] = useState([]);
@@ -122,7 +128,10 @@ export default function useHRManagement() {
             allocationType: 'YEARLY',
             daysPerCycle: '',
             carryForward: true,
-            tiers: []
+            tiers: [],
+            paidThresholdDays: 15,
+            halfPaidThresholdDays: 45,
+            medicalDocRequiredAfterDays: 1
         });
         setShowModal(true);
     };
@@ -187,7 +196,10 @@ export default function useHRManagement() {
                 allocationType: meta.allocationType || 'YEARLY',
                 daysPerCycle: meta.daysPerCycle ?? '',
                 carryForward: meta.carryForward ?? true,
-                tiers: Array.isArray(meta.tiers) ? meta.tiers : []
+                tiers: Array.isArray(meta.tiers) ? meta.tiers : [],
+                paidThresholdDays: meta.paidThresholdDays ?? 15,
+                halfPaidThresholdDays: meta.halfPaidThresholdDays ?? 45,
+                medicalDocRequiredAfterDays: meta.medicalDocRequiredAfterDays ?? 1
             });
             setInputValue(item.name);
         } else {
@@ -220,7 +232,10 @@ export default function useHRManagement() {
                         allocationType: leaveTypeState.allocationType,
                         daysPerCycle: Number(leaveTypeState.daysPerCycle) || 0,
                         carryForward: leaveTypeState.carryForward,
-                        tiers: cleanTiers
+                        tiers: cleanTiers,
+                        paidThresholdDays: Number(leaveTypeState.paidThresholdDays) || 15,
+                        halfPaidThresholdDays: Number(leaveTypeState.halfPaidThresholdDays) || 45,
+                        medicalDocRequiredAfterDays: Number(leaveTypeState.medicalDocRequiredAfterDays) || 1
                     }
                 };
                 if (editId) await leaveTypeService.update(editId, payload);

@@ -103,18 +103,58 @@ export const getEmployeeVisaExpiries = async (req, res) => {
     const employees = await Employee.find(employeeQuery)
       .select("name designation code visaExpiry passportExpiry emiratesIdExpiry laborCards");
 
+    // isActive filter excludes documents superseded by a newer upload of the same
+    // type (see employeeDocumentController.js's syncEmployeeExpiryAndSupersedePrior)
+    // - otherwise an old expired upload keeps surfacing here even after a valid
+    // new one exists. $ne:false (not isActive:true) so documents created before
+    // this field existed are still treated as active.
+    const docQuery = { expiryDate: { $ne: null }, isActive: { $ne: false } };
+    if (restrictToSelf) docQuery.employeeId = req.user.employeeId;
+
+    const uploadedDocs = await EmployeeDocument.find(docQuery)
+      .populate("employeeId", "name designation code");
+
+    // The bare Employee.visaExpiry/passportExpiry/emiratesIdExpiry/laborCards fields
+    // and the EmployeeDocument records are two independently-writable sources for the
+    // same expiry data - a manual edit on the Employee profile, a document uploaded
+    // before the sync helper existed, or a document that was deleted (deleteDocument
+    // never clears the bare field) can all leave the bare field holding a different
+    // value than the actual latest active document. Previously both sources were
+    // rendered as separate, undeduplicated rows, so a stale bare field kept surfacing
+    // as "expired" even after HR uploaded a corrected document. Treat an active
+    // EmployeeDocument as authoritative when one exists for that type, and only fall
+    // back to the bare field when no document has ever been uploaded for it.
+    const normalizeDocFamily = (type) => {
+      const upper = String(type || "").trim().toUpperCase();
+      if (upper === "VISA") return "VISA";
+      if (upper === "PASSPORT") return "PASSPORT";
+      if (upper === "EMIRATES ID") return "EMIRATES_ID";
+      if (upper === "LABOUR CARD" || upper === "LABOR CARD") return "LABOUR_CARD";
+      return null;
+    };
+    const employeesWithActiveDocFamily = new Set(
+      uploadedDocs
+        .map((doc) => {
+          const family = normalizeDocFamily(doc.documentType);
+          return family ? `${doc.employeeId?._id || doc.employeeId}_${family}` : null;
+        })
+        .filter(Boolean)
+    );
+
     const rows = [];
     employees.forEach((emp) => {
       [
-        { documentType: "Visa", expiryDate: emp.visaExpiry },
-        { documentType: "Passport", expiryDate: emp.passportExpiry },
-        { documentType: "Emirates ID", expiryDate: emp.emiratesIdExpiry },
+        { documentType: "Visa", expiryDate: emp.visaExpiry, family: "VISA" },
+        { documentType: "Passport", expiryDate: emp.passportExpiry, family: "PASSPORT" },
+        { documentType: "Emirates ID", expiryDate: emp.emiratesIdExpiry, family: "EMIRATES_ID" },
         ...(emp.laborCards || []).map((card) => ({
           documentType: "Labor Card",
-          expiryDate: card.expiryDate
+          expiryDate: card.expiryDate,
+          family: "LABOUR_CARD"
         }))
-      ].forEach(({ documentType, expiryDate }) => {
+      ].forEach(({ documentType, expiryDate, family }) => {
         if (!expiryDate) return;
+        if (employeesWithActiveDocFamily.has(`${emp._id}_${family}`)) return;
         const status = computeExpiryStatus(expiryDate);
         if (status === "Valid") return;
         rows.push({
@@ -128,17 +168,6 @@ export const getEmployeeVisaExpiries = async (req, res) => {
         });
       });
     });
-
-    // isActive filter excludes documents superseded by a newer upload of the same
-    // type (see employeeDocumentController.js's syncEmployeeExpiryAndSupersedePrior)
-    // - otherwise an old expired upload keeps surfacing here even after a valid
-    // new one exists. $ne:false (not isActive:true) so documents created before
-    // this field existed are still treated as active.
-    const docQuery = { expiryDate: { $ne: null }, isActive: { $ne: false } };
-    if (restrictToSelf) docQuery.employeeId = req.user.employeeId;
-
-    const uploadedDocs = await EmployeeDocument.find(docQuery)
-      .populate("employeeId", "name designation code");
 
     uploadedDocs.forEach((doc) => {
       if (!doc.employeeId) return; // employee since deleted
