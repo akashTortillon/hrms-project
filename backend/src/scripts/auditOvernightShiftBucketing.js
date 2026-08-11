@@ -115,11 +115,23 @@ async function main() {
       d.setUTCDate(d.getUTCDate() - 1);
       shiftDate = d.toISOString().split("T")[0];
     } else {
+      // Gap zone (between shift end and shift start) is not truly ambiguous once you
+      // account for punch type: an OUT here is a late tail-end checkout of the shift
+      // that started the day before (extend the end-boundary grace); an IN here is an
+      // early arrival for the shift about to start today (extend the start-boundary
+      // grace). Only genuinely unclassifiable if this assumption is wrong for a given
+      // employee - samples are still printed below for a sanity check.
       gapZoneCount++;
       if (gapZoneSamples.length < 20) {
         gapZoneSamples.push({ code, shift: employee.shift, dateStr, timeStr, type: txn.transactionType });
       }
-      continue; // don't guess - excluded from the corrected grouping below
+      if (txn.transactionType === "OUT") {
+        const d = new Date(`${dateStr}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - 1);
+        shiftDate = d.toISOString().split("T")[0];
+      } else {
+        shiftDate = dateStr;
+      }
     }
 
     const key = `${code}_${shiftDate}`;
@@ -146,58 +158,81 @@ async function main() {
 
   console.log(`\nRecomputed shift-day buckets: ${grouped.size}`);
 
-  // 5. For each corrected shift-day bucket, compare against what Attendance actually
-  //    has stored for shiftDate and shiftDate+1 (the two dates the bug could have split
-  //    a single occurrence across).
-  let splitRecords = 0;
-  const splitSamples = [];
+  // 5. For each corrected shift-day bucket, compare directly against whatever's
+  //    currently stored in Attendance for that shiftDate - not just the narrow
+  //    "checkIn-only + checkOut-only on the next day" signature. The old calendar-day
+  //    bucketing usually gets REFILLED by the next shift occurrence's own check-in, so
+  //    most affected days look like complete, plausible records that are actually
+  //    stitched together from two different shift occurrences. Missing that class was
+  //    the mistake in the first pass of this script.
+  let matches = 0;
+  let missing = 0;
+  let mismatchClean = 0;   // current record empty on the side that's wrong (old "split" signature)
+  let mismatchSilent = 0;  // current record has BOTH fields populated but at least one is wrong
+  const mismatchSamples = { clean: [], silent: [] };
 
   for (const g of grouped.values()) {
     const employee = employeeByCode.get(g.code);
-    const nextDate = new Date(`${g.shiftDate}T00:00:00Z`);
-    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
-    const nextDateStr = nextDate.toISOString().split("T")[0];
+    const attCurrent = await Attendance.findOne({ employee: employee._id, date: g.shiftDate }).lean();
 
-    const [attToday, attNext] = await Promise.all([
-      Attendance.findOne({ employee: employee._id, date: g.shiftDate }).lean(),
-      Attendance.findOne({ employee: employee._id, date: nextDateStr }).lean()
-    ]);
+    if (!attCurrent) {
+      missing++;
+      continue;
+    }
+    if (attCurrent.isManuallyEdited) continue; // out of scope - preserved either way
 
-    // Signature of a split: today's row has a checkIn but no checkOut, AND tomorrow's
-    // row has a checkOut but no checkIn (or vice versa isn't possible with earliest-IN
-    // grouping, but check both directions defensively).
-    const looksSplit =
-      attToday && attToday.checkIn && !attToday.checkOut &&
-      attNext && attNext.checkOut && !attNext.checkIn;
+    const checkInMatches = attCurrent.checkIn === g.checkIn;
+    const checkOutMatches = attCurrent.checkOut === g.checkOut;
 
-    if (looksSplit) {
-      splitRecords++;
-      if (splitSamples.length < 30) {
-        splitSamples.push({
-          employee: employee.name, code: employee.code, shift: employee.shift,
-          shiftDate: g.shiftDate,
-          today: { date: g.shiftDate, checkIn: attToday.checkIn, checkOut: attToday.checkOut },
-          next: { date: nextDateStr, checkIn: attNext.checkIn, checkOut: attNext.checkOut }
-        });
-      }
+    if (checkInMatches && checkOutMatches) {
+      matches++;
+      continue;
+    }
+
+    const bothCurrentlyPopulated = attCurrent.checkIn && attCurrent.checkOut;
+    const sample = {
+      employee: employee.name, code: employee.code, shift: employee.shift,
+      shiftDate: g.shiftDate,
+      current: { checkIn: attCurrent.checkIn, checkOut: attCurrent.checkOut },
+      corrected: { checkIn: g.checkIn, checkOut: g.checkOut }
+    };
+
+    if (bothCurrentlyPopulated) {
+      mismatchSilent++;
+      if (mismatchSamples.silent.length < 30) mismatchSamples.silent.push(sample);
+    } else {
+      mismatchClean++;
+      if (mismatchSamples.clean.length < 15) mismatchSamples.clean.push(sample);
     }
   }
 
-  console.log("\n=== Split-record samples (first 30) ===");
-  for (const s of splitSamples) {
+  console.log("\n=== SILENT mismatches - current record looks complete but is wrong (first 30) ===");
+  for (const s of mismatchSamples.silent) {
     console.log(`${s.employee} (${s.code}, ${s.shift}) - shift day ${s.shiftDate}`);
-    console.log(`  ${s.today.date}: checkIn=${s.today.checkIn ?? "—"} checkOut=${s.today.checkOut ?? "—"}`);
-    console.log(`  ${s.next.date}: checkIn=${s.next.checkIn ?? "—"} checkOut=${s.next.checkOut ?? "—"}`);
+    console.log(`  current:   checkIn=${s.current.checkIn ?? "—"} checkOut=${s.current.checkOut ?? "—"}`);
+    console.log(`  corrected: checkIn=${s.corrected.checkIn ?? "—"} checkOut=${s.corrected.checkOut ?? "—"}`);
   }
-  if (splitRecords > splitSamples.length) console.log(`... and ${splitRecords - splitSamples.length} more`);
+  if (mismatchSilent > mismatchSamples.silent.length) console.log(`... and ${mismatchSilent - mismatchSamples.silent.length} more`);
+
+  console.log("\n=== CLEAN mismatches - current record missing a side (first 15) ===");
+  for (const s of mismatchSamples.clean) {
+    console.log(`${s.employee} (${s.code}, ${s.shift}) - shift day ${s.shiftDate}`);
+    console.log(`  current:   checkIn=${s.current.checkIn ?? "—"} checkOut=${s.current.checkOut ?? "—"}`);
+    console.log(`  corrected: checkIn=${s.corrected.checkIn ?? "—"} checkOut=${s.corrected.checkOut ?? "—"}`);
+  }
+  if (mismatchClean > mismatchSamples.clean.length) console.log(`... and ${mismatchClean - mismatchSamples.clean.length} more`);
 
   console.log("\n=== Summary ===");
   console.log(`Overnight shifts: ${Array.from(overnightShiftNames).join(", ") || "none"}`);
   console.log(`Employees on overnight shifts: ${employees.length}`);
   console.log(`Raw punches scanned: ${transactions.length}`);
+  console.log(`Gap-zone punches (reassigned by type - OUT->prev day, IN->this day): ${gapZoneCount}`);
   console.log(`Corrected shift-day buckets computed: ${grouped.size}`);
-  console.log(`Gap-zone punches (ambiguous, need manual review): ${gapZoneCount}`);
-  console.log(`Shift-days with a confirmed IN/OUT split across two Attendance rows: ${splitRecords}`);
+  console.log(`Already correct: ${matches}`);
+  console.log(`No Attendance record at all for this shift-day: ${missing}`);
+  console.log(`Mismatch - current record missing a side (matches old "clean split"): ${mismatchClean}`);
+  console.log(`Mismatch - current record fully populated but WRONG (silent corruption): ${mismatchSilent}`);
+  console.log(`\nTotal shift-days needing correction: ${mismatchClean + mismatchSilent + missing}`);
 
   await mongoose.disconnect();
 }
