@@ -43,6 +43,8 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
         return "status-weekend"; // New class for Sundays
       case "Holiday":
         return "status-holiday";
+      case "Flex Off":
+        return "status-flex-off"; // Working Day Type 2's flexible monthly allowance
       default:
         return "";
     }
@@ -56,6 +58,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
     if (status === "On Leave" || status === "Leave") return "OL";
     if (status === "Weekend") return "W";
     if (status === "Holiday") return "H";
+    if (status === "Flex Off") return "F";
     return "-";
   };
 
@@ -130,6 +133,7 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
                       else if (status === 'Incomplete') { color = '#ea580c'; bg = '#ffedd5'; }
                       else if (status === 'Weekend') { color = '#9ca3af'; bg = '#f3f4f6'; }
                       else if (status === 'Holiday') { color = '#7c3aed'; bg = '#f3e8ff'; }
+                      else if (status === 'Flex Off') { color = '#0891b2'; bg = '#cffafe'; }
                       else if (status === 'On Leave') { color = '#ca8a04'; bg = '#fef9c3'; }
 
                       const abbr = status ? getStatusAbbr(status) : "-";

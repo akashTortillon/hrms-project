@@ -222,7 +222,8 @@ import {
   getApprovedLeaves,
   isLeave,
   isWeekOff,
-  holidaySetFromHolidays
+  holidaySetFromHolidays,
+  applyMonthlyFlexQuota
 } from "../utils/attendanceUtils.js";
 
 /**
@@ -476,9 +477,9 @@ export const getMonthlyAttendance = async (req, res) => {
     }).populate("editedBy", "name"); // ✅ Populate Editor
 
     // Get Holidays + company-wide default week-off day
-    const settingsForWeekOff = await SystemSettings.findOne().select("holidays defaultWeekOffDay");
+    const settingsForWeekOff = await SystemSettings.findOne().select("holidays defaultWorkingDayType defaultWeekOffDays");
     const holidaySet = holidaySetFromHolidays(settingsForWeekOff?.holidays || []);
-    const defaultWeekOffDay = settingsForWeekOff?.defaultWeekOffDay;
+    const defaultWorkingDaySettings = { workingDayType: settingsForWeekOff?.defaultWorkingDayType, weekOffDays: settingsForWeekOff?.defaultWeekOffDays };
     // ✅ NEW: Get Leave Map
     const leaveMap = await getApprovedLeavesMap(employees);
 
@@ -501,10 +502,15 @@ export const getMonthlyAttendance = async (req, res) => {
 
       let present = 0, late = 0, absent = 0, leave = 0;
 
-      days.forEach(day => {
+      // Two passes: first resolve each day's raw status, then (for a workingDayType
+      // 2 employee) convert their first 2 no-record "Absent" days per period into
+      // "Flex Off" before the final counts/output are built - the flex allowance
+      // isn't a per-day fact (isWeekOff() never marks a day off for type 2), it can
+      // only be decided by looking at the whole period in order.
+      const dayList = days.map(day => {
         const record = empAttendance[day];
         const dateObj = new Date(day);
-        const isWeekend = isWeekOff(dateObj, emp, defaultWeekOffDay);
+        const isWeekend = isWeekOff(dateObj, emp, defaultWorkingDaySettings);
         const isHoliday = holidaySet.has(day);
 
         let status;
@@ -529,6 +535,14 @@ export const getMonthlyAttendance = async (req, res) => {
           }
         }
 
+        return { day, record, status };
+      });
+
+      if (emp.workingDayType === 2) {
+        applyMonthlyFlexQuota(dayList, 2, { absentStatus: "Absent", flexStatus: "Flex Off" });
+      }
+
+      dayList.forEach(({ day, record, status }) => {
         attendanceData[day] = {
           status,
           checkIn: record?.checkIn,
@@ -550,7 +564,7 @@ export const getMonthlyAttendance = async (req, res) => {
           // but the total `leave` will render correctly on the dashboard visually (e.g. 1.5).
         }
         else if (status === "Absent") absent++;
-        // Weekends don't count towards absent
+        // Weekends/Holidays/Flex Off don't count towards absent
       });
 
       return {
@@ -600,13 +614,14 @@ export const markAttendanceBulk = async (req, res) => {
     const results = [];
 
     // Was hardcoded Sat+Sun, inconsistent with every other weekend check in this
-    // codebase (Sunday-only, or now this employee's own weekOffDay). Align it so
+    // codebase (Sunday-only, or now this employee's own Working Day Type). Align it so
     // "skip weekends" means the same thing everywhere.
-    const bulkEmployee = skipWeekends ? await Employee.findById(employeeId).select("weekOffDay") : null;
-    const bulkSettings = skipWeekends ? await SystemSettings.findOne().select("defaultWeekOffDay") : null;
+    const bulkEmployee = skipWeekends ? await Employee.findById(employeeId).select("workingDayType weekOffDays") : null;
+    const bulkSettings = skipWeekends ? await SystemSettings.findOne().select("defaultWorkingDayType defaultWeekOffDays") : null;
+    const bulkDefault = { workingDayType: bulkSettings?.defaultWorkingDayType, weekOffDays: bulkSettings?.defaultWeekOffDays };
 
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      if (skipWeekends && isWeekOff(d, bulkEmployee, bulkSettings?.defaultWeekOffDay)) continue;
+      if (skipWeekends && isWeekOff(d, bulkEmployee, bulkDefault)) continue;
 
       const dateStr = d.toISOString().split("T")[0];
 
@@ -774,7 +789,8 @@ export const getEmployeeAttendanceStats = async (req, res) => {
     const records = await Attendance.find({ employee: employeeId });
 
     const holidaySet = await getHolidaysSet();
-    const statsSettings = await SystemSettings.findOne().select("defaultWeekOffDay");
+    const statsSettings = await SystemSettings.findOne().select("defaultWorkingDayType defaultWeekOffDays");
+    const statsDefault = { workingDayType: statsSettings?.defaultWorkingDayType, weekOffDays: statsSettings?.defaultWeekOffDays };
     // ✅ NEW: Get Leave Map for this employee
     const leaveMap = await getApprovedLeavesMap([employee]);
 
@@ -785,14 +801,25 @@ export const getEmployeeAttendanceStats = async (req, res) => {
 
     // Iterate from Start Date to Today
     let currentDate = new Date(startDate);
+    // Working Day Type 2's flex allowance resets each calendar month - this loop
+    // spans the employee's whole tenure (not a single pay period), so track the
+    // remaining quota per month as we go rather than using applyMonthlyFlexQuota
+    // (which expects one period's day list, not a multi-year running total).
+    let flexMonthKey = null;
+    let flexRemaining = 0;
 
     while (currentDate <= today) {
       const year = currentDate.getFullYear();
       const month = String(currentDate.getMonth() + 1).padStart(2, "0");
       const day = String(currentDate.getDate()).padStart(2, "0");
       const dateStr = `${year}-${month}-${day}`;
+      const monthKey = `${year}-${month}`;
+      if (employee.workingDayType === 2 && monthKey !== flexMonthKey) {
+        flexMonthKey = monthKey;
+        flexRemaining = 2;
+      }
 
-      const isEmployeeWeekOff = isWeekOff(currentDate, employee, statsSettings?.defaultWeekOffDay);
+      const isEmployeeWeekOff = isWeekOff(currentDate, employee, statsDefault);
       const isHoliday = holidaySet.has(dateStr);
       const record = recordMap[dateStr];
 
@@ -808,6 +835,8 @@ export const getEmployeeAttendanceStats = async (req, res) => {
         // ✅ Check for Leave
         if (isLeave(employee._id, dateStr, leaveMap)) {
           leave++;
+        } else if (employee.workingDayType === 2 && flexRemaining > 0) {
+          flexRemaining -= 1; // this month's flex allowance absorbs it, not counted as absent
         } else if (!isEmployeeWeekOff && !isHoliday) {
           absent++;
         }
@@ -855,7 +884,8 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
     });
 
     const holidaySet = await getHolidaysSet();
-    const historySettings = await SystemSettings.findOne().select("defaultWeekOffDay");
+    const historySettings = await SystemSettings.findOne().select("defaultWorkingDayType defaultWeekOffDays");
+    const historyDefault = { workingDayType: historySettings?.defaultWorkingDayType, weekOffDays: historySettings?.defaultWeekOffDays };
     // ✅ NEW: Leave Map
     const leaveMap = await getApprovedLeavesMap([employee]);
 
@@ -869,11 +899,12 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
+    const dayList = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const dateObj = new Date(dateStr);
 
-      const isEmployeeWeekOff = isWeekOff(dateObj, employee, historySettings?.defaultWeekOffDay);
+      const isEmployeeWeekOff = isWeekOff(dateObj, employee, historyDefault);
       const isHoliday = holidaySet.has(dateStr);
       const record = attendanceMap[dateStr];
 
@@ -891,6 +922,17 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
         else status = "Absent";
       }
 
+      dayList.push({ dateStr, record, status });
+    }
+
+    // Working Day Type 2's flex allowance isn't a per-day fact (see getMonthlyAttendance)
+    // - convert the first 2 no-record "Absent" days this period into "Flex Off" now
+    // that the whole month's statuses are resolved in order.
+    if (employee.workingDayType === 2) {
+      applyMonthlyFlexQuota(dayList, 2, { absentStatus: "Absent", flexStatus: "Flex Off" });
+    }
+
+    dayList.forEach(({ dateStr, record, status }) => {
       history.push({
         date: dateStr,
         status,
@@ -898,7 +940,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
         checkOut: record?.checkOut || "-",
         workHours: record?.workHours || "-"
       });
-    }
+    });
 
     res.json(history);
   } catch (error) {
@@ -945,7 +987,8 @@ export const exportAttendance = async (req, res) => {
 
       const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
       const holidaySet = await getHolidaysSet();
-      const exportSettings = await SystemSettings.findOne().select("defaultWeekOffDay");
+      const exportSettings = await SystemSettings.findOne().select("defaultWorkingDayType defaultWeekOffDays");
+      const exportDefault = { workingDayType: exportSettings?.defaultWorkingDayType, weekOffDays: exportSettings?.defaultWeekOffDays };
       // ✅ NEW: Leave Map
       const leaveMap = await getApprovedLeavesMap(employees);
 
@@ -971,30 +1014,41 @@ export const exportAttendance = async (req, res) => {
         const empAttendance = attendanceMap[emp._id] || {};
         let present = 0, late = 0, absent = 0, leave = 0;
 
-        days.forEach(d => {
+        const dayList = days.map(d => {
           const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const record = empAttendance[dateKey];
           const dateObj = new Date(dateKey);
-          const isEmployeeWeekOff = isWeekOff(dateObj, emp, exportSettings?.defaultWeekOffDay);
+          const isEmployeeWeekOff = isWeekOff(dateObj, emp, exportDefault);
           const isHoliday = holidaySet.has(dateKey);
 
           let status = "";
-          let cellValue = "";
 
           if (record) {
             status = record.status;
-            cellValue = record.status === "Present" ? "P" :
-              record.status === "Late" ? "L" :
-                record.status === "Absent" ? "A" :
-                  record.status === "On Leave" ? "OL" : record.status;
           } else {
             // Holiday takes precedence over Weekend (see getMonthlyAttendance for why).
-            if (emp.status === "On Leave") { status = "On Leave"; cellValue = "OL"; }
-            else if (isLeave(emp._id, dateKey, leaveMap)) { status = "On Leave"; cellValue = "OL"; } // ✅ Checked
-            else if (isHoliday) { status = "Holiday"; cellValue = "H"; }
-            else if (isEmployeeWeekOff) { status = "Weekend"; cellValue = "W"; }
-            else { status = "Absent"; cellValue = "A"; }
+            if (emp.status === "On Leave") status = "On Leave";
+            else if (isLeave(emp._id, dateKey, leaveMap)) status = "On Leave"; // ✅ Checked
+            else if (isHoliday) status = "Holiday";
+            else if (isEmployeeWeekOff) status = "Weekend";
+            else status = "Absent";
           }
+
+          return { d, record, status };
+        });
+
+        if (emp.workingDayType === 2) {
+          applyMonthlyFlexQuota(dayList, 2, { absentStatus: "Absent", flexStatus: "Flex Off" });
+        }
+
+        dayList.forEach(({ d, record, status }) => {
+          const cellValue = status === "Present" ? "P" :
+            status === "Late" ? "L" :
+              status === "Absent" ? "A" :
+                status === "On Leave" ? "OL" :
+                  status === "Holiday" ? "H" :
+                    status === "Weekend" ? "W" :
+                      status === "Flex Off" ? "F" : status;
 
           row[String(d)] = cellValue;
 

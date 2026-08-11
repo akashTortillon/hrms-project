@@ -110,12 +110,52 @@ export const getHolidaysSet = async () => {
   return holidaySetFromHolidays(settings?.holidays || []);
 };
 
-// True if `dateObj` falls on the given employee's weekly off day (per-employee
-// weekOffDay, falling back to the company-wide SystemSettings.defaultWeekOffDay, falling
-// back to Sunday). 0=Sunday ... 6=Saturday, matching Date#getDay().
-export const isWeekOff = (dateObj, employee, systemDefault) => {
-  const offDay = employee?.weekOffDay ?? systemDefault ?? 0;
-  return dateObj.getDay() === offDay;
+// True if `dateObj` falls on one of the given employee's recurring weekly off-days,
+// under their Working Day Type (see employeeModel.js for the 0/2/4/8 meanings).
+// `systemDefault` is the company-wide fallback shape { workingDayType, weekOffDays }
+// (typically SystemSettings' defaultWorkingDayType/defaultWeekOffDays), used only when
+// the employee has no explicit value of their own.
+//
+// Type 0 (no days off) and type 2 (flexible monthly allowance, not tied to any
+// weekday) both always return false here - neither is a "this specific calendar day
+// is structurally off" fact. Type 2's allowance is handled separately, after the
+// per-day loop, by applyMonthlyFlexQuota() below - it can't be decided per-day in
+// isolation since it's a monthly budget, not a fixed pattern.
+export const isWeekOff = (dateObj, employee, systemDefault = {}) => {
+  const type = employee?.workingDayType ?? systemDefault?.workingDayType ?? 4;
+  if (type === 0 || type === 2) return false;
+
+  const days = (employee?.weekOffDays && employee.weekOffDays.length)
+    ? employee.weekOffDays
+    : ((systemDefault?.weekOffDays && systemDefault.weekOffDays.length) ? systemDefault.weekOffDays : [0]);
+  return days.includes(dateObj.getDay());
+};
+
+// For workingDayType===2 (flexible monthly allowance): walks a period's day-by-day
+// status array in date order and converts up to `quotaDays` of the FIRST plain
+// "ABSENT" days (no attendance record, not on leave, not a holiday - i.e. genuinely
+// unaccounted-for days) into "FLEX_OFF" - a paid status, excluded from the
+// deduction basis, same treatment as WEEKEND/HOLIDAY. This is deliberately
+// first-come-first-served: the employee doesn't need to file a leave request for
+// these, the system just doesn't penalize their first N no-shows each period.
+// `dayStatuses` entries are mutated in place; callers should already have them
+// sorted chronologically (both attendanceController.js and payrollController.js
+// build them in date order).
+// `absentStatus`/`flexStatus` are configurable because payrollController.js and
+// attendanceController.js use two different status-string casing conventions
+// (upper-case 'ABSENT'/'FLEX_OFF' vs display Title-Case "Absent"/"Flex Off") - this
+// helper stays agnostic to which one a given caller uses.
+export const applyMonthlyFlexQuota = (dayStatuses, quotaDays, { absentStatus = "ABSENT", flexStatus = "FLEX_OFF" } = {}) => {
+  if (!quotaDays || quotaDays <= 0) return dayStatuses;
+  let remaining = quotaDays;
+  for (const day of dayStatuses) {
+    if (remaining <= 0) break;
+    if (day.status === absentStatus) {
+      day.status = flexStatus;
+      remaining -= 1;
+    }
+  }
+  return dayStatuses;
 };
 
 // Get Map of Approved Leaves for Multiple Employees

@@ -406,11 +406,11 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
-                  <label>Week Off Day</label>
+                  <label>Working Day Type</label>
                   <select
-                    name="weekOffDay"
-                    value={form.weekOffDay ?? ""}
-                    onChange={handleChange}
+                    name="workingDayType"
+                    value={form.workingDayType ?? 4}
+                    onChange={(e) => setForm({ ...form, workingDayType: Number(e.target.value) })}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -421,14 +421,32 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       height: "42px"
                     }}
                   >
-                    <option value="0">Sunday</option>
-                    <option value="1">Monday</option>
-                    <option value="2">Tuesday</option>
-                    <option value="3">Wednesday</option>
-                    <option value="4">Thursday</option>
-                    <option value="5">Friday</option>
-                    <option value="6">Saturday</option>
+                    <option value={0}>0 Days — no days off</option>
+                    <option value={2}>2 Days — flexible, any 2 days/month</option>
+                    <option value={4}>4 Days — one weekday/week off</option>
+                    <option value={8}>8 Days — two weekdays/week off</option>
                   </select>
+                  {(Number(form.workingDayType ?? 4) === 4 || Number(form.workingDayType ?? 4) === 8) && (
+                    <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, dayNum) => {
+                        const selected = (form.weekOffDays || [0]).includes(dayNum);
+                        return (
+                          <label key={dayNum} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => {
+                                const current = form.weekOffDays || [0];
+                                const next = selected ? current.filter((d) => d !== dayNum) : [...current, dayNum].sort();
+                                setForm({ ...form, weekOffDays: next });
+                              }}
+                            />
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {showManagerFields && (

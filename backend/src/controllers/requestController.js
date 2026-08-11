@@ -922,6 +922,24 @@ export const createRequest = async (req, res) => {
         });
       }
 
+      // Sick-leave medical document requirement is now enforced at submission, not
+      // just advisory - threshold is configurable via the Sick Leave master's
+      // metadata (Masters > HR Management > Leave Types), defaulting to "more than 1
+      // consecutive day" if unset. Rejecting here (rather than just flagging pay
+      // status like before) means an employee can no longer silently submit a
+      // multi-day sick leave with no supporting document at all.
+      if (sickLeave && !storedMedicalDoc) {
+        const sickLeaveMaster = await Master.findOne({ type: "LEAVE_TYPE", name: /sick/i });
+        const docThresholdRaw = Number(sickLeaveMaster?.metadata?.medicalDocRequiredAfterDays);
+        const docThreshold = Number.isFinite(docThresholdRaw) ? docThresholdRaw : 1;
+        if (numberOfDays > docThreshold) {
+          return res.status(400).json({
+            success: false,
+            message: `A medical document is required for sick leave longer than ${docThreshold} day(s). Please attach one and resubmit.`
+          });
+        }
+      }
+
       details.numberOfDays = numberOfDays;
       details.medicalDocumentRequired = sickLeave && numberOfDays > 1;
       details.hasMedicalDocument = Boolean(storedMedicalDoc);

@@ -41,11 +41,17 @@ const getStatusClass = (status) => {
 
 function Attendance() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { hasPermission } = useRole();
+  const { hasPermission, currentUser } = useRole();
   const isEmployee = !hasPermission("VIEW_ALL_ATTENDANCE");
 
   // Read State from URL Params
   const viewMode = searchParams.get("view") || "day";
+  // "Self" toggle - a Manager's scoped attendance response already includes their own
+  // record alongside their reports' (attendanceController.js always adds
+  // req.user.employeeId to the scope query), there's just never been a way to isolate
+  // it in the UI. Filtering client-side here avoids needing a backend change - the data
+  // is already there, this just narrows what's rendered.
+  const selfOnly = searchParams.get("scope") === "self";
   const selectedDate = searchParams.get("date") || getTodayDate();
   const selectedMonth = parseInt(searchParams.get("month") || (new Date().getMonth() + 1));
   const selectedYear = parseInt(searchParams.get("year") || new Date().getFullYear());
@@ -301,6 +307,8 @@ function Attendance() {
         loading={loading}
         onExport={isEmployee ? null : handleExport}
         onBulkMark={hasPermission("MANAGE_ATTENDANCE") ? () => setShowBulkModal(true) : null}
+        selfOnly={selfOnly}
+        setSelfOnly={(v) => updateParams({ scope: v ? "self" : "" })}
       />
       <AttendanceStats stats={stats} />
 
@@ -336,11 +344,17 @@ function Attendance() {
       <AttendanceTable
         date={selectedDate}
         // ✅ Remove Client-Side Filter for Daily View, but Keep for Monthly
-        records={viewMode === "day" ? attendanceRecords : monthlyRecords.filter(record => {
+        records={(viewMode === "day" ? attendanceRecords : monthlyRecords.filter(record => {
           const deptMatch = !selectedDepartment || record.department === selectedDepartment;
           const shiftMatch = !selectedShift || record.shift === selectedShift;
           const branchMatch = !selectedBranch || record.branch === selectedBranch;
           return deptMatch && shiftMatch && branchMatch;
+        })).filter(record => {
+          // "Self" scope - daily rows key off `employeeId`, monthly rows key off `_id`
+          // (attendanceController.js's two endpoints shape rows differently) - check both.
+          if (!selfOnly || !currentUser?.employeeId) return true;
+          const recordEmployeeId = record.employeeId || record._id;
+          return String(recordEmployeeId) === String(currentUser.employeeId);
         })}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
