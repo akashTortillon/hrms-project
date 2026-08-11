@@ -11,6 +11,32 @@ export const toMinutes = (time) => {
   return h * 60 + m;
 };
 
+// Assigns a punch to the correct "shift day" instead of its own raw calendar date.
+// For a same-day shift (start <= end) this is just dateStr. For an overnight shift
+// (start > end, e.g. "Flexible" 05:00->03:00) a punch after midnight but before the
+// shift's end time is really the tail end of the PREVIOUS day's shift, not the start of
+// a new one on its own calendar date - bucketing by raw calendar date splits one shift
+// occurrence's check-in and check-out across two Attendance rows. Punches that fall in
+// the dead zone between one shift's end and the next one's start (rare - late checkout
+// or early arrival) are resolved by punch type: OUT extends the previous shift-day's
+// grace period, IN belongs to the shift about to start today.
+export const computeShiftDayBucket = (dateStr, timeStr, transactionType, rules) => {
+  const startMin = toMinutes(rules.start);
+  const endMin = toMinutes(rules.end);
+  if (startMin <= endMin) return dateStr; // same-day shift, no adjustment needed
+
+  const oneDayBack = () => {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().split("T")[0];
+  };
+
+  const punchMin = toMinutes(timeStr);
+  if (punchMin >= startMin) return dateStr;
+  if (punchMin < endMin) return oneDayBack();
+  return transactionType === "OUT" ? oneDayBack() : dateStr;
+};
+
 // Helper: Calculate duration between two times in HH:MM format
 export const calculateDuration = (start, end) => {
   if (!start || !end) return null;

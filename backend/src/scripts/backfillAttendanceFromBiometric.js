@@ -25,7 +25,7 @@ import { fileURLToPath } from "url";
 import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import BiometricTransaction from "../models/biometricTransactionModel.js";
-import { getShiftRules, calculateLateTier, calculateDuration } from "../utils/attendanceUtils.js";
+import { getShiftRules, calculateLateTier, calculateDuration, computeShiftDayBucket } from "../utils/attendanceUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,8 +46,8 @@ async function main() {
   console.log(`Mode: ${LIVE ? "LIVE (will write)" : "DRY RUN (no writes)"}`);
   if (FROM_DATE || TO_DATE) console.log(`Date range: ${FROM_DATE || "start"} to ${TO_DATE || "today"}`);
 
-  // 1. Pull every raw transaction and re-bucket into true earliest-IN / latest-OUT
-  //    per employee+date, using the exact same UAE-local bucketing as attendanceProcessor.
+  // 1. Pull every raw transaction, sorted chronologically per badge, and re-bucket into
+  //    true earliest-IN / latest-OUT per employee+shift-day.
   const txnQuery = {};
   if (FROM_DATE || TO_DATE) {
     txnQuery.timestamp = {};
@@ -55,31 +55,18 @@ async function main() {
     if (TO_DATE) txnQuery.timestamp.$lte = new Date(`${TO_DATE}T23:59:59Z`);
   }
 
-  const transactions = await BiometricTransaction.find(txnQuery).select("badgeNumber timestamp transactionType").lean();
+  const transactions = await BiometricTransaction.find(txnQuery)
+    .select("badgeNumber timestamp transactionType")
+    .sort({ badgeNumber: 1, timestamp: 1 })
+    .lean();
   console.log(`Loaded ${transactions.length} raw biometric transactions.`);
 
-  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, checkIn, checkOut }
-  for (const txn of transactions) {
-    const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
-    const dateStr = uaeTime.toISOString().split("T")[0];
-    const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5);
-    const code = txn.badgeNumber.trim();
-    const key = `${code}_${dateStr}`;
-
-    if (!grouped.has(key)) {
-      grouped.set(key, { badgeNumber: code, date: dateStr, checkIn: null, checkOut: null });
-    }
-    const g = grouped.get(key);
-    if (txn.transactionType === "IN") {
-      if (!g.checkIn || timeStr < g.checkIn) g.checkIn = timeStr;
-    } else if (txn.transactionType === "OUT") {
-      if (!g.checkOut || timeStr > g.checkOut) g.checkOut = timeStr;
-    }
-  }
-  console.log(`Recomputed ${grouped.size} true employee-day check-in/check-out pairs from raw punches.`);
-
-  // 2. Match employees once, up front.
-  const badgeCodes = Array.from(new Set(Array.from(grouped.values()).map(g => g.badgeNumber)));
+  // 2. Match employees once, up front - bucketing needs each employee's shift
+  //    start/end (see computeShiftDayBucket) to correctly place a punch into the right
+  //    shift-day for overnight shifts (e.g. "Flexible" 05:00->03:00), where the checkout
+  //    lands on the following calendar date and naive calendar-day bucketing would split
+  //    one shift occurrence's check-in and check-out across two Attendance rows.
+  const badgeCodes = Array.from(new Set(transactions.map(t => t.badgeNumber.trim())));
   const employees = await Employee.find({
     $or: [{ badgeNumber: { $in: badgeCodes } }, { code: { $in: badgeCodes } }]
   });
@@ -96,6 +83,35 @@ async function main() {
     }
     return shiftRulesCache.get(shiftName);
   };
+
+  const grouped = new Map(); // "badge_shiftDate" -> { badgeNumber, date, checkIn, checkOut }
+  for (const txn of transactions) {
+    const code = txn.badgeNumber.trim();
+    const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
+    const dateStr = uaeTime.toISOString().split("T")[0];
+    const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5);
+
+    const employee = employeeByBadge.get(code);
+    const rules = await getRulesCached(employee?.shift || "Day Shift");
+    const shiftDate = computeShiftDayBucket(dateStr, timeStr, txn.transactionType, rules);
+    const key = `${code}_${shiftDate}`;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, { badgeNumber: code, date: shiftDate, checkIn: null, checkOut: null });
+    }
+    const g = grouped.get(key);
+    // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so within a key
+    // the first IN seen is chronologically earliest and each OUT seen overwrites the
+    // previous one to end up as the chronologically latest - no string HH:MM comparison
+    // needed (which would break for an overnight shift-day bucket spanning two calendar
+    // dates, e.g. "22:00" > "01:00" as strings even though 01:00 the next day is later).
+    if (txn.transactionType === "IN") {
+      if (!g.checkIn) g.checkIn = timeStr;
+    } else if (txn.transactionType === "OUT") {
+      g.checkOut = timeStr;
+    }
+  }
+  console.log(`Recomputed ${grouped.size} true employee-shift-day check-in/check-out pairs from raw punches.`);
 
   let changed = 0, skippedManual = 0, skippedLeave = 0, skippedNoChange = 0, unmatched = 0, created = 0;
   const diffs = [];

@@ -6,7 +6,8 @@ import {
   calculateLateTier,
   calculateDuration,
   getApprovedLeavesMap,
-  isLeave
+  isLeave,
+  computeShiftDayBucket
 } from "../utils/attendanceUtils.js";
 
 // UAE local "today" as YYYY-MM-DD, matching the +4h anchor this file already uses to
@@ -37,9 +38,34 @@ class AttendanceProcessor {
       return stats;
     }
 
-    // 1. Group transactions by Employee Code (Badge Number) + Date
-    const grouped = {};
+    // 1. Collect badge codes and fetch employees + shift rules BEFORE bucketing -
+    // bucketing an overnight shift (see step 2) needs to know each employee's shift
+    // start/end to place a punch into the right shift-day, so employee lookup can't
+    // happen after grouping the way it used to when every bucket was just a raw
+    // calendar date.
     const employeeCodes = new Set();
+    for (const txn of transactions) {
+      if (!txn.badgeNumber || !txn.timestamp) continue;
+      employeeCodes.add(txn.badgeNumber.trim());
+    }
+
+    // Fetch employees by `code` — confirmed against real device data that the
+    // Attendance API's employeeID equals the employee's HRMS code directly for
+    // regular staff (Employee.badgeNumber is unused/unpopulated in practice).
+    const employeesList = await Employee.find({ code: { $in: Array.from(employeeCodes) } });
+    const employeeByCode = new Map(employeesList.map(e => [e.code.trim(), e]));
+    const leaveMap = await getApprovedLeavesMap(employeesList);
+
+    const shiftRulesCache = new Map();
+    const getRulesCached = async (shiftName) => {
+      if (!shiftRulesCache.has(shiftName)) {
+        shiftRulesCache.set(shiftName, await getShiftRules(shiftName));
+      }
+      return shiftRulesCache.get(shiftName);
+    };
+
+    // 2. Group transactions by Employee Code (Badge Number) + shift day
+    const grouped = {};
 
     for (const txn of transactions) {
       if (!txn.badgeNumber || !txn.timestamp) continue;
@@ -53,43 +79,52 @@ class AttendanceProcessor {
       const dateStr = uaeTime.toISOString().split("T")[0];
       const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5); // HH:MM, UAE local
       const code = txn.badgeNumber.trim();
-      const key = `${code}_${dateStr}`;
 
-      employeeCodes.add(code);
+      // Overnight shifts (e.g. "Flexible" 05:00->03:00) have their checkout land on the
+      // NEXT calendar date - bucketing by raw dateStr splits one shift occurrence's
+      // check-in and check-out across two Attendance rows. computeShiftDayBucket anchors
+      // the bucket to the shift's own start/end instead of calendar midnight.
+      const employee = employeeByCode.get(code);
+      const shiftName = employee?.shift || "Day Shift";
+      const rules = await getRulesCached(shiftName);
+      const shiftDate = computeShiftDayBucket(dateStr, timeStr, txn.transactionType, rules);
+      const key = `${code}_${shiftDate}`;
 
       if (!grouped[key]) {
         grouped[key] = {
           badgeNumber: code,
           employeeName: txn.rawData?.personName || null, // Capture name from Attendance API
-          date: dateStr,
+          date: shiftDate,
           checkIn: null,
-          checkOut: null
+          checkInAt: null,  // actual instant behind checkIn, for cross-midnight comparison
+          checkOut: null,
+          checkOutAt: null  // actual instant behind checkOut, for cross-midnight comparison
         };
       }
 
+      // An overnight shift-day bucket can hold punches from two different calendar
+      // dates (an evening OUT and an early-morning-next-day OUT), so "latest"/"earliest"
+      // must compare true chronological instants, not the derived HH:MM strings -
+      // "22:00" > "01:00" as strings even though 01:00 the next day is later in reality.
+      const txnAt = new Date(txn.timestamp).getTime();
+      const g = grouped[key];
       if (txn.transactionType === "IN") {
-        // Keep earliest check-in
-        if (!grouped[key].checkIn || timeStr < grouped[key].checkIn) {
-          grouped[key].checkIn = timeStr;
+        if (g.checkInAt === null || txnAt < g.checkInAt) {
+          g.checkIn = timeStr;
+          g.checkInAt = txnAt;
         }
       } else if (txn.transactionType === "OUT") {
-        // Keep latest check-out
-        if (!grouped[key].checkOut || timeStr > grouped[key].checkOut) {
-          grouped[key].checkOut = timeStr;
+        if (g.checkOutAt === null || txnAt > g.checkOutAt) {
+          g.checkOut = timeStr;
+          g.checkOutAt = txnAt;
         }
       }
     }
 
-    // 2. Fetch employees by `code` — confirmed against real device data that the
-    // Attendance API's employeeID equals the employee's HRMS code directly for
-    // regular staff (Employee.badgeNumber is unused/unpopulated in practice).
-    const employeesList = await Employee.find({ code: { $in: Array.from(employeeCodes) } });
-    const leaveMap = await getApprovedLeavesMap(employeesList);
-
     // 3. Process each grouped record
     for (const key in grouped) {
       const record = grouped[key];
-      const employee = employeesList.find(e => e.code && e.code.trim() === record.badgeNumber);
+      const employee = employeeByCode.get(record.badgeNumber);
 
       if (!employee) {
         console.warn(`[AttendanceProcessor] Employee with badge number ${record.badgeNumber} not found.`);
@@ -126,7 +161,7 @@ class AttendanceProcessor {
 
       // Get shift rules
       const shiftName = employee.shift || "Day Shift";
-      const rules = await getShiftRules(shiftName);
+      const rules = await getRulesCached(shiftName);
 
       // Check if updating is needed
       if (existingRecord) {
