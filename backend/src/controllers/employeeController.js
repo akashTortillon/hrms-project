@@ -794,13 +794,41 @@ export const updateEmployee = async (req, res) => {
       await updatedEmployee.save();
     }
 
-    // Sync Role with User account
-    if (role && updatedEmployee.email) {
-      // Find linked User by email and update role
-      await User.findOneAndUpdate(
-        { email: updatedEmployee.email },
-        { role: role }
-      );
+    // Sync the linked User account with this update.
+    // Look up by employeeId first (the authoritative link) rather than by the
+    // employee's OLD email - if email is changing this update, `before.email` no
+    // longer matches the User we actually want to touch. Falls back to the old email
+    // for legacy records that predate employeeId being set at all.
+    const emailChanged = before && payload.email !== undefined && before.email !== updatedEmployee.email;
+    let linkedUser = await User.findOne({ employeeId: id });
+    if (!linkedUser && before?.email) {
+      linkedUser = await User.findOne({ email: before.email });
+    }
+
+    if (linkedUser) {
+      if (role) linkedUser.role = role;
+      if (emailChanged) linkedUser.email = updatedEmployee.email;
+      if (!linkedUser.employeeId) linkedUser.employeeId = updatedEmployee._id; // heal a bulk-import gap while we're here
+      if (linkedUser.isModified()) {
+        try {
+          await linkedUser.save();
+        } catch (userSyncErr) {
+          // Don't fail the whole employee update over a User-side conflict (e.g. the new
+          // email collides with a different existing User) - the Employee document is
+          // already saved at this point, so the update itself should still succeed.
+          console.error(`[updateEmployee] Failed to sync linked User for employee ${id}: ${userSyncErr.message}`);
+        }
+      }
+    } else if (emailChanged) {
+      // No User linked at all (by employeeId or by the old email) but the new email
+      // matches an existing, unlinked User - heal the link rather than leaving it
+      // orphaned for "Reset Password" to have to provision a fresh duplicate account.
+      const byNewEmail = await User.findOne({ email: updatedEmployee.email });
+      if (byNewEmail && !byNewEmail.employeeId) {
+        byNewEmail.employeeId = updatedEmployee._id;
+        if (role) byNewEmail.role = role;
+        await byNewEmail.save();
+      }
     }
 
     if (req.body.appendSalaryHistory && salaryEditAllowed) {
@@ -1763,10 +1791,55 @@ export const resetEmployeePassword = async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
-    // Find the associated user
-    const user = await User.findOne({ employeeId: id });
+    // Find the associated user. employeeId is the authoritative link, but two known
+    // gaps can leave it unset even though the employee is legitimate:
+    //   1. Bulk import (importEmployees) creates the User but never sets employeeId.
+    //   2. Editing an employee's email later (updateEmployee) never updates the linked
+    //      User's email, orphaning it under the stale address.
+    // Rather than just erroring, heal the link (User exists by email, just unlinked) or
+    // provision a fresh account (no User exists under this email at all) so "Reset
+    // Password" also fixes the underlying account gap it's exposing, not just report it.
+    let user = await User.findOne({ employeeId: id });
+
+    if (!user && employee.email) {
+      user = await User.findOne({ email: employee.email });
+      if (user) {
+        user.employeeId = employee._id;
+        await user.save();
+      }
+    }
+
     if (!user) {
-      return res.status(404).json({ message: "Linked user account not found for this employee." });
+      if (!employee.email) {
+        return res.status(404).json({ message: "Linked user account not found for this employee, and no email is on file to provision one. Add an email to this employee's profile first." });
+      }
+
+      let userPhone = (employee.phone || "").replace(/\s+/g, "");
+      if (userPhone.startsWith("0")) {
+        userPhone = "+971" + userPhone.substring(1);
+      } else if (userPhone.startsWith("971")) {
+        userPhone = "+" + userPhone;
+      } else if (userPhone && !userPhone.startsWith("+")) {
+        userPhone = "+971" + userPhone;
+      }
+
+      try {
+        const hashedPassword = await bcrypt.hash("Password@123", 10);
+        user = await User.create({
+          name: employee.name,
+          email: employee.email,
+          phone: userPhone,
+          password: hashedPassword,
+          role: employee.role,
+          employeeId: employee._id,
+          mustChangePassword: true
+        });
+      } catch (provisionErr) {
+        if (provisionErr.code === 11000) {
+          return res.status(409).json({ message: "Could not provision a login account for this employee: the email or phone number is already used by another account. Resolve that conflict first, then try again." });
+        }
+        return res.status(500).json({ message: "Could not provision a login account for this employee: " + provisionErr.message });
+      }
     }
 
     // Generate random 8-char password
