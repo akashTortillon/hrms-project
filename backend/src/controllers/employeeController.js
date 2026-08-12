@@ -1882,10 +1882,18 @@ export const resetEmployeePassword = async (req, res) => {
     const emailResult = await sendEmail(emailOptions);
 
     if (!emailResult.success) {
-      return res.status(500).json({ message: "Password was reset but failed to send email. The temporary password is: " + newPassword });
+      // The password WAS reset - only delivery failed (e.g. SMTP not configured, see
+      // sendEmail.js). That's a 200 with a warning flag, not a 500: a 500 here previously
+      // made the frontend treat a successful reset as an error, with the temp password
+      // buried in a generic error-toast string instead of surfaced for the admin to copy.
+      return res.status(200).json({
+        message: "Password was reset, but the notification email could not be sent.",
+        emailSent: false,
+        tempPassword: newPassword
+      });
     }
 
-    res.status(200).json({ message: "Password reset successfully and email dispatched to employee." });
+    res.status(200).json({ message: "Password reset successfully and email dispatched to employee.", emailSent: true });
   } catch (error) {
     console.error("Reset Password Error:", error);
     res.status(500).json({ message: "Server error resetting password", error: error.message });

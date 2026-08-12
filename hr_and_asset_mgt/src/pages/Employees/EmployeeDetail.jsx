@@ -795,8 +795,39 @@ export default function EmployeeDetail() {
                                         onClick={async () => {
                                             if (window.confirm("Are you sure you want to reset this employee's password? An email will be sent immediately with a new temporary password.")) {
                                                 try {
-                                                    await resetEmployeePassword(effectiveId);
-                                                    toast.success("Password reset successfully. Email sent to employee.");
+                                                    const result = await resetEmployeePassword(effectiveId);
+                                                    if (result?.emailSent === false && result?.tempPassword) {
+                                                        // Delivery failed but the reset itself succeeded - surface the temp
+                                                        // password directly instead of leaving the admin to relay it manually
+                                                        // with no way to hand it to the employee.
+                                                        toast.warn(
+                                                            ({ closeToast }) => (
+                                                                <div>
+                                                                    <div style={{ marginBottom: 6 }}>
+                                                                        Password reset, but the email could not be sent.
+                                                                    </div>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                        <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 'bold' }}>
+                                                                            {result.tempPassword}
+                                                                        </code>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                navigator.clipboard.writeText(result.tempPassword);
+                                                                                toast.success("Password copied to clipboard");
+                                                                                closeToast();
+                                                                            }}
+                                                                            style={{ padding: '2px 10px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', cursor: 'pointer' }}
+                                                                        >
+                                                                            Copy
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ),
+                                                            { autoClose: false }
+                                                        );
+                                                    } else {
+                                                        toast.success("Password reset successfully. Email sent to employee.");
+                                                    }
                                                 } catch (err) {
                                                     console.error("Password reset failed", err);
                                                     toast.error(err.response?.data?.message || "Failed to reset password");
