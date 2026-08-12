@@ -3,6 +3,37 @@ import Master from "../models/masterModel.js";
 import Employee from "../models/employeeModel.js";
 import path from "path";
 import fs from "fs";
+import { getSignedFileUrl } from "../utils/storage.js";
+
+// Items uploaded before documentPath existed only have the raw (unsigned) S3 URL -
+// the key is still recoverable from its path, so old uploads don't stay broken forever.
+const deriveS3KeyFromUrl = (url) => {
+    try {
+        return decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ""));
+    } catch {
+        return null;
+    }
+};
+
+const signWorkflowItemDocuments = async (workflow) => {
+    if (!workflow?.items?.length) return workflow;
+    const plain = workflow.toObject ? workflow.toObject() : workflow;
+    await Promise.all(
+        plain.items.map(async (item) => {
+            if (!item.documentUrl) return;
+            try {
+                item.documentUrl = await getSignedFileUrl({
+                    filePath: item.documentPath || deriveS3KeyFromUrl(item.documentUrl),
+                    fileUrl: item.documentUrl,
+                    storage: item.documentStorage || "S3"
+                });
+            } catch (err) {
+                console.error("Failed to sign workflow document URL:", err.message);
+            }
+        })
+    );
+    return plain;
+};
 
 // Preset Checklist Items
 const ONBOARDING_ITEMS = [
@@ -179,7 +210,7 @@ export const getEmployeeWorkflow = async (req, res) => {
             }
         }
 
-        res.json({ success: true, data: workflow });
+        res.json({ success: true, data: await signWorkflowItemDocuments(workflow) });
     } catch (error) {
         console.error("Workflow Error:", error);
         res.status(500).json({ success: false, message: error.message });
@@ -241,7 +272,11 @@ export const updateWorkflowItem = async (req, res) => {
             // `location` (the full public S3 URL) and `key`. Using `.filename`
             // here always produced "/uploads/workflows/undefined" - the file
             // landed in S3 fine, but nothing ever pointed at it.
+            // The bucket is private, so `location` alone 403s when opened directly -
+            // keep the S3 key too so getEmployeeWorkflow can sign it on read.
             item.documentUrl = file.location;
+            item.documentPath = file.key;
+            item.documentStorage = "S3";
             item.status = "Completed"; // Auto-complete on upload logic? User preference: Maybe yes for now.
         }
 
@@ -270,7 +305,7 @@ export const updateWorkflowItem = async (req, res) => {
         }
 
         await workflow.save();
-        res.json({ success: true, data: workflow });
+        res.json({ success: true, data: await signWorkflowItemDocuments(workflow) });
 
     } catch (error) {
         console.error("Update Item Error:", error);

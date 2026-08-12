@@ -5,6 +5,8 @@ const workflowItemSchema = new mongoose.Schema({
     description: { type: String },
     status: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
     documentUrl: { type: String }, // URL of uploaded doc if applicable
+    documentPath: { type: String }, // S3 key, used to sign documentUrl for private buckets
+    documentStorage: { type: String },
     required: { type: Boolean, default: true },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedAt: { type: Date }
