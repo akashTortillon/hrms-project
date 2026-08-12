@@ -1,5 +1,5 @@
 /* ============================================================
-   LOGIN PAGE — Leptis HRM (Premium Dark Theme)
+   LOGIN PAGE — Kayzan Group HRMS (Premium Dark Theme)
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -25,7 +25,7 @@
   overflow: hidden;
   box-shadow:
     0 40px 100px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(28, 79, 158, 0.18);
+    0 0 0 1px rgba(200, 144, 42, 0.12);
 }
 
 /* ================================================================
@@ -42,7 +42,7 @@
   overflow: hidden;
 }
 
-/* Decorative brand orbs */
+/* Decorative gold orb */
 .login-brand-panel::before {
   content: '';
   position: absolute;
@@ -50,7 +50,7 @@
   left: -80px;
   width: 320px;
   height: 320px;
-  background: radial-gradient(circle, rgba(28, 79, 158, 0.10) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(200, 144, 42, 0.07) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -61,7 +61,7 @@
   right: -60px;
   width: 260px;
   height: 260px;
-  background: radial-gradient(circle, rgba(231, 69, 46, 0.06) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(200, 144, 42, 0.05) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -75,29 +75,29 @@
   z-index: 1;
 }
 
-/* Logo */
-.leptis-logo-wrap {
-  width: 220px;
-  height: auto;
+/* Logo SVG */
+.kayzan-logo-wrap {
+  width: 120px;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 0 20px rgba(28, 79, 158, 0.35));
+  filter: drop-shadow(0 0 20px rgba(200, 144, 42, 0.35));
   animation: logoPulse 3s ease-in-out infinite;
 }
 
-.leptis-logo-img {
+.kayzan-logo-svg {
   width: 100%;
-  height: auto;
+  height: 100%;
 }
 
 @keyframes logoPulse {
-  0%, 100% { filter: drop-shadow(0 0 16px rgba(28, 79, 158, 0.3)); }
-  50%       { filter: drop-shadow(0 0 28px rgba(28, 79, 158, 0.55)); }
+  0%, 100% { filter: drop-shadow(0 0 16px rgba(200, 144, 42, 0.3)); }
+  50%       { filter: drop-shadow(0 0 28px rgba(200, 144, 42, 0.55)); }
 }
 
 /* Wordmark */
-.leptis-wordmark {
+.kayzan-wordmark {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -105,11 +105,28 @@
   margin-top: -6px;
 }
 
-.leptis-tag {
-  font-size: 15px;
-  font-weight: 700;
+.kayzan-name {
+  font-size: 34px;
+  font-weight: 800;
   letter-spacing: 6px;
-  color: #4c7fd6;
+  background: linear-gradient(135deg, #c8902a, #f0c060, #c8902a);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+.kayzan-group {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 5px;
+  color: #8a7050;
   text-transform: uppercase;
 }
 
@@ -134,25 +151,25 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(28, 79, 158, 0.08);
-  border: 1px solid rgba(28, 79, 158, 0.2);
+  background: rgba(200, 144, 42, 0.06);
+  border: 1px solid rgba(200, 144, 42, 0.15);
   border-radius: 10px;
   padding: 10px 16px;
   font-size: 13px;
-  color: #a9c2e8;
+  color: #c8ae8a;
   font-weight: 500;
   transition: background 0.2s;
 }
 
 .feature-pill:hover {
-  background: rgba(28, 79, 158, 0.14);
+  background: rgba(200, 144, 42, 0.1);
 }
 
 .feature-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1c4f9e, #e7452e);
+  background: linear-gradient(135deg, #c8902a, #f0c060);
   flex-shrink: 0;
 }
 
@@ -261,8 +278,8 @@
 }
 
 .input-wrap input:focus {
-  border-color: rgba(28, 79, 158, 0.6);
-  box-shadow: 0 0 0 3px rgba(28, 79, 158, 0.12);
+  border-color: rgba(200, 144, 42, 0.5);
+  box-shadow: 0 0 0 3px rgba(200, 144, 42, 0.08);
 }
 
 /* Password toggle */
@@ -280,7 +297,7 @@
 }
 
 .password-toggle:hover {
-  color: #4c7fd6;
+  color: #c8902a;
 }
 
 /* Submit button */
@@ -290,7 +307,7 @@
   padding: 16px;
   border-radius: 12px;
   border: none;
-  background: linear-gradient(135deg, #163e80, #1c4f9e, #2a63bc);
+  background: linear-gradient(135deg, #b87a20, #d4962c, #c8902a);
   background-size: 200% auto;
   color: #fff;
   font-size: 15px;
@@ -298,14 +315,14 @@
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: all 0.25s ease;
-  box-shadow: 0 8px 24px rgba(28, 79, 158, 0.35);
+  box-shadow: 0 8px 24px rgba(200, 144, 42, 0.3);
   animation: none;
 }
 
 .login-btn:hover:not(:disabled) {
   background-position: right center;
   transform: translateY(-2px);
-  box-shadow: 0 14px 32px rgba(28, 79, 158, 0.5);
+  box-shadow: 0 14px 32px rgba(200, 144, 42, 0.45);
 }
 
 .login-btn:active:not(:disabled) {
@@ -352,7 +369,7 @@
 }
 
 .login-card-footer strong {
-  color: #4c7fd6;
+  color: #8a7050;
   font-weight: 600;
 }
 
@@ -397,8 +414,9 @@
     padding: 36px 24px;
   }
 
-  .leptis-logo-wrap {
-    width: 170px;
+  .kayzan-name {
+    font-size: 26px;
+    letter-spacing: 4px;
   }
 
   .login-form-wrapper {
