@@ -79,14 +79,29 @@ export const getShiftRules = async (shiftName) => {
 
 export const calculateLateTier = (checkInTime, rules) => {
   if (!checkInTime) return 0;
-  const checkInMin = toMinutes(checkInTime);
+
+  // Overnight shifts (e.g. "Flexible" start 05:00) can have late-policy tiers that
+  // land after midnight - "Flexible"'s tiers are 13:15 -> 13:30 -> 02:00 (next day,
+  // the harshest tier). Sorting those as plain minutes-of-day puts "02:00" (120) FIRST
+  // since it's numerically smallest, even though it's chronologically LAST relative to
+  // the shift's own start - making 02:00 the on-time cutoff instead of 13:15 and
+  // pushing every legitimately-on-time check-in into "Late". Normalize any time earlier
+  // than the shift's start into "next day" space before comparing, same fix as
+  // computeShiftDayBucket uses for punch bucketing. No-op for same-day shifts, where
+  // every buffer is already >= start.
+  const shiftStartMin = toMinutes(rules.start);
+  const normalize = (t) => {
+    const m = toMinutes(t);
+    return m < shiftStartMin ? m + 24 * 60 : m;
+  };
+  const checkInMin = normalize(checkInTime);
 
   // Ensure we have at least one buffer
   const buffers = rules.buffers || [rules.lateLimit];
   if (buffers.length === 0) return 0;
 
   // Convert all buffers to minutes
-  const bufferMins = buffers.map(b => toMinutes(b)).sort((a, b) => a - b);
+  const bufferMins = buffers.map(normalize).sort((a, b) => a - b);
 
   if (checkInMin <= bufferMins[0]) return 0; // On Time
 
