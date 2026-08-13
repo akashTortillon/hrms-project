@@ -11,7 +11,7 @@ class BiometricScheduler {
    * Starts the background scheduler job
    */
   start() {
-    const interval = parseInt(process.env.ATTENDANCE_SYNC_INTERVAL) || 10;
+    const interval = parseInt(process.env.BIOCLOUD_SYNC_INTERVAL) || 10;
     const cronExpression = `*/${interval} * * * *`;
 
     console.log(`[BiometricScheduler] Registering cron execution job every ${interval} minutes...`);
