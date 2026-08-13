@@ -207,11 +207,39 @@ class BiometricSyncService {
 
       console.log(`[BiometricSyncService] Stored ${transactionsStored} new unique transactions in database.`);
 
-      // 5. Process new transactions to generate attendance records
-      const processingStats = await attendanceProcessor.processTransactions(newTransactions);
+      // A malformed/out-of-order authDateTime from the API (already known to be an
+      // unreliable field - see parseLeptisTimestamp) can otherwise push the cursor ahead
+      // of real time. Once that happens, every future "/since <cursor>" call legitimately
+      // returns nothing forever - this is exactly what caused the 2026-08-12 all-day gap
+      // (cursor found sitting ~1h41m ahead of the sync run that supposedly set it). Never
+      // let the cursor advance past "now".
+      const now = new Date();
+      if (highestAuthDateTime && highestAuthDateTime > now) {
+        console.warn(`[BiometricSyncService] Computed cursor ${highestAuthDateTime.toISOString()} is ahead of now (${now.toISOString()}) - a transaction in this batch has a bad authDateTime. Clamping cursor to now so future syncs aren't skipped.`);
+        highestAuthDateTime = now;
+      }
+
+      // Sweep up any earlier transactions that got stored but never made it through
+      // attendance processing (e.g. inserted by a standalone backfill script, or a prior
+      // run that stored records then errored before reaching step 5). Without this,
+      // processed:false rows have no retry path - they just sit there permanently, which
+      // is why the 2026-08-12 backfill call reported transactionsFetched:1006 but
+      // transactionsStored:0: every one of those 1006 already existed from an earlier
+      // insert and was silently skipped by the `exists` check above, never reprocessed.
+      const staleUnprocessed = await BiometricTransaction.find({
+        processed: { $ne: true },
+        _id: { $nin: newTransactions.map((t) => t._id) }
+      }).limit(5000);
+      if (staleUnprocessed.length > 0) {
+        console.warn(`[BiometricSyncService] Found ${staleUnprocessed.length} previously-stored transaction(s) never processed into attendance records - reprocessing now.`);
+      }
+      const transactionsToProcess = [...newTransactions, ...staleUnprocessed];
+
+      // 5. Process new (and any backlogged) transactions to generate attendance records
+      const processingStats = await attendanceProcessor.processTransactions(transactionsToProcess);
 
       // 6. Update transaction processed state
-      for (const newTxn of newTransactions) {
+      for (const newTxn of transactionsToProcess) {
         newTxn.processed = true;
         newTxn.processedAt = new Date();
         await newTxn.save();
