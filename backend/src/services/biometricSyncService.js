@@ -124,10 +124,22 @@ class BiometricSyncService {
       const finalStartDate = `${startDate || todayStr} 00:00:00`;
       const finalEndDate = `${endDate || todayStr} 23:59:59`;
 
-      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | Starting from Transaction ID: ${lastSyncedTransactionId}`);
+      // BioCloud ANDs the IdFrom cursor with the StartDate/EndDate window - it does not
+      // treat an explicit date range as overriding the ID floor. Once the live cursor has
+      // advanced past today's transaction IDs, requesting an EARLIER date (a manual
+      // backfill) with that same high IdFrom silently returns nothing, even though the
+      // date range is correct and BioCloud genuinely has the data (confirmed directly:
+      // the same StartDate/EndDate with IdFrom=0 via a raw API call returned real 2026-08-12
+      // records that a sync using the live cursor as IdFrom did not). A manual/dated
+      // backfill is asking for data BEFORE the current cursor by definition, so it must
+      // not be floored by it - only scheduled "catch up from where we left off" runs
+      // should use the live cursor as IdFrom.
+      const idFrom = startDate ? 0 : lastSyncedTransactionId;
+
+      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | IdFrom: ${idFrom}${startDate ? " (backfill - ignoring live cursor)" : ""}`);
 
       // 3. Fetch from BioCloud API with retry logic
-      const apiResponse = await this._fetchFromApiWithRetries(lastSyncedTransactionId, finalStartDate, finalEndDate);
+      const apiResponse = await this._fetchFromApiWithRetries(idFrom, finalStartDate, finalEndDate);
       
       console.log(`[BiometricSyncService] Raw API response parsed. Type: ${typeof apiResponse}, IsArray: ${Array.isArray(apiResponse)}`);
 
