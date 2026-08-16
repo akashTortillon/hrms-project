@@ -9,12 +9,24 @@ const salaryHistorySchema = new mongoose.Schema({
   basicSalary: { type: Number, default: 0 },
   visaBase: { type: Number, default: 0 },
   workBase: { type: Number, default: 0 },
+  // 50/30/20 split target fields (basic/hra/allowance) - undefined default (not 0) so
+  // legacy entries that predate this field aren't misread as "set to 0" by the lazy-apply
+  // sweep below, which only writes these back when typeof is "number".
+  allowance: { type: Number, default: undefined },
+  hra: { type: Number, default: undefined },
   ctc: { type: Number, default: 0 },
   incrementAmount: { type: Number, default: 0 },
   effectiveDate: { type: Date, required: true },
   notes: { type: String, default: "" },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  // Whether this salary change has actually been applied to the employee's live
+  // basicSalary/visaBase/workBase/allowance/hra/totalSalary/ctc fields. Immediate
+  // changes (effectiveDate <= today) are applied on creation. Future-dated changes
+  // stay pending (applied:false) until applyDuePendingSalaryChanges() promotes them -
+  // mirrors transferHistory.applied exactly. Existing history predates this field and
+  // was always applied instantly, so the default is true.
+  applied: { type: Boolean, default: true }
 }, { _id: true });
 
 const allowanceSchema = new mongoose.Schema({

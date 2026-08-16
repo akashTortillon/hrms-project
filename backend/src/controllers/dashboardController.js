@@ -91,6 +91,9 @@ export const getEmployeeVisaExpiries = async (req, res) => {
     const restrictToSelf = !req.user.permissions.includes("VIEW_ALL_EMPLOYEES") && req.user.role !== "Admin";
 
     let employeeQuery = {
+      // Only active employees - an offboarded employee's visa/passport naturally sits
+      // expired forever and would otherwise permanently clutter this reminder list.
+      status: "Active",
       $or: [
         { visaExpiry: { $ne: null } },
         { passportExpiry: { $ne: null } },
@@ -111,8 +114,13 @@ export const getEmployeeVisaExpiries = async (req, res) => {
     const docQuery = { expiryDate: { $ne: null }, isActive: { $ne: false } };
     if (restrictToSelf) docQuery.employeeId = req.user.employeeId;
 
-    const uploadedDocs = await EmployeeDocument.find(docQuery)
-      .populate("employeeId", "name designation code");
+    // EmployeeDocument has no status of its own - it lives on the populated employee.
+    // Filter to Active here too (can't just reuse `employees` above as an allowlist:
+    // a purely document-driven employee with no bare expiry field set wouldn't be in
+    // that set even while Active).
+    const uploadedDocsRaw = await EmployeeDocument.find(docQuery)
+      .populate("employeeId", "name designation code status");
+    const uploadedDocs = uploadedDocsRaw.filter((doc) => doc.employeeId?.status === "Active");
 
     // The bare Employee.visaExpiry/passportExpiry/emiratesIdExpiry/laborCards fields
     // and the EmployeeDocument records are two independently-writable sources for the

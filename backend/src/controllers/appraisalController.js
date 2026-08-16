@@ -3,7 +3,7 @@ import Appraisal from "../models/appraisalModel.js";
 import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
 import { createNotification } from "./notificationController.js";
-import { toNumber, computeTotalSalary, computeCtc } from "../utils/salaryCalc.js";
+import { toNumber, computeTotalSalary, computeCtc, splitIncrement } from "../utils/salaryCalc.js";
 
 export const getAppraisalCycles = async (req, res) => {
   try {
@@ -138,30 +138,67 @@ export const approveAppraisal = async (req, res) => {
       const latestVisaBase = toNumber(employee.visaBase || employee.basicSalary);
       const latestWorkBase = toNumber(employee.workBase || employee.basicSalary);
       const latestBasic = toNumber(employee.basicSalary);
+      const latestHra = toNumber(employee.hra);
+      const latestAllowance = toNumber(employee.allowance);
 
-      employee.basicSalary = String(latestBasic + increment);
-      employee.visaBase = latestVisaBase + increment;
-      employee.workBase = latestWorkBase + increment;
-      employee.totalSalary = computeTotalSalary(employee);
-      employee.ctc = computeCtc(employee);
+      // Increment is split 50/30/20 across basic/hra/allowance, added on top of current
+      // values - not dumped entirely into basicSalary. visaBase/workBase still get the
+      // full unsplit amount (see splitIncrement's comment for why).
+      const { basicDelta, hraDelta, allowanceDelta } = splitIncrement(increment);
+      const newBasic = latestBasic + basicDelta;
+      const newVisaBase = latestVisaBase + increment;
+      const newWorkBase = latestWorkBase + increment;
+      const newHra = latestHra + hraDelta;
+      const newAllowance = latestAllowance + allowanceDelta;
+      const newCtc = computeCtc({
+        basicSalary: newBasic,
+        allowance: newAllowance,
+        hra: newHra,
+        accommodationAllowance: employee.accommodationAllowance,
+        vehicleAllowance: employee.vehicleAllowance
+      });
+
+      // Only apply immediately when the effective date is today or in the past.
+      // Future-dated increments are recorded but left pending until their date arrives
+      // (see applyDuePendingSalaryChanges) - mirrors transferEmployee's isImmediate gate.
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      const isImmediate = new Date(effectiveDate) <= endOfToday;
+
       employee.salaryHistory.push({
         salaryType: "APPRAISAL",
-        basicSalary: latestBasic + increment,
-        visaBase: latestVisaBase + increment,
-        workBase: latestWorkBase + increment,
-        ctc: employee.ctc,
+        basicSalary: newBasic,
+        visaBase: newVisaBase,
+        workBase: newWorkBase,
+        allowance: newAllowance,
+        hra: newHra,
+        ctc: newCtc,
         incrementAmount: increment,
         effectiveDate,
         notes: req.body.notes || "Approved through appraisal",
-        createdBy: req.user._id
+        createdBy: req.user._id,
+        applied: isImmediate
       });
+
+      if (isImmediate) {
+        employee.basicSalary = String(newBasic);
+        employee.visaBase = newVisaBase;
+        employee.workBase = newWorkBase;
+        employee.hra = newHra;
+        employee.allowance = newAllowance;
+        employee.totalSalary = computeTotalSalary(employee);
+        employee.ctc = computeCtc(employee);
+      }
       await employee.save();
 
       if (linkedUser) {
+        const message = isImmediate
+          ? `Your salary increment was approved by ${req.user.name || "HR/Admin"}. Salary updated from AED ${latestVisaBase.toFixed(2)} to AED ${newVisaBase.toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`
+          : `Your salary increment of AED ${increment.toFixed(2)} was approved by ${req.user.name || "HR/Admin"} and will take effect on ${new Date(effectiveDate).toLocaleDateString()}.`;
         await createNotification({
           recipient: linkedUser._id,
           title: "Salary increment applied",
-          message: `Your salary increment was approved by ${req.user.name || "HR/Admin"}. Salary updated from AED ${latestVisaBase.toFixed(2)} to AED ${(latestVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`,
+          message,
           type: "INFO",
           link: "/app/requests"
         });

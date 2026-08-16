@@ -29,6 +29,21 @@ const getEmployeeLabel = (employee) => {
     : employee.name;
 };
 
+// Increments most commonly need to take effect on the 1st of next month rather than
+// immediately, so default the picker there instead of "today" — still fully editable.
+const getDefaultEffectiveDate = () => {
+  const now = new Date();
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return nextMonth.toISOString().slice(0, 10);
+};
+
+const isFutureDate = (dateStr) => {
+  if (!dateStr) return false;
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  return new Date(dateStr) > endOfToday;
+};
+
 export default function AppraisalsView() {
   const { hasPermission } = useRole();
   const canManageAppraisals = hasPermission("MANAGE_APPRAISALS");
@@ -38,6 +53,7 @@ export default function AppraisalsView() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [incrementAmount, setIncrementAmount] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState(getDefaultEffectiveDate());
   const [adjustmentMode, setAdjustmentMode] = useState("SALARY"); // "SALARY" | "ALLOWANCE"
   const [allowanceTypes, setAllowanceTypes] = useState([]);
   const [selectedAllowanceType, setSelectedAllowanceType] = useState("");
@@ -142,23 +158,32 @@ export default function AppraisalsView() {
       return;
     }
 
+    if (!effectiveDate) {
+      toast.error("Please select an effective date");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
-      const today = new Date().toISOString().slice(0, 10);
       await appraisalService.applyAdjustment({
         employee: selectedEmployeeId,
         type: isAllowanceMode ? "ALLOWANCE" : "SALARY",
         allowanceTypeName: isAllowanceMode ? selectedAllowanceType : "",
         amount: parsedIncrement,
-        effectiveDate: today,
+        effectiveDate,
         includeInPayroll: isAllowanceMode ? includeInPayroll : true
       });
 
       setIncrementAmount("");
+      setEffectiveDate(getDefaultEffectiveDate());
       if (isAllowanceMode) setIncludeInPayroll(true); // reset to safe default after submit
       await loadData(selectedEmployeeId);
-      toast.success(isAllowanceMode ? "Allowance applied successfully" : "Increment applied successfully");
+      toast.success(
+        isFutureDate(effectiveDate)
+          ? `${isAllowanceMode ? "Allowance" : "Increment"} scheduled for ${effectiveDate}`
+          : (isAllowanceMode ? "Allowance applied successfully" : "Increment applied successfully")
+      );
     } catch (error) {
       const message = error?.response?.data?.message || "Failed to apply adjustment";
       toast.error(message);
@@ -311,6 +336,21 @@ export default function AppraisalsView() {
                   disabled={!canManageAppraisals || submitting}
                 />
               </div>
+            </label>
+
+            <label className="appraisal-field">
+              <span>Effective Date</span>
+              <input
+                type="date"
+                value={effectiveDate}
+                onChange={(event) => setEffectiveDate(event.target.value)}
+                disabled={!canManageAppraisals || submitting}
+              />
+              {isFutureDate(effectiveDate) && (
+                <span className="appraisal-toggle-hint">
+                  This {isAllowanceMode ? "allowance" : "increment"} will take effect on {effectiveDate} — the employee's current {isAllowanceMode ? "allowance" : "salary"} won't change until then.
+                </span>
+              )}
             </label>
 
             <div className="appraisal-next-salary">

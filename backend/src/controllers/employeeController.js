@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { sendEmail } from "../utils/sendEmail.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
-import { toNumber, computeTotalSalary, computeCtc } from "../utils/salaryCalc.js";
+import { toNumber, computeTotalSalary, computeCtc, splitIncrement } from "../utils/salaryCalc.js";
 import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
 
 const buildLaborCards = (payload = {}) => {
@@ -622,6 +622,11 @@ export const getEmployeeById = async (req, res) => {
     } catch (transferError) {
       console.error("applyDuePendingTransfers failed for employee", id, ":", transferError);
     }
+    try {
+      await applyDuePendingSalaryChanges(employee);
+    } catch (salaryError) {
+      console.error("applyDuePendingSalaryChanges failed for employee", id, ":", salaryError);
+    }
 
     res.json(await attachSignedProfilePhotoUrl(employee));
   } catch (error) {
@@ -681,6 +686,11 @@ export const getMyEmployeeProfile = async (req, res) => {
       await applyDuePendingTransfers(employee);
     } catch (transferError) {
       console.error("  ⚠️ applyDuePendingTransfers failed for /me:", transferError);
+    }
+    try {
+      await applyDuePendingSalaryChanges(employee);
+    } catch (salaryError) {
+      console.error("  ⚠️ applyDuePendingSalaryChanges failed for /me:", salaryError);
     }
 
     const responseData = await attachSignedProfilePhotoUrl(employee);
@@ -1037,6 +1047,37 @@ export const applyDuePendingTransfers = async (employee) => {
   return true;
 };
 
+/**
+ * Applies any pending (future-dated) salary increments whose effectiveDate has now
+ * arrived. Same shape as applyDuePendingTransfers above. Each salaryHistory entry
+ * stores its own absolute post-increment values, so the last one applied simply wins -
+ * no need to re-sum increments here.
+ */
+export const applyDuePendingSalaryChanges = async (employee) => {
+  if (!employee?.salaryHistory?.length) return false;
+
+  const now = new Date();
+  const due = employee.salaryHistory
+    .filter((s) => s.applied === false && s.effectiveDate && new Date(s.effectiveDate) <= now)
+    .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+
+  if (!due.length) return false;
+
+  for (const s of due) {
+    employee.basicSalary = String(s.basicSalary);
+    employee.visaBase = s.visaBase;
+    employee.workBase = s.workBase;
+    if (typeof s.allowance === "number") employee.allowance = s.allowance;
+    if (typeof s.hra === "number") employee.hra = s.hra;
+    employee.totalSalary = computeTotalSalary(employee);
+    employee.ctc = computeCtc(employee);
+    s.applied = true;
+  }
+
+  await employee.save();
+  return true;
+};
+
 export const transferEmployee = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1173,36 +1214,74 @@ export const confirmProbation = async (req, res) => {
     const currentVisaBase = toNumber(lastSalaryEntry?.visaBase || employee.visaBase || employee.basicSalary);
     const currentWorkBase = toNumber(lastSalaryEntry?.workBase || employee.workBase || employee.basicSalary);
     const increment = toNumber(employee.fixedProbationIncrementAmount);
+    const effectiveDate = employee.probationEndDate || new Date();
+    let isImmediate = true;
 
     if (increment > 0) {
-      employee.basicSalary = String(currentBasic + increment);
-      employee.visaBase = currentVisaBase + increment;
-      employee.workBase = currentWorkBase + increment;
-      employee.totalSalary = computeTotalSalary(employee);
-      employee.ctc = computeCtc(employee);
+      const currentHra = toNumber(employee.hra);
+      const currentAllowance = toNumber(employee.allowance);
+
+      // Same 50/30/20 split treatment as appraisal increments (approveAppraisal) -
+      // full amount still goes to visaBase/workBase, see splitIncrement's comment.
+      const { basicDelta, hraDelta, allowanceDelta } = splitIncrement(increment);
+      const newBasic = currentBasic + basicDelta;
+      const newVisaBase = currentVisaBase + increment;
+      const newWorkBase = currentWorkBase + increment;
+      const newHra = currentHra + hraDelta;
+      const newAllowance = currentAllowance + allowanceDelta;
+      const newCtc = computeCtc({
+        basicSalary: newBasic,
+        allowance: newAllowance,
+        hra: newHra,
+        accommodationAllowance: employee.accommodationAllowance,
+        vehicleAllowance: employee.vehicleAllowance
+      });
+
+      // Same isImmediate gate as approveAppraisal, kept for consistency even though
+      // probationEndDate is almost always <= now by the time confirmation happens.
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      isImmediate = new Date(effectiveDate) <= endOfToday;
+
       employee.salaryHistory.push({
         salaryType: "PROBATION_INCREMENT",
-        basicSalary: currentBasic + increment,
-        visaBase: currentVisaBase + increment,
-        workBase: currentWorkBase + increment,
-        ctc: employee.ctc,
+        basicSalary: newBasic,
+        visaBase: newVisaBase,
+        workBase: newWorkBase,
+        allowance: newAllowance,
+        hra: newHra,
+        ctc: newCtc,
         incrementAmount: increment,
-        effectiveDate: employee.probationEndDate || new Date(),
+        effectiveDate,
         notes: remarks || "Probation increment applied",
-        createdBy: req.user._id
+        createdBy: req.user._id,
+        applied: isImmediate
       });
+
+      if (isImmediate) {
+        employee.basicSalary = String(newBasic);
+        employee.visaBase = newVisaBase;
+        employee.workBase = newWorkBase;
+        employee.hra = newHra;
+        employee.allowance = newAllowance;
+        employee.totalSalary = computeTotalSalary(employee);
+        employee.ctc = computeCtc(employee);
+      }
     }
 
     await employee.save();
 
     const linkedUser = await User.findOne({ email: employee.email });
     if (linkedUser) {
+      const showIncrementMessage = increment > 0 && isImmediate;
       await createNotification({
         recipient: linkedUser._id,
         title: increment > 0 ? "Salary increment applied" : "Probation confirmed",
-        message: increment > 0
-          ? `Your probation has been confirmed by ${req.user.name || "HR/Admin"}. Salary updated from AED ${currentVisaBase.toFixed(2)} to AED ${(currentVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(employee.probationEndDate || new Date()).toLocaleDateString()}.`
-          : `Your probation has been confirmed by ${req.user.name || "HR/Admin"}.`,
+        message: showIncrementMessage
+          ? `Your probation has been confirmed by ${req.user.name || "HR/Admin"}. Salary updated from AED ${currentVisaBase.toFixed(2)} to AED ${(currentVisaBase + increment).toFixed(2)} with an increment of AED ${increment.toFixed(2)}, effective ${new Date(effectiveDate).toLocaleDateString()}.`
+          : increment > 0
+            ? `Your probation has been confirmed by ${req.user.name || "HR/Admin"}. Your salary increment of AED ${increment.toFixed(2)} will take effect on ${new Date(effectiveDate).toLocaleDateString()}.`
+            : `Your probation has been confirmed by ${req.user.name || "HR/Admin"}.`,
         type: "INFO",
         link: `/app/employees/${employee._id}`
       });
