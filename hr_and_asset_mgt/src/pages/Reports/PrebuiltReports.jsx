@@ -64,6 +64,7 @@ export default function PrebuiltReports() {
   // New report filters
   const [attendanceFilters, setAttendanceFilters] = useState({ branch: "", department: "", company: "" });
   const [salaryFilters, setSalaryFilters] = useState({ branch: "", department: "", company: "" });
+  const [salaryReportFilters, setSalaryReportFilters] = useState({ branch: "", company: "" });
   const [revisionFilters, setRevisionFilters] = useState({ branch: "", department: "", fromDate: "", toDate: "" });
   const [leaveYear, setLeaveYear] = useState(currentDate.getFullYear());
   const [leaveFilters, setLeaveFilters] = useState({ branch: "", department: "", company: "" });
@@ -1096,6 +1097,66 @@ export default function PrebuiltReports() {
                     link.click();
                     link.remove();
                     toast.success("Overtime & allowance report downloaded");
+                  } catch {
+                    toast.error("Failed to download report");
+                  }
+                }}
+                disabled={loading}
+              >
+                Download Excel
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Employee Salary Report */}
+        {(activeTab === "Payroll" || activeTab === "All") && (
+          <Card className="report-card">
+            <div className="report-card-header">
+              <div className="report-icon"><SvgIcon name="dollar" size={22} /></div>
+              <span className="report-tag">Payroll</span>
+            </div>
+            <h4 className="report-title">Employee Salary Report</h4>
+            <p className="report-desc">
+              Per-employee CTC, HRA, base salary and other allowances, optionally filtered by branch or company.
+            </p>
+
+            <div className="report-filters">
+              <select
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                value={salaryReportFilters.branch}
+                onChange={e => setSalaryReportFilters(p => ({ ...p, branch: e.target.value }))}
+              >
+                <option value="">All Branches</option>
+                {branchOptions.map(b => <option key={b._id || b.name} value={b.name}>{b.name}</option>)}
+              </select>
+              <select
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+                value={salaryReportFilters.company}
+                onChange={e => setSalaryReportFilters(p => ({ ...p, company: e.target.value }))}
+              >
+                <option value="">All Companies</option>
+                {companyOptions.map(c => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+
+            <div className="report-actions">
+              <Button
+                className="generate-btn"
+                onClick={async () => {
+                  try {
+                    const params = new URLSearchParams({ export: "true" });
+                    if (salaryReportFilters.branch) params.set("branch", salaryReportFilters.branch);
+                    if (salaryReportFilters.company) params.set("company", salaryReportFilters.company);
+                    const res = await api.get(`/reports/employee-salary?${params}`, { responseType: "blob" });
+                    const url = window.URL.createObjectURL(new Blob([res.data]));
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = "Employee_Salary_Report.xlsx";
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    toast.success("Employee salary report downloaded");
                   } catch {
                     toast.error("Failed to download report");
                   }

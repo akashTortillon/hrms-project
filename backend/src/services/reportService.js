@@ -636,6 +636,29 @@ export const getHeadcountReport = async ({ branch, department, company } = {}) =
   return data;
 };
 
+// ─── EMPLOYEE SALARY REPORT ──────────────────────────────────────────────────
+export const getEmployeeSalaryReport = async ({ branch, company } = {}) => {
+  const matchFilter = { status: "Active" };
+  if (branch) matchFilter.branch = branch;
+  if (company) matchFilter.company = company;
+
+  const employees = await Employee.find(matchFilter)
+    .select("code name branch company basicSalary allowance hra totalSalary ctc")
+    .lean();
+
+  return employees.map(e => ({
+    code: e.code || "N/A",
+    name: e.name || "N/A",
+    branch: e.branch || "N/A",
+    company: e.company || "N/A",
+    ctc: e.ctc || 0,
+    hra: e.hra || 0,
+    basicSalary: Number(e.basicSalary) || 0,
+    allowance: e.allowance || 0,
+    totalSalary: e.totalSalary || 0
+  }));
+};
+
 // ─── 6. ASSET REPORT (per employee) ──────────────────────────────────────────
 export const getAssetAssignmentReport = async ({ branch, department, company, employeeId } = {}) => {
   const empFilter = {};

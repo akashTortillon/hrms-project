@@ -26,7 +26,8 @@ import {
     getLeaveBalanceReport,
     getHeadcountReport,
     getAssetAssignmentReport,
-    getOvertimeAllowanceReport
+    getOvertimeAllowanceReport,
+    getEmployeeSalaryReport
 } from "../controllers/reportController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 import { generateSIF, generateMOLReport } from "../controllers/payrollController.js";
@@ -61,6 +62,7 @@ router.get("/leave-balance", getLeaveBalanceReport);
 router.get("/headcount", getHeadcountReport);
 router.get("/asset-assignments", getAssetAssignmentReport);
 router.get("/overtime-allowance", getOvertimeAllowanceReport);
+router.get("/employee-salary", hasPermission("MANAGE_PAYROLL"), getEmployeeSalaryReport);
 
 // Dashboard Stats
 router.get("/stats", getReportStats);

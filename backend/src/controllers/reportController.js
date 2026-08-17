@@ -650,6 +650,54 @@ export const getSalaryRevisionReport = async (req, res) => {
   }
 };
 
+// ─── EMPLOYEE SALARY REPORT ────────────────────────────────────────────────
+export const getEmployeeSalaryReport = async (req, res) => {
+  try {
+    const { branch, company } = req.query;
+    const isExport = req.query.export === "true";
+
+    const data = await reportService.getEmployeeSalaryReport({ branch, company });
+
+    if (isExport) {
+      const exportData = data.map(d => ({
+        "Employee Code": d.code,
+        "Employee Name": d.name,
+        "Branch": d.branch,
+        "Company": d.company,
+        "CTC (AED)": d.ctc,
+        "HRA (AED)": d.hra,
+        "Base Salary (AED)": d.basicSalary,
+        "Other Allowances (AED)": d.allowance,
+        "Total (AED)": d.totalSalary
+      }));
+
+      // Grand-total row - summed from exportData (post-mapping) so the keys always
+      // match the sheet's actual headers, not the raw service field names.
+      const totals = exportData.reduce((acc, row) => {
+        acc["CTC (AED)"] += row["CTC (AED)"] || 0;
+        acc["HRA (AED)"] += row["HRA (AED)"] || 0;
+        acc["Base Salary (AED)"] += row["Base Salary (AED)"] || 0;
+        acc["Other Allowances (AED)"] += row["Other Allowances (AED)"] || 0;
+        acc["Total (AED)"] += row["Total (AED)"] || 0;
+        return acc;
+      }, {
+        "Employee Code": "TOTAL", "Employee Name": "", "Branch": "", "Company": "",
+        "CTC (AED)": 0, "HRA (AED)": 0, "Base Salary (AED)": 0,
+        "Other Allowances (AED)": 0, "Total (AED)": 0
+      });
+      exportData.push(totals);
+
+      await logActivity("Export", "Employee Salary Report");
+      return sendExcelResponse(res, exportData, "Employee_Salary_Report", "Employee Salary");
+    }
+
+    await logActivity("Generation", "Employee Salary Report");
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
 // ─── LEAVE BALANCE REPORT ─────────────────────────────────────────────────────
 export const getLeaveBalanceReport = async (req, res) => {
   try {
