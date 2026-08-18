@@ -4,7 +4,7 @@ const syncHistorySchema = new mongoose.Schema(
   {
     syncType: {
       type: String,
-      enum: ["SCHEDULED", "MANUAL"],
+      enum: ["SCHEDULED", "MANUAL", "SWEEP"],
       required: true
     },
     startTime: {
