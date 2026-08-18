@@ -50,7 +50,7 @@ const TrashIcon = () => (
 import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity, deleteAllowance } from "../../services/employeeService";
 import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments } from "../../services/masterService";
-import { getEmployeeRequests, updateRepaymentSchedule, getLeaveSummary } from "../../services/requestService";
+import { getEmployeeRequests, updateRepaymentSchedule, createExistingLoan, getLeaveSummary } from "../../services/requestService";
 import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
 
 import EditEmployeeModal from "./EditEmployeeModal.jsx";
@@ -60,6 +60,7 @@ import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
 import AdjustLoanModal from "./AdjustLoanModal.jsx";
 import ExtraPaymentModal from "./ExtraPaymentModal.jsx";
+import AddExistingLoanModal from "./AddExistingLoanModal.jsx";
 import AddAllowanceModal from "./AddAllowanceModal.jsx";
 import { appraisalService } from "../../services/appraisalService";
 import { toast } from "react-toastify";
@@ -158,6 +159,8 @@ export default function EmployeeDetail() {
     const [showExtraPaymentModal, setShowExtraPaymentModal] = useState(false);
     const [selectedLoanForExtraPayment, setSelectedLoanForExtraPayment] = useState(null);
     const [savingExtraPayment, setSavingExtraPayment] = useState(false);
+    const [showAddExistingLoanModal, setShowAddExistingLoanModal] = useState(false);
+    const [savingExistingLoan, setSavingExistingLoan] = useState(false);
 
     // Leave Summary State
     const [leaveSummary, setLeaveSummary] = useState([]);
@@ -510,6 +513,21 @@ export default function EmployeeDetail() {
             toast.error(error.response?.data?.message || "Failed to save repayment skip");
         } finally {
             setSavingLoanSkip(false);
+        }
+    };
+
+    const handleAddExistingLoan = async (payload) => {
+        try {
+            setSavingExistingLoan(true);
+            await createExistingLoan(effectiveId, payload);
+            toast.success("Existing loan added successfully");
+            setShowAddExistingLoanModal(false);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Add existing loan failed", error);
+            toast.error(error.response?.data?.message || "Failed to add existing loan");
+        } finally {
+            setSavingExistingLoan(false);
         }
     };
 
@@ -1579,6 +1597,14 @@ export default function EmployeeDetail() {
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Loans & Advances</h3>
+                            {canManageRepayments && (
+                                <button
+                                    onClick={() => setShowAddExistingLoanModal(true)}
+                                    style={{ background: 'none', border: 'none', fontSize: '14px', fontWeight: '500', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    + Add Existing Loan
+                                </button>
+                            )}
                         </div>
 
                         <div className="loans-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -1911,6 +1937,15 @@ export default function EmployeeDetail() {
                     onClose={() => setShowAddAllowanceModal(false)}
                     onConfirm={handleAddAllowance}
                     submitting={allowanceSubmitting}
+                />
+            )}
+
+            {showAddExistingLoanModal && (
+                <AddExistingLoanModal
+                    show={showAddExistingLoanModal}
+                    onClose={() => setShowAddExistingLoanModal(false)}
+                    onSubmit={handleAddExistingLoan}
+                    submitting={savingExistingLoan}
                 />
             )}
 

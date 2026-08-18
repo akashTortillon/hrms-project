@@ -108,6 +108,15 @@ export const updateRepaymentSchedule = async (id, payload) => {
   return response.data;
 };
 
+// Admin – record a loan/advance that predates this HRMS (existing-company onboarding)
+export const createExistingLoan = async (employeeId, payload) => {
+  const response = await api.post(
+    `${REQUEST_API}/employee/${employeeId}/existing-loan`,
+    payload
+  );
+  return response.data;
+};
+
 // ✅ Admin – revoke an already-approved leave (reverses attendance + leave wallet)
 export const revokeLeaveRequest = async (id, reason) => {
   const response = await api.patch(

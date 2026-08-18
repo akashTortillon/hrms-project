@@ -699,8 +699,17 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
 };
 
 // Generate next request ID (REQ001, REQ002, etc.)
+//
+// Constrained to strictly "REQ" + digits: this DB also has legacy/test requestIds like
+// "REQZZTW1", "REQZZTW2" (e.g. seeded test data) that don't follow that shape. A plain
+// `sort({ requestId: -1 })` over ALL requestIds is a lexicographic STRING sort, and
+// those alpha-suffixed ids sort ahead of every real "REQ0xx" one ('Z' > any digit in
+// ASCII) - so `lastRequest.requestId` was picking one of those, `parseInt("ZZTW2")` was
+// NaN, and the resulting "REQNaN" got written to the DB, permanently colliding on the
+// unique index for every request created afterward. Matching only well-formed ids here
+// keeps the sort meaningful and skips that legacy data instead of tripping over it.
 const generateRequestId = async () => {
-  const lastRequest = await Request.findOne().sort({ requestId: -1 });
+  const lastRequest = await Request.findOne({ requestId: { $regex: /^REQ\d+$/ } }).sort({ requestId: -1 });
 
   if (!lastRequest || !lastRequest.requestId) {
     return "REQ001";
@@ -1777,6 +1786,119 @@ export const revokeLeave = async (req, res) => {
   } catch (err) {
     console.error("Revoke leave error:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Admin-only: record a loan/salary-advance that predates this HRMS (e.g. onboarding an
+// existing company). Unlike createRequest, this writes the Request directly at
+// status:"APPROVED" with all three approval stages "SKIPPED" (not fabricated-APPROVED
+// with today's date and a real approver's name, since no such approval ever happened
+// for a loan taken before the system existed) and carries details.originDate, the one
+// piece of information nothing else in this schema captures.
+export const createExistingLoanForEmployee = async (req, res) => {
+  try {
+    const canCreate = req.user.role === "Admin"
+      || req.user.permissions?.includes("ALL")
+      || req.user.permissions?.includes("APPROVE_REQUESTS");
+
+    if (!canCreate) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: Insufficient Permissions"
+      });
+    }
+
+    const { employeeId } = req.params;
+    const {
+      subType,
+      amount,
+      monthlyRepaymentAmount,
+      repaymentPeriod,
+      totalRepaymentAmount,
+      alreadyRepaid,
+      originDate,
+      deductionStartMonth,
+      deductionStartYear,
+      reason
+    } = req.body;
+
+    if (!["loan", "salary_advance"].includes(subType)) {
+      return res.status(400).json({ success: false, message: "subType must be 'loan' or 'salary_advance'." });
+    }
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: "amount is required and must be greater than 0." });
+    }
+    if (!monthlyRepaymentAmount || monthlyRepaymentAmount <= 0) {
+      return res.status(400).json({ success: false, message: "monthlyRepaymentAmount is required and must be greater than 0." });
+    }
+    if (!repaymentPeriod || repaymentPeriod <= 0) {
+      return res.status(400).json({ success: false, message: "repaymentPeriod is required and must be greater than 0." });
+    }
+    if (!originDate) {
+      return res.status(400).json({ success: false, message: "originDate is required." });
+    }
+
+    // Resolve Employee -> User the same way getEmployeeRequests does (direct link, then email fallback)
+    let user = await User.findOne({ employeeId });
+    if (!user) {
+      const employee = await Employee.findById(employeeId);
+      if (employee?.email) {
+        user = await User.findOne({ email: { $regex: new RegExp(`^${employee.email}$`, "i") } });
+      }
+    }
+    if (!user) {
+      return res.status(404).json({ success: false, message: "No user account linked to this employee" });
+    }
+
+    const requestId = await generateRequestId();
+    const now = new Date();
+    const onboardedBy = req.user.name || req.user.email || "Admin";
+    const skipRemark = `Pre-existing loan onboarded by ${onboardedBy} on ${now.toDateString()} - no approval workflow applies, loan predates this system.`;
+
+    const totalPayable = totalRepaymentAmount || amount;
+    const netAlreadyRepaid = Number(alreadyRepaid) > 0 ? Number(alreadyRepaid) : 0;
+    const remainingAfter = Math.max(0, totalPayable - netAlreadyRepaid);
+    const isFullyPaid = netAlreadyRepaid > 0 && remainingAfter <= 0;
+
+    // Matches the exact shape updateSalaryRepaymentSchedule's EXTRA_PAYMENT action writes
+    // (remainingBalanceAfter/recordedBy/recordedByName/recordedAt) - the Loans tab UI reads
+    // those specific field names when rendering "EXTRA PAYMENT HISTORY".
+    const request = await Request.create({
+      userId: user._id,
+      requestId,
+      requestType: "SALARY",
+      currentApprovalStage: "COMPLETED",
+      managerApproval: { status: "SKIPPED" },
+      financeApproval: { status: "SKIPPED", remarks: skipRemark },
+      hrApproval: { status: "SKIPPED", remarks: skipRemark },
+      status: isFullyPaid ? "COMPLETED" : "APPROVED",
+      isFullyPaid,
+      details: {
+        subType,
+        amount,
+        monthlyRepaymentAmount,
+        repaymentPeriod,
+        totalRepaymentAmount: totalPayable,
+        deductionStartMonth,
+        deductionStartYear,
+        isPreExisting: true,
+        originDate,
+        extraPayments: netAlreadyRepaid > 0 ? [{
+          amount: netAlreadyRepaid,
+          reason: reason || "Balance already repaid before HRMS onboarding",
+          remainingBalanceAfter: remainingAfter,
+          recordedBy: req.user._id,
+          recordedByName: onboardedBy,
+          recordedAt: now
+        }] : []
+      },
+      payrollDeductions: []
+    });
+
+    res.status(201).json({ success: true, data: request });
+  } catch (error) {
+    console.error("[requestController] createExistingLoanForEmployee failed:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 

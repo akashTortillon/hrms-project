@@ -65,6 +65,7 @@ import {
   getPendingRequestsForAdmin,
   updateRequestStatus,
   updateSalaryRepaymentSchedule,
+  createExistingLoanForEmployee,
   revokeLeave,
   approveDocumentRequest,
   rejectDocumentRequest,
@@ -112,6 +113,15 @@ router.put(
   "/:requestId/action",
   protect,
   updateRequestStatus
+);
+
+// Admin-only: record a loan that predates this HRMS (existing-company onboarding)
+// POST /api/requests/employee/:employeeId/existing-loan
+router.post(
+  "/employee/:employeeId/existing-loan",
+  protect,
+  hasPermission("APPROVE_REQUESTS"),
+  createExistingLoanForEmployee
 );
 
 router.patch(
