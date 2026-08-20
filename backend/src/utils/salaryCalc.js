@@ -17,12 +17,15 @@ export const computeCtc = (employee) =>
   toNumber(employee.accommodationAllowance) +
   toNumber(employee.vehicleAllowance);
 
-// Splits a salary increment 50/30/20 across basicSalary/hra/allowance, added on top of
-// current values (not a full re-derivation of total salary). visaBase/workBase are NOT
-// split - they receive the full increment amount (separate visa/labour-filing figures,
-// no "HRA visa base" concept, splitting them would silently shrink the compliance-facing
+// Splits any amount 50/30/20 into basic/hra/allowance shares. Used two ways by callers:
+// (1) approveAppraisal passes the full NEW GROSS (old total + increment) to fully
+// re-derive basicSalary/hra/allowance as an exact 50/30/20 split - not add a 50/30/20
+// split of just the increment onto whatever those fields already held, which let them
+// drift off-ratio over repeated increments. visaBase/workBase are NEVER split - they
+// receive the full increment amount unsplit (separate visa/labour-filing figures, no
+// "HRA visa base" concept, splitting them would silently shrink the compliance-facing
 // salary bump). Remainder-based rounding (allowance = amount - the other two, not its
-// own independent rounding) so the three deltas always sum exactly to `amount`.
+// own independent rounding) so the three shares always sum exactly to `amount`.
 export const splitIncrement = (incrementAmount) => {
   const amount = toNumber(incrementAmount);
   const basicDelta = Math.round(amount * 0.5 * 100) / 100;

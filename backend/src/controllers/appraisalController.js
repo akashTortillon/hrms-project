@@ -137,19 +137,19 @@ export const approveAppraisal = async (req, res) => {
     } else {
       const latestVisaBase = toNumber(employee.visaBase || employee.basicSalary);
       const latestWorkBase = toNumber(employee.workBase || employee.basicSalary);
-      const latestBasic = toNumber(employee.basicSalary);
-      const latestHra = toNumber(employee.hra);
-      const latestAllowance = toNumber(employee.allowance);
 
-      // Increment is split 50/30/20 across basic/hra/allowance, added on top of current
-      // values - not dumped entirely into basicSalary. visaBase/workBase still get the
-      // full unsplit amount (see splitIncrement's comment for why).
-      const { basicDelta, hraDelta, allowanceDelta } = splitIncrement(increment);
-      const newBasic = latestBasic + basicDelta;
+      // Gross-first, then split: add the full increment to the current gross
+      // (basicSalary + hra + allowance) FIRST, then re-derive basicSalary/hra/allowance
+      // as exactly 50/30/20 of that new gross - not add a 50/30/20 split of just the
+      // increment delta onto whatever the three fields happened to already hold. The old
+      // delta-only approach let basic/hra/allowance drift away from a clean 50/30/20 ratio
+      // over repeated increments (e.g. if a field was ever hand-edited); this keeps the
+      // ratio exact after every increment, at the cost of overwriting any such prior
+      // manual adjustment to the individual components.
+      const newGross = computeTotalSalary(employee) + increment;
+      const { basicDelta: newBasic, hraDelta: newHra, allowanceDelta: newAllowance } = splitIncrement(newGross);
       const newVisaBase = latestVisaBase + increment;
       const newWorkBase = latestWorkBase + increment;
-      const newHra = latestHra + hraDelta;
-      const newAllowance = latestAllowance + allowanceDelta;
       const newCtc = computeCtc({
         basicSalary: newBasic,
         allowance: newAllowance,
