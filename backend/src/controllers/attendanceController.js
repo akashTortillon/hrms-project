@@ -203,6 +203,8 @@ import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
 import biometricSyncService from "../services/biometricSyncService.js";
+import attendanceProcessor from "../services/attendanceProcessor.js";
+import BiometricTransaction from "../models/biometricTransactionModel.js";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -254,6 +256,59 @@ export const syncBiometrics = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Server error during manual biometric synchronization"
+    });
+  }
+};
+
+/**
+ * REPROCESS Biometrics
+ * Re-runs attendanceProcessor over BiometricTransaction docs that already exist in the DB.
+ * A normal sync (syncBiometrics) only feeds newly-fetched transactions into the processor -
+ * a transaction that was already stored (e.g. from a prior sync) never gets reprocessed,
+ * even if its resulting Attendance record was later deleted or never generated. This is the
+ * recovery path for that gap: point it at a badge + date range and it regenerates Attendance
+ * directly from whatever biometrictransactions already exist, no new BioCloud fetch involved.
+ */
+export const reprocessBiometrics = async (req, res) => {
+  try {
+    const { badgeNumber, startDate, endDate } = req.body || {};
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "startDate and endDate are required (YYYY-MM-DD)" });
+    }
+
+    const query = {
+      timestamp: {
+        $gte: new Date(`${startDate}T00:00:00+04:00`),
+        $lte: new Date(`${endDate}T23:59:59+04:00`)
+      }
+    };
+    if (badgeNumber) {
+      query.badgeNumber = badgeNumber.trim();
+    }
+
+    const transactions = await BiometricTransaction.find(query);
+
+    console.log(`[attendanceController] Manual reprocess triggered by user ${req.user?._id}. Badge: ${badgeNumber || "ALL"}, Range: ${startDate} to ${endDate}, Found: ${transactions.length} transactions.`);
+
+    const stats = await attendanceProcessor.processTransactions(transactions);
+
+    return res.status(200).json({
+      success: true,
+      message: "Reprocess completed successfully",
+      data: {
+        transactionsFound: transactions.length,
+        recordsCreated: stats.created,
+        recordsUpdated: stats.updated,
+        recordsSkipped: stats.skipped,
+        unmappedBadges: stats.unmappedBadges
+      }
+    });
+  } catch (error) {
+    console.error("[attendanceController] Manual reprocess failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error during attendance reprocessing"
     });
   }
 };
