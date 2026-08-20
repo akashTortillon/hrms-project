@@ -345,7 +345,12 @@ export default function EmployeeDetail() {
             fetchDocuments();
         } catch (e) {
             console.error(e);
-            toast.error("Upload failed");
+            const message = e?.response?.data?.message
+                || (e?.response?.status === 413 ? "File is too large to upload" : "")
+                || (e?.response?.status === 403 ? "You don't have permission to upload documents" : "")
+                || e?.message
+                || "Upload failed";
+            toast.error(message);
         }
     };
 

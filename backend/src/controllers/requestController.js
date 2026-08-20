@@ -1711,10 +1711,20 @@ export const revokeLeave = async (req, res) => {
 
     const { fromDate, toDate, leaveTypeId, numberOfDays } = request.details || {};
 
+    // employeeId can be a stale/orphaned link (e.g. the Employee doc it points to was
+    // deleted and recreated with a new _id) - falling back to email ONLY when employeeId
+    // was never set means a stale-but-present id silently short-circuits this to null,
+    // which then skips the whole attendance-clearing block below with no error at all
+    // (confirmed: this is exactly what happened for R175 - revoke reported success and
+    // flipped the request to REVOKED, but never touched a single stale "On Leave"
+    // Attendance doc). Always fall back to email whenever the id lookup comes up empty,
+    // not only when the field itself was unset - matches the resolution pattern already
+    // used in getEmployeeRequests.
     const employeeUser = await User.findById(request.userId);
-    const employee = employeeUser?.employeeId
-      ? await Employee.findById(employeeUser.employeeId)
-      : (employeeUser?.email ? await Employee.findOne({ email: employeeUser.email }) : null);
+    let employee = employeeUser?.employeeId ? await Employee.findById(employeeUser.employeeId) : null;
+    if (!employee && employeeUser?.email) {
+      employee = await Employee.findOne({ email: { $regex: new RegExp(`^${employeeUser.email}$`, "i") } });
+    }
 
     let attendanceCleared = 0;
     if (employee && fromDate && toDate) {
