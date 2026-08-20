@@ -53,7 +53,11 @@ const WorkflowTab = ({ employeeId, type }) => {
                 toast.success("Document uploaded successfully");
             }
         } catch (error) {
-            const message = error?.response?.data?.message || error?.message || "Upload failed";
+            const message = error?.response?.data?.message
+                || (error?.response?.status === 413 ? "File is too large to upload" : "")
+                || (error?.response?.status === 403 ? "You don't have permission to upload documents" : "")
+                || error?.message
+                || "Upload failed";
             toast.error(message);
         } finally {
             setUploadingId(null);

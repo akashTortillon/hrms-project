@@ -58,30 +58,23 @@ const OFFBOARDING_ITEMS = [
 ];
 
 const mergeTemplateSteps = (defaultItems = [], templateItems = []) => {
-    const normalizedDefaults = defaultItems.map((item) => ({ ...item }));
-    const defaultsByName = new Map(normalizedDefaults.map((item) => [item.name, item]));
-    const extras = [];
-
-    templateItems.forEach((item) => {
-        if (!item?.name) return;
-
-        if (defaultsByName.has(item.name)) {
-            const base = defaultsByName.get(item.name);
-            defaultsByName.set(item.name, {
-                ...base,
-                ...item,
-                name: base.name,
-                required: base.required
+    if (templateItems.length > 0) {
+        // The template is the source of truth once an admin has saved it - a step
+        // missing here means it was intentionally removed, not something to restore.
+        // Hardcoded defaults are only used to enrich a matching-by-name item (fill in
+        // description/required for legacy entries), never to reintroduce a removed one.
+        const defaultsByName = new Map(defaultItems.map((item) => [item.name, item]));
+        return templateItems
+            .filter((item) => item?.name)
+            .map((item) => {
+                const base = defaultsByName.get(item.name);
+                return base
+                    ? { ...base, ...item, name: base.name, required: base.required }
+                    : { ...item, status: item.status || "Pending" };
             });
-        } else {
-            extras.push({
-                ...item,
-                status: item.status || "Pending"
-            });
-        }
-    });
-
-    return normalizedDefaults.map((item) => defaultsByName.get(item.name) || item).concat(extras);
+    }
+    // No template exists yet - seed from the hardcoded defaults.
+    return defaultItems.map((item) => ({ ...item }));
 };
 
 const normalizeWorkflowItems = (existingItems = [], templateItems = []) => {
@@ -124,7 +117,15 @@ export const createOnboardingWorkflowForEmployee = async (employeeId, createdBy)
     const existing = await Workflow.findOne({ employee: employeeId, type });
     if (existing) return existing;
 
-    let template = await Master.findOne({ type: "WORKFLOW_TEMPLATE", name: type });
+    // Case-insensitive: the Masters admin UI lets an admin free-type the template name
+    // (e.g. "OFFBOARDING"), while this hardcoded `type` is always proper-case
+    // ("Onboarding"/"Offboarding"). An exact-match query silently misses that admin's
+    // template and auto-creates a second, divergent one - so an admin's edits (saved
+    // correctly to their own template) never reach what employees actually see.
+    let template = await Master.findOne({
+        type: "WORKFLOW_TEMPLATE",
+        name: { $regex: new RegExp(`^${type}$`, "i") }
+    });
     const initialItems = template?.metadata?.steps?.length
         ? mergeTemplateSteps(ONBOARDING_ITEMS, template.metadata.steps)
         : ONBOARDING_ITEMS;
@@ -152,9 +153,11 @@ export const getEmployeeWorkflow = async (req, res) => {
 
         let workflow = await Workflow.findOne({ employee: employeeId, type });
         const defaultItems = type === 'Onboarding' ? ONBOARDING_ITEMS : OFFBOARDING_ITEMS;
+        // Same case-insensitive match as createOnboardingWorkflowForEmployee above -
+        // see comment there for why this must not be an exact-case match.
         let template = await Master.findOne({
             type: "WORKFLOW_TEMPLATE",
-            name: type
+            name: { $regex: new RegExp(`^${type}$`, "i") }
         });
         let initialItems = [];
 
@@ -177,11 +180,6 @@ export const getEmployeeWorkflow = async (req, res) => {
                     console.warn("Auto-create master template failed (likely race condition):", err.message);
                 }
             }
-        }
-
-        if (template && JSON.stringify(template.metadata?.steps || []) !== JSON.stringify(initialItems)) {
-            template.metadata = { ...(template.metadata || {}), steps: initialItems };
-            await template.save();
         }
 
         if (!workflow) {

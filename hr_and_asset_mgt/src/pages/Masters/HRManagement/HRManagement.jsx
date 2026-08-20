@@ -676,7 +676,7 @@ export default function HRManagement() {
 
                         <div className="form-group">
                             <label className="modal-form-label mb-2 block">Checklist Steps</label>
-                            <div className="flex gap-2 mb-3">
+                            <div className="workflow-step-input-row">
                                 <input
                                     type="text"
                                     className="modal-form-input"
@@ -700,29 +700,29 @@ export default function HRManagement() {
                                             setTempStepName("");
                                         }
                                     }}
-                                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+                                    className="workflow-step-add-btn"
                                 >
                                     Add
                                 </button>
                             </div>
 
-                            <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-100 p-2 rounded-md">
+                            <div className="workflow-step-list">
                                 {workflowState.steps.map((step, index) => (
-                                    <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200">
-                                        <span className="text-sm text-gray-700 font-medium">{index + 1}. {step.name}</span>
+                                    <div key={index} className="workflow-step-row">
+                                        <span>{index + 1}. {step.name}</span>
                                         <button
                                             onClick={() => {
                                                 const newSteps = [...workflowState.steps];
                                                 newSteps.splice(index, 1);
                                                 setWorkflowState({ ...workflowState, steps: newSteps });
                                             }}
-                                            className="text-red-500 hover:text-red-700"
+                                            className="workflow-step-remove-btn"
                                         >
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
                                         </button>
                                     </div>
                                 ))}
-                                {workflowState.steps.length === 0 && <p className="text-sm text-gray-400 text-center py-2">No steps added yet.</p>}
+                                {workflowState.steps.length === 0 && <p className="workflow-step-empty">No steps added yet.</p>}
                             </div>
                         </div>
                     </div>
