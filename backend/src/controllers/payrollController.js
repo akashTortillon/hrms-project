@@ -754,7 +754,7 @@ export const setPayrollAnchor = async (req, res) => {
 // --- API: Generate Payroll for a Month ---
 export const generatePayroll = async (req, res) => {
     try {
-        const { periodStart: periodStartRaw, periodEnd: periodEndRaw } = req.body;
+        const { periodStart: periodStartRaw, periodEnd: periodEndRaw, force } = req.body;
 
         if (!periodStartRaw || !periodEndRaw) {
             return res.status(400).json({ message: "periodStart and periodEnd are required." });
@@ -773,6 +773,38 @@ export const generatePayroll = async (req, res) => {
         if (latestFinalized && periodEnd <= latestFinalized.periodEnd) {
             return res.status(400).json({
                 message: `Payroll through ${formatYMD(latestFinalized.periodEnd)} is already finalized and locked. Select a later period.`
+            });
+        }
+
+        // The contiguity check above only guards against the LATEST FINALIZED cycle -
+        // a DRAFT that never got finalized (admin generated it, then generated a later
+        // period instead of finalizing first) was invisible to it, so nothing stopped
+        // requesting a period that fully overlaps an existing DRAFT/PROCESSED/PAID one.
+        // That produced payroll runs spanning the union of both ranges (e.g. periodStart
+        // reused from the stale draft + a much later periodEnd), inflating attendanceSummary
+        // totalDays to an impossible figure and double-counting the overlapping days'
+        // attendance/deductions. Any existing record whose range intersects the requested
+        // one - regardless of status - means this isn't a fresh period.
+        // EXCLUDE an exact periodStart+periodEnd match though - re-running generation for
+        // the SAME period (e.g. to refresh numbers after fixing attendance data) is the
+        // normal, intended path: the bulkWrite below upserts on this exact triple
+        // (employee, periodStart, periodEnd), so it updates the existing docs in place
+        // rather than creating a duplicate. Flagging that as a conflict would block routine
+        // re-generation, not just genuine overlaps.
+        const overlapping = await Payroll.findOne({
+            periodStart: { $lte: periodEnd },
+            periodEnd: { $gte: periodStart },
+            $nor: [{ periodStart, periodEnd }]
+        }).select("periodStart periodEnd status employee");
+
+        if (overlapping && !force) {
+            return res.status(409).json({
+                message: `Requested period (${formatYMD(periodStart)} to ${formatYMD(periodEnd)}) overlaps an existing ${overlapping.status} payroll period `
+                    + `(${formatYMD(overlapping.periodStart)} to ${formatYMD(overlapping.periodEnd)}). Finalize or delete the conflicting period first, `
+                    + `or pass force to override if this is intentional.`,
+                conflictPeriodStart: formatYMD(overlapping.periodStart),
+                conflictPeriodEnd: formatYMD(overlapping.periodEnd),
+                conflictStatus: overlapping.status
             });
         }
 

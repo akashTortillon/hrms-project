@@ -1416,6 +1416,15 @@ export default function EmployeeDetail() {
                                 {[
                                     { label: 'Fixed Probation Increment', value: employee.fixedProbationIncrementAmount, fallback: '0 AED' },
                                     { label: 'Basic Salary', value: employee.basicSalary, fallback: 'N/A' },
+                                    // HRA and Allowance are counted into Total Salary below (see
+                                    // computeTotalSalary in salaryCalc.js: basicSalary + allowance + hra)
+                                    // and are exactly what an appraisal increment's 50/30/20 split
+                                    // writes into - they used to be completely absent from this list,
+                                    // so Total Salary never matched the sum of the rows actually shown
+                                    // here (an increment would visibly move Basic Salary but silently
+                                    // add to two fields nobody could see).
+                                    { label: 'HRA', value: employee.hra, fallback: '0 AED' },
+                                    { label: 'Allowance', value: employee.allowance, fallback: '0 AED' },
                                     { label: 'Accommodation Allowance', value: employee.accommodationAllowance, fallback: '0 AED' },
                                     { label: 'Vehicle Allowance', value: employee.vehicleAllowance, fallback: '0 AED' },
                                 ].map(({ label, value, fallback }) => (
