@@ -970,6 +970,23 @@ body {
   padding: 0 !important;
 }
 
+@media (max-width: 1024px) {
+  /* Was position:absolute + right:0 anchored to the 36px "+" button itself - on
+     mobile that button sits near the left edge of the topbar, so a right:0-anchored
+     180px-wide dropdown extended mostly off the left edge of the viewport (clipped,
+     only its rightmost sliver visible). Same overflow class of bug as
+     .notification-dropdown-menu above, which already got this exact fixed-position
+     treatment - .quick-action-menu never did. Left-anchored (not left+right like the
+     notification panel) since this is a short action list, not a full-width panel. */
+  .quick-action-menu {
+    position: fixed !important;
+    top: 72px !important;
+    left: 8px !important;
+    right: auto !important;
+    margin: 0 !important;
+  }
+}
+
 /* Menu items */
 .quick-action-item {
   padding: 10px 16px;
