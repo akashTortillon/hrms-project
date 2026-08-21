@@ -309,7 +309,14 @@ function Attendance() {
     const deptMatch = !selectedDepartment || record.department === selectedDepartment;
     const shiftMatch = !selectedShift || record.shift === selectedShift;
     const branchMatch = !selectedBranch || record.branch === selectedBranch;
-    return deptMatch && shiftMatch && branchMatch;
+    // Monthly has no server-side search param (unlike Daily, which already searches
+    // server-side via the `search` param above) - getMonthlyAttendance returns every
+    // matching employee for the month unpaginated, so filtering client-side here is safe.
+    const q = searchQuery.trim().toLowerCase();
+    const searchMatch = !q
+      || record.name?.toLowerCase().includes(q)
+      || record.code?.toLowerCase().includes(q);
+    return deptMatch && shiftMatch && branchMatch && searchMatch;
   });
 
   // "Self" scope - daily rows key off `employeeId`, monthly rows key off `_id`

@@ -54,3 +54,9 @@ export const toggleNotification = async (id) => {
     const res = await api.put(`${BASE_URL}/notifications/${id}/toggle`);
     return res.data;
 };
+
+// Backup - mounted at /api/backup directly, not under BASE_URL
+export const downloadBackup = async () => {
+    const res = await api.get(`/backup`, { responseType: "blob" });
+    return res.data;
+};

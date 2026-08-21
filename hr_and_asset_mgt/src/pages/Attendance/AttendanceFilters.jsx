@@ -143,7 +143,7 @@ export default function AttendanceFilters({
       )}
 
       {/* NEW: Search Filter */}
-      {viewMode === "day" && showSearch && (
+      {(viewMode === "day" || viewMode === "month") && showSearch && (
         <div className="filter-group">
           <label className="filter-label">Search</label>
           <input

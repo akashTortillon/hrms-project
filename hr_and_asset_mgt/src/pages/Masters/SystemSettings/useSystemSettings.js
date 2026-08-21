@@ -9,7 +9,8 @@ import {
     addAllowanceType,
     updateAllowanceType,
     deleteAllowanceType,
-    toggleNotification as toggleNotificationApi
+    toggleNotification as toggleNotificationApi,
+    downloadBackup as downloadBackupApi
 } from "../../../services/systemSettingsService";
 import { payrollService } from "../../../services/payrollService";
 
@@ -260,9 +261,25 @@ export default function useSystemSettings() {
         }
     };
 
-    // Data Management Mock Handlers
+    // Data Management Handlers
     const handleImport = () => toast.info("Import functionality coming soon");
-    const handleBackup = () => toast.info("Backup functionality coming soon");
+    const handleBackup = async () => {
+        try {
+            const blob = await downloadBackupApi();
+            const url = window.URL.createObjectURL(new Blob([blob]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `hrms_backup_${new Date().toISOString().slice(0, 10)}.zip`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success("Backup downloaded successfully");
+        } catch (error) {
+            console.error("Backup failed", error);
+            toast.error(error.response?.data?.message || "Backup failed");
+        }
+    };
     const handleRestore = () => toast.info("Restore functionality coming soon");
 
     return {

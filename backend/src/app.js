@@ -105,10 +105,12 @@ import announcementRoutes from "./routes/announcementRoutes.js";
 import policyRoutes from "./routes/policyRoutes.js";
 import warningRoutes from "./routes/warningRoutes.js";
 import activityLogRoutes from "./routes/activityLogRoutes.js";
+import backupRoutes from "./routes/backupRoutes.js";
 app.use("/api/appraisals", appraisalRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/policies", policyRoutes);
 app.use("/api/warnings", warningRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
+app.use("/api/backup", backupRoutes);
 
 export default app;

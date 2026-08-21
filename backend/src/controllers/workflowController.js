@@ -100,7 +100,15 @@ const normalizeWorkflowItems = (existingItems = [], templateItems = []) => {
     });
 
     existingByName.forEach((item) => {
-        normalized.push(item.toObject?.() || item);
+        const plain = item.toObject?.() || item;
+        // A leftover item is no longer in the (now-authoritative) template. Only keep
+        // it if real work exists on it - anything not "Pending". A step still
+        // untouched simply disappears along with its template removal; a Completed
+        // step (has an uploaded document) is preserved so a template edit can never
+        // destroy a real employee submission.
+        if (plain.status && plain.status !== "Pending") {
+            normalized.push(plain);
+        }
     });
 
     return normalized;

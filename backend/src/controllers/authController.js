@@ -96,6 +96,25 @@ export const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
+    // Block offboarded/deactivated employees. Checked AFTER the password match (not
+    // before) so a wrong-password attempt never leaks whether an account is
+    // deactivated. Admins are never gated on Employee record state - same convention
+    // already used elsewhere (authMiddleware.js's employeeId auto-heal skip,
+    // attendanceController.js's Admin bypass) - and "On Leave"/"Onboarding" employees
+    // must still be able to log in, only "Inactive" blocks. No linked Employee found
+    // at all fails OPEN (doesn't block) - this stays scoped to "block accounts whose
+    // linked record says Inactive," not "block anyone who fails to resolve an Employee."
+    let linkedEmployee = null;
+    if (user.role !== "Admin") {
+      linkedEmployee = user.employeeId
+        ? await Employee.findById(user.employeeId).select("status")
+        : await Employee.findOne({ email: { $regex: new RegExp(`^${user.email}$`, "i") } }).select("status");
+
+      if (linkedEmployee && linkedEmployee.status === "Inactive") {
+        return res.status(403).json({ message: "Your account has been deactivated. Please contact HR/Admin." });
+      }
+    }
+
     // Fetch Permissions from Master DB
     let permissions = [];
     if (user.role === 'Admin') {
@@ -123,8 +142,9 @@ export const login = async (req, res) => {
 
     setRefreshTokenCookie(res, refreshToken);
 
-    // Check for linked employee via email if not explicitly linked
-    let finalEmployeeId = user.employeeId;
+    // Check for linked employee via email if not explicitly linked - reuses the
+    // lookup already done above for the Inactive-status check instead of querying twice.
+    let finalEmployeeId = user.employeeId || linkedEmployee?._id || null;
     if (!finalEmployeeId) {
       const linkedEmp = await Employee.findOne({
         email: { $regex: new RegExp(`^${user.email}$`, 'i') }
@@ -179,6 +199,22 @@ export const refresh = async (req, res) => {
     if (!user) {
       console.warn("⚠️ User not found for refresh token");
       return res.status(401).json({ message: "User not found" });
+    }
+
+    // Same Inactive-employee gate as login() - without this, an employee deactivated
+    // mid-session could keep hitting this endpoint (auto-triggered by the frontend's
+    // 401 interceptor) for up to 7 days (refresh token lifetime) after deactivation.
+    if (user.role !== "Admin") {
+      const linkedEmployee = user.employeeId
+        ? await Employee.findById(user.employeeId).select("status")
+        : await Employee.findOne({ email: { $regex: new RegExp(`^${user.email}$`, "i") } }).select("status");
+
+      if (linkedEmployee && linkedEmployee.status === "Inactive") {
+        user.refreshTokens = [];
+        await user.save();
+        res.clearCookie("refreshToken");
+        return res.status(403).json({ message: "Your account has been deactivated. Please contact HR/Admin." });
+      }
     }
 
     // Find the token in the DB

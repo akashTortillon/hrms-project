@@ -506,12 +506,25 @@ body {
     color: var(--text);
   }
 
-  .search-form {
-    display: block;
-    width: 100%;
+  /* GlobalSearch (canUseGlobalSearch, non-Employee roles) has zero responsive CSS of
+     its own and a hardcoded 65% width - at phone widths it collides with the
+     hamburger/+/bell/profile row. DOM order is .brand -> GlobalSearch -> .topbar-actions
+     (Navbar.jsx), so explicit `order` on all three forces brand+actions to share row 1
+     while search is pushed to its own full-width row below - flex-basis alone (without
+     order) would just push .topbar-actions to a 3rd line instead. */
+  .global-search-container {
+    width: 100% !important;
     margin: 8px 0;
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .topbar .brand {
+    order: 1;
+  }
+
+  .topbar-actions {
     order: 2;
-    /* Place below the top row on mobile */
   }
 
   .topbar-container {
