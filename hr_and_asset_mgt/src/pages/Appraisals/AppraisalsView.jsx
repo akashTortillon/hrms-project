@@ -19,8 +19,15 @@ const formatDate = (value) => {
   return new Date(value).toISOString().slice(0, 10);
 };
 
+// Was employee.visaBase || employee.basicSalary. visaBase is a separate
+// compliance/labour-filing figure, allowed to diverge from real gross pay (see the
+// CTC popup's own "Payroll Base (Visa Base)" vs "Gross Earnings" split) - any employee
+// whose salary was ever set via a direct Edit rather than an Appraisal increment has a
+// stale visaBase, since only the increment path keeps it in lockstep. Showing it here
+// as "Current Base Salary" let this preview show a number completely disconnected from
+// totalSalary, which is what the increment approval actually operates on.
 const getBaseSalary = (employee) =>
-  Number(employee?.visaBase || employee?.basicSalary || 0);
+  Number(employee?.totalSalary || employee?.basicSalary || 0);
 
 const getEmployeeLabel = (employee) => {
   if (!employee) return "";

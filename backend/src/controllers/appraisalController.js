@@ -57,7 +57,15 @@ export const createAppraisal = async (req, res) => {
       const existing = employee.allowances.find((item) => item.typeName === req.body.allowanceTypeName);
       currentSalary = existing ? toNumber(existing.amount) : 0;
     } else {
-      currentSalary = toNumber(employee.visaBase || employee.basicSalary);
+      // Was employee.visaBase || employee.basicSalary - visaBase is a separate
+      // compliance/labour-filing figure that can legitimately diverge from the
+      // employee's real gross pay (e.g. any employee whose salary was ever set via a
+      // direct Edit rather than an Appraisal increment, since only the increment path
+      // keeps visaBase moving in lockstep). approveAppraisal's actual split math runs
+      // on computeTotalSalary (basic+hra+allowance) - showing visaBase here let this
+      // preview diverge arbitrarily from what approval actually does, which is exactly
+      // what happened for R175 (visaBase 1,500 vs real totalSalary 3,000).
+      currentSalary = computeTotalSalary(employee);
     }
 
     const appraisal = await Appraisal.create({
