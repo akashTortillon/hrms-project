@@ -16,6 +16,7 @@ import { payrollService } from "../../../services/payrollService";
 
 export default function useSystemSettings() {
     const [loading, setLoading] = useState(false);
+    const [backupLoading, setBackupLoading] = useState(false);
     const [holidays, setHolidays] = useState([]);
     const [allowanceTypes, setAllowanceTypes] = useState([]);
 
@@ -264,6 +265,10 @@ export default function useSystemSettings() {
     // Data Management Handlers
     const handleImport = () => toast.info("Import functionality coming soon");
     const handleBackup = async () => {
+        // A full DB dump takes a few real seconds server-side (every collection gets
+        // .find({}).toArray()'d and zipped) - with no feedback, clicking Backup looked
+        // like nothing happened. This gives the button a visible in-flight state.
+        setBackupLoading(true);
         try {
             const blob = await downloadBackupApi();
             const url = window.URL.createObjectURL(new Blob([blob]));
@@ -278,6 +283,8 @@ export default function useSystemSettings() {
         } catch (error) {
             console.error("Backup failed", error);
             toast.error(error.response?.data?.message || "Backup failed");
+        } finally {
+            setBackupLoading(false);
         }
     };
     const handleRestore = () => toast.info("Restore functionality coming soon");
@@ -324,6 +331,7 @@ export default function useSystemSettings() {
 
         handleImport,
         handleBackup,
+        backupLoading,
         handleRestore
     };
 }

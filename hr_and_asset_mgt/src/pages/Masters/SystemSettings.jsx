@@ -18,6 +18,7 @@ export default function SystemSettings() {
     toggleNotification,
     handleImport,
     handleBackup,
+    backupLoading,
     handleRestore,
     // Payroll Period Anchor
     currentAnchorEnd,
@@ -175,7 +176,9 @@ export default function SystemSettings() {
               <div className="data-title">Backup Data</div>
               <div className="data-desc">Create system backup</div>
             </div>
-            <CustomButton onClick={handleBackup} size="sm">Backup</CustomButton>
+            <CustomButton onClick={handleBackup} size="sm" disabled={backupLoading}>
+              {backupLoading ? "Generating..." : "Backup"}
+            </CustomButton>
           </div>
 
           <div className="data-action bg-red-50 border-red-100">
