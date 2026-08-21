@@ -291,6 +291,38 @@
   background: linear-gradient(180deg, #d8bc63 0%, #b98925 100%);
 }
 
+.appraisal-split-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(247, 248, 251, 0.9);
+  border: 1px solid #e8edf5;
+}
+
+.appraisal-split-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8f98aa;
+}
+
+.appraisal-split-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #52607a;
+}
+
+.appraisal-split-row strong {
+  font-size: 14px;
+  color: #162235;
+  font-weight: 700;
+}
+
 .appraisal-currency-input {
   display: flex;
   align-items: center;

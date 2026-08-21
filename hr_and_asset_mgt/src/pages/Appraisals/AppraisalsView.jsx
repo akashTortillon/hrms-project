@@ -365,6 +365,36 @@ export default function AppraisalsView() {
               <strong>{selectedEmployee ? formatCurrency(nextSalary) : "--"}</strong>
             </div>
 
+            {/* Preview of approveAppraisal's actual gross-first-split math (see
+                splitIncrement in salaryCalc.js) so the split is visible before
+                confirming, not just the single New Salary total. */}
+            {!isAllowanceMode && selectedEmployee && nextSalary > 0 && (
+              <div className="appraisal-split-breakdown">
+                <span className="appraisal-split-title">Split — 50% Basic / 30% HRA / 20% Allowance</span>
+                {(() => {
+                  const basicShare = Math.round(nextSalary * 0.5 * 100) / 100;
+                  const hraShare = Math.round(nextSalary * 0.3 * 100) / 100;
+                  const allowanceShare = Math.round((nextSalary - basicShare - hraShare) * 100) / 100;
+                  return (
+                    <>
+                      <div className="appraisal-split-row">
+                        <span>Basic Salary (50%)</span>
+                        <strong>{formatCurrency(basicShare)}</strong>
+                      </div>
+                      <div className="appraisal-split-row">
+                        <span>HRA (30%)</span>
+                        <strong>{formatCurrency(hraShare)}</strong>
+                      </div>
+                      <div className="appraisal-split-row">
+                        <span>Allowance (20%)</span>
+                        <strong>{formatCurrency(allowanceShare)}</strong>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
             <button
               className="appraisal-confirm-button"
               onClick={applyIncrement}
