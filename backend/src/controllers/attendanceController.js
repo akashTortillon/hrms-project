@@ -267,7 +267,7 @@ export const syncBiometrics = async (req, res) => {
  * a transaction that was already stored (e.g. from a prior sync) never gets reprocessed,
  * even if its resulting Attendance record was later deleted or never generated. This is the
  * recovery path for that gap: point it at a badge + date range and it regenerates Attendance
- * directly from whatever biometrictransactions already exist, no new BioCloud fetch involved.
+ * directly from whatever biometrictransactions already exist, no new Attendance API fetch involved.
  */
 export const reprocessBiometrics = async (req, res) => {
   try {
