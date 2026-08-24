@@ -368,7 +368,11 @@ export const addEmployee = async (req, res) => {
         createdUser = true;
       } catch (uErr) {
         // console.error("User creation failed:", uErr.message);
-        return res.status(500).json({ message: "Failed to create User account. Employee not added." });
+        return res.status(500).json({
+          message: "Failed to create User account. Employee not added.",
+          err: uErr?.message,
+          details: uErr || null
+        });
       }
     }
 
@@ -464,7 +468,7 @@ export const addEmployee = async (req, res) => {
       description: `Employee ${employee.name} (${employee.code}) created`,
       targetId: employee._id,
       targetName: employee.name
-    }).catch(() => {});
+    }).catch(() => { });
   } catch (error) {
     // console.error("Add Employee Error:", error);
     if (error.name === 'ValidationError') {
@@ -896,7 +900,7 @@ export const updateEmployee = async (req, res) => {
       targetId: updatedEmployee._id,
       targetName: updatedEmployee.name,
       metadata: { changes }
-    }).catch(() => {});
+    }).catch(() => { });
   } catch (error) {
     // console.error("Update Employee Error:", error);
     if (error.code === 11000) {
@@ -937,7 +941,7 @@ export const deleteAllowance = async (req, res) => {
       description: `Allowance "${allowance.typeName}" (AED ${allowance.amount}) removed from ${employee.name} (${employee.code})`,
       targetId: employee._id,
       targetName: employee.name
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.json({ employee });
   } catch (error) {
@@ -991,7 +995,7 @@ export const uploadEmployeePhoto = async (req, res) => {
       description: `Employee ${employee.name} (${employee.code}) profile photo updated`,
       targetId: employee._id,
       targetName: employee.name
-    }).catch(() => {});
+    }).catch(() => { });
   } catch (error) {
     res.status(500).json({ message: "Failed to upload employee photo" });
   }
@@ -1017,7 +1021,7 @@ export const deleteEmployee = async (req, res) => {
       description: `Employee ${employee.name} (${employee.code}) deleted`,
       targetId: employee._id,
       targetName: employee.name
-    }).catch(() => {});
+    }).catch(() => { });
   } catch (error) {
     // console.error(error);
     res.status(500).json({ message: "Server error" });
@@ -1154,7 +1158,7 @@ export const transferEmployee = async (req, res) => {
         from: { company: previousCompany, branch: previousBranch },
         to: { company: targetCompany, branch: targetBranch }
       }
-    }).catch(() => {});
+    }).catch(() => { });
   } catch (error) {
     res.status(500).json({ message: "Failed to transfer employee" });
   }
@@ -1341,14 +1345,14 @@ export const importEmployees = async (req, res) => {
     // row's Company, rather than a numeric Company Code ID - keyed by companyId::branchNameLower.
     const branchNameByCompanyIdAndName = new Map();
     masters.filter(m => m.type === 'BRANCH' && m.parentId).forEach(m => {
-        branchNameByCompanyIdAndName.set(`${String(m.parentId)}::${m.name.toLowerCase()}`, m.name);
+      branchNameByCompanyIdAndName.set(`${String(m.parentId)}::${m.name.toLowerCase()}`, m.name);
     });
 
     // Companies map by their "Code ID" (Masters > Company Structure > Companies > Code ID field)
     // WORK LOCATION / VISA LOCATION columns in the import sheet hold this code, not a name.
     const companyByCode = new Map();
     masters.filter(m => m.type === 'COMPANY' && m.code).forEach(m => {
-        companyByCode.set(String(m.code).trim(), m.name);
+      companyByCode.set(String(m.code).trim(), m.name);
     });
 
     // The sheet's "COMPANY / BRANCH" column is a single merged field (e.g. "RIZAN HEAD OFFICE").
@@ -1378,14 +1382,14 @@ export const importEmployees = async (req, res) => {
 
     // Distinct missing values seen across the whole file, for the summary block
     const missing = {
-        departments: new Set(),
-        designations: new Set(),
-        branches: new Set(),
-        companies: new Set(),
-        roles: new Set(),
-        contractTypes: new Set(),
-        workLocationCodes: new Set(),
-        visaLocationCodes: new Set()
+      departments: new Set(),
+      designations: new Set(),
+      branches: new Set(),
+      companies: new Set(),
+      roles: new Set(),
+      contractTypes: new Set(),
+      workLocationCodes: new Set(),
+      visaLocationCodes: new Set()
     };
 
     // Internal auto-incremented reference number (systemCode), independent of the
@@ -1869,7 +1873,7 @@ export const applyShiftImport = async (req, res) => {
 export const resetEmployeePassword = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Find the employee
     const employee = await Employee.findById(id);
     if (!employee) {
@@ -1931,7 +1935,7 @@ export const resetEmployeePassword = async (req, res) => {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
     let newPassword = "";
     for (let i = 0; i < 8; i++) {
-        newPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+      newPassword += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
     // Hash it and save
@@ -1941,9 +1945,9 @@ export const resetEmployeePassword = async (req, res) => {
 
     // Email the employee
     const emailOptions = {
-        to: employee.email,
-        subject: "Administrator Triggered Password Reset - HRMS",
-        html: `
+      to: employee.email,
+      subject: "Administrator Triggered Password Reset - HRMS",
+      html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
                 <div style="background-color: #ef4444; color: white; padding: 20px; text-align: center;">
                     <h2 style="margin: 0;">Password Reset</h2>
