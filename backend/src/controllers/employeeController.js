@@ -367,12 +367,24 @@ export const addEmployee = async (req, res) => {
         });
         createdUser = true;
       } catch (uErr) {
-        // console.error("User creation failed:", uErr.message);
-        return res.status(500).json({
-          message: "Failed to create User account. Employee not added.",
-          err: uErr?.message,
-          details: uErr || null
-        });
+        console.error("User creation failed:", uErr.message);
+
+        // deleteEmployee never removes the linked User account, so a phone/email that
+        // belonged to a previously-deleted employee is still sitting in the users
+        // collection (both fields are `unique`) - re-adding anyone with that same
+        // phone/email hits this every time. Surface which field actually collided
+        // instead of a generic message, so the admin knows what to change rather than
+        // just seeing a raw Mongo duplicate-key error (or nothing at all).
+        if (uErr?.code === 11000) {
+          const field = Object.keys(uErr.keyValue || {})[0] || "email or phone";
+          const value = uErr.keyValue?.[field];
+          const label = field === "phone" ? "Phone number" : field === "email" ? "Email" : field;
+          return res.status(409).json({
+            message: `${label} "${value}" is already registered to another account. If this employee was previously removed, their old login account still exists - use a different ${field === "phone" ? "phone number" : "email"} or ask an Admin to clean up the orphaned account.`
+          });
+        }
+
+        return res.status(500).json({ message: "Failed to create User account. Employee not added." });
       }
     }
 
