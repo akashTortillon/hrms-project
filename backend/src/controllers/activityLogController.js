@@ -1,10 +1,16 @@
 import ActivityLog from "../models/activityLogModel.js";
 import * as XLSX from "xlsx";
 
+// Must match the sidebar's gate for the Activity Log link (MANAGE_MASTERS
+// permission, see Sidebar.jsx) - it used to only accept role "Admin"/"HR*" or
+// literal "ALL" permission, so any user granted MANAGE_MASTERS through a custom
+// role (not Admin/HR-named) could see the nav link but got 403'd on every
+// request here, surfacing as "Failed to load activity logs".
 const isAdmin = (user = {}) =>
   user.role === "Admin" ||
   /^HR/i.test(user.role || "") ||
-  user.permissions?.includes("ALL");
+  user.permissions?.includes("ALL") ||
+  user.permissions?.includes("MANAGE_MASTERS");
 
 export const getActivityLogs = async (req, res) => {
   try {
