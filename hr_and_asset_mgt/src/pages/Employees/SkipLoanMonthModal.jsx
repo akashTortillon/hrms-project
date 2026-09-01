@@ -75,7 +75,13 @@ export default function SkipLoanMonthModal({ show, request, onClose, onSubmit, s
                     <input
                         type="month"
                         value={cycle}
-                        min={getDefaultMonthValue()}
+                        // No `min` here on purpose - this used to force "next calendar month
+                        // from today" as the earliest selectable cycle, which blocked skipping
+                        // a month that's already past (e.g. today is Sept 1, need to skip
+                        // August) even when that month's deduction never actually ran. The
+                        // backend (updateSalaryRepaymentSchedule, requestController.js) already
+                        // rejects skipping a month that was genuinely already deducted or
+                        // already has a skip scheduled - it's the real gate, not this input.
                         onChange={(e) => setCycle(e.target.value)}
                         className="form-control"
                         style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1d5db" }}
