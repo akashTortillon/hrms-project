@@ -1425,8 +1425,8 @@ export default function EmployeeDetail() {
                                     // add to two fields nobody could see).
                                     { label: 'HRA', value: employee.hra, fallback: '0 AED' },
                                     { label: 'Allowance', value: employee.allowance, fallback: '0 AED' },
-                                    { label: 'Accommodation Allowance', value: employee.accommodationAllowance, fallback: '0 AED' },
-                                    { label: 'Vehicle Allowance', value: employee.vehicleAllowance, fallback: '0 AED' },
+                                    { label: 'Accommodation Expense', value: employee.accommodationAllowance, fallback: '0 AED' },
+                                    { label: 'Vehicle Expense', value: employee.vehicleAllowance, fallback: '0 AED' },
                                 ].map(({ label, value, fallback }) => (
                                     <div key={label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ fontSize: '13px', color: '#6b7280' }}>{label}</span>
@@ -1808,7 +1808,7 @@ export default function EmployeeDetail() {
                                                     <div key={idx} style={{ fontSize: '13px', color: '#374151', padding: '8px 10px', background: '#f0fdf4', borderRadius: '6px' }}>
                                                         <div>
                                                             <strong style={{ color: '#15803d' }}>+{entry.amount} AED</strong>
-                                                            {' '}(balance after: {entry.remainingBalanceAfter} AED)
+                                                            {' '}(balance after: <strong style={{ color: '#1d4ed8' }}>{entry.remainingBalanceAfter} AED</strong>)
                                                         </div>
                                                         <div style={{ color: '#6b7280', marginTop: '2px' }}>
                                                             "{entry.reason}" — {entry.recordedByName || 'Unknown'}, {entry.recordedAt ? new Date(entry.recordedAt).toLocaleString() : ''}

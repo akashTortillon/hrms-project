@@ -800,12 +800,12 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
-                  <label>Accommodation Allowance (AED)</label>
+                  <label>Accommodation Expense (AED)</label>
                   <input name="accommodationAllowance" type="number" value={form.accommodationAllowance || ''} onChange={handleChange} placeholder="e.g. 500" />
                 </div>
 
                 <div className="form-group">
-                  <label>Vehicle Allowance (AED)</label>
+                  <label>Vehicle Expense (AED)</label>
                   <input name="vehicleAllowance" type="number" value={form.vehicleAllowance || ''} onChange={handleChange} placeholder="e.g. 400" />
                 </div>
 

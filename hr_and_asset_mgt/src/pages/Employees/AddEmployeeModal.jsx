@@ -597,12 +597,12 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
             </div>
 
             <div className="form-group">
-              <label>Accommodation Allowance (AED)</label>
+              <label>Accommodation Expense (AED)</label>
               <input name="accommodationAllowance" type="number" placeholder="e.g. 500" onChange={handleChange} />
             </div>
 
             <div className="form-group">
-              <label>Vehicle Allowance (AED)</label>
+              <label>Vehicle Expense (AED)</label>
               <input name="vehicleAllowance" type="number" placeholder="e.g. 400" onChange={handleChange} />
             </div>
 

@@ -2547,13 +2547,22 @@ export const getEmployeeRequests = async (req, res) => {
       }
     }
 
-    const requests = await Request.find(query)
+    let requests = await Request.find(query)
       .populate("approvedBy", "name role")
       .populate("withdrawnBy", "name")
       .populate("managerApproval.actedBy", "name role")
       .populate("financeApproval.actedBy", "name role")
       .populate("hrApproval.actedBy", "name role")
       .sort({ submittedAt: -1 });
+
+    // Pre-existing loans (added via Add Existing Loan, details.isPreExisting) predate
+    // this system and skip the normal approval workflow entirely - a Manager viewing
+    // via the assigned-manager scope never approved it and has no context for it, so
+    // hide it from that view specifically. Self, Admin, and full-permission (HR/Finance)
+    // views are untouched - only the Manager-scoped read filters these out.
+    if (isAssignedManager) {
+      requests = requests.filter((r) => !r.details?.isPreExisting);
+    }
 
     console.log(`[getEmployeeRequests] Found ${requests.length} requests`);
 
