@@ -649,11 +649,17 @@ export default function EmployeeDetail() {
 
     const canConfirmProbation = canEdit && !isSelf && employee.probationStatus !== "CONFIRMED" && employee.probationEndDate;
 
-    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Loans", "Leave Summary", "Leave Wallet"];
+    const tabs = ["Personal Info", "Employment", "Documents", "Attendance", "Assets", "Leave Summary", "Leave Wallet"];
     // Salary tab — Finance/HR/Admin, OR the employee viewing their OWN profile (read-only).
     const canViewSalary = hasPermission("ALL") || hasPermission("MANAGE_PAYROLL") || hasPermission("APPROVE_FINANCE_REQUESTS") || hasPermission("APPROVE_REQUESTS") || isSelf;
     if (canViewSalary) {
         tabs.push("Salary");
+    }
+    // Loans tab — was unconditionally in the base tabs array above (no gate at all), so
+    // any Manager viewing any direct report saw full loan/repayment data they never
+    // approved. Same financial-data sensitivity as Salary, so reuse the exact same gate.
+    if (canViewSalary) {
+        tabs.push("Loans");
     }
     // Warnings tab — visible to HR/Admin/Manager (can manage) and the employee themselves
     const canViewWarnings = canEdit || isSelf;
@@ -1607,7 +1613,11 @@ export default function EmployeeDetail() {
                     />
                 )}
 
-                {activeTab === "Loans" && (
+                {/* Gate the render itself, not just the tab button above - `activeTab` can be
+                    set directly from a `?tab=Loans` URL param on mount, which would bypass
+                    a button-only check and still show loan data to a Manager who typed/pasted
+                    the link. */}
+                {activeTab === "Loans" && canViewSalary && (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Loans & Advances</h3>
