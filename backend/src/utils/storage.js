@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
-import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const LOCAL_ROOT = path.resolve("uploads");
@@ -184,7 +184,15 @@ export const s3ObjectExists = async (key) => {
   }
 };
 
-export const getSignedFileUrl = async ({ filePath, fileUrl, storage = "LOCAL", expiresIn = 60 * 60 * 12 }) => {
+// No existing function could delete an S3 object - deleteStoredFile above explicitly
+// no-ops for storage !== "LOCAL". Needed by the backup-job cleanup cron.
+export const deleteS3Object = async (key) => {
+  const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
+  if (!bucket || !key) return;
+  await getS3Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+};
+
+export const getSignedFileUrl = async ({ filePath, fileUrl, storage = "LOCAL", expiresIn = 60 * 60 * 12, downloadFilename }) => {
   if (storage !== "S3") {
     return fileUrl || (filePath ? `/${String(filePath).replace(/^\/+/, "")}` : "");
   }
@@ -195,6 +203,15 @@ export const getSignedFileUrl = async ({ filePath, fileUrl, storage = "LOCAL", e
   }
 
   const key = String(filePath).replace(/^\/+/, "");
-  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+  // downloadFilename sets Content-Disposition on S3's response itself, via the
+  // presigned URL - lets a caller force a real "Save As" download (with a clean
+  // filename) from a plain <a href> navigation, without needing JS to read the
+  // response body (which would require the bucket to have CORS configured for
+  // whatever origin is calling - a plain top-level navigation needs no CORS at all).
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ...(downloadFilename ? { ResponseContentDisposition: `attachment; filename="${downloadFilename}"` } : {})
+  });
   return getSignedUrl(getS3Client(), command, { expiresIn });
 };

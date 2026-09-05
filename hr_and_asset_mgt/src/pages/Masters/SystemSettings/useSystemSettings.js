@@ -10,7 +10,9 @@ import {
     updateAllowanceType,
     deleteAllowanceType,
     toggleNotification as toggleNotificationApi,
-    downloadBackup as downloadBackupApi
+    startBackupJob as startBackupJobApi,
+    getBackupJobStatus as getBackupJobStatusApi,
+    getBackupDownloadUrl as getBackupDownloadUrlApi
 } from "../../../services/systemSettingsService";
 import { payrollService } from "../../../services/payrollService";
 
@@ -264,26 +266,72 @@ export default function useSystemSettings() {
 
     // Data Management Handlers
     const handleImport = () => toast.info("Import functionality coming soon");
+    // Was one synchronous call holding a single HTTP request open for the whole
+    // ~40-50s backup - confirmed failing on mobile connections that can't keep a
+    // request alive that long. Now: start the job (returns immediately), poll status,
+    // download only once ready. The 5-minute POLL_TIMEOUT_MS is a client-side give-up
+    // only - the job itself keeps running server-side regardless of tab/poll state.
+    const POLL_INTERVAL_MS = 3000;
+    const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
     const handleBackup = async () => {
-        // A full DB dump takes a few real seconds server-side (every collection gets
-        // .find({}).toArray()'d and zipped) - with no feedback, clicking Backup looked
-        // like nothing happened. This gives the button a visible in-flight state.
         setBackupLoading(true);
         try {
-            const blob = await downloadBackupApi();
-            const url = window.URL.createObjectURL(new Blob([blob]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `hrms_backup_${new Date().toISOString().slice(0, 10)}.zip`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            toast.success("Backup downloaded successfully");
+            const { jobId } = await startBackupJobApi();
+            toast.info("Backup started — this may take a minute...");
+
+            const startTime = Date.now();
+            const poll = async () => {
+                let job;
+                try {
+                    job = await getBackupJobStatusApi(jobId);
+                } catch (error) {
+                    toast.error(error.response?.data?.message || "Failed to check backup status");
+                    setBackupLoading(false);
+                    return;
+                }
+
+                if (job.status === "ready") {
+                    try {
+                        // Plain navigation to the presigned S3 URL, not a fetch+blob read -
+                        // avoids depending on the S3 bucket's CORS policy allowlisting this
+                        // origin (a cross-origin fetch/XHR read does; a top-level navigation
+                        // download does not). The URL's own Content-Disposition (set
+                        // server-side) forces the "Save As" download with a clean filename.
+                        const url = await getBackupDownloadUrlApi(jobId);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.rel = "noopener";
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        toast.success("Backup downloaded successfully");
+                    } catch (error) {
+                        toast.error(error.response?.data?.message || "Backup was ready but the download failed");
+                    }
+                    setBackupLoading(false);
+                    return;
+                }
+
+                if (job.status === "failed") {
+                    toast.error(job.error || "Backup failed");
+                    setBackupLoading(false);
+                    return;
+                }
+
+                if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+                    toast.error("Backup is taking longer than expected. It will finish in the background — try again shortly.");
+                    setBackupLoading(false);
+                    return;
+                }
+
+                setTimeout(poll, POLL_INTERVAL_MS);
+            };
+
+            setTimeout(poll, POLL_INTERVAL_MS);
         } catch (error) {
-            console.error("Backup failed", error);
-            toast.error(error.response?.data?.message || "Backup failed");
-        } finally {
+            console.error("Backup failed to start", error);
+            toast.error(error.response?.data?.message || "Failed to start backup");
             setBackupLoading(false);
         }
     };
