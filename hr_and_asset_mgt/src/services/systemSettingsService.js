@@ -55,8 +55,28 @@ export const toggleNotification = async (id) => {
     return res.data;
 };
 
-// Backup - mounted at /api/backup directly, not under BASE_URL
-export const downloadBackup = async () => {
-    const res = await api.get(`/backup`, { responseType: "blob" });
+// Backup - mounted at /api/backup directly, not under BASE_URL. Async job pattern:
+// start returns immediately with a jobId, status is polled, download is only called
+// once status is "ready" (server 302s to a fresh short-lived S3 presigned URL, which
+// axios follows transparently). Replaces the old single-call synchronous download,
+// which held one long HTTP request open for the whole ~40-50s backup and was
+// confirmed to fail on slower mobile connections before it could complete.
+export const startBackupJob = async () => {
+    const res = await api.post(`/backup/start`);
+    return res.data; // { jobId, status }
+};
+
+export const getBackupJobStatus = async (jobId) => {
+    const res = await api.get(`/backup/status/${jobId}`);
     return res.data;
+};
+
+// Returns the signed S3 URL as JSON, not a redirect the browser has to follow via
+// fetch/XHR (that path needs the bucket's CORS to allowlist whatever origin is
+// calling, which failed even for this app's existing, already-live document-download
+// endpoint when tested from a non-prod origin). The caller does a plain <a href>
+// navigation to this URL instead - no CORS involved, no bucket config dependency.
+export const getBackupDownloadUrl = async (jobId) => {
+    const res = await api.get(`/backup/download/${jobId}`);
+    return res.data.url;
 };

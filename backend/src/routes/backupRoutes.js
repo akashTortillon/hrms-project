@@ -1,5 +1,5 @@
 import express from "express";
-import { downloadBackup } from "../controllers/backupController.js";
+import { startBackup, getBackupStatus, downloadBackupFile } from "../controllers/backupController.js";
 import { protect, restrictTo } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -7,6 +7,8 @@ const router = express.Router();
 router.use(protect);
 router.use(restrictTo("Admin"));
 
-router.get("/", downloadBackup);
+router.post("/start", startBackup);
+router.get("/status/:jobId", getBackupStatus);
+router.get("/download/:jobId", downloadBackupFile);
 
 export default router;

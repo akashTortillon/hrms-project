@@ -5,6 +5,7 @@ import biometricScheduler from "./schedulers/biometricScheduler.js";
 import transferScheduler from "./schedulers/transferScheduler.js";
 import birthdayScheduler from "./schedulers/birthdayScheduler.js";
 import leaveAccrualScheduler from "./schedulers/leaveAccrualScheduler.js";
+import backupCleanupScheduler from "./schedulers/backupCleanupScheduler.js";
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ connectDB().then(() => {
   transferScheduler.start();
   birthdayScheduler.start();
   leaveAccrualScheduler.start();
+  backupCleanupScheduler.start();
 });
 
 app.listen(PORT, () => {
