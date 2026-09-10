@@ -517,6 +517,11 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                 </div>
 
                 <div className="form-group">
+                  <label>Passport Number</label>
+                  <input name="passportNo" value={form.passportNo || ''} onChange={handleChange} placeholder="e.g. P1234567" />
+                </div>
+
+                <div className="form-group">
                   <label>Passport Expiry</label>
                   <input
                     type="date"
@@ -532,6 +537,11 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                       height: "42px"
                     }}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label>Emirates ID Number</label>
+                  <input name="emiratesIdNo" value={form.emiratesIdNo || ''} onChange={handleChange} placeholder="e.g. 784-XXXX-XXXXXXX-X" />
                 </div>
 
                 <div className="form-group">

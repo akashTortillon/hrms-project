@@ -109,6 +109,35 @@ const attachSignedFileUrl = async (document) => {
     return item;
 };
 
+// Re-uploading a document supersedes the prior one via isActive:false (see
+// syncEmployeeExpiryAndSupersedePrior) rather than deleting it - the old record stays in
+// the DB. This surfaces those superseded records as `previousVersions` on each active
+// document of the same type, so an expired passport/Emirates ID scan stays reachable from
+// the Documents tab instead of vanishing once a newer one is uploaded.
+const attachPreviousVersions = async (employeeId, signedActiveDocuments) => {
+    const activeTypes = [...new Set(signedActiveDocuments.map((d) => d.documentType))];
+    if (!activeTypes.length) return signedActiveDocuments;
+
+    const superseded = await EmployeeDocument.find({
+        employeeId,
+        documentType: { $in: activeTypes },
+        isActive: false
+    }).sort({ createdAt: -1 });
+
+    if (!superseded.length) return signedActiveDocuments;
+
+    const signedSuperseded = await Promise.all(superseded.map(attachSignedFileUrl));
+    const byType = {};
+    signedSuperseded.forEach((doc) => {
+        (byType[doc.documentType] ||= []).push(doc);
+    });
+
+    return signedActiveDocuments.map((doc) => ({
+        ...doc,
+        previousVersions: byType[doc.documentType] || []
+    }));
+};
+
 // Add Document
 export const addDocument = async (req, res) => {
     try {
@@ -275,7 +304,8 @@ export const getEmployeeDocuments = async (req, res) => {
         }
 
         const documents = await EmployeeDocument.find({ employeeId, isActive: { $ne: false } }).sort({ createdAt: -1 });
-        const signedDocuments = await Promise.all(documents.map(attachSignedFileUrl));
+        const signedActiveDocuments = await Promise.all(documents.map(attachSignedFileUrl));
+        const signedDocuments = await attachPreviousVersions(employeeId, signedActiveDocuments);
 
         // Superset with the Dashboard's expiry widget (dashboardController.js's
         // getEmployeeVisaExpiries): surface passport/visa/Emirates ID/labor-card expiry

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import Pagination from "../../components/reusable/Pagination.jsx";
 import "../../style/EmployeeDetail.css";
 
 // Icons (using bootstrap-icons or valid imports, assuming generic svgs or library usage in project)
@@ -85,6 +86,14 @@ const resolveUploadedAssetUrl = (url) => {
     return `${serverBase}${url.startsWith("/") ? url : `/${url}`}`;
 };
 
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WORKING_DAY_TYPE_LABELS = {
+    0: "0 Days — no days off",
+    2: "2 Days — flexible, any 2 days/month",
+    4: "4 Days — one weekday/week off",
+    8: "8 Days — two weekdays/week off"
+};
+
 export default function EmployeeDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -134,6 +143,33 @@ export default function EmployeeDetail() {
     const [workflowDocs, setWorkflowDocs] = useState([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [uploadPrefillType, setUploadPrefillType] = useState("");
+    // Documents tab: sub-tabs, per-document version-history expand, filters, pagination
+    const [docsSubTab, setDocsSubTab] = useState("Documents"); // "Documents" | "Onboarding"
+    const [expandedVersions, setExpandedVersions] = useState({}); // docId -> bool
+    const [docStatusFilter, setDocStatusFilter] = useState("");
+    const [docTypeFilter, setDocTypeFilter] = useState("");
+    const [docPage, setDocPage] = useState(1);
+    const [docLimit, setDocLimit] = useState(10);
+    const [wfPage, setWfPage] = useState(1);
+    const [wfLimit, setWfLimit] = useState(10);
+
+    // Documents tab: filter + paginate the active document rows (each row's version
+    // history stays nested inside it, never flattened into the page).
+    const DOC_STATUS_OPTIONS = ["Valid", "Expiring Soon", "Critical", "Expired"];
+    const docTypeOptions = useMemo(
+        () => [...new Set(documents.map((d) => d.documentType).filter(Boolean))].sort(),
+        [documents]
+    );
+    const filteredDocuments = useMemo(
+        () => documents.filter((d) =>
+            (!docStatusFilter || d.status === docStatusFilter) &&
+            (!docTypeFilter || d.documentType === docTypeFilter)
+        ),
+        [documents, docStatusFilter, docTypeFilter]
+    );
+    const docTotalPages = Math.max(1, Math.ceil(filteredDocuments.length / docLimit));
+    const pagedDocuments = filteredDocuments.slice((docPage - 1) * docLimit, docPage * docLimit);
+    const pagedWorkflowDocs = workflowDocs.slice((wfPage - 1) * wfLimit, wfPage * wfLimit);
 
     // Attendance & Training State
     const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, late: 0, total: 0 });
@@ -960,11 +996,16 @@ export default function EmployeeDetail() {
                                 <div>{employee.address || "N/A"}</div>
                             </div>
                             <div className="info-group">
-                                {/* Spacer or additional field */}
+                                <label>Passport Number</label>
+                                <div>{employee.passportNo || "N/A"}</div>
                             </div>
                             <div className="info-group">
                                 <label>Passport Expiry</label>
                                 <div>{employee.passportExpiry || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Emirates ID Number</label>
+                                <div>{employee.emiratesIdNo || "N/A"}</div>
                             </div>
                             <div className="info-group">
                                 <label>Emirates ID Expiry</label>
@@ -1041,6 +1082,32 @@ export default function EmployeeDetail() {
                             <div className="info-group">
                                 <label>Agent ID (WPS)</label>
                                 <div>{employee.agentId || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Shift</label>
+                                <div>{employee.shift || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Working Day Type</label>
+                                <div>{WORKING_DAY_TYPE_LABELS[employee.workingDayType] ?? (employee.workingDayType ?? "N/A")}</div>
+                            </div>
+                            {(Number(employee.workingDayType) === 4 || Number(employee.workingDayType) === 8) && (
+                                <div className="info-group">
+                                    <label>Week Off Days</label>
+                                    <div>
+                                        {Array.isArray(employee.weekOffDays) && employee.weekOffDays.length
+                                            ? employee.weekOffDays.map((d) => WEEKDAY_LABELS[d]).filter(Boolean).join(", ")
+                                            : "N/A"}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="info-group">
+                                <label>Designated Manager</label>
+                                <div>{employee.designatedManagerName || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Finance Manager</label>
+                                <div>{employee.designatedFinanceManagerName || "N/A"}</div>
                             </div>
                             <div className="info-group">
                                 <label>Probation Start Date</label>
@@ -1147,9 +1214,9 @@ export default function EmployeeDetail() {
 
                 {activeTab === "Documents" && (
                     <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#1f2937' }}>Document Tracker</h3>
-                            {canManageDocs && (
+                            {canManageDocs && docsSubTab === "Documents" && (
                                 <button
                                     onClick={() => { setUploadPrefillType(""); setShowUploadModal(true); }}
                                     style={{
@@ -1161,74 +1228,160 @@ export default function EmployeeDetail() {
                                 </button>
                             )}
                         </div>
-                        <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                            {documents.map(doc => (
-                                <div key={doc._id} style={{
-                                    background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px',
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                                }}>
-                                    <div>
-                                        <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}{doc.label ? ` — ${doc.label}` : ''}</div>
-                                        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                                            {doc.documentNumber || 'No Ref'} • Expires: {doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : 'N/A'}
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                        <span style={{
-                                            background: doc.status === 'Valid' ? '#dcfce7' : (doc.status === 'Expired' ? '#fee2e2' : '#fef3c7'),
-                                            color: doc.status === 'Valid' ? '#166534' : (doc.status === 'Expired' ? '#991b1b' : '#92400e'),
-                                            padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
-                                        }}>
-                                            {doc.status}
-                                        </span>
-                                        {doc.noFileUploaded ? (
-                                            <>
-                                                <span style={{ fontSize: '12px', color: '#9ca3af' }}>No file uploaded</span>
-                                                {canManageDocs && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setUploadPrefillType(doc.documentType); setShowUploadModal(true); }}
-                                                        style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                                    >
-                                                        Upload
-                                                    </button>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleViewEmployeeDocument(doc)}
-                                                    style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                                >
-                                                    View
-                                                </button>
-                                                {canManageDocs && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteEmployeeDocument(doc)}
-                                                        style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                            {[
+                                { key: "Documents", label: "Documents", count: documents.length },
+                                { key: "Onboarding", label: "Onboarding Documents", count: workflowDocs.length }
+                            ].map(({ key, label, count }) => (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setDocsSubTab(key)}
+                                    style={{
+                                        padding: '6px 14px', borderRadius: '9999px', fontSize: '13px', cursor: 'pointer', fontWeight: 500,
+                                        border: docsSubTab === key ? '1px solid #2563eb' : '1px solid #e5e7eb',
+                                        background: docsSubTab === key ? '#eff6ff' : 'white',
+                                        color: docsSubTab === key ? '#2563eb' : '#374151'
+                                    }}
+                                >
+                                    {label}{count > 0 ? ` (${count})` : ''}
+                                </button>
                             ))}
-                            {documents.length === 0 && (
-                                <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
-                                    No documents uploaded yet.
-                                </div>
-                            )}
                         </div>
 
-                        {workflowDocs.length > 0 && (
-                            <div style={{ marginTop: '30px' }}>
-                                <h3 style={{ margin: '0 0 15px', fontSize: '16px', color: '#1f2937' }}>Onboarding / Offboarding Documents</h3>
+                        {docsSubTab === "Documents" && (
+                            <>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                                    <select
+                                        value={docStatusFilter}
+                                        onChange={(e) => { setDocStatusFilter(e.target.value); setDocPage(1); }}
+                                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '13px', background: 'white' }}
+                                    >
+                                        <option value="">All Statuses</option>
+                                        {DOC_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <select
+                                        value={docTypeFilter}
+                                        onChange={(e) => { setDocTypeFilter(e.target.value); setDocPage(1); }}
+                                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '13px', background: 'white' }}
+                                    >
+                                        <option value="">All Types</option>
+                                        {docTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                </div>
+
                                 <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                    {workflowDocs.map(doc => (
+                                    {pagedDocuments.map(doc => (
+                                        <div key={doc._id} style={{
+                                            background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: '600', color: '#111827' }}>{doc.documentType}{doc.label ? ` — ${doc.label}` : ''}</div>
+                                                    <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                                        {doc.documentNumber || 'No Ref'} • Expires: {doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : 'N/A'}
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                    <span style={{
+                                                        background: doc.status === 'Valid' ? '#dcfce7' : (doc.status === 'Expired' ? '#fee2e2' : '#fef3c7'),
+                                                        color: doc.status === 'Valid' ? '#166534' : (doc.status === 'Expired' ? '#991b1b' : '#92400e'),
+                                                        padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500'
+                                                    }}>
+                                                        {doc.status}
+                                                    </span>
+                                                    {doc.noFileUploaded ? (
+                                                        <>
+                                                            <span style={{ fontSize: '12px', color: '#9ca3af' }}>No file uploaded</span>
+                                                            {canManageDocs && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { setUploadPrefillType(doc.documentType); setShowUploadModal(true); }}
+                                                                    style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                                >
+                                                                    Upload
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleViewEmployeeDocument(doc)}
+                                                                style={{ color: '#2563eb', fontSize: '14px', fontWeight: '500', textDecoration: 'none', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                            >
+                                                                View
+                                                            </button>
+                                                            {canManageDocs && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDeleteEmployeeDocument(doc)}
+                                                                    style={{ color: '#dc2626', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: 'transparent', border: 0, padding: 0 }}
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {!doc.noFileUploaded && doc.previousVersions?.length > 0 && (
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setExpandedVersions(p => ({ ...p, [doc._id]: !p[doc._id] }))}
+                                                        style={{ color: '#6b7280', fontSize: '13px', background: 'transparent', border: 0, cursor: 'pointer', padding: 0 }}
+                                                    >
+                                                        {expandedVersions[doc._id] ? '▾' : '▸'} {doc.previousVersions.length} previous version{doc.previousVersions.length > 1 ? 's' : ''}
+                                                    </button>
+                                                    {expandedVersions[doc._id] && (
+                                                        <div style={{ marginTop: '8px', paddingLeft: '12px', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                            {doc.previousVersions.map(v => (
+                                                                <div key={v._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#6b7280' }}>
+                                                                    <span>
+                                                                        {v.label ? `${v.label} • ` : ''}{v.documentNumber || 'No Ref'} • Expires: {v.expiryDate ? new Date(v.expiryDate).toISOString().split('T')[0] : 'N/A'} • {v.status}
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleViewEmployeeDocument(v)}
+                                                                        style={{ color: '#2563eb', background: 'transparent', border: 0, cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                                                                    >
+                                                                        View
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {filteredDocuments.length === 0 && (
+                                        <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                            {documents.length === 0 ? 'No documents uploaded yet.' : 'No documents match the selected filters.'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {filteredDocuments.length > 0 && (
+                                    <Pagination
+                                        currentPage={docPage}
+                                        totalPages={docTotalPages}
+                                        onPageChange={setDocPage}
+                                        totalRecords={filteredDocuments.length}
+                                        limit={docLimit}
+                                        onLimitChange={(l) => { setDocLimit(l); setDocPage(1); }}
+                                    />
+                                )}
+                            </>
+                        )}
+
+                        {docsSubTab === "Onboarding" && (
+                            <>
+                                <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    {pagedWorkflowDocs.map(doc => (
                                         <div key={doc._id} style={{
                                             background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '15px',
                                             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
@@ -1247,8 +1400,24 @@ export default function EmployeeDetail() {
                                             </a>
                                         </div>
                                     ))}
+                                    {workflowDocs.length === 0 && (
+                                        <div style={{ textAlign: 'center', padding: '30px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                                            No onboarding / offboarding documents.
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
+
+                                {workflowDocs.length > 0 && (
+                                    <Pagination
+                                        currentPage={wfPage}
+                                        totalPages={Math.max(1, Math.ceil(workflowDocs.length / wfLimit))}
+                                        onPageChange={setWfPage}
+                                        totalRecords={workflowDocs.length}
+                                        limit={wfLimit}
+                                        onLimitChange={(l) => { setWfLimit(l); setWfPage(1); }}
+                                    />
+                                )}
+                            </>
                         )}
                     </>
                 )}

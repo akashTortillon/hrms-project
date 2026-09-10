@@ -55,7 +55,11 @@ export default function useHRManagement() {
         // payrollController.js). Defaults match the previously-hardcoded values.
         paidThresholdDays: 15,
         halfPaidThresholdDays: 45,
-        medicalDocRequiredAfterDays: 1
+        medicalDocRequiredAfterDays: 1,
+        // Cumulative absolute cap (same convention as the two thresholds above): once an
+        // employee's approved sick days for the calendar year would exceed this, a new
+        // sick-leave request is rejected at submission. 0/blank = no cap.
+        unpaidThresholdDays: 90
     });
 
     const [shifts, setShifts] = useState([]);
@@ -131,7 +135,8 @@ export default function useHRManagement() {
             tiers: [],
             paidThresholdDays: 15,
             halfPaidThresholdDays: 45,
-            medicalDocRequiredAfterDays: 1
+            medicalDocRequiredAfterDays: 1,
+            unpaidThresholdDays: 90
         });
         setShowModal(true);
     };
@@ -199,7 +204,8 @@ export default function useHRManagement() {
                 tiers: Array.isArray(meta.tiers) ? meta.tiers : [],
                 paidThresholdDays: meta.paidThresholdDays ?? 15,
                 halfPaidThresholdDays: meta.halfPaidThresholdDays ?? 45,
-                medicalDocRequiredAfterDays: meta.medicalDocRequiredAfterDays ?? 1
+                medicalDocRequiredAfterDays: meta.medicalDocRequiredAfterDays ?? 1,
+                unpaidThresholdDays: meta.unpaidThresholdDays ?? 90
             });
             setInputValue(item.name);
         } else {
@@ -235,7 +241,8 @@ export default function useHRManagement() {
                         tiers: cleanTiers,
                         paidThresholdDays: Number(leaveTypeState.paidThresholdDays) || 15,
                         halfPaidThresholdDays: Number(leaveTypeState.halfPaidThresholdDays) || 45,
-                        medicalDocRequiredAfterDays: Number(leaveTypeState.medicalDocRequiredAfterDays) || 1
+                        medicalDocRequiredAfterDays: Number(leaveTypeState.medicalDocRequiredAfterDays) || 1,
+                        unpaidThresholdDays: Number(leaveTypeState.unpaidThresholdDays) || 0
                     }
                 };
                 if (editId) await leaveTypeService.update(editId, payload);
