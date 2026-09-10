@@ -654,9 +654,19 @@ export default function HRManagement() {
                                             onChange={(e) => setLeaveTypeState({ ...leaveTypeState, medicalDocRequiredAfterDays: e.target.value })}
                                         />
                                     </div>
+                                    <div className="form-group">
+                                        <label className="modal-form-label">Unpaid up to (days)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="modal-form-input"
+                                            value={leaveTypeState.unpaidThresholdDays}
+                                            onChange={(e) => setLeaveTypeState({ ...leaveTypeState, unpaidThresholdDays: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-xs text-gray-500" style={{ marginTop: '6px' }}>
-                                    Beyond the half-paid threshold, remaining days are unpaid — no further cutoff. A sick leave longer than the "Medical Doc Required After" threshold will be rejected at submission unless a medical document is attached.
+                                    Days past the half-paid threshold are unpaid. "Unpaid up to" is the yearly cap (cumulative across all approved Sick Leave that calendar year) — a new request that would take the total past it is rejected at submission. Set it to 0 for no cap. A sick leave longer than the "Medical Doc Required After" threshold is also rejected unless a medical document is attached.
                                 </p>
                             </div>
                         )}

@@ -97,6 +97,20 @@ const attachSignedProfilePhotoUrl = async (employee) => {
   return item;
 };
 
+// designatedManager / designatedFinanceManager are stored + returned as raw Employee._id
+// (so the Add/Edit dropdowns pre-select correctly - never populate them in place). This
+// attaches read-only *Name fields alongside for the detail view to display a human name.
+const attachManagerNames = async (item) => {
+  if (!item) return item;
+  const [managerDoc, financeManagerDoc] = await Promise.all([
+    item.designatedManager ? Employee.findById(item.designatedManager).select("name") : null,
+    item.designatedFinanceManager ? Employee.findById(item.designatedFinanceManager).select("name") : null
+  ]);
+  item.designatedManagerName = managerDoc?.name || "";
+  item.designatedFinanceManagerName = financeManagerDoc?.name || "";
+  return item;
+};
+
 // Legacy records can have a date field stored as a plain string (from data that predates
 // the Date schema type, or a bad import) - $convert guards that. Some also hold a real Date
 // with a garbage year (e.g. a bad Excel-serial import producing year 20024) - $dateToString's
@@ -650,7 +664,8 @@ export const getEmployeeById = async (req, res) => {
       console.error("applyDuePendingSalaryChanges failed for employee", id, ":", salaryError);
     }
 
-    res.json(await attachSignedProfilePhotoUrl(employee));
+    const responseData = await attachManagerNames(await attachSignedProfilePhotoUrl(employee));
+    res.json(responseData);
   } catch (error) {
     console.error("Get Employee By ID Error:", error);
     res.status(500).json({ message: "Server error: " + error.message });
@@ -715,7 +730,7 @@ export const getMyEmployeeProfile = async (req, res) => {
       console.error("  ⚠️ applyDuePendingSalaryChanges failed for /me:", salaryError);
     }
 
-    const responseData = await attachSignedProfilePhotoUrl(employee);
+    const responseData = await attachManagerNames(await attachSignedProfilePhotoUrl(employee));
     console.log("  📤 Successfully returning profile for employee:", employee.name);
     res.json(responseData);
   } catch (error) {

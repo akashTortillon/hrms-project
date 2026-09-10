@@ -921,6 +921,43 @@ export const createRequest = async (req, res) => {
       }
 
       const sickLeave = isSickLeave(details);
+      const sickLeaveMaster = sickLeave
+        ? await Master.findOne({ type: "LEAVE_TYPE", name: /sick/i })
+        : null;
+
+      // Annual sick-leave cap (cumulative absolute, configurable via the Sick Leave
+      // master's metadata.unpaidThresholdDays). Once the employee's approved sick days
+      // for this calendar year would exceed it, reject the request at submission. Counts
+      // cumulatively across all approved Sick Leave that year - mirrors the per-year
+      // tallying payrollController's getApprovedLeavesMap does for pay tiers, single
+      // employee here. 0/unset = no cap. Only guards against ALREADY-APPROVED requests
+      // (same limitation as the wallet-balance check above).
+      if (sickLeave) {
+        const capRaw = Number(sickLeaveMaster?.metadata?.unpaidThresholdDays);
+        const cap = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : null;
+        if (cap) {
+          const requestYear = new Date(details.fromDate).getFullYear();
+          const priorLeaveRequests = await Request.find({
+            userId,
+            requestType: "LEAVE",
+            status: "APPROVED"
+          }).select("details");
+          const priorSickDaysThisYear = priorLeaveRequests.reduce((sum, r) => {
+            const d = r.details || {};
+            if (!isSickLeave(d)) return sum;
+            const start = d.fromDate || d.startDate;
+            if (!start || new Date(start).getFullYear() !== requestYear) return sum;
+            return sum + Number(d.numberOfDays || 0);
+          }, 0);
+          if (priorSickDaysThisYear + numberOfDays > cap) {
+            return res.status(400).json({
+              success: false,
+              message: `This request would exceed the annual sick leave cap of ${cap} day(s) — ${priorSickDaysThisYear} day(s) already approved this year. Contact HR.`
+            });
+          }
+        }
+      }
+
       let storedMedicalDoc = null;
 
       if (req.file) {
@@ -938,7 +975,6 @@ export const createRequest = async (req, res) => {
       // status like before) means an employee can no longer silently submit a
       // multi-day sick leave with no supporting document at all.
       if (sickLeave && !storedMedicalDoc) {
-        const sickLeaveMaster = await Master.findOne({ type: "LEAVE_TYPE", name: /sick/i });
         const docThresholdRaw = Number(sickLeaveMaster?.metadata?.medicalDocRequiredAfterDays);
         const docThreshold = Number.isFinite(docThresholdRaw) ? docThresholdRaw : 1;
         if (numberOfDays > docThreshold) {
