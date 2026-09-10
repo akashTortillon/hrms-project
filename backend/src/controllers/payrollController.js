@@ -877,7 +877,14 @@ export const generatePayroll = async (req, res) => {
 
         for (const emp of employees) {
             const effectiveSalary = resolveEffectiveSalary(emp, periodEnd);
-            const basicSalary = effectiveSalary.visaBase || effectiveSalary.basicSalary;
+            // Use basicSalary, not visaBase. An appraisal splits the increment 50/30/20
+            // across basicSalary/hra/allowance but adds the FULL increment to visaBase.
+            // Paying visaBase as "Basic" while also paying the split hra/allowance double-
+            // counted the non-basic slice of every appraisal increment, inflating gross
+            // (and the WPS/SIF filed basic). basicSalary matches the employee's salary
+            // card and the gratuity calc. Fall back to visaBase only for legacy records
+            // with no basicSalary set.
+            const basicSalary = effectiveSalary.basicSalary || effectiveSalary.visaBase;
 
             const allowanceList = [];
             const deductionList = [];
