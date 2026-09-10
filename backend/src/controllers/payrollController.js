@@ -23,6 +23,18 @@ const __dirname = path.dirname(__filename);
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Round to 2 decimal places (currency). Used so a payroll's totalAllowances /
+// totalDeductions / netSalary are always the exact sum of the 2dp-rounded line
+// items shown on the payslip - previously the totals accumulated raw floats while
+// each line item was stored rounded, so e.g. a 980.00 manual deduction could show
+// up in the total as 979.997 once an auto item with a repeating-decimal amount
+// (anything derived from basicSalary / 30) had been added and later removed.
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+// Sum a payslip's line items the same way the payslip renders them: each amount
+// rounded to 2dp first, then the total rounded - so "Total" always equals the sum
+// of the printed rows.
+const sumAmounts = (items = []) => round2((items || []).reduce((s, i) => s + round2(Number(i?.amount || 0)), 0));
+
 const resolveCompanyLogoPath = (companyImage) => {
     if (!companyImage || /^https?:\/\//i.test(companyImage)) return null;
 
@@ -1271,8 +1283,14 @@ export const generatePayroll = async (req, res) => {
                 }
             }
 
-            // 4. Calculate Net
-            const netSalary = basicSalary + totalAllowances - totalDeductions;
+            // 4. Calculate Net — totals are the exact sum of the (already 2dp-rounded)
+            // line items so the payslip's Total Allowances / Total Deductions always
+            // equal the sum of the rows displayed, and net never carries float-rounding
+            // residue. (Was: totalAllowances/totalDeductions accumulated raw floats.)
+            const roundedBasic = round2(basicSalary);
+            const finalAllowances = sumAmounts(allowanceList);
+            const finalDeductions = sumAmounts(deductionList);
+            const netSalary = round2(roundedBasic + finalAllowances - finalDeductions);
 
             // 5. Prepare Record — identity is the exact period (employee + periodStart +
             // periodEnd), not derived month/year, so regenerating the same period
@@ -1285,11 +1303,11 @@ export const generatePayroll = async (req, res) => {
                             month,
                             year,
                             status: "DRAFT",
-                            basicSalary,
+                            basicSalary: roundedBasic,
                             allowances: allowanceList,
                             deductions: deductionList,
-                            totalAllowances,
-                            totalDeductions,
+                            totalAllowances: finalAllowances,
+                            totalDeductions: finalDeductions,
                             netSalary,
                             attendanceSummary: stats
                         }
@@ -1456,7 +1474,7 @@ export const addAdjustment = async (req, res) => {
             return res.status(400).json({ message: "Reason is required for manual adjustments." });
         }
 
-        const numAmount = Number(amount);
+        const numAmount = round2(Number(amount));
 
         const newItem = {
             name,
@@ -1470,14 +1488,15 @@ export const addAdjustment = async (req, res) => {
 
         if (type === "ALLOWANCE") {
             payroll.allowances.push(newItem);
-            payroll.totalAllowances = (payroll.totalAllowances || 0) + numAmount;
         } else {
             payroll.deductions.push(newItem);
-            payroll.totalDeductions = (payroll.totalDeductions || 0) + numAmount;
         }
 
-        // Recalculate Net
-        payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
+        // Recompute totals + net from the line items (not incrementally) so the totals
+        // always equal the exact sum of the rows shown - see round2 note above.
+        payroll.totalAllowances = sumAmounts(payroll.allowances);
+        payroll.totalDeductions = sumAmounts(payroll.deductions);
+        payroll.netSalary = round2(round2(payroll.basicSalary) + payroll.totalAllowances - payroll.totalDeductions);
 
         await payroll.save();
 
@@ -1519,7 +1538,6 @@ export const removePayrollItem = async (req, res) => {
                 removedAmount = payroll.allowances[itemIndex].amount;
                 removedName = payroll.allowances[itemIndex].name;
                 payroll.allowances.splice(itemIndex, 1);
-                payroll.totalAllowances -= removedAmount;
             }
         } else {
             const itemIndex = payroll.deductions.findIndex(i => i._id.toString() === itemId);
@@ -1527,12 +1545,14 @@ export const removePayrollItem = async (req, res) => {
                 removedAmount = payroll.deductions[itemIndex].amount;
                 removedName = payroll.deductions[itemIndex].name;
                 payroll.deductions.splice(itemIndex, 1);
-                payroll.totalDeductions -= removedAmount;
             }
         }
 
-        // Recalculate Net
-        payroll.netSalary = payroll.basicSalary + payroll.totalAllowances - payroll.totalDeductions;
+        // Recompute totals + net from the remaining line items (not by subtracting the
+        // removed amount from a raw-float running total) - see round2 note above.
+        payroll.totalAllowances = sumAmounts(payroll.allowances);
+        payroll.totalDeductions = sumAmounts(payroll.deductions);
+        payroll.netSalary = round2(round2(payroll.basicSalary) + payroll.totalAllowances - payroll.totalDeductions);
         await payroll.save();
 
         // AUDIT LOG
