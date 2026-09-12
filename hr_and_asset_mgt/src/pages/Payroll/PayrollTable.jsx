@@ -42,11 +42,16 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
   const handleRemove = async (record) => {
     if (window.confirm(`Are you sure you want to remove ${record.employee?.name} from this payroll?`)) {
       try {
-        await payrollService.removePayrollItem(record._id);
+        // Was calling removePayrollItem(record._id) - that endpoint deletes a single
+        // allowance/deduction line and needs (payrollId, itemId, type); called with
+        // only a payrollId it was a silent no-op that still returned success, so the
+        // row never actually disappeared. removeEmployeeFromPayroll deletes the whole
+        // record.
+        await payrollService.removeEmployeeFromPayroll(record._id);
         toast.success("Employee removed from payroll");
         onRefresh && onRefresh();
       } catch (err) {
-        toast.error("Failed to remove employee");
+        toast.error(err.response?.data?.message || "Failed to remove employee");
       }
     }
   };

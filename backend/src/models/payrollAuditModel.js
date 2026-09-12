@@ -4,7 +4,7 @@ const payrollAuditSchema = new mongoose.Schema({
     action: {
         type: String,
         required: true,
-        enum: ["GENERATED", "FINALIZED", "UNFINALIZED", "ANCHOR_SET", "ADJUSTMENT", "EXPORTED", "SIF_GENERATED"]
+        enum: ["GENERATED", "FINALIZED", "UNFINALIZED", "ANCHOR_SET", "ADJUSTMENT", "EXPORTED", "SIF_GENERATED", "REMOVED_FROM_PAYROLL"]
     },
     performedBy: {
         type: mongoose.Schema.Types.ObjectId,

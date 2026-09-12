@@ -90,7 +90,7 @@ export const formatPeriodLabel = (record, monthName) => {
 };
 
 export const getPayslipBranding = (record, companies = []) => {
-  const companyName = record?.employee?.company || "LEPTIS HYPERMARKET LLC";
+  const companyName = record?.employee?.company || "Company";
   const dynamicCompany = companies.find((company) => company.name === companyName);
   const proxiedLogoSrc = dynamicCompany?._id ? `${API_BASE}/masters/companies/${dynamicCompany._id}/logo` : "";
   return {

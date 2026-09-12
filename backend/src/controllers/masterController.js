@@ -88,6 +88,39 @@ export const getItems = async (req, res) => {
     }
 };
 
+// Company Master logos are uploaded to a private S3 bucket - the stored `image`
+// field is a plain (unsigned) S3 URL, which 403s on a direct fetch. Both the
+// browser-facing logo proxy below and the server-side payslip PDF generator
+// (payrollController.js downloadPayslip) need the actual bytes, so this presigns
+// the URL when it's S3-hosted and fetches it, shared by both callers.
+export const resolveCompanyLogoBuffer = async (imageUrl) => {
+    if (!imageUrl) return null;
+    try {
+        const resolvedUrl = imageUrl.includes("amazonaws.com")
+            ? await (async () => {
+                const bucket = process.env.AWS_S3_BUCKET_NAME || process.env.AWS_S3_BUCKET || "kayzen";
+                const url = new URL(imageUrl);
+                let key = decodeURIComponent(url.pathname.substring(1));
+                if (key.startsWith(bucket + "/")) {
+                    key = key.substring(bucket.length + 1);
+                }
+                const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+                return getSignedUrl(getS3Client(), command, { expiresIn: 43200 });
+            })()
+            : imageUrl;
+
+        const response = await fetch(resolvedUrl);
+        if (!response.ok) return null;
+        return {
+            buffer: Buffer.from(await response.arrayBuffer()),
+            contentType: response.headers.get("content-type") || "image/png",
+        };
+    } catch (error) {
+        console.warn("Unable to resolve company logo buffer:", error.message);
+        return null;
+    }
+};
+
 export const getCompanyLogoProxy = async (req, res) => {
     try {
         const { id } = req.params;
@@ -97,28 +130,14 @@ export const getCompanyLogoProxy = async (req, res) => {
             return res.status(404).json({ message: "Company logo not found" });
         }
 
-        const imageUrl = company.image.includes("amazonaws.com")
-            ? await (async () => {
-                const bucket = process.env.AWS_S3_BUCKET_NAME || process.env.AWS_S3_BUCKET || "kayzen";
-                const url = new URL(company.image);
-                let key = decodeURIComponent(url.pathname.substring(1));
-                if (key.startsWith(bucket + "/")) {
-                    key = key.substring(bucket.length + 1);
-                }
-                const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-                return getSignedUrl(getS3Client(), command, { expiresIn: 43200 });
-            })()
-            : company.image;
-
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
+        const logo = await resolveCompanyLogoBuffer(company.image);
+        if (!logo) {
             return res.status(502).json({ message: "Failed to fetch company logo" });
         }
 
-        const buffer = Buffer.from(await response.arrayBuffer());
-        res.setHeader("Content-Type", response.headers.get("content-type") || "image/png");
+        res.setHeader("Content-Type", logo.contentType);
         res.setHeader("Cache-Control", "private, max-age=3600");
-        res.send(buffer);
+        res.send(logo.buffer);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { holidaySetFromHolidays, isWeekOff, applyMonthlyFlexQuota } from "../utils/attendanceUtils.js";
+import { resolveCompanyLogoBuffer } from "./masterController.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,6 +51,19 @@ const resolveCompanyLogoPath = (companyImage) => {
         const ext = path.extname(candidate).toLowerCase();
         return [".png", ".jpg", ".jpeg"].includes(ext) && fs.existsSync(candidate);
     }) || null;
+};
+
+// Company Master logos (Masters > Company Structure) are uploaded to a private S3
+// bucket and stored as unsigned https:// URLs - a plain fetch() 403s, and pdfkit's
+// doc.image() can only embed a local file path or a Buffer anyway, not a remote
+// URL. resolveCompanyLogoBuffer (masterController.js) presigns the URL and fetches
+// it - the same helper the browser-facing logo proxy route uses. Without this,
+// every company's S3-hosted logo silently failed to embed on the pdfkit payslip,
+// and the legacy process.env.COMPANY_LOGO local-file fallback (left over from
+// before the S3 migration, pointing at another tenant's logo) rendered instead.
+const fetchRemoteLogoBuffer = async (imageUrl) => {
+    const logo = await resolveCompanyLogoBuffer(imageUrl);
+    return logo?.buffer || null;
 };
 
 const getPayrollCycleKey = (month, year) => (Number(year) * 100) + Number(month);
@@ -933,10 +947,13 @@ export const generatePayroll = async (req, res) => {
             }
 
             // --- 2.2 FIXED EMPLOYEE ALLOWANCES ---
+            // Accommodation/Vehicle Expense are CTC-only, never part of actual monthly
+            // gross pay - see computeTotalSalary/computeCtc (salaryCalc.js), which
+            // deliberately exclude them from Total Salary and only add them for the CTC
+            // figure. Paying them out here as cash allowances contradicted that
+            // convention (and the client's own expectation) - removed.
             const fixedAllowances = [
                 { name: "Housing Rent Allowance (HRA)", value: emp.hra },
-                { name: "Accommodation Allowance", value: emp.accommodationAllowance },
-                { name: "Vehicle Allowance", value: emp.vehicleAllowance },
                 { name: "Other Allowance", value: emp.allowance }
             ];
 
@@ -1460,10 +1477,21 @@ export const getPayrollAuditLogs = async (req, res) => {
     }
 };
 
+// Loan/advance line items carry meta: "Req ID: REQxxx | Remaining: ..." so
+// finalizePayroll/unfinalizePayroll can find their way back to the Request doc.
+// If HR deletes an AUTO-generated loan/advance line and manually re-adds it (e.g.
+// to override one month's amount), the replacement had no meta - finalizePayroll's
+// writeback silently skipped it, so the employee got paid correctly but the loan's
+// Request.payrollDeductions ledger never moved. Re-derive the same marker here so a
+// manual override of a loan/advance line stays traceable exactly like the original.
+const LOAN_NAME_PATTERN = /^(Loan Repayment|Salary Advance)\s*\(([A-Za-z0-9]+)\)/i;
+
 // --- API: Add Manual Adjustment ---
 export const addAdjustment = async (req, res) => {
     try {
-        const { payrollId, type, name, amount, reason } = req.body;
+        // type: "ALLOWANCE" | "DEDUCTION" | "OVERTIME" (overtime is a structured
+        // allowance variant - see isOvertime below)
+        const { payrollId, type, name, amount, reason, hours, rate } = req.body;
         const payroll = await Payroll.findById(payrollId);
 
         if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
@@ -1474,10 +1502,18 @@ export const addAdjustment = async (req, res) => {
             return res.status(400).json({ message: "Reason is required for manual adjustments." });
         }
 
-        const numAmount = round2(Number(amount));
+        // Overtime: hours x rate, when given, is the source of truth for the amount
+        // (rather than trusting a client-computed `amount`) - keeps the structured
+        // hours/rate meta and the paid amount always consistent.
+        const isOvertime = type === "OVERTIME";
+        const numHours = isOvertime ? Number(hours) || 0 : null;
+        const numRate = isOvertime ? Number(rate) || 0 : null;
+        const numAmount = isOvertime && numHours && numRate
+            ? round2(numHours * numRate)
+            : round2(Number(amount));
 
         const newItem = {
-            name,
+            name: name || (isOvertime ? "Overtime" : name),
             amount: numAmount,
             type: "MANUAL",
             // ✅ Manual Tracking
@@ -1486,7 +1522,15 @@ export const addAdjustment = async (req, res) => {
             reason: reason
         };
 
-        if (type === "ALLOWANCE") {
+        if (isOvertime) {
+            newItem.category = "OVERTIME";
+            newItem.meta = { hours: numHours, rate: numRate };
+        } else if (type === "DEDUCTION") {
+            const loanMatch = String(name || "").match(LOAN_NAME_PATTERN);
+            if (loanMatch) newItem.meta = `Req ID: ${loanMatch[2]}`;
+        }
+
+        if (type === "ALLOWANCE" || isOvertime) {
             payroll.allowances.push(newItem);
         } else {
             payroll.deductions.push(newItem);
@@ -1507,7 +1551,7 @@ export const addAdjustment = async (req, res) => {
             performedByName: req.user ? req.user.name : "System",
             month: payroll.month,
             year: payroll.year,
-            details: `Manual adjustment [${type}]: ${name} (${amount}) for Payroll ID ${payrollId}`,
+            details: `Manual adjustment [${type}]: ${newItem.name} (${numAmount}) for Payroll ID ${payrollId}`,
             relatedPayrollId: payrollId // ✅ Link to Payroll
         });
 
@@ -1568,6 +1612,42 @@ export const removePayrollItem = async (req, res) => {
 
         res.json({ message: "Item removed successfully", payroll });
 
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// --- API: Remove an employee's whole record from a DRAFT payroll period ---
+// Distinct from removePayrollItem above (which deletes one allowance/deduction line).
+// The row-menu "Remove" action used to call removePayrollItem with only a payrollId
+// (no itemId/type) - that's a no-op that still returned 200, so the row never
+// actually disappeared. This is the real endpoint: deletes the whole Payroll doc for
+// that employee+period. DRAFT-only, same lock as addAdjustment/removePayrollItem -
+// once PROCESSED, Un-finalize first.
+export const removeEmployeeFromPayroll = async (req, res) => {
+    try {
+        const { payrollId } = req.body;
+        const payroll = await Payroll.findById(payrollId).populate("employee", "name code");
+
+        if (!payroll) return res.status(404).json({ message: "Payroll record not found" });
+        if (payroll.status !== "DRAFT") {
+            return res.status(400).json({ message: "Cannot remove an employee from a finalized payroll. Un-finalize the period first." });
+        }
+
+        const { month, year, employee } = payroll;
+        await Payroll.deleteOne({ _id: payrollId });
+
+        await PayrollAudit.create({
+            action: "REMOVED_FROM_PAYROLL",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month: String(month),
+            year: String(year),
+            details: `Removed ${employee?.name || "employee"} (${employee?.code || payrollId}) from payroll`,
+            relatedPayrollId: payrollId
+        });
+
+        res.json({ message: "Employee removed from payroll" });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -1821,8 +1901,8 @@ export const exportPayroll = async (req, res) => {
         const monthNames = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
         const monthName = monthNames[parseInt(month) - 1] || "UNKNOWN";
 
-        // Company Constants (Hardcoded as per request image)
-        const exportCompanyName = records[0]?.employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
+        // Company Constants
+        const exportCompanyName = records[0]?.employee?.company || process.env.COMPANY_NAME || "Company";
         const COMPANY_NAME = `COMPANY NAME: ${exportCompanyName}`;
         const MOL_ID = "MOL ID No. 0000001564503";
 
@@ -1985,12 +2065,55 @@ export const exportPayroll = async (req, res) => {
 // --- API: Generate SIF File (WPS) ---
 export const generateSIF = async (req, res) => {
     try {
-        const { month, year } = req.query;
-        // Fetch only PROCESSED (Finalized) records ideally, but DRAFT is ok for testing
-        const records = await Payroll.find({ month, year }).populate("employee", "name code bankName laborCardNumber bankAccount iban agentId");
+        const { month, year, periodStart, periodEnd } = req.query;
+        // Prefer the exact period (periodStart/periodEnd) over the derived month/year
+        // pair when the caller has it. month/year is a calendar-month bucket computed
+        // independently by the frontend from whatever periodEnd the date picker
+        // currently shows - Finalize/Un-finalize/the "Finalized" badge all key off the
+        // *exact* period instead, so the two can drift out of sync (e.g. the picker
+        // re-renders with a different periodEnd than the one that's actually marked
+        // Finalized) and this endpoint would search the wrong bucket and wrongly
+        // report "no finalized records" for a period that IS finalized.
+        const query = { status: "PROCESSED" };
+        if (periodStart && periodEnd) {
+            // Must normalize with the same toDayStart/toDayEnd helper generatePayroll
+            // used to store these - a raw `new Date(periodStart)` lands on UTC midnight,
+            // which is NOT what's stored (periodStart/periodEnd are local-midnight
+            // normalized, so their UTC millisecond value shifts by the server's
+            // timezone offset - a naive Date parse here would never exact-match).
+            query.periodStart = toDayStart(periodStart);
+            query.periodEnd = toDayEnd(periodEnd);
+        } else {
+            query.month = month;
+            query.year = year;
+        }
+        // A bank payment file should only ever be built from finalized payroll -
+        // was pulling DRAFT records too, contrary to this comment's own stated intent.
+        const records = await Payroll.find(query).populate("employee", "name code bankName laborCardNumber bankAccount iban agentId");
 
         if (!records || records.length === 0) {
-            return res.status(404).json({ message: "No payroll records found." });
+            return res.status(404).json({ message: "No finalized payroll records found for this period. SIF can only be generated after Finalize." });
+        }
+
+        // Missing bank details silently degraded to placeholder strings before
+        // ("UNSPECIFIED_BANK", "000000000000") instead of being caught - surface
+        // exactly which employee/field is missing so it can be fixed and retried,
+        // instead of a generic "SIF Generation failed".
+        const missingBankInfo = records
+            .filter(r => r.employee && (!r.employee.bankName || (!r.employee.iban && !r.employee.bankAccount)))
+            .map(r => ({
+                code: r.employee.code,
+                name: r.employee.name,
+                missing: [
+                    !r.employee.bankName && "Bank Name",
+                    (!r.employee.iban && !r.employee.bankAccount) && "IBAN/Account Number"
+                ].filter(Boolean)
+            }));
+        if (missingBankInfo.length > 0) {
+            return res.status(400).json({
+                message: "Some employees are missing required bank details for SIF generation.",
+                missingBankInfo
+            });
         }
 
         // Standard WPS SIF Header (Example)
@@ -2044,7 +2167,12 @@ export const generateSIF = async (req, res) => {
             };
         });
 
-        const archive = buildZipArchive(zipEntries);
+        let archive;
+        try {
+            archive = buildZipArchive(zipEntries);
+        } catch (zipError) {
+            return res.status(500).json({ message: "Failed to build SIF archive: " + zipError.message });
+        }
 
         res.setHeader("Content-Disposition", `attachment; filename="SIF_${employerId}_${creationDate}.zip"`);
         res.setHeader("Content-Type", "application/zip");
@@ -2071,23 +2199,39 @@ export const generateSIF = async (req, res) => {
 // --- API: Generic MOL Compliance Report ---
 export const generateMOLReport = async (req, res) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, visaCompany, workPermitCompany } = req.query;
 
-        // 1. Get all active employees
-        const employees = await Employee.find({ status: "Active" });
-
-        // 2. Get payroll records for this month
+        // 2. Get payroll records for this month (fetched first - needed below to build
+        // the employee list too, not just to look up net-paid amounts)
         const payrolls = await Payroll.find({ month, year });
         const payrollMap = {};
         payrolls.forEach(p => {
             if (p.employee) payrollMap[p.employee.toString()] = p;
         });
 
+        // 1. Employee list = every Active employee, UNION every employee who actually
+        // has a payroll record this month - was Active-status only, which silently
+        // dropped anyone who left/was deactivated mid-month but was still paid that
+        // period. A compliance report for a given month must include everyone paid
+        // that month regardless of their CURRENT status.
+        const employeeFilter = {};
+        if (visaCompany) employeeFilter.visaCompany = visaCompany;
+        if (workPermitCompany) employeeFilter.workPermitCompany = workPermitCompany;
+        const activeEmployees = await Employee.find({ ...employeeFilter, status: "Active" });
+        const paidEmployeeIds = payrolls.map(p => p.employee).filter(Boolean);
+        const alreadyIncluded = new Set(activeEmployees.map(e => e._id.toString()));
+        const missingPaidEmployeeIds = paidEmployeeIds.filter(id => !alreadyIncluded.has(id.toString()));
+        const otherPaidEmployees = missingPaidEmployeeIds.length
+            ? await Employee.find({ ...employeeFilter, _id: { $in: missingPaidEmployeeIds } })
+            : [];
+        const employees = [...activeEmployees, ...otherPaidEmployees];
+
         const reportData = employees.map(emp => {
             const payRecord = payrollMap[emp._id.toString()];
             const isPaid = payRecord && payRecord.status === "PROCESSED";
 
             return {
+                "Visa Company": emp.visaCompany || "N/A",
                 "Employee ID": emp.code,
                 "Name": emp.name,
                 "Labor Card No.": emp.laborCardNumber || "N/A",
@@ -2097,6 +2241,10 @@ export const generateMOLReport = async (req, res) => {
                 "Month": `${month}/${year}`
             };
         });
+
+        // Grouped by visa company (MOL/labour filings are per-sponsor) rather than one
+        // flat company-wide list - sort so each sponsor's employees sit together.
+        reportData.sort((a, b) => String(a["Visa Company"]).localeCompare(String(b["Visa Company"])) || String(a.Name).localeCompare(String(b.Name)));
 
         const worksheet = XLSX.utils.json_to_sheet(reportData);
         const workbook = XLSX.utils.book_new();
@@ -2117,13 +2265,15 @@ export const generateMOLReport = async (req, res) => {
 // --- API: Yearly Payment History ---
 export const getPaymentHistory = async (req, res) => {
     try {
-        const { year } = req.query;
+        const { year, month } = req.query;
 
-        const records = await Payroll.find({ year, status: "PROCESSED" })
+        const query = { year, status: "PROCESSED" };
+        if (month) query.month = month;
+        const records = await Payroll.find(query)
             .populate("employee", "name code department");
 
         if (records.length === 0) {
-            return res.status(404).json({ message: `No payment history found for ${year}` });
+            return res.status(404).json({ message: month ? `No payment history found for ${month}/${year}` : `No payment history found for ${year}` });
         }
 
         const historyData = records.map(r => ({
@@ -2140,15 +2290,38 @@ export const getPaymentHistory = async (req, res) => {
         }));
 
         // Sort by Month then Name
-        historyData.sort((a, b) => a.Month - b.Month);
+        historyData.sort((a, b) => a.Month - b.Month || String(a.Name).localeCompare(String(b.Name)));
 
-        const worksheet = XLSX.utils.json_to_sheet(historyData);
+        const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, `History_${year}`);
+
+        if (month) {
+            // Single month requested - one flat sheet, unchanged from before.
+            const worksheet = XLSX.utils.json_to_sheet(historyData);
+            XLSX.utils.book_append_sheet(workbook, worksheet, `History_${month}_${year}`);
+        } else {
+            // "All months" - was one flat sheet mixing every month together with no
+            // visual separation. Now one sheet PER month that has data, each with the
+            // month name as a title row at the top, so a year-wide export reads as a
+            // clear set of monthly statements rather than one undifferentiated list.
+            const byMonth = {};
+            historyData.forEach((row) => {
+                (byMonth[row.Month] ||= []).push(row);
+            });
+            for (const m of Object.keys(byMonth).map(Number).sort((a, b) => a - b)) {
+                const title = `PAYMENT HISTORY - ${MONTH_NAMES[m - 1]?.toUpperCase() || m} ${year}`;
+                const worksheet = XLSX.utils.aoa_to_sheet([[title], []]);
+                XLSX.utils.sheet_add_json(worksheet, byMonth[m], { origin: -1 });
+                // Sheet names are capped at 31 chars and can't repeat - month names are
+                // always short/unique within one year's workbook.
+                XLSX.utils.book_append_sheet(workbook, worksheet, MONTH_NAMES[m - 1] || `Month ${m}`);
+            }
+        }
 
         const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-        res.setHeader("Content-Disposition", `attachment; filename="Payment_History_${year}.xlsx"`);
+        const filename = month ? `Payment_History_${month}_${year}.xlsx` : `Payment_History_${year}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buffer);
 
@@ -2207,11 +2380,18 @@ export const downloadPayslip = async (req, res) => {
         }
 
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year, periodStart, periodEnd } = payroll;
-        const companyName = employee?.company || process.env.COMPANY_NAME || "LEPTIS HYPERMARKET LLC";
+        const companyName = employee?.company || process.env.COMPANY_NAME || "Company";
         const companyMaster = companyName
             ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
             : null;
-        const companyLogoPath = resolveCompanyLogoPath(companyMaster?.image || process.env.COMPANY_LOGO);
+        // Prefer this employee's own company logo (S3 URL from Masters > Company
+        // Structure, fetched as a Buffer) or a legacy local-file upload. No
+        // cross-tenant fallback to process.env.COMPANY_LOGO - if a company has no
+        // logo configured, the payslip renders with no logo rather than borrowing
+        // another tenant's.
+        const companyLogoSource = companyMaster?.image;
+        const companyLogoBuffer = await fetchRemoteLogoBuffer(companyLogoSource);
+        const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyLogoSource);
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         // "Period" used to always show just periodEnd's calendar month/year (e.g.
         // "August 2026"), even when the actual pay period (this app uses a rolling,
@@ -2263,9 +2443,9 @@ export const downloadPayslip = async (req, res) => {
         const centerX = pageWidth / 2;
 
         // Title
-        if (companyLogoPath) {
+        if (companyLogoBuffer || companyLogoPath) {
             try {
-                doc.image(companyLogoPath, 50, 112, { fit: [90, 46], align: "left", valign: "center" });
+                doc.image(companyLogoBuffer || companyLogoPath, 50, 112, { fit: [90, 46], align: "left", valign: "center" });
             } catch (imageError) {
                 console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
             }
@@ -2346,16 +2526,31 @@ export const downloadPayslip = async (req, res) => {
         // Earnings & Deductions
         const salaryY = doc.y + 20;
 
+        // Column geometry - two side-by-side blocks. Each amount is right-aligned
+        // inside a box; the box's x is its LEFT edge (pdfkit convention), not the
+        // desired right edge. The left column's amount box used to start at
+        // centerX-10 (already near the middle) and extend rightward with the SAME
+        // width as the right column, landing on top of/inside the Deductions block -
+        // and the right column's box started at pageWidth-50 and extended further
+        // right by that same width, running off the page entirely. Net effect:
+        // deduction amounts (both per-row and the Total Deductions figure) never
+        // rendered at all, and the earnings amount visually overlapped into the
+        // Deductions column. Both boxes now start at their own column's left edge
+        // and share one width so they end exactly at the divider / right margin.
+        const amountColWidth = centerX - 60;
+        const leftAmountX = 50;
+        const rightAmountX = centerX + 10;
+
         // Headers
         doc.rect(40, salaryY, (pageWidth - 80) / 2, 20).fill("#182d54");
         doc.rect(centerX, salaryY, (pageWidth - 80) / 2, 20).fill("#182d54");
 
         doc.fillColor("#FFFFFF").font("Helvetica-Bold");
         doc.text("Earnings", 50, salaryY + 6);
-        doc.text("Amount (AED)", centerX - 10, salaryY + 6, { align: "right", width: centerX - 60 });
+        doc.text("Amount (AED)", leftAmountX, salaryY + 6, { align: "right", width: amountColWidth });
 
         doc.text("Deductions", centerX + 10, salaryY + 6);
-        doc.text("Amount (AED)", pageWidth - 50, salaryY + 6, { align: "right", width: centerX - 60 });
+        doc.text("Amount (AED)", rightAmountX, salaryY + 6, { align: "right", width: amountColWidth });
 
         // Rows
         let currentY = salaryY + 20;
@@ -2374,11 +2569,11 @@ export const downloadPayslip = async (req, res) => {
 
             if (earn) {
                 doc.text(earn.name, 50, currentY + 6);
-                doc.text(earn.amount.toFixed(2), centerX - 10, currentY + 6, { align: "right", width: centerX - 60 });
+                doc.text(earn.amount.toFixed(2), leftAmountX, currentY + 6, { align: "right", width: amountColWidth });
             }
             if (ded) {
                 doc.text(ded.name, centerX + 10, currentY + 6);
-                doc.text(ded.amount.toFixed(2), pageWidth - 50, currentY + 6, { align: "right", width: centerX - 60 });
+                doc.text(ded.amount.toFixed(2), rightAmountX, currentY + 6, { align: "right", width: amountColWidth });
             }
 
             // Draw line
@@ -2391,10 +2586,10 @@ export const downloadPayslip = async (req, res) => {
         doc.fillColor("#000000").font("Helvetica-Bold");
 
         doc.text("Total Earnings", 50, currentY + 8);
-        doc.text(grossEarnings.toFixed(2), centerX - 10, currentY + 8, { align: "right", width: centerX - 60 });
+        doc.text(grossEarnings.toFixed(2), leftAmountX, currentY + 8, { align: "right", width: amountColWidth });
 
         doc.text("Total Deductions", centerX + 10, currentY + 8);
-        doc.text(totalDeductions.toFixed(2), pageWidth - 50, currentY + 8, { align: "right", width: centerX - 60 });
+        doc.text(totalDeductions.toFixed(2), rightAmountX, currentY + 8, { align: "right", width: amountColWidth });
 
         currentY += 35;
 
@@ -2421,11 +2616,19 @@ export const downloadPayslip = async (req, res) => {
         const contentPdfBuffer = await docEndPromise;
 
         // 2. Setup Template & Merge using pdf-lib
+        // Letter_Head_-_Group_2023.pdf is Leptis Group's own letterhead (their logo,
+        // Arabic mark, address, and subsidiary-company footer bar) - it used to be
+        // overlaid on every payslip regardless of which company the employee
+        // actually belongs to, so a Rizan employee's payslip showed Leptis branding.
+        // Only apply it for Leptis employees; every other company gets the plain
+        // PDFKit content page above, which already carries that company's own name
+        // and logo (from Masters > Company Structure).
+        const LEPTIS_COMPANY_NAMES = ["LEPTIS HYPERMARKET LLC", "LEPTIS", "LEPTIS HYPERMARKET"];
+        const isLeptisCompany = LEPTIS_COMPANY_NAMES.some((n) => n.toLowerCase() === String(companyName).toLowerCase());
         const templatePath = path.join(__dirname, "../assets/templates/Letter_Head_-_Group_2023.pdf");
 
-        // Check if template exists
-        if (!fs.existsSync(templatePath)) {
-            // Fallback: Return raw content PDF if template missing
+        // Non-Leptis companies (or if the template file is missing) get the plain content PDF.
+        if (!isLeptisCompany || !fs.existsSync(templatePath)) {
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
             return res.send(contentPdfBuffer);

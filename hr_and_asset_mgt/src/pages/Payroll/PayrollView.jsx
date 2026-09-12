@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView";
@@ -133,6 +133,15 @@ function Payroll() {
   const today = new Date();
   const [periodStart, setPeriodStart] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [periodEnd, setPeriodEnd] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
+  // Guards fetchPayroll/fetchAllRecords against out-of-order responses: on mount, the
+  // initial period's fetch fires, then fetchLatestFinalized's auto-advance changes
+  // periodEnd milliseconds later and fires a second fetch for the new period. If the
+  // FIRST (now-stale) request resolves after the second, it used to overwrite `records`
+  // with the wrong period's data - e.g. the Finalize/Generate badges kept showing
+  // "Finalized" (from the old period) for a brand new period with zero records, with no
+  // way to tell without comparing timestamps. Each fetch takes a ticket; only the
+  // latest ticket's response is applied.
+  const fetchSeqRef = useRef(0);
   const periodEndDate = new Date(`${periodEnd}T00:00:00`);
   const month = periodEndDate.getMonth() + 1;
   const year = periodEndDate.getFullYear();
@@ -173,33 +182,47 @@ function Payroll() {
     fetchLatestFinalized();
   }, []);
 
-  const fetchLatestFinalized = async () => {
+  // Just updates `latestFinalized` (drives the Un-finalize button's canUnfinalize
+  // check) without touching the displayed period. Use this after Finalize/Un-finalize
+  // — the admin is looking at the period they just acted on and the view shouldn't
+  // jump elsewhere. Only the mount-time fetchLatestFinalized() below should ever
+  // move periodStart/periodEnd.
+  const refreshLatestFinalized = async () => {
     try {
       const latest = await payrollService.getLatestFinalizedPeriod();
       setLatestFinalized(latest);
-
-      // periodStart is always locked to the day after the last finalized period's
-      // end (force-contiguous — no gaps, no overlaps). If the current periodEnd
-      // selection is already covered by that lock, bump it forward to a sensible
-      // ~1-month default instead of landing on an already-locked period.
-      // Comparing plain "YYYY-MM-DD" strings (from the server) — avoids any
-      // browser/server timezone drift that reconstructing Date objects here would risk.
-      if (latest) {
-        const lockedEndStr = latest.periodEndStr;
-        const lockedEnd = new Date(`${lockedEndStr}T00:00:00`);
-        const requiredStart = new Date(lockedEnd);
-        requiredStart.setDate(requiredStart.getDate() + 1);
-        setPeriodStart(toDateStr(requiredStart));
-
-        if (periodEnd <= lockedEndStr) {
-          const suggestedEnd = new Date(requiredStart);
-          suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
-          suggestedEnd.setDate(suggestedEnd.getDate() - 1);
-          setPeriodEnd(toDateStr(suggestedEnd));
-        }
-      }
+      return latest;
     } catch (error) {
       console.error(error);
+      return null;
+    }
+  };
+
+  const fetchLatestFinalized = async () => {
+    const latest = await refreshLatestFinalized();
+
+    // periodStart is always locked to the day after the last finalized period's
+    // end (force-contiguous — no gaps, no overlaps). If the current periodEnd
+    // selection is already covered by that lock, bump it forward to a sensible
+    // ~1-month default instead of landing on an already-locked period.
+    // Comparing plain "YYYY-MM-DD" strings (from the server) — avoids any
+    // browser/server timezone drift that reconstructing Date objects here would risk.
+    // Mount-only (see the useEffect below) — don't call this after Finalize/Un-finalize,
+    // it would silently jump the admin off the period they just acted on (was the bug
+    // behind "Export/SIF/MOL disappeared after Finalize, new date came into place").
+    if (latest) {
+      const lockedEndStr = latest.periodEndStr;
+      const lockedEnd = new Date(`${lockedEndStr}T00:00:00`);
+      const requiredStart = new Date(lockedEnd);
+      requiredStart.setDate(requiredStart.getDate() + 1);
+      setPeriodStart(toDateStr(requiredStart));
+
+      if (periodEnd <= lockedEndStr) {
+        const suggestedEnd = new Date(requiredStart);
+        suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
+        suggestedEnd.setDate(suggestedEnd.getDate() - 1);
+        setPeriodEnd(toDateStr(suggestedEnd));
+      }
     }
   };
 
@@ -214,30 +237,36 @@ function Payroll() {
   }, [activeTab, periodEnd, filters]);
 
   const fetchPayroll = async () => {
+    const seq = ++fetchSeqRef.current;
     try {
       setLoading(true);
       const data = await payrollService.getSummary(month, year, filters);
+      if (seq !== fetchSeqRef.current) return; // superseded by a newer fetch - stale, ignore
       setRecords(data.records || []);
       setStats(data.stats || {});
       setPagination(data.pagination || null);
     } catch (error) {
+      if (seq !== fetchSeqRef.current) return;
       console.error(error);
       toast.error("Failed to fetch payroll summary");
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   };
 
   const fetchAllRecords = async () => {
+    const seq = ++fetchSeqRef.current;
     try {
       setLoading(true);
       const reportType = activeTab === 'Location report' ? 'permit' : activeTab === 'Visa report' ? 'visa' : null;
       const data = await payrollService.getSummary(month, year, { ...filters, reportType, limit: 1000 });
+      if (seq !== fetchSeqRef.current) return;
       setAllRecords(data.records || []);
     } catch (error) {
+      if (seq !== fetchSeqRef.current) return;
       console.error(error);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   };
 
@@ -260,7 +289,7 @@ function Payroll() {
       await payrollService.finalize(periodStart, periodEnd);
       toast.success("Payroll Finalized & Locked!");
       fetchPayroll();
-      fetchLatestFinalized();
+      refreshLatestFinalized();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to finalize");
     } finally {
@@ -280,7 +309,7 @@ function Payroll() {
       await payrollService.unfinalize(periodStart, periodEnd);
       toast.success("Payroll un-finalized — period is editable again.");
       fetchPayroll();
-      fetchLatestFinalized();
+      refreshLatestFinalized();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to un-finalize");
     } finally {
@@ -299,16 +328,22 @@ function Payroll() {
       await payrollService.exportExcel(month, year, reportType, filters);
       toast.success("Export Downloaded!");
     } catch (error) {
-      toast.error("Export failed.");
+      // was a hardcoded "Export failed." regardless of the real reason (e.g. "No
+      // records found for this month") - payrollService now extracts the actual
+      // backend message even though these are blob responses, see blobErrorMessage.
+      toast.error(error.message || "Export failed.");
     }
   };
 
   const handleGenerateSIF = async () => {
     try {
-      await payrollService.generateSIF(month, year);
+      // Pass the exact period too, not just the derived month/year - see
+      // payrollService.generateSIF's comment (avoids a mismatch against whatever the
+      // "Finalized" badge is actually keyed to).
+      await payrollService.generateSIF(month, year, periodStart, periodEnd);
       toast.success("SIF File Generated!");
     } catch (error) {
-      toast.error("SIF Generation failed.");
+      toast.error(error.message || "SIF Generation failed.");
     }
   };
 
@@ -317,16 +352,22 @@ function Payroll() {
       await payrollService.downloadMOLReport(month, year);
       toast.success("MOL Report Downloaded!");
     } catch (error) {
-      toast.error("Failed to download MOL Report");
+      toast.error(error.message || "Failed to download MOL Report");
     }
   };
 
+  // '' = whole year (existing behavior); a specific month narrows the download to
+  // just that month. Year defaults to the main date picker's year but is independently
+  // selectable - was hardcoded to `year` with no way to reach 2024/2025 etc.
+  const [historyMonth, setHistoryMonth] = useState('');
+  const [historyYear, setHistoryYear] = useState(year);
+
   const handlePaymentHistory = async () => {
     try {
-      await payrollService.downloadPaymentHistory(year);
-      toast.success(`Payment History for ${year} Downloaded!`);
+      await payrollService.downloadPaymentHistory(historyYear, historyMonth || null);
+      toast.success(historyMonth ? `Payment History for ${historyMonth}/${historyYear} Downloaded!` : `Payment History for ${historyYear} Downloaded!`);
     } catch (error) {
-      toast.error("Failed to download History");
+      toast.error(error.message || "Failed to download History");
     }
   };
 
@@ -485,6 +526,29 @@ function Payroll() {
                         <div className="tool-content">
                             <h4>Payment History</h4>
                             <p>View past payroll transactions</p>
+                            <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                                <select
+                                    value={historyYear}
+                                    onChange={(e) => setHistoryYear(Number(e.target.value))}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ fontSize: '12px', padding: '2px 4px' }}
+                                >
+                                    {Array.from({ length: 6 }, (_, i) => today.getFullYear() - i).map(y => (
+                                        <option key={y} value={y}>{y}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={historyMonth}
+                                    onChange={(e) => setHistoryMonth(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ fontSize: '12px', padding: '2px 4px' }}
+                                >
+                                    <option value="">All months</option>
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                        <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleString('en', { month: 'long' })}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>

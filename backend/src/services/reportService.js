@@ -723,9 +723,16 @@ export const getOvertimeAllowanceReport = async ({ month, year, branch, departme
   return payrolls.map(p => {
     const emp = empMap[p.employee.toString()] || {};
 
-    // Extract overtime pay from allowances
+    // Extract overtime pay from allowances - prefer the structured `category`
+    // (set on manually-added Overtime adjustments, see AdjustmentModal.jsx) over
+    // name matching. The old /overtime|OT/i regex had no word boundary, so it
+    // false-positived on "Other Allowance" (contains "Ot") - both misclassifying
+    // it as overtime pay here AND dropping it from "other allowances" below.
+    // Word-boundary regex kept only as a fallback for legacy/rule-engine-generated
+    // items that predate the `category` field.
+    const OVERTIME_PATTERN = /\bovertime\b|\bOT\b/i;
     const overtimeAllowance = (p.allowances || []).find(a =>
-      /overtime|OT/i.test(a.name || "")
+      a.category === "OVERTIME" || OVERTIME_PATTERN.test(a.name || "")
     );
     const overtimePay = overtimeAllowance?.amount || 0;
     const overtimeHours = p.attendanceSummary?.overtimeHours || 0;
@@ -737,7 +744,7 @@ export const getOvertimeAllowanceReport = async ({ month, year, branch, departme
 
     // All other allowances
     const otherAllowances = (p.allowances || [])
-      .filter(a => !/overtime|OT|accommodation|vehicle|housing|hra/i.test(a.name || ""))
+      .filter(a => a.category !== "OVERTIME" && !OVERTIME_PATTERN.test(a.name || "") && !/accommodation|vehicle|housing|hra/i.test(a.name || ""))
       .map(a => `${a.name}: ${a.amount} AED`)
       .join(" | ");
 
