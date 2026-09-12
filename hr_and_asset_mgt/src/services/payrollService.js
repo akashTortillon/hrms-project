@@ -1,6 +1,29 @@
 
 import api from "../api/apiClient";
 
+// Axios requests below use responseType:'blob' (needed for the successful zip/xlsx
+// download). The problem: when the backend responds with an error instead (400/500
+// JSON), axios STILL decodes it as a Blob because responseType is fixed for the whole
+// request - so error.response.data is a Blob object, not the parsed {message} JSON.
+// Every caller's `error.message`/`error.response?.data?.message` read was therefore
+// always undefined, and every catch block fell back to a hardcoded generic string
+// ("SIF Generation failed.") no matter what specific error the backend actually
+// returned (missing bank info, no records found, etc). This reads the Blob back as
+// text and parses the real message out of it.
+const blobErrorMessage = async (error, fallback) => {
+    const data = error?.response?.data;
+    if (data instanceof Blob) {
+        try {
+            const text = await data.text();
+            const parsed = JSON.parse(text);
+            if (parsed?.message) return parsed.message;
+        } catch (_) {
+            // not JSON / couldn't parse - fall through to fallback
+        }
+    }
+    return error?.response?.data?.message || fallback;
+};
+
 export const payrollService = {
     // Generate Payroll for a rolling period — periodStart/periodEnd are "YYYY-MM-DD" strings
     generate: async (periodStart, periodEnd) => {
@@ -27,9 +50,16 @@ export const payrollService = {
         return response.data;
     },
 
-    // Remove Payroll Item
+    // Remove Payroll Item — deletes one allowance/deduction line from a DRAFT payroll
     removePayrollItem: async (payrollId, itemId, type) => {
         const response = await api.post("/payroll/remove-item", { payrollId, itemId, type });
+        return response.data;
+    },
+
+    // Remove an employee's whole record from a DRAFT payroll period (distinct from
+    // removePayrollItem above, which only removes one line item within a record)
+    removeEmployeeFromPayroll: async (payrollId) => {
+        const response = await api.post("/payroll/remove-employee", { payrollId });
         return response.data;
     },
 
@@ -69,13 +99,16 @@ export const payrollService = {
         if (filters.company) urlPath += `&company=${encodeURIComponent(filters.company)}`;
         if (filters.branch) urlPath += `&branch=${encodeURIComponent(filters.branch)}`;
 
-        const response = await api.get(urlPath, {
-            responseType: 'blob'
-        });
+        let response;
+        try {
+            response = await api.get(urlPath, { responseType: 'blob' });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "Export failed."));
+        }
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
-        
+
         // Dynamic filename
         let filename = `Payroll_${month}_${year}.xlsx`;
         if (reportType === 'permit') filename = `Location_Report_${month}_${year}.xlsx`;
@@ -87,11 +120,21 @@ export const payrollService = {
         link.parentNode.removeChild(link);
     },
 
-    // Generate SIF
-    generateSIF: async (month, year) => {
-        const response = await api.get(`/payroll/export-sif?month=${month}&year=${year}`, {
-            responseType: 'blob'
-        });
+    // Generate SIF — periodStart/periodEnd (optional) are the exact period the
+    // Finalize/Un-finalize badges key off; passing them avoids a mismatch against the
+    // derived month/year if the date picker's periodEnd and the actually-finalized
+    // period ever disagree.
+    generateSIF: async (month, year, periodStart = null, periodEnd = null) => {
+        let urlPath = `/payroll/export-sif?month=${month}&year=${year}`;
+        if (periodStart && periodEnd) urlPath += `&periodStart=${periodStart}&periodEnd=${periodEnd}`;
+        let response;
+        try {
+            response = await api.get(urlPath, {
+                responseType: 'blob'
+            });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "SIF Generation failed."));
+        }
         // Try to get filename from header
         const contentDisposition = response.headers['content-disposition'];
         let filename = `SIF_${year}${month}.zip`;
@@ -112,7 +155,12 @@ export const payrollService = {
 
     // Download MOL Report
     downloadMOLReport: async (month, year) => {
-        const response = await api.get(`/payroll/export-mol?month=${month}&year=${year}`, { responseType: 'blob' });
+        let response;
+        try {
+            response = await api.get(`/payroll/export-mol?month=${month}&year=${year}`, { responseType: 'blob' });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "Failed to download MOL Report."));
+        }
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
@@ -122,13 +170,20 @@ export const payrollService = {
         link.parentNode.removeChild(link);
     },
 
-    // Download Payment History
-    downloadPaymentHistory: async (year) => {
-        const response = await api.get(`/payroll/history?year=${year}`, { responseType: 'blob' });
+    // Download Payment History — month is optional (whole year if omitted)
+    downloadPaymentHistory: async (year, month = null) => {
+        let urlPath = `/payroll/history?year=${year}`;
+        if (month) urlPath += `&month=${month}`;
+        let response;
+        try {
+            response = await api.get(urlPath, { responseType: 'blob' });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "Failed to download History."));
+        }
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `Payment_History_${year}.xlsx`);
+        link.setAttribute('download', month ? `Payment_History_${month}_${year}.xlsx` : `Payment_History_${year}.xlsx`);
         document.body.appendChild(link);
         link.click();
         link.parentNode.removeChild(link);

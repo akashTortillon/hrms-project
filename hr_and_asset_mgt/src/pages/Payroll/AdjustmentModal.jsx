@@ -13,6 +13,8 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
         type: 'ALLOWANCE',
         name: '',
         amount: '',
+        hours: '',   // OVERTIME only
+        rate: '',    // OVERTIME only - AED per hour
         reason: '' // ✅ NEW
     });
 
@@ -61,8 +63,20 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
+    const isOvertime = formData.type === 'OVERTIME';
+    const overtimeAmount = (Number(formData.hours) || 0) * (Number(formData.rate) || 0);
+
     const handleSubmit = async () => {
-        if (!formData.payrollId || !formData.name || !formData.amount || !formData.reason) { // ✅ Reason Check
+        if (!formData.payrollId || !formData.reason) {
+            toast.error("Please fill all fields, including Reason.");
+            return;
+        }
+        if (isOvertime) {
+            if (!formData.hours || !formData.rate) {
+                toast.error("Please enter Hours and Rate/Hour for overtime.");
+                return;
+            }
+        } else if (!formData.name || !formData.amount) {
             toast.error("Please fill all fields, including Reason.");
             return;
         }
@@ -72,7 +86,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
             toast.success("Adjustment added correctly");
             onSuccess(); // Refresh
             onClose();
-            setFormData({ payrollId: '', type: 'ALLOWANCE', name: '', amount: '' });
+            setFormData({ payrollId: '', type: 'ALLOWANCE', name: '', amount: '', hours: '', rate: '', reason: '' });
         } catch (error) {
             toast.error(error.response?.data?.message || "Failed to add adjustment");
         }
@@ -100,6 +114,18 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
     };
 
     const selectedRecord = employees.find(e => e._id === formData.payrollId);
+
+    // meta is a free-form string on auto-generated loan/advance lines (e.g.
+    // "Req ID: REQ123 | Remaining: 1,200.00") and a structured {hours,rate} object on
+    // overtime lines - meta was set on generation/add but never surfaced in this UI
+    // before, so HR only ever saw the bare item name.
+    const describeItemMeta = (item) => {
+        if (typeof item.meta === "string" && item.meta.trim()) return item.meta;
+        if (item.category === "OVERTIME" && item.meta && typeof item.meta === "object") {
+            return `${item.meta.hours || 0}h @ ${item.meta.rate || 0}/h`;
+        }
+        return null;
+    };
 
     const displayTitle = showHistory
         ? "Adjustment History"
@@ -180,7 +206,12 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                         <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0 0' }}>
                                             {selectedRecord.allowances.map(item => (
                                                 <li key={item._id} className="adjustment-item">
-                                                    <span>{item.name} ({item.amount})</span>
+                                                    <span>
+                                                        {item.name} ({item.amount})
+                                                        {describeItemMeta(item) && (
+                                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>{describeItemMeta(item)}</div>
+                                                        )}
+                                                    </span>
                                                     {!isFinalized && (
                                                         <button
                                                             onClick={() => handleRemoveClick(item._id, 'ALLOWANCE', item.name)}
@@ -203,7 +234,12 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                         <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0 0' }}>
                                             {selectedRecord.deductions.map(item => (
                                                 <li key={item._id} className="adjustment-item">
-                                                    <span>{item.name} ({item.amount})</span>
+                                                    <span>
+                                                        {item.name} ({item.amount})
+                                                        {describeItemMeta(item) && (
+                                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>{describeItemMeta(item)}</div>
+                                                        )}
+                                                    </span>
                                                     {!isFinalized && (
                                                         <button
                                                             onClick={() => handleRemoveClick(item._id, 'DEDUCTION', item.name)}
@@ -233,36 +269,75 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                             >
                                 <option value="ALLOWANCE">Allowance (Add to Salary)</option>
                                 <option value="DEDUCTION">Deduction (Subtract from Salary)</option>
+                                <option value="OVERTIME">Overtime (Hours x Rate)</option>
                             </select>
                         </div>
 
-                        {/* Name */}
+                        {/* Name - optional for Overtime (defaults to "Overtime") */}
                         <div className="modal-form-group">
-                            <label className="modal-label">Description / Name</label>
+                            <label className="modal-label">Description / Name{isOvertime ? " (optional)" : ""}</label>
                             <input
                                 type="text"
                                 name="name"
                                 className="modal-input"
-                                placeholder="e.g. Sales Bonus, Uniform Damage"
+                                placeholder={isOvertime ? "Overtime" : "e.g. Sales Bonus, Uniform Damage"}
                                 value={formData.name}
                                 onChange={handleChange}
                                 disabled={isFinalized}
                             />
                         </div>
 
-                        {/* Amount */}
-                        <div className="modal-form-group">
-                            <label className="modal-label">Amount (AED)</label>
-                            <input
-                                type="number"
-                                name="amount"
-                                className="modal-input"
-                                placeholder="0.00"
-                                value={formData.amount}
-                                onChange={handleChange}
-                                disabled={isFinalized}
-                            />
-                        </div>
+                        {isOvertime ? (
+                            <>
+                                {/* Hours */}
+                                <div className="modal-form-group">
+                                    <label className="modal-label">Hours</label>
+                                    <input
+                                        type="number"
+                                        name="hours"
+                                        className="modal-input"
+                                        placeholder="0"
+                                        value={formData.hours}
+                                        onChange={handleChange}
+                                        disabled={isFinalized}
+                                    />
+                                </div>
+
+                                {/* Rate/Hour */}
+                                <div className="modal-form-group">
+                                    <label className="modal-label">Rate / Hour (AED)</label>
+                                    <input
+                                        type="number"
+                                        name="rate"
+                                        className="modal-input"
+                                        placeholder="0.00"
+                                        value={formData.rate}
+                                        onChange={handleChange}
+                                        disabled={isFinalized}
+                                    />
+                                </div>
+
+                                {/* Computed amount, read-only */}
+                                <div className="modal-form-group">
+                                    <label className="modal-label">Amount (AED) — computed</label>
+                                    <input type="text" className="modal-input" value={overtimeAmount.toFixed(2)} disabled readOnly />
+                                </div>
+                            </>
+                        ) : (
+                            /* Amount */
+                            <div className="modal-form-group">
+                                <label className="modal-label">Amount (AED)</label>
+                                <input
+                                    type="number"
+                                    name="amount"
+                                    className="modal-input"
+                                    placeholder="0.00"
+                                    value={formData.amount}
+                                    onChange={handleChange}
+                                    disabled={isFinalized}
+                                />
+                            </div>
+                        )}
 
 
                         {/* Reason */}

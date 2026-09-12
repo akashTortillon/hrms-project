@@ -36,6 +36,11 @@ const payrollSchema = new mongoose.Schema({
         name: String,
         amount: Number,
         type: { type: String, enum: ["AUTO", "MANUAL"], default: "AUTO" },
+        // Structured tag for line items that need to be reliably identified beyond
+        // free-text name matching (e.g. "OVERTIME" for manual overtime entries -
+        // the Overtime Report used to fuzzy-match names, which misclassified
+        // "Other Allowance" as overtime pay). null for everything else.
+        category: { type: String, default: null },
         meta: mongoose.Schema.Types.Mixed, // For debugging (e.g. "20% of Basic")
         // ✅ Manual Tracking
         addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
