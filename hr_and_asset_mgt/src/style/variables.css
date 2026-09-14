@@ -14,6 +14,13 @@
     --color-primary-light: #eff4ff;
     /* Backgrounds used in active states */
 
+    /* Kayzan gold - matches the gradient already hardcoded in Sidebar.jsx/Login.jsx/
+       loginAuth.css. Defined here as the single token source for new gold usages
+       (e.g. the navbar icon recolor) - does not retrofit those existing hardcoded
+       usages, which are out of scope. */
+    --color-gold: #c8902a;
+    --color-gold-light: #f0c060;
+
     /* Neutral scale */
     --color-text-main: #1f2d3d;
     --color-text-secondary: #4b5563;

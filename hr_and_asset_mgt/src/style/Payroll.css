@@ -693,3 +693,68 @@
 .payroll-golden-card, .payroll-golden-header, .golden-tab-btn, .payroll-golden-card table {
     display: none !important;
 }
+
+.tool-icon-box.purple { background: #f5f3ff; color: #7c3aed; }
+
+/* ==========================================================================
+   RESPONSIVE - this file previously had zero @media queries, the only
+   page-specific stylesheet in the app without any. Below breaks fixed-grid/
+   no-wrap layouts down at the app's established breakpoints (768px = primary
+   mobile cut, 480px = narrow-phone fine-tuning - see Attendance.css/Assets.css
+   for the same convention).
+   ========================================================================== */
+
+/* Missing scroll container for the employee table - JSX already wraps the
+   table in .payroll-list-table-wrapper (PayrollTable.jsx/PayrollView.jsx) but
+   no rule for that class existed anywhere, so the table just overflowed the
+   page with no way to scroll to it. Unconditional (not just mobile) since a
+   wide table benefits from this at any width. */
+.payroll-list-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.payroll-modern-table {
+  min-width: 720px;
+}
+
+@media (max-width: 768px) {
+  .payroll-new-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .payroll-header-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .payroll-stat-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .payroll-action-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .action-btns-group {
+    margin-left: 0;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .wps-tools-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .payroll-stat-row {
+    grid-template-columns: 1fr;
+  }
+}

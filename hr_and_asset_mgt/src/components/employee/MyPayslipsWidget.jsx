@@ -9,6 +9,12 @@ export default function MyPayslipsWidget() {
     const [payslips, setPayslips] = useState([]);
     const [downloadingSlip, setDownloadingSlip] = useState(null);
     const [user, setUser] = useState(null);
+    // Distinct from true-empty ("no payroll processed yet") - a fetch error (e.g.
+    // the backend's 400 "Employee ID not found for user", which happens when this
+    // User's account was never linked to an Employee record) used to be caught and
+    // silently rendered identically to true-empty, making a real account-linkage
+    // bug indistinguishable from "nothing to show yet".
+    const [loadError, setLoadError] = useState(false);
 
     useEffect(() => {
         try {
@@ -22,10 +28,22 @@ export default function MyPayslipsWidget() {
                 const slips = await payrollService.getMyPayslips();
                 setPayslips(Array.isArray(slips) ? slips : []);
             } catch {
+                setLoadError(true);
                 setPayslips([]);
             }
         })();
     }, []);
+
+    if (loadError) {
+        return (
+            <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
+                <h5 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 700, color: '#1f2937' }}>My Payslips</h5>
+                <div style={{ padding: '16px', textAlign: 'center', color: '#b45309', background: '#fffbeb', borderRadius: '8px', fontSize: '13px' }}>
+                    Unable to load payslips — please contact HR.
+                </div>
+            </div>
+        );
+    }
 
     if (payslips.length === 0) {
         return (

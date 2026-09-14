@@ -1707,12 +1707,14 @@ export const importEmployees = async (req, res) => {
         employeeFields.totalSalary = computeTotalSalary(employeeFields);
         employeeFields.ctc = computeCtc(employeeFields);
 
+        let employeeIdForLink;
         if (existingEmployeeDoc) {
           // Update path: never touch systemCode (immutable) or salaryHistory/probation
           // confirmation state (real history, not something a re-upload should overwrite).
           await Employee.findByIdAndUpdate(existingEmployeeDoc._id, employeeFields);
+          employeeIdForLink = existingEmployeeDoc._id;
         } else {
-          await Employee.create({
+          const createdEmployee = await Employee.create({
             ...employeeFields,
             systemCode: nextSystemCode,
             probationStartDate: joinDate,
@@ -1726,7 +1728,22 @@ export const importEmployees = async (req, res) => {
               joinDate
             })
           });
+          employeeIdForLink = createdEmployee._id;
         }
+
+        // Link the User account to this Employee record. Covers both: a User just
+        // created above (User.create at ~line 1611 never sets employeeId - the
+        // Employee doc didn't exist yet at that point), and a pre-existing User
+        // whose employeeId was never set (e.g. an earlier import that hit this same
+        // gap). Only fills an UNSET employeeId - never overwrites one already
+        // pointing somewhere else, so a deliberately different existing link is
+        // never clobbered. Without this, the employee's own login can't resolve
+        // req.user.employeeId (see authMiddleware.js's protect) and self-service
+        // endpoints like "My Payslips" silently 400 / show as empty.
+        await User.updateOne(
+          { email, $or: [{ employeeId: null }, { employeeId: { $exists: false } }] },
+          { $set: { employeeId: employeeIdForLink } }
+        );
 
         // Add to local sets to prevent duplicates within the same file
         existingEmails.add(email.toLowerCase());
@@ -1909,7 +1926,10 @@ export const resetEmployeePassword = async (req, res) => {
 
     // Find the associated user. employeeId is the authoritative link, but two known
     // gaps can leave it unset even though the employee is legitimate:
-    //   1. Bulk import (importEmployees) creates the User but never sets employeeId.
+    //   1. Bulk import (importEmployees) used to create the User without ever
+    //      setting employeeId - fixed at the source now (see the backfill link
+    //      right after Employee create/update there), but this stays as a safety
+    //      net for records imported before that fix.
     //   2. Editing an employee's email later (updateEmployee) never updates the linked
     //      User's email, orphaning it under the stale address.
     // Rather than just erroring, heal the link (User exists by email, just unlinked) or

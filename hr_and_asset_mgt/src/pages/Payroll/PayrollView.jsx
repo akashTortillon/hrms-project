@@ -161,6 +161,12 @@ function Payroll() {
   // { month, year, periodStart, periodEnd, finalizedAt } | null
   const [latestFinalized, setLatestFinalized] = useState(null);
 
+  // Default true so the warning banner never flashes on load before the check
+  // resolves — absence deduction depends on Masters config, not the period, so
+  // this is refreshed on mount and again right after Generate (where the backend
+  // already includes it in the response, so that path needs no extra request).
+  const [hasAbsenceDeductionRule, setHasAbsenceDeductionRule] = useState(true);
+
   // --- MOCK DATA FOR CHARTS (To avoid breaking backend dependencies) ---
   const mockTrends = [
     { name: 'Jan', netSalary: 45000, deductions: 5000 },
@@ -180,6 +186,9 @@ function Payroll() {
     getCompanies().then(setCompanies).catch(console.error);
     getBranches().then(setBranches).catch(console.error);
     fetchLatestFinalized();
+    payrollService.getRuleHealth()
+      .then((r) => setHasAbsenceDeductionRule(r.hasActiveAbsenceDeductionRule))
+      .catch(console.error);
   }, []);
 
   // Just updates `latestFinalized` (drives the Un-finalize button's canUnfinalize
@@ -273,8 +282,11 @@ function Payroll() {
   const handleGenerate = async () => {
     try {
       setLoading(true);
-      await payrollService.generate(periodStart, periodEnd);
+      const result = await payrollService.generate(periodStart, periodEnd);
       toast.success("Payroll Generated Successfully!");
+      if (typeof result?.hasActiveAbsenceDeductionRule === "boolean") {
+        setHasAbsenceDeductionRule(result.hasActiveAbsenceDeductionRule);
+      }
       fetchPayroll();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to generate payroll");
@@ -347,6 +359,15 @@ function Payroll() {
     }
   };
 
+  const handleExportAllPayslips = async () => {
+    try {
+      await payrollService.exportAllPayslips(month, year, periodStart, periodEnd);
+      toast.success("Payslips Exported!");
+    } catch (error) {
+      toast.error(error.message || "Payslip export failed.");
+    }
+  };
+
   const handleGenerateMOL = async () => {
     try {
       await payrollService.downloadMOLReport(month, year);
@@ -388,6 +409,7 @@ function Payroll() {
         periodEnd={periodEnd}
         setPeriodEnd={setPeriodEnd}
         onExportWPS={() => handleExportExcel()}
+        hasAbsenceDeductionRule={hasAbsenceDeductionRule}
       />
 
       {/* Modern Tabs Switcher (Design only) */}
@@ -551,6 +573,15 @@ function Payroll() {
                             </div>
                         </div>
                     </div>
+                    {isFinalized && (
+                        <div className="wps-tool-card" onClick={handleExportAllPayslips}>
+                            <div className="tool-icon-box purple"><SvgIcon name="download" size={20} /></div>
+                            <div className="tool-content">
+                                <h4>Export All Payslips</h4>
+                                <p>Download every payslip for this period as a ZIP</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </>

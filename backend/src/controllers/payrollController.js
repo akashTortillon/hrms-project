@@ -36,6 +36,19 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 // of the printed rows.
 const sumAmounts = (items = []) => round2((items || []).reduce((s, i) => s + round2(Number(i?.amount || 0)), 0));
 
+// True only if an active PAYROLL_RULE Master resolves to an automatic ABSENT_DAYS
+// deduction - mirrors the exact predicate generatePayroll's Dynamic Rule Engine
+// uses (including the legacy code==="LOP"/name-includes-"Unpaid" fallback for
+// rules with no explicit metadata.basis) so generatePayroll and getPayrollRuleHealth
+// can never disagree about whether absence actually reduces pay.
+const computeHasActiveAbsenceDeductionRule = (rules = []) => rules.some((rule) => {
+    const meta = rule.metadata || {};
+    if (!meta.isAutomatic || meta.category !== "DEDUCTION") return false;
+    let basis = meta.basis;
+    if (!basis && (rule.code === "LOP" || (rule.name && rule.name.includes("Unpaid")))) basis = "ABSENT_DAYS";
+    return basis === "ABSENT_DAYS";
+});
+
 const resolveCompanyLogoPath = (companyImage) => {
     if (!companyImage || /^https?:\/\//i.test(companyImage)) return null;
 
@@ -711,6 +724,19 @@ export const getLatestFinalizedPeriod = async (req, res) => {
     }
 };
 
+// Cheap, read-only check so the dashboard can warn BEFORE generating payroll that
+// absence won't reduce pay. Uses the same computeHasActiveAbsenceDeductionRule
+// predicate generatePayroll's Dynamic Rule Engine is built on, so this can never
+// drift out of sync with what actually happens on Generate.
+export const getPayrollRuleHealth = async (req, res) => {
+    try {
+        const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
+        res.json({ hasActiveAbsenceDeductionRule: computeHasActiveAbsenceDeductionRule(rules) });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to check payroll rule health" });
+    }
+};
+
 // --- API: Set Payroll Period Anchor ---
 // Admin-only correction tool (Masters > System Settings), separate from Finalize/
 // Un-finalize. Moves the rolling-period lockout cursor to a chosen date WITHOUT
@@ -854,6 +880,12 @@ export const generatePayroll = async (req, res) => {
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
         const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
+
+        // Absence is always tracked correctly in attendanceSummary (shown on the
+        // payslip) regardless of this - but it only ever reduces pay if an active
+        // rule resolves to basis "ABSENT_DAYS" and category "DEDUCTION". Surfaced to
+        // the frontend so a misconfigured/missing rule doesn't fail silently.
+        const hasActiveAbsenceDeductionRule = computeHasActiveAbsenceDeductionRule(rules);
 
         // Fetch Shifts to map names to hours
         const shifts = await Master.find({ type: "SHIFT", isActive: true });
@@ -1357,7 +1389,8 @@ export const generatePayroll = async (req, res) => {
             month,
             year,
             periodStart,
-            periodEnd
+            periodEnd,
+            hasActiveAbsenceDeductionRule
         });
 
     } catch (error) {
@@ -2362,36 +2395,43 @@ export const getMyPayslips = async (req, res) => {
 };
 
 // --- API: Download Payslip PDF (Mobile) ---
-export const downloadPayslip = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const payroll = await Payroll.findById(id).populate("employee", "name code designation department company");
+// Resolves a company's payslip branding (logo + whether it gets the Leptis
+// Group letterhead) once per company name, cached in the Map the caller
+// provides - a bulk export loops many employees who often share a company, and
+// without this each one would re-hit S3/Mongo for the identical logo.
+const resolveCompanyBranding = async (companyName, brandingCache) => {
+    if (brandingCache.has(companyName)) return brandingCache.get(companyName);
 
-        if (!payroll) {
-            return res.status(404).json({ message: "Payslip not found" });
-        }
+    const companyMaster = companyName
+        ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
+        : null;
+    // Prefer this employee's own company logo (S3 URL from Masters > Company
+    // Structure, fetched as a Buffer) or a legacy local-file upload. No
+    // cross-tenant fallback to process.env.COMPANY_LOGO - if a company has no
+    // logo configured, the payslip renders with no logo rather than borrowing
+    // another tenant's.
+    const companyLogoSource = companyMaster?.image;
+    const companyLogoBuffer = await fetchRemoteLogoBuffer(companyLogoSource);
+    const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyLogoSource);
+    const LEPTIS_COMPANY_NAMES = ["LEPTIS HYPERMARKET LLC", "LEPTIS", "LEPTIS HYPERMARKET"];
+    const isLeptisCompany = LEPTIS_COMPANY_NAMES.some((n) => n.toLowerCase() === String(companyName).toLowerCase());
 
-        // Verify Ownership (unless Admin)
-        // Assuming req.user is populated by protect middleware
-        if (req.user.role !== "Admin" && req.user.employeeId) {
-            if (payroll.employee._id.toString() !== req.user.employeeId.toString()) {
-                return res.status(403).json({ message: "Unauthorized access to this payslip" });
-            }
-        }
+    const branding = { companyLogoBuffer, companyLogoPath, isLeptisCompany };
+    brandingCache.set(companyName, branding);
+    return branding;
+};
 
+// Builds one payslip PDF (PDFKit content, optionally merged onto the Leptis
+// Group letterhead via pdf-lib) and returns it as a Buffer - shared by the
+// single-payslip download below and the bulk ZIP export, so there is exactly
+// one place that draws a payslip. `payroll` must have `.employee` populated
+// with at least name/code/designation/department/company (same shape the
+// single-download query below fetches). `brandingCache` is a Map the caller
+// owns - pass a fresh one for a single call, or one shared Map across a loop.
+const buildPayslipPdfBuffer = async (payroll, brandingCache) => {
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year, periodStart, periodEnd } = payroll;
         const companyName = employee?.company || process.env.COMPANY_NAME || "Company";
-        const companyMaster = companyName
-            ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
-            : null;
-        // Prefer this employee's own company logo (S3 URL from Masters > Company
-        // Structure, fetched as a Buffer) or a legacy local-file upload. No
-        // cross-tenant fallback to process.env.COMPANY_LOGO - if a company has no
-        // logo configured, the payslip renders with no logo rather than borrowing
-        // another tenant's.
-        const companyLogoSource = companyMaster?.image;
-        const companyLogoBuffer = await fetchRemoteLogoBuffer(companyLogoSource);
-        const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyLogoSource);
+        const { companyLogoBuffer, companyLogoPath, isLeptisCompany } = await resolveCompanyBranding(companyName, brandingCache);
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         // "Period" used to always show just periodEnd's calendar month/year (e.g.
         // "August 2026"), even when the actual pay period (this app uses a rolling,
@@ -2623,15 +2663,11 @@ export const downloadPayslip = async (req, res) => {
         // Only apply it for Leptis employees; every other company gets the plain
         // PDFKit content page above, which already carries that company's own name
         // and logo (from Masters > Company Structure).
-        const LEPTIS_COMPANY_NAMES = ["LEPTIS HYPERMARKET LLC", "LEPTIS", "LEPTIS HYPERMARKET"];
-        const isLeptisCompany = LEPTIS_COMPANY_NAMES.some((n) => n.toLowerCase() === String(companyName).toLowerCase());
         const templatePath = path.join(__dirname, "../assets/templates/Letter_Head_-_Group_2023.pdf");
 
         // Non-Leptis companies (or if the template file is missing) get the plain content PDF.
         if (!isLeptisCompany || !fs.existsSync(templatePath)) {
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
-            return res.send(contentPdfBuffer);
+            return contentPdfBuffer;
         }
 
         const templateBytes = fs.readFileSync(templatePath);
@@ -2653,14 +2689,111 @@ export const downloadPayslip = async (req, res) => {
 
         // Serialize
         const pdfBytes = await templatePdf.save();
-        const finalBuffer = Buffer.from(pdfBytes);
+        return Buffer.from(pdfBytes);
+};
+
+// Single payslip PDF download - self-service (employee downloading their own)
+// and admin/HR (downloading any employee's). No status gate here deliberately
+// (unlike getMyPayslips' PROCESSED-only filter) - once you have the id, a
+// DRAFT payslip can be previewed too.
+export const downloadPayslip = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const payroll = await Payroll.findById(id).populate("employee", "name code designation department company");
+
+        if (!payroll) {
+            return res.status(404).json({ message: "Payslip not found" });
+        }
+
+        // Verify Ownership (unless Admin)
+        // Assuming req.user is populated by protect middleware
+        if (req.user.role !== "Admin" && req.user.employeeId) {
+            if (payroll.employee._id.toString() !== req.user.employeeId.toString()) {
+                return res.status(403).json({ message: "Unauthorized access to this payslip" });
+            }
+        }
+
+        const pdfBuffer = await buildPayslipPdfBuffer(payroll, new Map());
+        const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
 
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
-        res.send(finalBuffer);
-
+        res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${payroll.year}.pdf"`);
+        res.send(pdfBuffer);
     } catch (error) {
         // console.error(error);
         res.status(500).json({ message: "PDF Generation Failed: " + error.message });
+    }
+};
+
+// Bulk payslip export - one ZIP containing every PROCESSED employee's payslip
+// PDF for a period, available once Finalize has run. Mirrors generateSIF's
+// period-resolution (prefer exact periodStart/periodEnd, fall back to
+// month/year) and its build-validate-zip-respond shape.
+export const exportAllPayslips = async (req, res) => {
+    try {
+        const { month, year, periodStart, periodEnd } = req.query;
+
+        const query = { status: "PROCESSED" };
+        if (periodStart && periodEnd) {
+            query.periodStart = toDayStart(periodStart);
+            query.periodEnd = toDayEnd(periodEnd);
+        } else {
+            if (!month || !year) {
+                return res.status(400).json({ message: "month and year (or periodStart and periodEnd) are required." });
+            }
+            query.month = Number(month);
+            query.year = Number(year);
+        }
+
+        const records = await Payroll.find(query).populate("employee", "name code designation department company");
+
+        if (records.length === 0) {
+            return res.status(404).json({ message: "No finalized payroll records found for this period. Payslips can only be exported after Finalize." });
+        }
+
+        const brandingCache = new Map();
+        const zipEntries = [];
+        const failures = [];
+
+        for (const record of records) {
+            try {
+                const pdfBuffer = await buildPayslipPdfBuffer(record, brandingCache);
+                const safeCode = String(record.employee?.code || record.employee?._id || "employee").replace(/[^a-z0-9_-]+/gi, "_");
+                const monthName = new Date(record.year, record.month - 1).toLocaleString('default', { month: 'long' });
+                zipEntries.push({ name: `Payslip_${safeCode}_${monthName}_${record.year}.pdf`, content: pdfBuffer });
+            } catch (buildError) {
+                failures.push({ employeeCode: record.employee?.code, employeeName: record.employee?.name, error: buildError.message });
+            }
+        }
+
+        if (zipEntries.length === 0) {
+            return res.status(400).json({ message: "Failed to build any payslips for this period.", failures });
+        }
+
+        let archive;
+        try {
+            archive = buildZipArchive(zipEntries);
+        } catch (zipError) {
+            return res.status(500).json({ message: "Failed to build payslip archive: " + zipError.message });
+        }
+
+        const filenamePeriod = periodStart && periodEnd ? `${periodStart}_${periodEnd}` : `${month}_${year}`;
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", `attachment; filename="Payslips_${filenamePeriod}.zip"`);
+        if (failures.length > 0) {
+            res.setHeader("X-Skipped-Employees", String(failures.length));
+        }
+        res.send(archive);
+
+        PayrollAudit.create({
+            action: "PAYSLIPS_EXPORTED",
+            performedBy: req.user?._id,
+            performedByName: req.user?.name,
+            month: month ? Number(month) : records[0]?.month,
+            year: year ? Number(year) : records[0]?.year,
+            details: `Exported ${zipEntries.length} payslip(s) as ZIP${failures.length ? `, ${failures.length} skipped` : ""}`
+        }).catch(console.error);
+    } catch (error) {
+        res.status(500).json({ message: "Payslip export failed: " + error.message });
     }
 };

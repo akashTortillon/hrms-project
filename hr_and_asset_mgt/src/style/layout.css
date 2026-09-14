@@ -662,7 +662,7 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #2c5cff;
+  background: var(--color-gold);
   color: var(--color-text-light);
   display: inline-flex;
   align-items: center;
@@ -840,6 +840,15 @@ body {
   color: var(--color-text-light) !important;
 }
 
+/* Scoped to the hamburger/sidebar-toggle button only - Button.jsx's variant="light"
+   isn't a valid variantClass key so it silently falls back to "primary", picking up
+   .btn-primary-custom's blue. Compound selector (higher specificity than the bare
+   .btn-primary-custom above) recolors just this button to Kayzan gold without
+   touching any other primary button app-wide. */
+.hamburger-btn.btn-primary-custom {
+  background: var(--color-gold) !important;
+}
+
 .btn-success-custom {
   background: var(--color-success) !important;
   color: var(--color-text-light) !important;
@@ -945,7 +954,10 @@ body {
 
 .quick-action-btn .svg-icon,
 .quick-action-btn .svg-icon-white {
-  filter: invert(30%) sepia(83%) saturate(2326%) hue-rotate(204deg) brightness(96%) contrast(92%) !important;
+  /* Recolors the black source SVG to Kayzan gold (#c8902a) - values derived by a
+     canvas color-distance search against the actual rendered pixels (verified
+     result ~[201,147,38] vs target [200,144,42]), not guessed. */
+  filter: invert(50%) sepia(100%) saturate(350%) hue-rotate(2deg) brightness(100%) contrast(90%) !important;
   opacity: 1 !important;
 }
 
@@ -1226,6 +1238,10 @@ body {
 
 .svg-icon-blue {
   filter: invert(30%) sepia(83%) saturate(2326%) hue-rotate(204deg) brightness(96%) contrast(92%);
+}
+
+.svg-icon-gold {
+  filter: invert(50%) sepia(100%) saturate(350%) hue-rotate(2deg) brightness(100%) contrast(90%);
 }
 
 .svg-icon-green {

@@ -44,6 +44,13 @@ export const payrollService = {
         return response.data.latestFinalized; // { month, year, periodStart, periodEnd, finalizedAt } or null
     },
 
+    // Cheap check for whether an active absence-deduction Payroll Rule exists —
+    // lets the dashboard warn before Generate that absent days won't reduce pay.
+    getRuleHealth: async () => {
+        const response = await api.get("/payroll/rule-health");
+        return response.data; // { hasActiveAbsenceDeductionRule }
+    },
+
     // Add Manual Adjustment
     addAdjustment: async (payload) => {
         const response = await api.post("/payroll/adjust", payload);
@@ -144,6 +151,33 @@ export const payrollService = {
                 filename = fileNameMatch[1];
         }
 
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+    },
+
+    // Export all payslips for a finalized period as one ZIP — same period-
+    // resolution and blob/error-handling shape as generateSIF.
+    exportAllPayslips: async (month, year, periodStart = null, periodEnd = null) => {
+        let urlPath = `/payroll/export-payslips?month=${month}&year=${year}`;
+        if (periodStart && periodEnd) urlPath += `&periodStart=${periodStart}&periodEnd=${periodEnd}`;
+        let response;
+        try {
+            response = await api.get(urlPath, { responseType: 'blob' });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "Payslip export failed."));
+        }
+        const contentDisposition = response.headers['content-disposition'];
+        let filename = `Payslips_${month}_${year}.zip`;
+        if (contentDisposition) {
+            const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (fileNameMatch && fileNameMatch.length === 2)
+                filename = fileNameMatch[1];
+        }
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;

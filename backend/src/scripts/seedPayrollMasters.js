@@ -1,4 +1,16 @@
-
+// One-time setup utility - creates the standard Payroll Rule masters (HRA,
+// Transport/Phone allowance, Overtime, Unpaid-leave/LOP deduction, Loan
+// repayment) if they don't already exist (upsert by type+name, safe to re-run).
+//
+// Previously seeded these under type: "PAYROLL_COMPONENT" - but generatePayroll
+// and the Masters UI only ever read/write type: "PAYROLL_RULE", so running this
+// silently did nothing observable. Fixed to the correct type.
+//
+// Run manually only (never wired into any request path): `node
+// src/scripts/seedPayrollMasters.js`. Do NOT run against production without
+// explicit sign-off - it activates a real, automatic absence-deduction rule
+// (isAutomatic: true) that immediately changes payroll calculations app-wide
+// the next time payroll is generated.
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -25,7 +37,7 @@ const connectDB = async () => {
 const payrollRules = [
     // ALLOWANCES
     {
-        type: "PAYROLL_COMPONENT",
+        type: "PAYROLL_RULE",
         name: "House Rent Allowance (HRA)",
         code: "HRA",
         metadata: {
@@ -37,7 +49,7 @@ const payrollRules = [
         }
     },
     {
-        type: "PAYROLL_COMPONENT",
+        type: "PAYROLL_RULE",
         name: "Transport Allowance",
         code: "TA",
         metadata: {
@@ -48,7 +60,7 @@ const payrollRules = [
         }
     },
     {
-        type: "PAYROLL_COMPONENT",
+        type: "PAYROLL_RULE",
         name: "Phone Allowance",
         code: "PHONE",
         metadata: {
@@ -61,7 +73,7 @@ const payrollRules = [
 
     // OVERTIME
     {
-        type: "PAYROLL_COMPONENT",
+        type: "PAYROLL_RULE",
         name: "Overtime (Regular)",
         code: "OT_REG",
         metadata: {
@@ -75,19 +87,20 @@ const payrollRules = [
 
     // DEDUCTIONS
     {
-        type: "PAYROLL_COMPONENT",
+        type: "PAYROLL_RULE",
         name: "Unpaid Leave Deduction",
         code: "LOP",
         metadata: {
             category: "DEDUCTION",
             calculationType: "DAILY_RATE",
+            basis: "ABSENT_DAYS", // explicit - don't rely solely on the code==="LOP" legacy fallback
             value: 1, // 1 Day Salary per absent day
             base: "GROSS_SALARY",
             isAutomatic: true // Auto applied if Absent
         }
     },
     {
-        type: "PAYROLL_COMPONENT",
+        type: "PAYROLL_RULE",
         name: "Loan Repayment",
         code: "LOAN",
         metadata: {
