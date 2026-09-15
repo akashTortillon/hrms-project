@@ -161,32 +161,36 @@ export const payrollService = {
     },
 
     // Export payslips for a year as one ZIP — month is optional ("All months"
-    // zips every finalized month in that year). Same blob/error-handling shape
-    // as generateSIF/downloadPaymentHistory.
-    exportAllPayslips: async (year, month = null, periodStart = null, periodEnd = null) => {
-        let urlPath = `/payroll/export-payslips?year=${year}`;
+    // zips every finalized month in that year). Async job pattern (same as
+    // startBackupJob/getBackupJobStatus/getBackupDownloadUrl in
+    // systemSettingsService.js): a single synchronous request here was
+    // confirmed failing in production with an nginx 504 Gateway Time-out once
+    // building every employee's PDF took longer than the reverse proxy's read
+    // timeout. start returns immediately with a jobId; the caller polls status
+    // and only calls the download endpoint once status is "ready".
+    startPayslipExport: async (year, month = null, periodStart = null, periodEnd = null) => {
+        let urlPath = `/payroll/export-payslips/start?year=${year}`;
         if (month) urlPath += `&month=${month}`;
         if (periodStart && periodEnd) urlPath += `&periodStart=${periodStart}&periodEnd=${periodEnd}`;
-        let response;
         try {
-            response = await api.get(urlPath, { responseType: 'blob' });
+            const response = await api.post(urlPath);
+            return response.data; // { jobId, status }
         } catch (error) {
-            throw new Error(await blobErrorMessage(error, "Payslip export failed."));
+            throw new Error(error.response?.data?.message || "Failed to start payslip export.");
         }
-        const contentDisposition = response.headers['content-disposition'];
-        let filename = month ? `Payslips_${month}_${year}.zip` : `Payslips_All_${year}.zip`;
-        if (contentDisposition) {
-            const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
-            if (fileNameMatch && fileNameMatch.length === 2)
-                filename = fileNameMatch[1];
-        }
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        link.parentNode.removeChild(link);
+    },
+
+    getPayslipExportStatus: async (jobId) => {
+        const response = await api.get(`/payroll/export-payslips/status/${jobId}`);
+        return response.data; // { jobId, status, employeeCount, skippedCount, fileSize, error }
+    },
+
+    // Returns the signed S3 URL as JSON, not a redirect the browser has to
+    // follow via fetch/XHR (needs the bucket's CORS to allowlist the calling
+    // origin) - the caller does a plain <a href> navigation instead.
+    getPayslipExportDownloadUrl: async (jobId) => {
+        const response = await api.get(`/payroll/export-payslips/download/${jobId}`);
+        return response.data.url;
     },
 
     // Download MOL Report

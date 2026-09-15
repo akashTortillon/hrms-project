@@ -1,6 +1,6 @@
 
 import express from "express";
-import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, unfinalizePayroll, setPayrollAnchor, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, removeEmployeeFromPayroll, getPayrollAuditLogs, getMyPayslips, downloadPayslip, getLatestFinalizedPeriod, getPayrollRuleHealth, exportAllPayslips } from "../controllers/payrollController.js";
+import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, unfinalizePayroll, setPayrollAnchor, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, removeEmployeeFromPayroll, getPayrollAuditLogs, getMyPayslips, downloadPayslip, getLatestFinalizedPeriod, getPayrollRuleHealth, startPayslipExport, getPayslipExportStatus, downloadPayslipExportFile } from "../controllers/payrollController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -27,7 +27,9 @@ router.post("/set-anchor", setPayrollAnchor);
 router.get("/export", exportPayroll);
 router.get("/export-sif", generateSIF);
 router.get("/export-mol", generateMOLReport);
-router.get("/export-payslips", exportAllPayslips);
+router.post("/export-payslips/start", startPayslipExport);
+router.get("/export-payslips/status/:jobId", getPayslipExportStatus);
+router.get("/export-payslips/download/:jobId", downloadPayslipExportFile);
 router.get("/history", getPaymentHistory);
 router.get("/audit-logs", getPayrollAuditLogs); // ✅ NEW LINE
 

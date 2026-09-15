@@ -8,12 +8,14 @@ import mongoose from "mongoose";
 import SystemSettings from "../models/systemSettingsModel.js";
 import * as XLSX from "xlsx";
 import PayrollAudit from "../models/payrollAuditModel.js";
+import PayslipExportJob from "../models/payslipExportJobModel.js";
 import PDFDocument from "pdfkit";
 import { PDFDocument as PDFLibDocument } from "pdf-lib";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
+import { storeUploadedFile, getSignedFileUrl } from "../utils/storage.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { holidaySetFromHolidays, isWeekOff, applyMonthlyFlexQuota } from "../utils/attendanceUtils.js";
 import { resolveCompanyLogoBuffer } from "./masterController.js";
@@ -2726,10 +2728,18 @@ export const downloadPayslip = async (req, res) => {
 };
 
 // Bulk payslip export - one ZIP containing every PROCESSED employee's payslip
-// PDF for a period, available once Finalize has run. Mirrors generateSIF's
-// period-resolution (prefer exact periodStart/periodEnd, fall back to
-// month/year) and its build-validate-zip-respond shape.
-export const exportAllPayslips = async (req, res) => {
+// PDF for a period, available once Finalize has run.
+//
+// This used to be a single synchronous request: query, build every PDF, zip,
+// send. Confirmed failing in production with an nginx 504 Gateway Time-out -
+// building N PDFs (each with its own S3 logo fetch on a cache miss) can run
+// long enough on a real company's headcount that the reverse proxy kills the
+// connection before the response finishes (same failure mode already fixed
+// for the DB backup - see backupController.js's identical comment). A bounded-
+// concurrency loop alone only shaves time off; it doesn't remove the ceiling.
+// Split into start/status/download so the client never holds one long-lived
+// request open - the job keeps running server-side regardless.
+export const startPayslipExport = async (req, res) => {
     try {
         const { month, year, periodStart, periodEnd } = req.query;
 
@@ -2746,29 +2756,51 @@ export const exportAllPayslips = async (req, res) => {
             return res.status(400).json({ message: "year (or periodStart and periodEnd) is required." });
         }
 
-        const records = await Payroll.find(query).populate("employee", "name code designation department company");
-
-        if (records.length === 0) {
+        // Cheap existence check up front - a genuinely empty period should 404
+        // immediately, not spin up a job that would just fail a moment later.
+        const recordCount = await Payroll.countDocuments(query);
+        if (recordCount === 0) {
             const message = (month && !periodStart)
                 ? "There is no payroll for this particular month."
                 : "No finalized payroll records found for this period. Payslips can only be exported after Finalize.";
             return res.status(404).json({ message });
         }
 
+        const job = await PayslipExportJob.create({
+            status: "pending",
+            requestedBy: req.user?._id,
+            requestedByName: req.user?.name,
+            month: month ? Number(month) : undefined,
+            year: year ? Number(year) : undefined,
+            periodStart: periodStart ? toDayStart(periodStart) : undefined,
+            periodEnd: periodEnd ? toDayEnd(periodEnd) : undefined
+        });
+
+        res.status(202).json({ jobId: job._id, status: "pending" });
+
+        // Fire-and-forget: runs after the response is already sent, fully
+        // decoupled from this request/response cycle.
+        setImmediate(() => runPayslipExportJob(job._id, query, { month, year, periodStart, periodEnd }));
+    } catch (error) {
+        res.status(500).json({ message: "Failed to start payslip export: " + error.message });
+    }
+};
+
+async function runPayslipExportJob(jobId, query, rawParams) {
+    const { month, year, periodStart, periodEnd } = rawParams;
+    try {
+        await PayslipExportJob.findByIdAndUpdate(jobId, { status: "running", startedAt: new Date() });
+
+        const records = await Payroll.find(query).populate("employee", "name code designation department company");
+
         const brandingCache = new Map();
         const zipEntries = [];
         const failures = [];
 
-        // Was a fully serial `for...of` loop - one PDF (each with its own S3 logo
-        // fetch, on a cache miss) built at a time. Fine for a handful of employees,
-        // but for a real company's full headcount the wall-clock time adds up
-        // enough to risk tripping a reverse-proxy/platform request timeout upstream
-        // of this server (not something app code controls) - the exact symptom
-        // reported: a generic "Payslip export failed" with no specific backend
-        // message, consistent with the connection being killed mid-request rather
-        // than this handler ever getting to send a real error response. Bounded
-        // concurrency cuts real wall-clock time substantially while still keeping
-        // one slow/broken record from blocking the rest.
+        // Bounded concurrency - one PDF (each with its own S3 logo fetch, on a
+        // cache miss) at a time was needlessly slow for a large batch; this
+        // doesn't remove the timeout risk on its own (that's what the job
+        // split above is for) but still keeps the job itself fast.
         const CONCURRENCY = 5;
         let nextIndex = 0;
         const worker = async () => {
@@ -2789,35 +2821,92 @@ export const exportAllPayslips = async (req, res) => {
         await Promise.all(Array.from({ length: Math.min(CONCURRENCY, records.length) }, worker));
 
         if (zipEntries.length === 0) {
-            return res.status(400).json({ message: "Failed to build any payslips for this period.", failures });
+            await PayslipExportJob.findByIdAndUpdate(jobId, {
+                status: "failed",
+                error: "Failed to build any payslips for this period.",
+                completedAt: new Date()
+            });
+            return;
         }
 
-        let archive;
-        try {
-            archive = buildZipArchive(zipEntries);
-        } catch (zipError) {
-            return res.status(500).json({ message: "Failed to build payslip archive: " + zipError.message });
-        }
+        const archive = buildZipArchive(zipEntries);
 
         const filenamePeriod = periodStart && periodEnd
             ? `${periodStart}_${periodEnd}`
             : (month ? `${month}_${year}` : `All_${year}`);
-        res.setHeader("Content-Type", "application/zip");
-        res.setHeader("Content-Disposition", `attachment; filename="Payslips_${filenamePeriod}.zip"`);
-        if (failures.length > 0) {
-            res.setHeader("X-Skipped-Employees", String(failures.length));
-        }
-        res.send(archive);
+        const fileName = `Payslips_${filenamePeriod}.zip`;
+
+        const stored = await storeUploadedFile({
+            file: { buffer: archive, mimetype: "application/zip", originalname: fileName },
+            folder: "payslip-exports",
+            preferS3: true
+        });
+
+        await PayslipExportJob.findByIdAndUpdate(jobId, {
+            status: "ready",
+            s3Key: stored.filePath,
+            fileName,
+            fileSize: archive.length,
+            employeeCount: zipEntries.length,
+            skippedCount: failures.length,
+            completedAt: new Date()
+        });
 
         PayrollAudit.create({
             action: "PAYSLIPS_EXPORTED",
-            performedBy: req.user?._id,
-            performedByName: req.user?.name,
             month: month ? Number(month) : records[0]?.month,
             year: year ? Number(year) : records[0]?.year,
             details: `Exported ${zipEntries.length} payslip(s) as ZIP${failures.length ? `, ${failures.length} skipped` : ""}`
         }).catch(console.error);
     } catch (error) {
-        res.status(500).json({ message: "Payslip export failed: " + error.message });
+        console.error("[payrollController] Payslip export job failed:", error);
+        // Double-guarded, same as backupController.js's runBackupJob - a Mongo
+        // hiccup while recording the failure itself must never leave the job
+        // silently stuck in "running" forever, and must never throw inside a
+        // setImmediate callback (unhandled rejection would crash the process).
+        await PayslipExportJob.findByIdAndUpdate(jobId, {
+            status: "failed",
+            error: error.message,
+            completedAt: new Date()
+        }).catch(() => {});
+    }
+}
+
+export const getPayslipExportStatus = async (req, res) => {
+    try {
+        const job = await PayslipExportJob.findById(req.params.jobId);
+        if (!job) return res.status(404).json({ message: "Export job not found" });
+
+        res.json({
+            jobId: job._id,
+            status: job.status,
+            employeeCount: job.employeeCount,
+            skippedCount: job.skippedCount,
+            fileSize: job.fileSize,
+            error: job.error
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch export status: " + error.message });
+    }
+};
+
+export const downloadPayslipExportFile = async (req, res) => {
+    try {
+        const job = await PayslipExportJob.findById(req.params.jobId);
+        if (!job) return res.status(404).json({ message: "Export job not found" });
+        if (job.status !== "ready") return res.status(409).json({ message: "Export is not ready yet" });
+
+        // Return the URL as JSON, not a redirect - see backupController.js's
+        // downloadBackupFile for why (bucket CORS would otherwise need to
+        // allowlist whatever origin calls this via fetch/XHR).
+        const url = await getSignedFileUrl({
+            filePath: job.s3Key,
+            storage: "S3",
+            expiresIn: 300,
+            downloadFilename: job.fileName
+        });
+        res.json({ url });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to generate download link: " + error.message });
     }
 };

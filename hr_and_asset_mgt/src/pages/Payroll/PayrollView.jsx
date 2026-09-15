@@ -360,18 +360,72 @@ function Payroll() {
   };
 
   // Bulk export builds every employee's PDF server-side (40+ employees x
-  // however many months for "All months") - can genuinely take several
-  // seconds, with nothing else on screen to show it's working.
+  // however many months for "All months") - can genuinely take long enough
+  // that a single synchronous request gets killed by nginx's proxy_read_timeout
+  // before the response finishes (confirmed in production: 504 Gateway
+  // Time-out). Async job pattern instead - same one already used for the DB
+  // backup (useSystemSettings.js's handleBackup): start, poll status, download
+  // only once ready. Never one long-held request.
   const [exportingPayslips, setExportingPayslips] = useState(false);
+  const EXPORT_POLL_INTERVAL_MS = 3000;
+  const EXPORT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
   const handleExportAllPayslips = async () => {
+    setExportingPayslips(true);
     try {
-      setExportingPayslips(true);
-      await payrollService.exportAllPayslips(payslipExportYear, payslipExportMonth || null);
-      toast.success(payslipExportMonth ? "Payslips Exported!" : `All payslips for ${payslipExportYear} Exported!`);
+      const { jobId } = await payrollService.startPayslipExport(payslipExportYear, payslipExportMonth || null);
+      toast.info("Export started — this may take a moment...");
+
+      const startTime = Date.now();
+      const poll = async () => {
+        let job;
+        try {
+          job = await payrollService.getPayslipExportStatus(jobId);
+        } catch (error) {
+          toast.error(error.response?.data?.message || "Failed to check export status");
+          setExportingPayslips(false);
+          return;
+        }
+
+        if (job.status === "ready") {
+          try {
+            const url = await payrollService.getPayslipExportDownloadUrl(jobId);
+            const link = document.createElement('a');
+            link.href = url;
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            toast.success(
+              job.skippedCount
+                ? `Exported ${job.employeeCount} payslip(s), ${job.skippedCount} skipped.`
+                : "Payslips Exported!"
+            );
+          } catch (error) {
+            toast.error(error.response?.data?.message || "Export was ready but the download failed");
+          }
+          setExportingPayslips(false);
+          return;
+        }
+
+        if (job.status === "failed") {
+          toast.error(job.error || "Payslip export failed.");
+          setExportingPayslips(false);
+          return;
+        }
+
+        if (Date.now() - startTime > EXPORT_POLL_TIMEOUT_MS) {
+          toast.error("Export is taking longer than expected. It will finish in the background — try again shortly.");
+          setExportingPayslips(false);
+          return;
+        }
+
+        setTimeout(poll, EXPORT_POLL_INTERVAL_MS);
+      };
+
+      setTimeout(poll, EXPORT_POLL_INTERVAL_MS);
     } catch (error) {
       toast.error(error.message || "Payslip export failed.");
-    } finally {
       setExportingPayslips(false);
     }
   };
