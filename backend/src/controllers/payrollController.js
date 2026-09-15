@@ -2733,22 +2733,26 @@ export const exportAllPayslips = async (req, res) => {
     try {
         const { month, year, periodStart, periodEnd } = req.query;
 
+        // month is optional - the UI's "All months" option omits it, meaning
+        // "every finalized month in this year", not a single period.
         const query = { status: "PROCESSED" };
         if (periodStart && periodEnd) {
             query.periodStart = toDayStart(periodStart);
             query.periodEnd = toDayEnd(periodEnd);
-        } else {
-            if (!month || !year) {
-                return res.status(400).json({ message: "month and year (or periodStart and periodEnd) are required." });
-            }
-            query.month = Number(month);
+        } else if (year) {
             query.year = Number(year);
+            if (month) query.month = Number(month);
+        } else {
+            return res.status(400).json({ message: "year (or periodStart and periodEnd) is required." });
         }
 
         const records = await Payroll.find(query).populate("employee", "name code designation department company");
 
         if (records.length === 0) {
-            return res.status(404).json({ message: "No finalized payroll records found for this period. Payslips can only be exported after Finalize." });
+            const message = (month && !periodStart)
+                ? "There is no payroll for this particular month."
+                : "No finalized payroll records found for this period. Payslips can only be exported after Finalize.";
+            return res.status(404).json({ message });
         }
 
         const brandingCache = new Map();
@@ -2777,7 +2781,9 @@ export const exportAllPayslips = async (req, res) => {
             return res.status(500).json({ message: "Failed to build payslip archive: " + zipError.message });
         }
 
-        const filenamePeriod = periodStart && periodEnd ? `${periodStart}_${periodEnd}` : `${month}_${year}`;
+        const filenamePeriod = periodStart && periodEnd
+            ? `${periodStart}_${periodEnd}`
+            : (month ? `${month}_${year}` : `All_${year}`);
         res.setHeader("Content-Type", "application/zip");
         res.setHeader("Content-Disposition", `attachment; filename="Payslips_${filenamePeriod}.zip"`);
         if (failures.length > 0) {

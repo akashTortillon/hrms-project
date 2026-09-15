@@ -359,12 +359,20 @@ function Payroll() {
     }
   };
 
+  // Bulk export builds every employee's PDF server-side (40+ employees x
+  // however many months for "All months") - can genuinely take several
+  // seconds, with nothing else on screen to show it's working.
+  const [exportingPayslips, setExportingPayslips] = useState(false);
+
   const handleExportAllPayslips = async () => {
     try {
-      await payrollService.exportAllPayslips(month, year, periodStart, periodEnd);
-      toast.success("Payslips Exported!");
+      setExportingPayslips(true);
+      await payrollService.exportAllPayslips(payslipExportYear, payslipExportMonth || null);
+      toast.success(payslipExportMonth ? "Payslips Exported!" : `All payslips for ${payslipExportYear} Exported!`);
     } catch (error) {
       toast.error(error.message || "Payslip export failed.");
+    } finally {
+      setExportingPayslips(false);
     }
   };
 
@@ -382,6 +390,11 @@ function Payroll() {
   // selectable - was hardcoded to `year` with no way to reach 2024/2025 etc.
   const [historyMonth, setHistoryMonth] = useState('');
   const [historyYear, setHistoryYear] = useState(year);
+
+  // Independent of the main date picker and of Payment History's own selectors -
+  // '' month = "All months" (zips every finalized month in that year).
+  const [payslipExportMonth, setPayslipExportMonth] = useState('');
+  const [payslipExportYear, setPayslipExportYear] = useState(year);
 
   const handlePaymentHistory = async () => {
     try {
@@ -573,15 +586,48 @@ function Payroll() {
                             </div>
                         </div>
                     </div>
-                    {isFinalized && (
-                        <div className="wps-tool-card" onClick={handleExportAllPayslips}>
-                            <div className="tool-icon-box purple"><SvgIcon name="download" size={20} /></div>
-                            <div className="tool-content">
-                                <h4>Export All Payslips</h4>
-                                <p>Download every payslip for this period as a ZIP</p>
-                            </div>
-                        </div>
-                    )}
+                </div>
+
+                {/* Own full-width row, not a grid cell - needs room for selectors AND
+                    an Export button side by side, which a 1/3-width tool-card can't fit. */}
+                <div className="wps-tool-card export-payslips-bar" style={{ marginTop: '16px', flexWrap: 'wrap' }}>
+                    <div className="tool-icon-box purple"><SvgIcon name="download" size={20} /></div>
+                    <div className="tool-content" style={{ flex: '1 1 auto' }}>
+                        <h4>Export All Payslips</h4>
+                        <p>Download payslips for a month, or all year, as a ZIP</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
+                        <select
+                            value={payslipExportYear}
+                            onChange={(e) => setPayslipExportYear(Number(e.target.value))}
+                            disabled={exportingPayslips}
+                            style={{ fontSize: '13px', padding: '6px 8px' }}
+                        >
+                            {Array.from({ length: 6 }, (_, i) => today.getFullYear() - i).map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+                        <select
+                            value={payslipExportMonth}
+                            onChange={(e) => setPayslipExportMonth(e.target.value)}
+                            disabled={exportingPayslips}
+                            style={{ fontSize: '13px', padding: '6px 8px' }}
+                        >
+                            <option value="">All months</option>
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleString('en', { month: 'long' })}</option>
+                            ))}
+                        </select>
+                        <button
+                            className="export-record-btn"
+                            onClick={handleExportAllPayslips}
+                            disabled={exportingPayslips}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: exportingPayslips ? 0.7 : 1, cursor: exportingPayslips ? 'wait' : 'pointer' }}
+                        >
+                            {exportingPayslips && <span className="btn-spinner" aria-hidden="true" />}
+                            {exportingPayslips ? 'Exporting…' : 'Export'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </>

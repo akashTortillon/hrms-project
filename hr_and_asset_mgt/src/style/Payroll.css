@@ -673,6 +673,31 @@
 
 .wps-tool-card:hover { border-color: #3b82f6; background: #f8fbff; }
 
+/* Export All Payslips is a row with its own selects/button, not a click-the-
+   whole-card action like the other tool cards - no pointer cursor, no hover
+   border-color/background swap on the card itself. */
+.export-payslips-bar {
+  cursor: default;
+}
+.export-payslips-bar:hover {
+  border-color: #f1f5f9;
+  background: transparent;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(15, 23, 42, 0.2);
+  border-top-color: #0f172a;
+  border-radius: 50%;
+  animation: payroll-btn-spin 0.7s linear infinite;
+}
+
+@keyframes payroll-btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 .tool-icon-box {
   width: 44px;
   height: 44px;

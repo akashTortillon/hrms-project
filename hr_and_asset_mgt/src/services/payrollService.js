@@ -160,10 +160,12 @@ export const payrollService = {
         link.parentNode.removeChild(link);
     },
 
-    // Export all payslips for a finalized period as one ZIP — same period-
-    // resolution and blob/error-handling shape as generateSIF.
-    exportAllPayslips: async (month, year, periodStart = null, periodEnd = null) => {
-        let urlPath = `/payroll/export-payslips?month=${month}&year=${year}`;
+    // Export payslips for a year as one ZIP — month is optional ("All months"
+    // zips every finalized month in that year). Same blob/error-handling shape
+    // as generateSIF/downloadPaymentHistory.
+    exportAllPayslips: async (year, month = null, periodStart = null, periodEnd = null) => {
+        let urlPath = `/payroll/export-payslips?year=${year}`;
+        if (month) urlPath += `&month=${month}`;
         if (periodStart && periodEnd) urlPath += `&periodStart=${periodStart}&periodEnd=${periodEnd}`;
         let response;
         try {
@@ -172,7 +174,7 @@ export const payrollService = {
             throw new Error(await blobErrorMessage(error, "Payslip export failed."));
         }
         const contentDisposition = response.headers['content-disposition'];
-        let filename = `Payslips_${month}_${year}.zip`;
+        let filename = month ? `Payslips_${month}_${year}.zip` : `Payslips_All_${year}.zip`;
         if (contentDisposition) {
             const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
             if (fileNameMatch && fileNameMatch.length === 2)
