@@ -10,7 +10,7 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
   const cards = [
     {
       title: "Most recent payroll",
-      amount: `₦${(stats?.totalNet || 0).toLocaleString()}`,
+      amount: `${(stats?.totalNet || 0).toLocaleString()} AED`,
       trend: stats?.lastMonthComparison || "+2.4%",
       trendTerm: "vs last month",
       icon: "users",
@@ -33,7 +33,7 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
     },
     {
         title: "Total Deductions",
-        amount: `₦${(stats?.totalDeductions || 0).toLocaleString()}`,
+        amount: `${(stats?.totalDeductions || 0).toLocaleString()} AED`,
         trend: "For this month",
         icon: "dollar",
         color: "#f43f5e"
