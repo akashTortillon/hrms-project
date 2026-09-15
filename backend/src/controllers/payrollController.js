@@ -2759,16 +2759,34 @@ export const exportAllPayslips = async (req, res) => {
         const zipEntries = [];
         const failures = [];
 
-        for (const record of records) {
-            try {
-                const pdfBuffer = await buildPayslipPdfBuffer(record, brandingCache);
-                const safeCode = String(record.employee?.code || record.employee?._id || "employee").replace(/[^a-z0-9_-]+/gi, "_");
-                const monthName = new Date(record.year, record.month - 1).toLocaleString('default', { month: 'long' });
-                zipEntries.push({ name: `Payslip_${safeCode}_${monthName}_${record.year}.pdf`, content: pdfBuffer });
-            } catch (buildError) {
-                failures.push({ employeeCode: record.employee?.code, employeeName: record.employee?.name, error: buildError.message });
+        // Was a fully serial `for...of` loop - one PDF (each with its own S3 logo
+        // fetch, on a cache miss) built at a time. Fine for a handful of employees,
+        // but for a real company's full headcount the wall-clock time adds up
+        // enough to risk tripping a reverse-proxy/platform request timeout upstream
+        // of this server (not something app code controls) - the exact symptom
+        // reported: a generic "Payslip export failed" with no specific backend
+        // message, consistent with the connection being killed mid-request rather
+        // than this handler ever getting to send a real error response. Bounded
+        // concurrency cuts real wall-clock time substantially while still keeping
+        // one slow/broken record from blocking the rest.
+        const CONCURRENCY = 5;
+        let nextIndex = 0;
+        const worker = async () => {
+            while (true) {
+                const i = nextIndex++;
+                if (i >= records.length) return;
+                const record = records[i];
+                try {
+                    const pdfBuffer = await buildPayslipPdfBuffer(record, brandingCache);
+                    const safeCode = String(record.employee?.code || record.employee?._id || "employee").replace(/[^a-z0-9_-]+/gi, "_");
+                    const monthName = new Date(record.year, record.month - 1).toLocaleString('default', { month: 'long' });
+                    zipEntries.push({ name: `Payslip_${safeCode}_${monthName}_${record.year}.pdf`, content: pdfBuffer });
+                } catch (buildError) {
+                    failures.push({ employeeCode: record.employee?.code, employeeName: record.employee?.name, error: buildError.message });
+                }
             }
-        }
+        };
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, records.length) }, worker));
 
         if (zipEntries.length === 0) {
             return res.status(400).json({ message: "Failed to build any payslips for this period.", failures });
