@@ -8,7 +8,7 @@
   <rect width="200" height="200" rx="36" fill="#111318"/>
   <circle cx="100" cy="100" r="82" fill="none" stroke="url(#favGold)" stroke-width="12"/>
   <path
-    d="M72 52 L72 148 M72 100 L128 52 M72 100 L128 148"
+    d="M72 60 L128 60 M100 60 L100 148"
     stroke="url(#favGold)"
     stroke-width="20"
     stroke-linecap="round"
