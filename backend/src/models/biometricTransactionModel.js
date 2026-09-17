@@ -27,6 +27,18 @@ const biometricTransactionSchema = new mongoose.Schema(
       type: String,
       default: null
     },
+    employeeName: {
+      type: String,
+      default: null
+    },
+    verifyType: {
+      type: String,
+      default: null
+    },
+    statusId: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
     syncedAt: {
       type: Date,
       default: Date.now,

@@ -183,13 +183,16 @@ class BiometricSyncService {
 
         try {
           // Map API fields to database schema
-          // API uses: VerifyTime, Status, DeviceSerialNumber
+          // API uses: VerifyTime, Status, DeviceSerialNumber, EmployeeName, VerifyType, StatusId
           const storedTxn = await BiometricTransaction.create({
             transactionId: txn.Id,
             badgeNumber: txn.BadgeNumber,
             timestamp: parseBioCloudTimestamp(txn.VerifyTime),
             transactionType: classifyPunchDirection(txn.Status, txn.Id),
             deviceId: txn.DeviceSerialNumber || null,  // Changed from txn.DeviceId
+            employeeName: txn.EmployeeName || null,
+            verifyType: txn.VerifyType || null,
+            statusId: txn.StatusId ?? null,
             rawData: txn
           });
 
@@ -280,8 +283,11 @@ class BiometricSyncService {
    * Helper: Performs API fetch with exponential backoff retries and error handling
    */
   async _fetchFromApiWithRetries(idFrom, startDate, endDate) {
-    const apiUrl = process.env.BIOCLOUD_API_URL || "https://15.biocloud.me:8205";
-    const apiToken = process.env.BIOCLOUD_API_TOKEN || "d168b9ea529a4b44a8419e499fe16f3e";
+    const apiUrl = process.env.BIOCLOUD_API_URL;
+    const apiToken = process.env.BIOCLOUD_API_TOKEN;
+    if (!apiUrl || !apiToken) {
+      throw new Error("BIOCLOUD_API_URL and BIOCLOUD_API_TOKEN must be set in the environment.");
+    }
     const maxRetries = parseInt(process.env.BIOCLOUD_RETRY_ATTEMPTS) || 3;
     const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s
 
