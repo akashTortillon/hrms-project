@@ -2515,27 +2515,67 @@ const buildPayslipPdfBuffer = async (payroll, brandingCache) => {
         const periodHeight = doc.heightOfString(periodText, { width: 200, align: "center" });
         doc.text(periodText, centerX - 100, periodY, { align: "center", width: 200 });
 
-        // Employee Details Box, use Y to continue flow but reset after explicit positioning
+        // Employee Details Box - was a fixed-height (70pt) single-line row;
+        // doc.text() never wraps or truncates on its own, so a long value (e.g.
+        // "SHINDO VELIYANNURKARAN ANTONY") drew straight through into the next
+        // column's text with no gap at all ("...ANTONYEmployee ID: R143"). Fixed
+        // by giving each value a bounded `width` - pdfkit wraps to multiple
+        // lines on its own once width is set, same mechanism the company-name/
+        // PAYSLIP block above already uses. Row 2's Y and the box's own height
+        // are then derived from whichever of Name/Designation actually needed
+        // 2 lines, instead of a hardcoded 20pt gap that only fit one line.
         doc.y = periodY + periodHeight + 9;
         const startY = doc.y;
-        doc.rect(40, startY, pageWidth - 80, 70).fill("#FAFAFA");
+
+        const rightColX = centerX + 10;
+        const leftValueWidth = rightColX - 140 - 10; // gap before the right column starts
+        const rightValueWidth = (pageWidth - 40) - (rightColX + 80); // gap before the page's right margin
+        const rowLineGap = 6; // clearance between row 1 (Name/ID) and row 2 (Designation/Department)
+
+        doc.fontSize(10).font("Helvetica-Bold");
+        const nameText = employee?.name || "Unknown";
+        const codeText = employee?.code || "N/A";
+        const row1Height = Math.max(
+            doc.heightOfString(nameText, { width: leftValueWidth }),
+            doc.heightOfString(codeText, { width: rightValueWidth })
+        );
+
+        const designationText = employee?.designation || "N/A";
+        const departmentText = employee?.department || "N/A";
+        const row2Height = Math.max(
+            doc.heightOfString(designationText, { width: leftValueWidth }),
+            doc.heightOfString(departmentText, { width: rightValueWidth })
+        );
+
+        const row2Y = startY + 10 + row1Height + rowLineGap;
+        const boxHeight = (row2Y - startY) + row2Height + 10; // + bottom padding
+
+        doc.rect(40, startY, pageWidth - 80, boxHeight).fill("#FAFAFA");
         doc.fillColor("#000000");
 
         // Left Column
         doc.fontSize(10).font("Helvetica");
         doc.text("Employee Name:", 50, startY + 10);
-        doc.font("Helvetica-Bold").text(employee?.name || "Unknown", 140, startY + 10);
+        doc.font("Helvetica-Bold");
+        doc.text(nameText, 140, startY + 10, { width: leftValueWidth });
 
-        doc.font("Helvetica").text("Designation:", 50, startY + 30);
-        doc.font("Helvetica-Bold").text(employee?.designation || "N/A", 140, startY + 30);
+        doc.font("Helvetica").text("Designation:", 50, row2Y);
+        doc.font("Helvetica-Bold");
+        doc.text(designationText, 140, row2Y, { width: leftValueWidth });
 
         // Right Column
-        const rightColX = centerX + 10;
         doc.font("Helvetica").text("Employee ID:", rightColX, startY + 10);
-        doc.font("Helvetica-Bold").text(employee?.code || "N/A", rightColX + 80, startY + 10);
+        doc.font("Helvetica-Bold");
+        doc.text(codeText, rightColX + 80, startY + 10, { width: rightValueWidth });
 
-        doc.font("Helvetica").text("Department:", rightColX, startY + 30);
-        doc.font("Helvetica-Bold").text(employee?.department || "N/A", rightColX + 80, startY + 30);
+        doc.font("Helvetica").text("Department:", rightColX, row2Y);
+        doc.font("Helvetica-Bold");
+        doc.text(departmentText, rightColX + 80, row2Y, { width: rightValueWidth });
+
+        // Continue layout flow from the box's true bottom, not wherever the last
+        // text() call happened to land (which could under-report if the OTHER
+        // column wrapped instead).
+        doc.y = startY + boxHeight;
 
         doc.moveDown(4);
 
