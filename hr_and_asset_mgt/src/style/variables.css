@@ -8,18 +8,17 @@
      ------------------- */
 
     /* Brand Colors */
-    --color-primary: #2c5cff;
-    /* Main Action Blue */
-    --color-primary-hover: #1a45d6;
-    --color-primary-light: #eff4ff;
-    /* Backgrounds used in active states */
+    /* Tasty Restaurants build: primary is gold, single-sourced from the tokens below.
+       Sidebar.jsx/Login.jsx/loginAuth.css reference these tokens directly rather than
+       hardcoding their own hex, so there is one place to change the brand color. */
+    --color-primary: var(--color-gold);
+    --color-primary-hover: #b87a20;
+    /* darker gold, matches the existing loginAuth.css button hover gradient stop */
+    --color-primary-light: var(--color-gold-light);
 
-    /* Kayzan gold - matches the gradient already hardcoded in Sidebar.jsx/Login.jsx/
-       loginAuth.css. Defined here as the single token source for new gold usages
-       (e.g. the navbar icon recolor) - does not retrofit those existing hardcoded
-       usages, which are out of scope. */
     --color-gold: #c8902a;
     --color-gold-light: #f0c060;
+    --color-gold-rgb: 200, 144, 42;
 
     /* Neutral scale */
     --color-text-main: #1f2d3d;
