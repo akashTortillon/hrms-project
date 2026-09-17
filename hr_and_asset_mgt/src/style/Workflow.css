@@ -107,7 +107,7 @@
     align-items: center;
     gap: 5px;
     font-size: 13px;
-    color: #3b82f6;
+    color: var(--color-gold-light);
     text-decoration: none;
     font-weight: 500;
 }

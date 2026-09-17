@@ -11,7 +11,7 @@
   --accent: var(--color-primary-light);
   --success: var(--color-success);
   --danger: var(--color-danger);
-  --shadow-table-blue: 0 10px 30px rgba(37, 99, 235, 0.12);
+  --shadow-table-gold: 0 10px 30px rgba(var(--color-gold-rgb), 0.12);
 
   /* Luxury 2.0 Global Variables */
   --luxury-radius: 32px;
@@ -354,6 +354,13 @@ body {
 .sidebar-link .svg-icon {
   opacity: 0.7;
   filter: brightness(0) invert(1);
+}
+
+/* Collapsed-sidebar expand arrow - same black-source-icon recolor as the nav icons
+   above, otherwise it renders invisible (black) against the dark sidebar bg. */
+.collapse-arrow-btn .svg-icon {
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
 }
 
 .nav-label {
@@ -836,10 +843,10 @@ body {
 }
 
 /* Scoped to the hamburger/sidebar-toggle button only - Button.jsx's variant="light"
-   isn't a valid variantClass key so it silently falls back to "primary", picking up
-   .btn-primary-custom's blue. Compound selector (higher specificity than the bare
-   .btn-primary-custom above) recolors just this button to Kayzan gold without
-   touching any other primary button app-wide. */
+   isn't a valid variantClass key so it silently falls back to "primary". Left in
+   place as an explicit override; now that --color-primary is also gold this
+   resolves to the same color as .btn-primary-custom, but keeps this button pinned
+   to gold even if primary changes again later. */
 .hamburger-btn.btn-primary-custom {
   background: var(--color-gold) !important;
 }
@@ -949,9 +956,9 @@ body {
 
 .quick-action-btn .svg-icon,
 .quick-action-btn .svg-icon-white {
-  /* Recolors the black source SVG to Kayzan gold (#c8902a) - values derived by a
-     canvas color-distance search against the actual rendered pixels (verified
-     result ~[201,147,38] vs target [200,144,42]), not guessed. */
+  /* Recolors the black source SVG to brand gold (--color-gold, #c8902a) - values
+     derived by a canvas color-distance search against the actual rendered pixels
+     (verified result ~[201,147,38] vs target [200,144,42]), not guessed. */
   filter: invert(50%) sepia(100%) saturate(350%) hue-rotate(2deg) brightness(100%) contrast(90%) !important;
   opacity: 1 !important;
 }
@@ -1091,7 +1098,7 @@ body {
 .mark-read-btn {
   background: transparent !important;
   border: none !important;
-  color: #2c5cff !important;
+  color: var(--color-primary) !important;
   font-size: 12px !important;
   font-weight: 500 !important;
   cursor: pointer !important;
@@ -1107,7 +1114,7 @@ body {
 
 .notification-badge {
   background: #eef2ff !important;
-  color: #2c5cff !important;
+  color: var(--color-primary) !important;
   padding: 4px 12px !important;
   border-radius: 20px !important;
   font-size: 11px !important;
@@ -1179,7 +1186,7 @@ body {
 .unread-dot {
   width: 8px !important;
   height: 8px !important;
-  background: #2c5cff !important;
+  background: var(--color-primary) !important;
   border-radius: 50% !important;
   flex-shrink: 0 !important;
 }

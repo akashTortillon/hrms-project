@@ -62,8 +62,8 @@
 
 .attendance-tab.active {
   background: #e0ecff;
-  border-color: #2563eb;
-  color: #2563eb;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* "Self" is a filter layered on top of Daily/Monthly, not a competing third
@@ -107,7 +107,7 @@
   }
 
   .attendance-tab.active {
-    background: #2563eb;
+    background: var(--color-primary);
     color: #ffffff;
     z-index: 1;
   }
@@ -161,7 +161,7 @@
 /* Active (light blue) */
 .attendance-action-btn.is-active {
   background: #e0ecff !important;
-  color: #2563eb !important;
+  color: var(--color-primary) !important;
 
 }
 
@@ -329,8 +329,8 @@
 
 /* Focus (blue outline as in Figma) */
 .filter-input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 1px #2563eb;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 /* Select arrow alignment */
@@ -361,7 +361,7 @@
   border: 1px solid #e5e7eb;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: var(--shadow-table-blue);
+  box-shadow: var(--shadow-table-gold);
 }
 
 /* ===== HEADER ===== */
@@ -372,7 +372,7 @@
   align-items: center;
   padding: 18px 22px;
   border-bottom: none;
-  background: #2563eb;
+  background: var(--color-primary);
 }
 
 .attendance-table-header h3 {
@@ -385,7 +385,7 @@
 .mark-all-btn {
   background: none;
   border: none;
-  color: #2563eb;
+  color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -404,7 +404,7 @@
   font-weight: 600;
   text-align: left;
   color: #fff;
-  background: #2563eb;
+  background: var(--color-primary);
 }
 
 .attendance-table td {
@@ -588,7 +588,7 @@
 .edit-link {
   background: none;
   border: none;
-  color: #2563eb;
+  color: var(--color-primary);
   font-size: 14px;
   cursor: pointer;
 }
@@ -637,7 +637,7 @@
   position: sticky;
   left: 0;
   z-index: 30;
-  background: #1d4ed8 !important;
+  background: var(--color-primary-hover) !important;
   /* Slightly darker blue for sticky */
   color: #ffffff !important;
   min-width: 200px;

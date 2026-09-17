@@ -195,7 +195,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: var(--shadow-table-blue);
+  box-shadow: var(--shadow-table-gold);
 }
 
 /* =========================
@@ -208,7 +208,7 @@
 }
 
 .employees-table thead {
-  background: #2563eb;
+  background: var(--color-primary);
 }
 
 .employees-table th {
@@ -262,7 +262,7 @@
   height: 42px;
   border-radius: 50%;
   background: #dbeafe;
-  color: #2563eb;
+  color: var(--color-primary);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -290,7 +290,7 @@
 
 /* 🔵 Edit icon color */
 .edit-btn svg {
-  fill: #2563eb;
+  fill: var(--color-primary);
   /* blue-600 */
 }
 
@@ -474,7 +474,7 @@
 
 .list-item.active {
   background: #eff6ff;
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid var(--color-gold-light);
 }
 
 .list-item:hover {
@@ -701,8 +701,8 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--color-gold-rgb), 0.1);
 }
 
 .form-actions {
@@ -729,12 +729,12 @@
 }
 
 .btn-primary {
-  background-color: #2563eb;
+  background-color: var(--color-primary);
   color: white;
 }
 
 .btn-primary:hover {
-  background-color: #1d4ed8;
+  background-color: var(--color-primary-hover);
 }
 
 .btn-primary:disabled {
@@ -799,7 +799,7 @@
 
 .upload-dropzone:hover,
 .upload-dropzone.active {
-  border-color: #3b82f6;
+  border-color: var(--color-gold-light);
   background: #eff6ff;
 }
 
@@ -811,7 +811,7 @@
 }
 
 .upload-dropzone:hover .upload-icon-wrapper {
-  color: #3b82f6;
+  color: var(--color-gold-light);
 }
 
 .upload-text {
@@ -822,7 +822,7 @@
 }
 
 .upload-link {
-  color: #2563eb;
+  color: var(--color-primary);
   font-weight: 600;
 }
 

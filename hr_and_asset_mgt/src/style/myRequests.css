@@ -23,7 +23,7 @@
 /* Card */
 /* Pending Approvals Header */
 .requests-card .card-header {
-  background: #2563eb;
+  background: var(--color-primary);
   color: #ffffff;
   text-align: left;
   padding: 16px 18px;
@@ -143,8 +143,8 @@
 
 
 .requests-search:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-gold-rgb), 0.15);
 }
 
 .history-toggle-btn {
@@ -154,7 +154,7 @@
   gap: 12px;
   padding: 16px 18px;
 
-  background: #2563eb;
+  background: var(--color-primary);
   color: #ffffff;
 
   border: none;
@@ -169,15 +169,15 @@
 .history-toggle-btn:hover,
 .history-toggle-btn:focus,
 .history-toggle-btn:active {
-  background: #2563eb;
+  background: var(--color-primary);
   color: #ffffff;
 }
 
 /* Dropdown focus */
 .requests-select:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-gold-rgb), 0.15);
 }
 
 

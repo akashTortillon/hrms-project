@@ -60,7 +60,7 @@
 }
 
 .request-type-card.active {
-  border-color: #2563eb;
+  border-color: var(--color-primary);
   background: #eff6ff;
 }
 
@@ -134,7 +134,7 @@
 
 .submit-btn {
   flex: 1;
-  background: #2563eb;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 12px;
@@ -203,7 +203,7 @@
 }
 
 .request-type-card.active {
-  border-color: #2563eb;
+  border-color: var(--color-primary);
   background: #eff6ff;
 }
 
@@ -250,7 +250,7 @@
 
 .submit-btn {
   flex: 1;
-  background: #2563eb;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 12px;

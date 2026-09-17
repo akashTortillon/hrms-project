@@ -25,7 +25,7 @@
 
 /* BUTTON */
 .new-request-btn {
-  background-color: #2563eb;
+  background-color: var(--color-primary);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -39,7 +39,7 @@
 }
 
 .new-request-btn:hover {
-  background-color: #1e40af;
+  background-color: var(--color-primary-hover);
 }
 
 .plus {
@@ -367,7 +367,7 @@
 .toggle-icon {
   font-size: 20px;
   font-weight: 700;
-  color: #2563eb;
+  color: var(--color-primary);
   width: 24px;
   height: 24px;
   display: flex;
@@ -456,8 +456,8 @@
 }
 
 .rejection-textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--color-gold-rgb), 0.1);
 }
 
 .dialog-actions {
@@ -497,12 +497,12 @@
 }
 
 .dialog-btn-submit {
-  background: #2563eb;
+  background: var(--color-primary);
   color: #ffffff;
 }
 
 .dialog-btn-submit:hover {
-  background: #1e40af;
+  background: var(--color-primary-hover);
 }
 
 .download-btn {

@@ -31,7 +31,7 @@
 .warranty-view-all {
   background: none;
   border: none;
-  color: #2563eb;
+  color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;

@@ -65,7 +65,7 @@
     height: 80px;
     border-radius: 50%;
     background: #dbeafe;
-    color: #2563eb;
+    color: var(--color-primary);
     font-size: 32px;
     font-weight: 600;
     display: flex;
@@ -176,10 +176,10 @@
 }
 
 .probation-profile-btn {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    border-color: #1d4ed8;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+    border-color: var(--color-primary-hover);
     color: #ffffff;
-    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.22);
+    box-shadow: 0 14px 28px rgba(var(--color-gold-rgb), 0.22);
 }
 
 .probation-profile-btn:hover {
@@ -216,7 +216,7 @@
 
 .tab-btn.active {
     background: #eff6ff;
-    color: #2563eb;
+    color: var(--color-primary);
 }
 
 .tab-btn:hover:not(.active) {

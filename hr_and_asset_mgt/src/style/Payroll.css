@@ -59,14 +59,14 @@
 }
 
 .new-payroll-btn {
-  background: #3b82f6;
+  background: var(--color-gold-light);
   border: none;
   color: white;
 }
 
 .new-payroll-btn:hover {
-  background: #2563eb;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  background: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(var(--color-gold-rgb), 0.2);
 }
 
 /* Alert Bar */
@@ -211,13 +211,13 @@
 }
 
 .period-select:hover {
-  border-color: #3b82f6;
+  border-color: var(--color-gold-light);
   background: #f8fbff;
 }
 
 .period-select:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-gold-light);
+  box-shadow: 0 0 0 3px rgba(var(--color-gold-rgb), 0.1);
 }
 
 /* Tab Pills */
@@ -245,10 +245,10 @@
 }
 
 .tab-pill.active {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--color-gold-light);
+  border-color: var(--color-gold-light);
   color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 12px rgba(var(--color-gold-rgb), 0.2);
 }
 
 /* Action Steps Row */
@@ -286,7 +286,7 @@
 }
 
 .active .step-num {
-  background: #3b82f6;
+  background: var(--color-gold-light);
   color: white;
 }
 
@@ -327,11 +327,11 @@
   transition: all 0.2s;
 }
 
-.gen-btn { background: #3b82f6; color: white; border: none; }
-.gen-btn:hover:not(:disabled) { background: #2563eb; }
+.gen-btn { background: var(--color-gold-light); color: white; border: none; }
+.gen-btn:hover:not(:disabled) { background: var(--color-primary); }
 .gen-btn:disabled { background: #94a3b8; cursor: not-allowed; }
 
-.final-btn { background: white; color: #3b82f6; border: 1px solid #3b82f6; }
+.final-btn { background: white; color: var(--color-gold-light); border: 1px solid var(--color-gold-light); }
 .final-btn:hover:not(:disabled) { background: #eff6ff; }
 .final-btn:disabled { border-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
 
@@ -456,8 +456,8 @@
 
 .filter-group input:focus, .filter-group select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-gold-light);
+  box-shadow: 0 0 0 3px rgba(var(--color-gold-rgb), 0.1);
 }
 
 .filter-action-btns {
@@ -489,8 +489,8 @@
 .export-filtered-btn {
   padding: 10px 18px;
   background: white;
-  color: #3b82f6;
-  border: 1px solid #3b82f6;
+  color: var(--color-gold-light);
+  border: 1px solid var(--color-gold-light);
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -626,9 +626,9 @@
 }
 
 .pag-btn.blue-pag {
-  background: #3b82f6;
+  background: var(--color-gold-light);
   color: white;
-  border-color: #3b82f6;
+  border-color: var(--color-gold-light);
 }
 
 /* WPS Compliance Section */
@@ -671,7 +671,7 @@
   transition: all 0.2s;
 }
 
-.wps-tool-card:hover { border-color: #3b82f6; background: #f8fbff; }
+.wps-tool-card:hover { border-color: var(--color-gold-light); background: #f8fbff; }
 
 /* Export All Payslips is a row with its own selects/button, not a click-the-
    whole-card action like the other tool cards - no pointer cursor, no hover

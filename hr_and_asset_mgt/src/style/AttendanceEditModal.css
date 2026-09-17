@@ -69,11 +69,11 @@
   padding: 8px 18px;
   border-radius: 6px;
   border: none;
-  background: #2563eb;
+  background: var(--color-primary);
   color: white;
   cursor: pointer;
 }
 
 .btn-save:hover {
-  background: #1d4ed8;
+  background: var(--color-primary-hover);
 }

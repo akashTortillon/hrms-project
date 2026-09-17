@@ -152,8 +152,8 @@
 
 
 .assets-search:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-gold-rgb), 0.15);
 }
 
 
@@ -190,8 +190,8 @@
 
 .assets-select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-gold-light);
+  box-shadow: 0 0 0 3px rgba(var(--color-gold-rgb), 0.1);
 }
 
 /* ---------- Export ---------- */
@@ -206,7 +206,7 @@
   font-size: 13px;
   font-weight: 600;
   color: #fff;
-  background: #3b82f6;
+  background: var(--color-gold-light);
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -215,7 +215,7 @@
 }
 
 .assets-export-btn:hover {
-  background: #2563eb;
+  background: var(--color-primary);
   transform: translateY(-1px);
 }
 
@@ -245,7 +245,7 @@
   border-radius: 12px;
   background: #fff;
   margin-top: 25px;
-  box-shadow: var(--shadow-table-blue);
+  box-shadow: var(--shadow-table-gold);
 }
 
 /* ---------- Base Table ---------- */
@@ -292,7 +292,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #2563eb;
+  color: var(--color-primary);
 }
 
 .asset-name {
@@ -355,7 +355,7 @@
 .action-link {
   background: none;
   border: none;
-  color: #2563eb;
+  color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -375,7 +375,7 @@
 
 /* Edit button icon color */
 .edit-btn svg {
-  fill: #2563eb;
+  fill: var(--color-primary);
   /* blue-600 */
 }
 
@@ -387,7 +387,7 @@
 
 /* Hover effects */
 .edit-btn:hover svg {
-  fill: #1d4ed8;
+  fill: var(--color-primary-hover);
 }
 
 .delete-btn:hover svg {
@@ -437,7 +437,7 @@
 
 .action-icon.primary {
   background: #e6efff;
-  color: #2563eb;
+  color: var(--color-primary);
 }
 
 .action-icon.success {
@@ -480,7 +480,7 @@
 /* Button variants */
 
 .action-btn-primary {
-  background: #2563eb !important;
+  background: var(--color-primary) !important;
   color: #ffffff !important;
 }
 
