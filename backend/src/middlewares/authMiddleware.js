@@ -21,8 +21,15 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({ message: "User not found" });
       }
 
-      // 🔹 Auto-heal: If user lacks employeeId, try to link it based on Email
-      if (!user.employeeId && user.role !== "Admin") {
+      // 🔹 Auto-heal: If user lacks employeeId, try to link it based on Email.
+      // Used to skip Admin accounts entirely - but an Admin CAN also be a real,
+      // paid employee (e.g. a Finance Manager with Admin permissions), and
+      // excluding the role meant their employeeId link could never self-heal,
+      // silently hiding their own real payslips/attendance behind a "no
+      // employee" state. A genuine IT/system admin with no matching Employee
+      // record just finds no match below and falls through unchanged - same as
+      // any other role with no Employee under their email.
+      if (!user.employeeId) {
         try {
           // Import employeeModel dynamically if needed, or assume it's at top
           // Wait, I need to import it at the top of authMiddleware.js

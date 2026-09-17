@@ -2373,6 +2373,17 @@ export const getMyPayslips = async (req, res) => {
     try {
         const employeeId = req.user.employeeId;
         if (!employeeId) {
+            // Admin accounts are frequently pure system/IT logins with no
+            // corresponding real Employee record at all (never had one, not a
+            // broken link) - MyPayslipsWidget renders unconditionally on the
+            // admin dashboard regardless of whether this admin has a linked
+            // employee. Treat that specific case as "no payslips" (200, empty),
+            // not an error - the 400 stays for everyone else, where a missing
+            // employeeId really does mean a broken account link that needs
+            // fixing (see MyPayslipsWidget.jsx's distinct error-state render).
+            if (req.user.role === "Admin") {
+                return res.json([]);
+            }
             return res.status(400).json({ message: "Employee ID not found for user" });
         }
 

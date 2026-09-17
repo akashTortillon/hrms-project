@@ -550,6 +550,50 @@ function Payroll() {
                  </div>
             </div>
 
+            {/* Same Export All Payslips bar as the WPS Compliance Tools section
+                below - same state/handler (payslipExportYear/Month,
+                handleExportAllPayslips), just also surfaced right at the
+                Generate/Finalize step so it doesn't require scrolling down. */}
+            <div className="wps-tool-card export-payslips-bar" style={{ marginTop: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div className="tool-icon-box purple"><SvgIcon name="download" size={20} /></div>
+                <div className="tool-content" style={{ flex: '1 1 auto' }}>
+                    <h4>Export All Payslips</h4>
+                    <p>Download payslips for a month, or all year, as a ZIP</p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
+                    <select
+                        value={payslipExportYear}
+                        onChange={(e) => setPayslipExportYear(Number(e.target.value))}
+                        disabled={exportingPayslips}
+                        style={{ fontSize: '13px', padding: '6px 8px' }}
+                    >
+                        {Array.from({ length: 6 }, (_, i) => today.getFullYear() - i).map(y => (
+                            <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
+                    <select
+                        value={payslipExportMonth}
+                        onChange={(e) => setPayslipExportMonth(e.target.value)}
+                        disabled={exportingPayslips}
+                        style={{ fontSize: '13px', padding: '6px 8px' }}
+                    >
+                        <option value="">All months</option>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                            <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleString('en', { month: 'long' })}</option>
+                        ))}
+                    </select>
+                    <button
+                        className="export-record-btn"
+                        onClick={handleExportAllPayslips}
+                        disabled={exportingPayslips}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: exportingPayslips ? 0.7 : 1, cursor: exportingPayslips ? 'wait' : 'pointer' }}
+                    >
+                        {exportingPayslips && <span className="btn-spinner" aria-hidden="true" />}
+                        {exportingPayslips ? 'Exporting…' : 'Export'}
+                    </button>
+                </div>
+            </div>
+
             {/* Charts Grid (Commented out for now) */}
             {/* <div className="payroll-charts-grid">
                 <EmployeePayrollOverviewChart data={mockTrends} />
