@@ -205,6 +205,7 @@ export default function EmployeeDetail() {
         pendingRequests: 0
     });
     const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
+    const [leaveRecords, setLeaveRecords] = useState([]);
     const [leaveSummaryYear, setLeaveSummaryYear] = useState(new Date().getFullYear());
     const [leaveSummaryMonth, setLeaveSummaryMonth] = useState(0); // 0 = whole year
 
@@ -450,6 +451,7 @@ export default function EmployeeDetail() {
             if (!isSelf) params.employeeId = effectiveId;
             const res = await getLeaveSummary(params);
             setLeaveSummary(res.data || []);
+            setLeaveRecords(res.records || []);
             setLeaveSummaryTotals(res.totals || {
                 sick: 0,
                 casual: 0,
@@ -2070,6 +2072,43 @@ export default function EmployeeDetail() {
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {/* Itemized approved leaves - the type tiles above only ever showed
+                            counts. Request History caps at the latest 10 requests across ALL
+                            request types (not scoped to this employee's leave), so an older
+                            leave fell off it entirely. This lists every approved leave for the
+                            selected year/month right here, no separate tracking needed. */}
+                        {!leaveSummaryLoading && leaveRecords.length > 0 && (
+                            <div style={{ marginTop: '24px' }}>
+                                <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#1f2937', marginBottom: '12px' }}>Leave Records</h4>
+                                <div style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: '12px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                        <thead>
+                                            <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Type</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>From</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>To</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Days</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Paid</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Reason</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {leaveRecords.map((rec) => (
+                                                <tr key={rec._id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '10px 14px', fontWeight: '600', color: '#1f2937' }}>{rec.leaveType}{rec.isHalfDay ? ' (Half Day)' : ''}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.fromDate ? new Date(rec.fromDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.toDate ? new Date(rec.toDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.numberOfDays}</td>
+                                                    <td style={{ padding: '10px 14px', color: rec.isPaid ? '#15803d' : '#b91c1c', fontWeight: '600' }}>{rec.isPaid ? 'Paid' : 'Unpaid'}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#64748b' }}>{rec.reason || '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>

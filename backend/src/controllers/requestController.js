@@ -2720,9 +2720,32 @@ export const getLeaveSummary = async (req, res) => {
     // aggregates that never depended on name-matching.
     const totals = { approvedDays: totalDays, pendingRequests };
 
+    // Itemized approved leave records - the type-breakdown tiles above only ever
+    // showed aggregate counts, so seeing the actual dates/reason for a specific
+    // leave meant going to Request History, which caps at the latest 10 requests
+    // across ALL request types (not scoped to this employee's leave alone) - a
+    // long-tenured employee's older leaves fell off that list entirely. This
+    // reuses the same `leaveRequests` already fetched above for the aggregate,
+    // just also returns the per-request detail, newest first.
+    const records = leaveRequests
+      .map((r) => ({
+        _id: r._id,
+        leaveType: r.details?.leaveType || r.details?.leaveTypeId || "Other",
+        fromDate: r.details?.fromDate || null,
+        toDate: r.details?.toDate || null,
+        numberOfDays: parseFloat(r.details?.numberOfDays || 1),
+        isHalfDay: !!r.details?.isHalfDay,
+        isPaid: r.details?.isPaid !== false,
+        reason: r.details?.reason || "",
+        status: r.status,
+        createdAt: r.createdAt
+      }))
+      .sort((a, b) => new Date(b.fromDate || b.createdAt) - new Date(a.fromDate || a.createdAt));
+
     res.json({
       success: true,
       data: Object.values(summary),
+      records,
       totals,
       totalDays,
       totalRequests: leaveRequests.length
