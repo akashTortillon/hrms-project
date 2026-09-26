@@ -1454,13 +1454,18 @@ export const importEmployees = async (req, res) => {
       const rowNum = i + 2; // Excel row number (1-based, +1 for header)
       let errorMsg = null;
 
-      // 1. Basic Validation
-      if (!row["Full Name"] || !row["Email"] || !row["Department"]) {
+      // 1. Basic Validation - tolerate a few common header spellings instead of requiring
+      // an exact "Full Name"/"Email" match (a sheet not exported from this app's own
+      // template - e.g. a plain "Name" column - was otherwise silently failing every
+      // single row with the same "missing" error, even though the data was right there).
+      const fullName = (row["Full Name"] || row["Name"] || row["Employee Name"] || "").toString().trim();
+      const emailRaw = (row["Email"] || row["Email Address"] || "").toString().trim();
+      if (!fullName || !emailRaw || !row["Department"]) {
         errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Department)" });
         continue;
       }
 
-      const email = row["Email"].trim();
+      const email = emailRaw;
       const phone = (row["Contact Number"] || row["Phone"]) ? String(row["Contact Number"] || row["Phone"]).trim() : "";
 
       // Email Validation
@@ -1615,33 +1620,40 @@ export const importEmployees = async (req, res) => {
         }
       }
 
-      // 4. User Account Creation
-      let userPhone = phone.replace(/\s+/g, "");
-      if (userPhone.startsWith("0")) {
-        userPhone = "+971" + userPhone.substring(1);
-      } else if (userPhone.startsWith("971")) {
-        userPhone = "+" + userPhone;
-      } else if (!userPhone.startsWith("+")) {
-        userPhone = "+971" + userPhone;
-      }
-
-      const hashedPassword = await bcrypt.hash("Password@123", 10);
-      try {
-        // Check if user exists (could be a user without employee record)
-        const userExists = await User.findOne({ email });
-        if (!userExists) {
-          await User.create({
-            name: row["Full Name"],
-            email: email,
-            phone: userPhone,
-            password: hashedPassword,
-            role: role,
-            mustChangePassword: true
-          });
+      // 4. User Account Creation - only when a phone is actually present. A blank phone
+      // was previously force-formatted into a bare "+971" (no digits), which then failed
+      // User's phone regex and crashed the whole row with a generic Mongoose error - this
+      // was very likely the "mobile number" failures. The Employee record is still
+      // created either way (see below); it just gets no login account until a phone is
+      // added later (same behavior as the single Add Employee flow).
+      if (phone) {
+        let userPhone = phone.replace(/\s+/g, "");
+        if (userPhone.startsWith("0")) {
+          userPhone = "+971" + userPhone.substring(1);
+        } else if (userPhone.startsWith("971")) {
+          userPhone = "+" + userPhone;
+        } else if (!userPhone.startsWith("+")) {
+          userPhone = "+971" + userPhone;
         }
-      } catch (uErr) {
-        errors.push({ row: rowNum, email, message: "Failed to create User account: " + uErr.message });
-        continue;
+
+        const hashedPassword = await bcrypt.hash("Password@123", 10);
+        try {
+          // Check if user exists (could be a user without employee record)
+          const userExists = await User.findOne({ email });
+          if (!userExists) {
+            await User.create({
+              name: fullName,
+              email: email,
+              phone: userPhone,
+              password: hashedPassword,
+              role: role,
+              mustChangePassword: true
+            });
+          }
+        } catch (uErr) {
+          errors.push({ row: rowNum, email, message: "Failed to create User account: " + uErr.message });
+          continue;
+        }
       }
 
       // 4. Employee Creation / Update
@@ -1681,7 +1693,7 @@ export const importEmployees = async (req, res) => {
         const sheetStatus = validStatuses.includes(row["Status"]) ? row["Status"] : null;
 
         const employeeFields = {
-          name: row["Full Name"],
+          name: fullName,
           code: finalCode,
           role: role,
           department: department,
