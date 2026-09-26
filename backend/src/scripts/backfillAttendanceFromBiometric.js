@@ -25,7 +25,7 @@ import { fileURLToPath } from "url";
 import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import BiometricTransaction from "../models/biometricTransactionModel.js";
-import { getShiftRules, calculateLateTier, calculateDuration, computeShiftDayBucket } from "../utils/attendanceUtils.js";
+import { getShiftRules, calculateLateTier, calculateDuration } from "../utils/attendanceUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,34 +84,35 @@ async function main() {
     return shiftRulesCache.get(shiftName);
   };
 
-  const grouped = new Map(); // "badge_shiftDate" -> { badgeNumber, date, checkIn, checkOut }
+  // This device (Tasty/Achara IBILL) reports every punch with the same generic StatusId
+  // (no real Check-In/Check-Out direction), so txn.transactionType can't be trusted -
+  // matches the fix already live in attendanceProcessor.js. Direction is instead purely
+  // first-punch-of-the-day = check-in, last-punch-of-the-day = check-out. Calendar-day
+  // bucketing only (not shift-day/overnight-aware yet) - matches what's currently live;
+  // overnight-shift bucketing for this device needs its own dead-zone strategy since the
+  // old computeShiftDayBucket dead-zone logic also relied on transactionType.
+  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, checkIn, checkOut }
   for (const txn of transactions) {
     const code = txn.badgeNumber.trim();
     const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
     const dateStr = uaeTime.toISOString().split("T")[0];
     const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5);
-
-    const employee = employeeByBadge.get(code);
-    const rules = await getRulesCached(employee?.shift || "Day Shift");
-    const shiftDate = computeShiftDayBucket(dateStr, timeStr, txn.transactionType, rules);
-    const key = `${code}_${shiftDate}`;
+    const key = `${code}_${dateStr}`;
 
     if (!grouped.has(key)) {
-      grouped.set(key, { badgeNumber: code, date: shiftDate, checkIn: null, checkOut: null });
+      grouped.set(key, { badgeNumber: code, date: dateStr, checkIn: null, checkOut: null });
     }
     const g = grouped.get(key);
     // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so within a key
-    // the first IN seen is chronologically earliest and each OUT seen overwrites the
-    // previous one to end up as the chronologically latest - no string HH:MM comparison
-    // needed (which would break for an overnight shift-day bucket spanning two calendar
-    // dates, e.g. "22:00" > "01:00" as strings even though 01:00 the next day is later).
-    if (txn.transactionType === "IN") {
-      if (!g.checkIn) g.checkIn = timeStr;
-    } else if (txn.transactionType === "OUT") {
+    // the first punch seen is the earliest (check-in) and every later punch becomes the
+    // latest (check-out) - a lone punch that day stays check-in only.
+    if (!g.checkIn) {
+      g.checkIn = timeStr;
+    } else {
       g.checkOut = timeStr;
     }
   }
-  console.log(`Recomputed ${grouped.size} true employee-shift-day check-in/check-out pairs from raw punches.`);
+  console.log(`Recomputed ${grouped.size} true employee-day check-in/check-out pairs from raw punches.`);
 
   let changed = 0, skippedManual = 0, skippedLeave = 0, skippedNoChange = 0, unmatched = 0, created = 0;
   const diffs = [];
