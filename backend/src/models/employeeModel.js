@@ -76,9 +76,11 @@ const employeeSchema = new mongoose.Schema({
   department: { type: String, required: true },
   branch: { type: String },
   company: { type: String, default: "" },
-  email: { type: String, required: true },
-  phone: { type: String, required: true },
-  joinDate: { type: Date, required: true },
+  // Optional: an employee without email/phone simply gets no login account provisioned
+  // at creation (User model requires both) - see employeeController.js createEmployee.
+  email: { type: String },
+  phone: { type: String },
+  joinDate: { type: Date },
   status: {
     type: String,
     required: true,

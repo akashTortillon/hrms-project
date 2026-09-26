@@ -1,5 +1,6 @@
 import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
+import BiometricTransaction from "../models/biometricTransactionModel.js";
 import badgeNumberCache from "./badgeNumberCache.js";
 import {
   getShiftRules,
@@ -51,7 +52,6 @@ class AttendanceProcessor {
       // enough - no timezone-database lookup needed.
       const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
       const dateStr = uaeTime.toISOString().split("T")[0];
-      const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5); // HH:MM, UAE local
       const code = txn.badgeNumber.trim();
       const key = `${code}_${dateStr}`;
 
@@ -65,20 +65,16 @@ class AttendanceProcessor {
           checkIn: null,
           checkOut: null
         };
-      }
-
-      if (txn.transactionType === "IN") {
-        // Keep earliest check-in
-        if (!grouped[key].checkIn || timeStr < grouped[key].checkIn) {
-          grouped[key].checkIn = timeStr;
-        }
-      } else if (txn.transactionType === "OUT") {
-        // Keep latest check-out
-        if (!grouped[key].checkOut || timeStr > grouped[key].checkOut) {
-          grouped[key].checkOut = timeStr;
-        }
+      } else if (!grouped[key].employeeName && txn.rawData?.EmployeeName) {
+        grouped[key].employeeName = txn.rawData.EmployeeName;
       }
     }
+
+    // checkIn/checkOut are NOT derived from txn.transactionType/timeStr here anymore -
+    // this device reports every punch with the same generic StatusId (no real direction),
+    // so classifyPunchDirection can't be trusted (see biometricSyncService.js). Direction
+    // is instead resolved per employee+day just before use, below, from the FULL set of
+    // that day's stored punches (not just this batch - see comment there for why).
 
     // 2. Fetch employees by badgeNumber field for matching. Some employees never got
     // badgeNumber backfilled and instead have the device's badge value sitting in `code`
@@ -105,6 +101,28 @@ class AttendanceProcessor {
         stats.unmappedBadges.add(record.badgeNumber);
         continue;
       }
+
+      // Resolve check-in/check-out from the FULL day's punches, not just this batch -
+      // check-in and check-out routinely land in separate sync batches (checked in
+      // mid-morning, synced; checked out in the evening, synced later), and this batch
+      // alone can't tell direction anyway. Mirrors how BioCloud's own "First & Last"
+      // report derives it: earliest punch of the day = check-in, latest = check-out; a
+      // lone punch that day is check-in only (confirmed against BioCloud's own UI, which
+      // shows a single punch the same way rather than guessing a direction for it).
+      const dayStart = new Date(`${record.date}T00:00:00+04:00`);
+      const dayEnd = new Date(`${record.date}T23:59:59.999+04:00`);
+      const dayPunches = await BiometricTransaction.find({
+        badgeNumber: record.badgeNumber,
+        timestamp: { $gte: dayStart, $lte: dayEnd }
+      }).sort({ timestamp: 1 });
+
+      const toUaeTimeStr = (d) => {
+        const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
+        return uaeTime.toISOString().split("T")[1].substring(0, 5);
+      };
+
+      record.checkIn = dayPunches.length ? toUaeTimeStr(dayPunches[0].timestamp) : null;
+      record.checkOut = dayPunches.length > 1 ? toUaeTimeStr(dayPunches[dayPunches.length - 1].timestamp) : null;
 
       // HRMS is the source of truth for employee name - only auto-fill from BioCloud
       // when the HRMS record has no name at all (e.g. a brand-new employee whose
@@ -139,16 +157,12 @@ class AttendanceProcessor {
 
       // Check if updating is needed
       if (existingRecord) {
-        // A sync run only fetches transactions since its last cursor, so an employee's
-        // check-in and check-out for the same day routinely land in TWO SEPARATE calls
-        // to this function (checked in mid-morning, synced; checked out in the evening,
-        // synced later). `record` here only reflects whichever side THIS batch happened
-        // to contain. Take the EARLIEST check-in and LATEST check-out seen across both
-        // this batch and the already-saved record - not "this batch wins if present" -
-        // otherwise a later batch whose checkIn reflects a second/duplicate punch (e.g. a
-        // lunch re-entry) silently overwrites the true, earlier check-in with a wrong
-        // later one, while checkout stays correct (same bug class that previously flipped
-        // present/late to Absent, just the mirror-image failure on the checkIn side).
+        // record.checkIn/checkOut already reflect the full day's punches as of now (see
+        // the BiometricTransaction query above), so this merge is normally a no-op - kept
+        // as a safety net so a stale/incomplete `existingRecord` (e.g. from before that
+        // full-day resolution existed, or a partial write) can't regress an already-correct
+        // earlier value: still take the EARLIEST check-in and LATEST check-out seen across
+        // record and the saved row, never "record wins outright".
         const mergedCheckIn = [record.checkIn, existingRecord.checkIn]
           .filter(Boolean)
           .sort()[0] ?? null;
@@ -205,8 +219,8 @@ class AttendanceProcessor {
         await existingRecord.save();
         stats.updated++;
       } else {
-        // First transaction seen for this employee+date - no existing record to merge
-        // against, so record.checkIn/checkOut (whichever this batch has) is authoritative.
+        // No existing record yet for this employee+date - record.checkIn/checkOut (the
+        // full day's earliest/latest punch, resolved above) is authoritative as-is.
         let status = "Absent";
         let lateTier = 0;
         if (record.checkIn) {

@@ -147,10 +147,10 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
   };
 
   const handleSubmit = () => {
-    const { name, code, role, department, email, phone, joinDate } = form;
+    const { name, code, role, department } = form;
 
-    if (!name || !code || !role || !department || !email || !phone || !joinDate) {
-      alert("Name, employee code, role, department, email, phone and joining date are required");
+    if (!name || !code || !role || !department) {
+      alert("Name, employee code, role and department are required");
       return;
     }
 

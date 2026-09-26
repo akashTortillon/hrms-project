@@ -304,38 +304,45 @@ export const addEmployee = async (req, res) => {
     if (!code || !code.trim()) return res.status(400).json({ message: "Employee Code is required" });
     if (!role) return res.status(400).json({ message: "Role is required" });
     if (!department) return res.status(400).json({ message: "Department is required" });
-    if (!joinDate) return res.status(400).json({ message: "Joining Date is required" });
+    // Email, phone, and joining date are optional - only validated for shape when
+    // actually provided. An employee without email/phone just gets no login account
+    // provisioned yet (see the User-creation step below); joinDate optionality is
+    // already handled everywhere else that reads it (falls back to createdAt/now).
 
     const existingCode = await Employee.findOne({ code: code.trim() });
     if (existingCode) return res.status(409).json({ message: `Employee Code '${code.trim()}' is already in use` });
 
-    // Email Validation
+    // Email Validation - only if provided
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      return res.status(400).json({ message: "Valid Email is required" });
+    if (email && !emailRegex.test(email)) {
+      return res.status(400).json({ message: "Email is not a valid format" });
     }
 
     // Phone Validation - any country code (frontend has a country-code selector), not UAE-only.
     // Accepts +<country code><7-14 digits>, or a bare UAE-style number as a fallback for callers
-    // that don't send a country code at all.
+    // that don't send a country code at all. Only validated if provided.
     const internationalPhoneRegex = /^\+[1-9]\d{6,14}$/;
     const uaeFallbackRegex = /^(?:00971|971|0)?\d{7,12}$/;
 
     // Sanitize spaces/dashes before check
     const cleanPhone = phone ? phone.replace(/[\s-]/g, '') : '';
 
-    if (!cleanPhone || !(internationalPhoneRegex.test(cleanPhone) || uaeFallbackRegex.test(cleanPhone))) {
-      return res.status(400).json({ message: "Valid Phone Number (with country code) is required" });
+    if (cleanPhone && !(internationalPhoneRegex.test(cleanPhone) || uaeFallbackRegex.test(cleanPhone))) {
+      return res.status(400).json({ message: "Phone Number is not a valid format (include country code)" });
     }
 
-    // 2. Check for Duplicates (Email or Phone)
-    const existingEmployee = await Employee.findOne({
-      $or: [{ email: email }, { phone: phone }]
-    });
+    // 2. Check for Duplicates (Email or Phone) - only match on fields actually provided,
+    // otherwise every blank-email employee would "duplicate-match" every other one.
+    const dupConditions = [];
+    if (email) dupConditions.push({ email });
+    if (phone) dupConditions.push({ phone });
+    const existingEmployee = dupConditions.length
+      ? await Employee.findOne({ $or: dupConditions })
+      : null;
 
     if (existingEmployee) {
-      if (existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
-      if (existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
+      if (email && existingEmployee.email === email) return res.status(409).json({ message: "Email already exists" });
+      if (phone && existingEmployee.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
     }
 
     const resolvedDesignatedManager = await resolveManagerEmployeeId(designatedManager);
@@ -354,21 +361,25 @@ export const addEmployee = async (req, res) => {
       }
     }
 
-    // 4. Auto-create User account for login (CRITICAL STEP)
-    // If this fails, Employee will NOT be added
-
-    // Normalize phone for User model (+971 format)
-    let userPhone = phone.replace(/\s+/g, "");
-    if (userPhone.startsWith("0")) {
-      userPhone = "+971" + userPhone.substring(1);
-    } else if (userPhone.startsWith("971")) {
-      userPhone = "+" + userPhone;
-    }
-
-    const userExists = await User.findOne({ email });
+    // 4. Auto-create User account for login (CRITICAL STEP when email+phone are present)
+    // If this fails, Employee will NOT be added. The User model requires both a valid,
+    // unique email and phone, so without both there is nothing to provision yet - the
+    // Employee is still created, just with no login access until an admin fills in
+    // email+phone later (the existing "Reset Password" flow already provisions a User
+    // account on demand once an email is on file).
+    const userExists = email ? await User.findOne({ email }) : null;
     let createdUser = false;
+    const skippedUserCreation = !email || !phone;
 
-    if (!userExists) {
+    if (!userExists && !skippedUserCreation) {
+      // Normalize phone for User model (+971 format)
+      let userPhone = phone.replace(/\s+/g, "");
+      if (userPhone.startsWith("0")) {
+        userPhone = "+971" + userPhone.substring(1);
+      } else if (userPhone.startsWith("971")) {
+        userPhone = "+" + userPhone;
+      }
+
       try {
         const hashedPassword = await bcrypt.hash("Password@123", 10);
         await User.create({
@@ -464,18 +475,24 @@ export const addEmployee = async (req, res) => {
       })
     });
 
-    await User.findOneAndUpdate(
-      { email },
-      { employeeId: employee._id, role },
-      { new: true }
-    );
+    if (email) {
+      await User.findOneAndUpdate(
+        { email },
+        { employeeId: employee._id, role },
+        { new: true }
+      );
+    }
 
-    res.status(201).json({
-      message: createdUser
-        ? "Employee added & User account created (Password: Password@123)"
-        : "Employee added (User account already existed)",
-      employee
-    });
+    let message;
+    if (createdUser) {
+      message = "Employee added & User account created (Password: Password@123)";
+    } else if (skippedUserCreation) {
+      message = "Employee added (no login account yet - add both email and phone, then use Reset Password to create one)";
+    } else {
+      message = "Employee added (User account already existed)";
+    }
+
+    res.status(201).json({ message, employee });
 
     // Only when the employee is created directly with status "Onboarding" (today's
     // Add Employee default) - an employee added as already-Active (e.g. inter-branch
@@ -746,18 +763,23 @@ export const updateEmployee = async (req, res) => {
     const { id } = req.params;
     const { role, email, phone, code } = req.body;
 
-    // Check for duplicate email/phone excluding current user
+    // Check for duplicate email/phone excluding current user - only match on whichever
+    // of the two is actually being set, otherwise two employees both left with a blank
+    // email (or phone) would "duplicate-match" each other.
     if (email || phone) {
+      const dupConditions = [];
+      if (email) dupConditions.push({ email });
+      if (phone) dupConditions.push({ phone });
       const existing = await Employee.findOne({
         $and: [
           { _id: { $ne: id } },
-          { $or: [{ email }, { phone }] }
+          { $or: dupConditions }
         ]
       });
 
       if (existing) {
-        if (existing.email === email) return res.status(409).json({ message: "Email already exists" });
-        if (existing.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
+        if (email && existing.email === email) return res.status(409).json({ message: "Email already exists" });
+        if (phone && existing.phone === phone) return res.status(409).json({ message: "Phone number already exists" });
       }
     }
 
@@ -1946,8 +1968,8 @@ export const resetEmployeePassword = async (req, res) => {
     }
 
     if (!user) {
-      if (!employee.email) {
-        return res.status(404).json({ message: "Linked user account not found for this employee, and no email is on file to provision one. Add an email to this employee's profile first." });
+      if (!employee.email || !employee.phone) {
+        return res.status(404).json({ message: "Linked user account not found for this employee, and both an email and a phone number are needed to provision one. Add whichever is missing to this employee's profile first." });
       }
 
       let userPhone = (employee.phone || "").replace(/\s+/g, "");
