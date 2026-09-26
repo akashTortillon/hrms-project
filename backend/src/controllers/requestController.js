@@ -421,7 +421,8 @@ import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile }
 import { logActivity } from "../utils/activityLogger.js";
 import LeaveWallet from "../models/leaveWalletModel.js";
 import leaveWalletService from "../services/leaveWalletService.js";
-import { isManagerOfEmployee } from "../utils/managerScopeUtils.js";
+import { isManagerOfEmployee, isFinanceManagerOfEmployee } from "../utils/managerScopeUtils.js";
+import { escapeRegex } from "../utils/stringUtils.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -493,13 +494,32 @@ const isHrApprover = (user = {}) =>
   || user.permissions?.includes("ALL")
   || user.permissions?.includes("APPROVE_REQUESTS");
 
-const isFinanceApprover = (user = {}, request = {}) => {
+// Resolves `request`'s employee doc fresh - a live lookup, not the possibly-
+// stale designatedManager/designatedFinanceManager value stored on the request
+// itself at submission time. Mirrors createRequest's own User->Employee
+// resolution (Request has no direct `employee` ref, only `userId`).
+const getCurrentEmployeeForRequest = async (request) => {
+  if (!request.userId) return null;
+  const requestUser = await User.findById(request.userId).select("employeeId email");
+  if (requestUser?.employeeId) return Employee.findById(requestUser.employeeId).select("designatedManager designatedFinanceManager");
+  if (!requestUser?.email) return null;
+  return Employee.findOne({ email: { $regex: new RegExp(`^${escapeRegex(requestUser.email)}$`, "i") } }).select("designatedManager designatedFinanceManager");
+};
+
+const isFinanceApprover = async (user = {}, request = {}) => {
   const financeManagerId = request.designatedFinanceManager?.toString();
-  const isAssignedFinanceManager = financeManagerId && (
+  let isAssignedFinanceManager = financeManagerId && (
     financeManagerId === user._id?.toString()
     || financeManagerId === user.id?.toString()
     || (user.employeeId && financeManagerId === user.employeeId.toString())
   );
+
+  // Stale-snapshot fallback: the designated finance manager can be reassigned
+  // after the request was submitted, leaving the request's own snapshot stale.
+  if (!isAssignedFinanceManager) {
+    const employee = await getCurrentEmployeeForRequest(request);
+    isAssignedFinanceManager = isFinanceManagerOfEmployee(user, employee);
+  }
 
   return Boolean(
     isAssignedFinanceManager
@@ -512,13 +532,21 @@ const isFinanceApprover = (user = {}, request = {}) => {
   );
 };
 
-const isManagerApprover = (user = {}, request = {}) => {
+const isManagerApprover = async (user = {}, request = {}) => {
   const managerId = request.designatedManager?.toString();
-  const isAssignedManager = managerId && (
+  let isAssignedManager = managerId && (
     managerId === user._id?.toString()
     || managerId === user.id?.toString()
     || (user.employeeId && managerId === user.employeeId.toString())
   );
+
+  // Same stale-snapshot fallback (see getPendingRequestsForAdmin's matching
+  // fix for why the request needs to be visible in the first place too).
+  if (!isAssignedManager) {
+    const employee = await getCurrentEmployeeForRequest(request);
+    isAssignedManager = isManagerOfEmployee(user, employee);
+  }
+
   return Boolean(
     isAssignedManager
     && (user.role === "Manager" || user.permissions?.includes("APPROVE_MANAGER_REQUESTS"))
@@ -529,8 +557,6 @@ const formatPayrollCycle = (month, year) => {
   if (!month || !year) return "the configured payroll cycle";
   return `${String(month).padStart(2, "0")}/${year}`;
 };
-
-const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Finds the User account for a manager/finance-manager referenced by their
 // Employee._id, falling back to an email match (and healing the link) when their
@@ -1020,9 +1046,14 @@ export const createRequest = async (req, res) => {
     }
 
     const requestId = await generateRequestId();
-    const managerUser = requestType === "LEAVE" ? await resolveManagerRecipient(employee) : null;
+    // Loans specifically go Manager -> Finance (Item 1) - salary advances still skip
+    // straight to Finance, matching the client's exact wording ("the loan is
+    // approved... unnecessary here because manager and finance manager are the same
+    // person"), not a blanket change to every SALARY subType.
+    const isLoanRequest = requestType === "SALARY" && details?.subType === "loan";
+    const managerUser = (requestType === "LEAVE" || isLoanRequest) ? await resolveManagerRecipient(employee) : null;
     const financeUser = requestType === "SALARY" ? await resolveFinanceRecipient(employee) : null;
-    const requiresManagerApproval = requestType === "LEAVE" && Boolean(managerUser?._id);
+    const requiresManagerApproval = (requestType === "LEAVE" || isLoanRequest) && Boolean(managerUser?._id);
     const requiresFinanceApproval = requestType === "SALARY" && Boolean(financeUser?._id);
 
     const request = await Request.create({
@@ -1056,8 +1087,10 @@ export const createRequest = async (req, res) => {
       if (requiresManagerApproval && managerUser?._id) {
         createNotification({
           recipient: managerUser._id,
-          title: "Leave request awaiting manager approval",
-          message: `${employeeUser.name} submitted leave request ${request.requestId}.`,
+          title: isLoanRequest ? "Loan request awaiting manager approval" : "Leave request awaiting manager approval",
+          message: isLoanRequest
+            ? `${employeeUser.name} submitted a loan request (${request.requestId}).`
+            : `${employeeUser.name} submitted leave request ${request.requestId}.`,
           type: "REQUEST",
           link: "/app/requests"
         }).catch(e => console.error("Notify error:", e));
@@ -1251,29 +1284,70 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       financeScope.push(req.user.employeeId);
     }
 
+    // Stale-snapshot fallback: Request.designatedManager is resolved once at
+    // submission time and never re-resolved. If an employee's Employee.
+    // designatedManager was reassigned AFTER their request was submitted, the
+    // request's stored snapshot still points to the OLD manager - so it would
+    // never show up in the NEW manager's pending list at all (matching
+    // isManagerApprover's identical live-lookup fallback for the action-button
+    // check, which is moot if the request isn't even visible here first).
+    let currentReportUserIds = [];
+    if (req.user?.employeeId) {
+      const reports = await Employee.find({
+        $or: [{ designatedManager: req.user.employeeId }, { designatedFinanceManager: req.user.employeeId }]
+      }).select("_id email");
+      const reportEmployeeIds = reports.map((e) => e._id);
+      const reportEmails = reports.map((e) => e.email).filter(Boolean);
+      const reportUsers = await User.find({
+        $or: [
+          { employeeId: { $in: reportEmployeeIds } },
+          ...(reportEmails.length ? [{ email: { $in: reportEmails.map((e) => new RegExp(`^${escapeRegex(e)}$`, "i")) } }] : [])
+        ]
+      }).select("_id");
+      currentReportUserIds = reportUsers.map((u) => u._id);
+    }
+
     if (!canApproveHr && !canApproveFinance) {
       query.$and = query.$and || [];
       query.$and.push({
         currentApprovalStage: "MANAGER",
-        designatedManager: { $in: managerScope }
+        $or: [
+          { designatedManager: { $in: managerScope } },
+          { userId: { $in: currentReportUserIds } }
+        ]
       });
     } else if (!canApproveHr && canApproveFinance) {
       query.$and = query.$and || [];
       query.$and.push({
         currentApprovalStage: "FINANCE",
-        designatedFinanceManager: { $in: financeScope }
+        $or: [
+          { designatedFinanceManager: { $in: financeScope } },
+          { userId: { $in: currentReportUserIds } }
+        ]
       });
     } else if (!req.query.stage) {
       const stageFilters = [{ currentApprovalStage: "HR" }];
 
       if (canApproveManager) {
-        stageFilters.push({ currentApprovalStage: "MANAGER", designatedManager: { $in: managerScope } });
+        stageFilters.push({
+          currentApprovalStage: "MANAGER",
+          $or: [
+            { designatedManager: { $in: managerScope } },
+            { userId: { $in: currentReportUserIds } }
+          ]
+        });
       } else if (canApproveHr) {
         stageFilters.push({ currentApprovalStage: "MANAGER" });
       }
 
       if (canApproveFinance) {
-        stageFilters.push({ currentApprovalStage: "FINANCE", designatedFinanceManager: { $in: financeScope } });
+        stageFilters.push({
+          currentApprovalStage: "FINANCE",
+          $or: [
+            { designatedFinanceManager: { $in: financeScope } },
+            { userId: { $in: currentReportUserIds } }
+          ]
+        });
       } else if (canApproveHr) {
         stageFilters.push({ currentApprovalStage: "FINANCE" });
       }
@@ -1354,8 +1428,8 @@ export const updateRequestStatus = async (req, res) => {
     const isManagerStage = request.currentApprovalStage === "MANAGER";
     const isFinanceStage = request.currentApprovalStage === "FINANCE";
     const canApproveHr = isHrApprover(req.user);
-    const canApproveManager = isManagerApprover(req.user, request);
-    const canApproveFinance = isFinanceApprover(req.user, request);
+    const canApproveManager = await isManagerApprover(req.user, request);
+    const canApproveFinance = await isFinanceApprover(req.user, request);
     let salaryChangeNotification = null;
 
     if (isManagerStage && !canApproveManager) {
@@ -1378,13 +1452,65 @@ export const updateRequestStatus = async (req, res) => {
           actedAt: new Date(),
           remarks: req.body.remarks || ""
         };
+
+        // Loans specifically require Manager -> Finance (see createRequest) - unlike
+        // LEAVE, which always has financeApproval.status "SKIPPED" and so always goes
+        // straight to HR below. Collapse to a single click when the same person holds
+        // both the designated-manager and designated-finance-manager role for this
+        // employee (Item 1's original ask).
+        const loanNeedsFinanceApproval = request.financeApproval?.status === "PENDING";
+        const sameApproverHandlesFinance = loanNeedsFinanceApproval
+          ? await isFinanceApprover(req.user, request)
+          : false;
+
+        if (loanNeedsFinanceApproval && !sameApproverHandlesFinance) {
+          request.currentApprovalStage = "FINANCE";
+          request.status = "MANAGER_APPROVED";
+          await request.save();
+
+          await notifyFinanceApprovers(
+            "Loan request awaiting finance approval",
+            `Request ${request.requestId} has been approved by the manager and is awaiting finance approval.`,
+            "/app/requests",
+            request.designatedFinanceManager
+          );
+
+          try {
+            await createNotification({
+              recipient: request.userId,
+              title: "Manager Approved Request",
+              message: `Your request ${request.requestId} has been approved by your manager and forwarded to finance.`,
+              type: "REQUEST",
+              link: "/app/requests"
+            });
+          } catch (notifErr) {
+            console.error("Failed to notify employee of manager approval:", notifErr);
+          }
+
+          return res.json({
+            success: true,
+            message: "Request approved by manager and forwarded to finance",
+            data: request
+          });
+        }
+
+        if (sameApproverHandlesFinance) {
+          request.financeApproval = {
+            status: "APPROVED",
+            actedBy: req.user.id,
+            actedAt: new Date(),
+            remarks: "Auto-approved: same person is the designated Finance Manager for this employee."
+          };
+          request.status = "FINANCE_APPROVED";
+        } else {
+          request.status = "MANAGER_APPROVED";
+        }
         request.currentApprovalStage = "HR";
-        request.status = "MANAGER_APPROVED";
         await request.save();
 
         await notifyAdmins(
-          "Leave request awaiting HR approval",
-          `Request ${request.requestId} has been approved by the manager and is awaiting HR approval.`,
+          "Request awaiting HR approval",
+          `Request ${request.requestId} has been approved${sameApproverHandlesFinance ? " by the manager (also the designated finance manager)" : " by the manager"} and is awaiting HR approval.`,
           "/app/requests"
         );
 
@@ -2492,6 +2618,45 @@ export const downloadDocument = async (req, res) => {
       success: false,
       message: "Failed to download document"
     });
+  }
+};
+
+// Sick-leave medical document upload already writes details.medicalDocumentPath/
+// medicalDocumentUrl/medicalDocumentStorage/hasMedicalDocument at request-creation
+// time, but nothing previously read them back - modeled on downloadDocument above,
+// but with an EXPLICIT ownership/approver check that downloadDocument itself lacks
+// (a gap not worth copying here given a medical document is more sensitive).
+export const getMedicalDocumentUrl = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const request = await Request.findById(requestId);
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Request not found" });
+    }
+
+    const isOwner = request.userId?.toString() === (req.user._id || req.user.id)?.toString();
+    const canView = isOwner
+      || isHrApprover(req.user)
+      || await isManagerApprover(req.user, request)
+      || await isFinanceApprover(req.user, request);
+
+    if (!canView) {
+      return res.status(403).json({ success: false, message: "You do not have access to this document." });
+    }
+
+    if (!request.details?.hasMedicalDocument || !request.details?.medicalDocumentPath) {
+      return res.status(404).json({ success: false, message: "No medical document available for this request." });
+    }
+
+    const url = await getSignedFileUrl({
+      filePath: request.details.medicalDocumentPath,
+      fileUrl: request.details.medicalDocumentUrl,
+      storage: request.details.medicalDocumentStorage
+    });
+
+    res.json({ success: true, url });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to load medical document" });
   }
 };
 

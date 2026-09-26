@@ -338,6 +338,36 @@ export default function EmployeeDashboard() {
                 </Col>
             </Row>
 
+            {/* EmployeeDetail.jsx already supports viewing these tabs read-only when
+                isSelf (?tab=Loans / ?tab=Leave%20Summary) - these are pure discoverability
+                links, not new permissions. */}
+            <Row>
+                <Col md={4} className="mb-4">
+                    <WidgetCard
+                        title="My Loans"
+                        icon="dollar"
+                        color="#16a34a" // Green
+                        onClick={() => navigate('/app/employees/me?tab=Loans')}
+                    >
+                        <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                            View your loan balance, repayment progress, and history.
+                        </div>
+                    </WidgetCard>
+                </Col>
+                <Col md={4} className="mb-4">
+                    <WidgetCard
+                        title="My Leave Summary"
+                        icon="clipboard-list"
+                        color="#0891b2" // Cyan
+                        onClick={() => navigate(`/app/employees/me?tab=${encodeURIComponent("Leave Summary")}`)}
+                    >
+                        <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                            View your leave balances and detailed leave records.
+                        </div>
+                    </WidgetCard>
+                </Col>
+            </Row>
+
             {/* My Payslips — self-service download */}
             <Row>
                 <Col md={12} className="mb-4">

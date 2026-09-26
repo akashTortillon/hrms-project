@@ -26,7 +26,8 @@ export default function MyPayslipsWidget() {
         (async () => {
             try {
                 const slips = await payrollService.getMyPayslips();
-                setPayslips(Array.isArray(slips) ? slips : []);
+                // Backend already sorts newest-first - only the 2 most recent are shown here.
+                setPayslips(Array.isArray(slips) ? slips.slice(0, 2) : []);
             } catch {
                 setLoadError(true);
                 setPayslips([]);

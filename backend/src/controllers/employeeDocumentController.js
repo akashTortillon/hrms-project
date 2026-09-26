@@ -4,6 +4,7 @@ import User from "../models/userModel.js";
 import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile } from "../utils/storage.js";
 import { computeExpiryStatus } from "../utils/expiryStatus.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { escapeRegex } from "../utils/stringUtils.js";
 import fs from "fs";
 import path from "path";
 
@@ -13,8 +14,6 @@ const isDocumentManager = (user = {}) =>
     || user.role === "HR Admin"
     || user.permissions?.includes("ALL")
     || user.permissions?.includes("MANAGE_DOCUMENTS");
-
-const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // A Manager has no MANAGE_DOCUMENTS/isDocumentManager permission, so before this they
 // could only ever see their OWN documents, never their direct reports' - even though

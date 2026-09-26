@@ -19,12 +19,12 @@ import { storeUploadedFile, getSignedFileUrl } from "../utils/storage.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { holidaySetFromHolidays, isWeekOff, applyMonthlyFlexQuota } from "../utils/attendanceUtils.js";
 import { resolveCompanyLogoBuffer } from "./masterController.js";
+import { escapeRegex } from "../utils/stringUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
-const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Round to 2 decimal places (currency). Used so a payroll's totalAllowances /
 // totalDeductions / netSalary are always the exact sum of the 2dp-rounded line
@@ -883,6 +883,20 @@ export const generatePayroll = async (req, res) => {
         const employees = await Employee.find({ status: "Active" });
         const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
 
+        // Regenerating an existing DRAFT period used to rebuild allowances/deductions
+        // purely from fresh AUTO calculation and unconditionally overwrite the whole
+        // arrays in the bulkWrite below - destroying any type:"MANUAL" item added via
+        // addAdjustment (or a loan override) since the draft was first created. Pull
+        // the current draft per employee up front so its MANUAL items can be carried
+        // forward into the freshly-computed arrays instead of being wiped.
+        const existingDraftPayrolls = await Payroll.find({
+            periodStart, periodEnd, status: "DRAFT",
+            employee: { $in: employees.map(e => e._id) }
+        }).select("employee allowances deductions").lean();
+        const existingDraftByEmployee = new Map(
+            existingDraftPayrolls.map(p => [p.employee.toString(), p])
+        );
+
         // Absence is always tracked correctly in attendanceSummary (shown on the
         // payslip) regardless of this - but it only ever reduces pay if an active
         // rule resolves to basis "ABSENT_DAYS" and category "DEDUCTION". Surfaced to
@@ -950,6 +964,22 @@ export const generatePayroll = async (req, res) => {
             const deductionList = [];
             let totalAllowances = 0;
             let totalDeductions = 0;
+
+            // MANUAL items to carry forward from the existing draft (see fetch above).
+            const existingDraft = existingDraftByEmployee.get(emp._id.toString());
+            const preservedManualAllowances = (existingDraft?.allowances || []).filter(a => a.type === "MANUAL");
+            const preservedManualDeductions = (existingDraft?.deductions || []).filter(d => d.type === "MANUAL");
+            // A MANUAL loan-override deduction (addAdjustment tags it with
+            // `meta: "Req ID: <id>"`, same convention the AUTO loan deduction below
+            // uses) and a freshly-recomputed AUTO deduction for that SAME request would
+            // otherwise both end up in deductionList once regenerate stops wiping
+            // MANUAL items - double-deducting that loan. Skip the AUTO push for any
+            // Req ID already covered by a preserved MANUAL item.
+            const manuallyOverriddenLoanReqIds = new Set(
+                preservedManualDeductions
+                    .map(d => String(d.meta || "").match(/Req ID:\s*([A-Za-z0-9]+)/)?.[1])
+                    .filter(Boolean)
+            );
 
             // Derived Rates
             const dailySalary = basicSalary / 30; // Standard 30 days
@@ -1322,6 +1352,10 @@ export const generatePayroll = async (req, res) => {
                     // But if we already Finalized a payroll for this month, generatePayroll shouldn't define it again?
                     // generatePayroll creates DRAFT. If previous finalized payroll exists for this month, user handles it.
 
+                    if (manuallyOverriddenLoanReqIds.has(req.requestId)) {
+                        continue;
+                    }
+
                     if (deductionAmount > 0) {
                         deductionList.push({
                             name: req.details?.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
@@ -1333,6 +1367,11 @@ export const generatePayroll = async (req, res) => {
                     }
                 }
             }
+
+            // Carry forward preserved MANUAL items now that the AUTO lists are final
+            // (the loan-dedup guard above already ran against manuallyOverriddenLoanReqIds).
+            allowanceList.push(...preservedManualAllowances);
+            deductionList.push(...preservedManualDeductions);
 
             // 4. Calculate Net — totals are the exact sum of the (already 2dp-rounded)
             // line items so the payslip's Total Allowances / Total Deductions always
@@ -2093,6 +2132,131 @@ export const exportPayroll = async (req, res) => {
 
     } catch (error) {
         // console.error(error);
+        res.status(500).json({ message: "Export failed: " + error.message });
+    }
+};
+
+// The two fixed allowance names generatePayroll always pushes as AUTO items (see
+// "2.2 FIXED EMPLOYEE ALLOWANCES" above) - excluded from the collapsed ADDITIONS
+// column below since they're already broken out into their own ALLOWANCE/HRA
+// columns, matching the client's template. Everything else (ad-hoc allowances,
+// overtime, manual adjustments) collapses into one ADDITIONS row.
+const FIXED_ALLOWANCE_NAMES = new Set(["Housing Rent Allowance (HRA)", "Other Allowance"]);
+
+// Collapses a payroll's allowances/deductions array into one {name, amount, comments}
+// triple for the template's single NAME/AMOUNT/COMMENTS column group - joins names
+// and any reason/meta text with ", ", sums amounts via sumAmounts (same 2dp-rounded
+// summation every other total on the payslip uses).
+const collapseLineItems = (items = [], { exclude } = {}) => {
+    const filtered = exclude ? items.filter((i) => !exclude.has(i?.name)) : items;
+    if (!filtered.length) return { name: "", amount: 0, comments: "" };
+    const name = filtered.map((i) => i.name).filter(Boolean).join(", ");
+    const comments = filtered
+        .map((i) => i.reason || (typeof i.meta === "string" ? i.meta : ""))
+        .filter(Boolean)
+        .join(", ");
+    return { name, amount: sumAmounts(filtered), comments };
+};
+
+// --- API: Export "Payroll Sheet" (client-template-matched export, alongside the
+// existing exportPayroll WPS-format report - a different, non-WPS layout) ---
+export const exportPayrollSheet = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        if (!month || !year) {
+            return res.status(400).json({ message: "month and year are required." });
+        }
+
+        const records = await Payroll.find({ month, year }).populate({
+            path: "employee",
+            select: "name code personalId iban bankAccount company branch allowance hra"
+        });
+
+        const validRecords = records.filter((r) => r.employee);
+        if (!validRecords.length) {
+            return res.status(404).json({ message: "No payroll records found for this month." });
+        }
+
+        const aoa = [];
+        aoa.push(["PAYROLL SHEET"]);
+        aoa.push(["INFO", "", "", "", "", "", "SALARY DETAILS", "", "", "", "ADDITIONS", "", "", "DEDUCTIONS", "", "", "PAYABLE"]);
+        aoa.push([
+            "ID", "NAME", "PERSONAL ID", "IBAN", "COMPANY", "BRANCH",
+            "BASIC", "ALLOWANCE", "HRA", "SALARY",
+            "NAME", "AMOUNT", "COMMENTS",
+            "NAME", "AMOUNT", "COMMENTS",
+            "NET SALARY"
+        ]);
+
+        validRecords.forEach((r) => {
+            const emp = r.employee || {};
+            const basicSalary = round2(r.basicSalary || 0);
+            const allowance = Number(emp.allowance) || 0;
+            const hra = Number(emp.hra) || 0;
+            const totalAllowances = round2(r.totalAllowances || 0);
+            const salary = round2(basicSalary + totalAllowances);
+
+            const additions = collapseLineItems(r.allowances || [], { exclude: FIXED_ALLOWANCE_NAMES });
+            const deductions = collapseLineItems(r.deductions || []);
+
+            aoa.push([
+                emp.code || "",
+                emp.name || "",
+                emp.personalId || "",
+                emp.iban || emp.bankAccount || "",
+                emp.company || "",
+                emp.branch || "",
+                basicSalary,
+                allowance,
+                hra,
+                salary,
+                additions.name,
+                additions.amount,
+                additions.comments,
+                deductions.name,
+                deductions.amount,
+                deductions.comments,
+                round2(r.netSalary || 0)
+            ]);
+        });
+
+        aoa.push([]);
+        aoa.push(["PAYROLL VERIFICATION", "", "", "", "", "", "", "", "HR VERIFICATION"]);
+
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        worksheet['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 16 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+            { s: { r: 1, c: 6 }, e: { r: 1, c: 9 } },
+            { s: { r: 1, c: 10 }, e: { r: 1, c: 12 } },
+            { s: { r: 1, c: 13 }, e: { r: 1, c: 15 } }
+        ];
+        worksheet['!cols'] = [
+            { wch: 12 }, { wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 14 },
+            { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+            { wch: 20 }, { wch: 12 }, { wch: 24 },
+            { wch: 20 }, { wch: 12 }, { wch: 24 },
+            { wch: 14 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Payroll_Sheet_${month}_${year}`);
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+        res.setHeader("Content-Disposition", `attachment; filename="Payroll_Sheet_${month}_${year}.xlsx"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        PayrollAudit.create({
+            action: "EXPORTED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            details: "Exported Payroll Sheet"
+        }).catch(console.error);
+
+        res.send(buffer);
+    } catch (error) {
         res.status(500).json({ message: "Export failed: " + error.message });
     }
 };

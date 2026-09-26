@@ -14,3 +14,16 @@ export const isManagerOfEmployee = (reqUser, employee) => {
     || (reqUser.employeeId && managerId === reqUser.employeeId.toString())
   );
 };
+
+// Same check against `designatedFinanceManager` instead - added alongside the
+// manager version so isFinanceApprover's stale-snapshot fallback (see
+// requestController.js) can share this instead of re-deriving the comparison.
+export const isFinanceManagerOfEmployee = (reqUser, employee) => {
+  const financeManagerId = employee?.designatedFinanceManager?.toString();
+  if (!financeManagerId || !reqUser) return false;
+  return (
+    financeManagerId === reqUser._id?.toString()
+    || financeManagerId === reqUser.id?.toString()
+    || (reqUser.employeeId && financeManagerId === reqUser.employeeId.toString())
+  );
+};

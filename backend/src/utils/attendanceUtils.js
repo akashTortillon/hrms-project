@@ -3,6 +3,7 @@ import Employee from "../models/employeeModel.js";
 import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
+import { escapeRegex } from "./stringUtils.js";
 
 // Helper: Parse time to minutes (HH:MM) -> minutes
 export const toMinutes = (time) => {
@@ -54,9 +55,22 @@ export const calculateDuration = (start, end) => {
  * Get Shift Rules from Master
  */
 export const getShiftRules = async (shiftName) => {
-  const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
+  // Case-insensitive, whitespace-trimmed match - employee.shift is free-text and
+  // the Shift Master's own name field has no dropdown/enum tying it to that value,
+  // so a rename, typo, or trailing space silently missed this exact-match lookup
+  // and fell all the way through to the hardcoded 09:00/09:15 default below with
+  // no indication anywhere - e.g. an employee whose real shift starts at 10:30
+  // would show "Late" at both 9:59 AND 10:30, purely because they were silently
+  // running against the wrong shift's rules.
+  const trimmedName = String(shiftName || "").trim();
+  const shiftMaster = trimmedName
+    ? await Master.findOne({ type: "SHIFT", name: new RegExp(`^${escapeRegex(trimmedName)}$`, "i") })
+    : null;
   if (shiftMaster && shiftMaster.metadata) {
     const meta = shiftMaster.metadata;
+    if (!meta.startTime) {
+      console.warn(`[attendanceUtils] Shift Master "${shiftMaster.name}" has no startTime configured - falling back to 09:00. Check Masters > HR Management > Shift.`);
+    }
     // Extract buffers from latePolicy if available, otherwise fallback to buffers or lateLimit
     let buffers = [];
     if (meta.latePolicy && Array.isArray(meta.latePolicy)) {
@@ -73,6 +87,7 @@ export const getShiftRules = async (shiftName) => {
       buffers: buffers.length > 0 ? buffers : ["09:15"]
     };
   }
+  console.warn(`[attendanceUtils] No Shift Master found matching "${shiftName}" - falling back to default shift rules (09:00-18:00, late limit 09:15). Check Masters > HR Management > Shift for a name/casing mismatch.`);
   // Default fallback
   return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
 };

@@ -127,6 +127,24 @@ export const payrollService = {
         link.parentNode.removeChild(link);
     },
 
+    // Export "Payroll Sheet" - separate template-matched layout from exportExcel's
+    // WPS-format report, requested alongside it (see Item 8).
+    exportPayrollSheet: async (month, year) => {
+        let response;
+        try {
+            response = await api.get(`/payroll/export-sheet?month=${month}&year=${year}`, { responseType: 'blob' });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "Export failed."));
+        }
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Payroll_Sheet_${month}_${year}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+    },
+
     // Generate SIF — periodStart/periodEnd (optional) are the exact period the
     // Finalize/Un-finalize badges key off; passing them avoids a mismatch against the
     // derived month/year if the date picker's periodEnd and the actually-finalized

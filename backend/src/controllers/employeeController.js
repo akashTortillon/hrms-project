@@ -185,6 +185,7 @@ export const exportEmployees = async (req, res) => {
         $project: {
           _id: 0,
           "Employee Code": "$code",
+          "System Code": "$systemCode",
           "Full Name": "$name",
           "Role": "$role",
           "Department": "$department",
@@ -552,9 +553,18 @@ export const getEmployees = async (req, res) => {
     // Manager/Finance Manager both carry VIEW_ALL_EMPLOYEES (see config/db.js's default
     // role permissions) so they can use employee pickers/assignment dropdowns - that
     // permission was never meant to expose the entire company's employee list to them.
-    // Admin/HR keep unrestricted access; a Manager/Finance Manager who isn't also one of
-    // those gets scoped to their own direct reports (by designatedManager/
-    // designatedFinanceManager) plus their own record.
+    // Admin/HR keep unrestricted access; anyone else gets scoped to their own direct
+    // reports (by designatedManager/designatedFinanceManager) plus their own record.
+    //
+    // This used to only apply when the requester's role literally matched "Manager"/
+    // "Finance Manager" (or held the specific APPROVE_MANAGER_REQUESTS/
+    // APPROVE_FINANCE_REQUESTS permission) - a requester under any OTHER role name who
+    // still carried VIEW_ALL_EMPLOYEES (e.g. a custom "Ops Lead" role) fell through this
+    // check entirely and got the FULL unrestricted employee list. Scoping is now the
+    // default for every non-full-access requester, not gated on a specific role name -
+    // someone who isn't anyone's designated manager/finance manager and has no
+    // employeeId link simply matches nothing (sees only themselves via the {_id:null}
+    // fallback... actually matches nobody, which is the correct, safe default).
     const requester = req.user || {};
     const hasFullAccess = requester.role === "Admin"
       || /^HR/i.test(requester.role || "")
@@ -562,17 +572,12 @@ export const getEmployees = async (req, res) => {
       || requester.permissions?.includes("APPROVE_REQUESTS");
 
     if (!hasFullAccess) {
-      const isManager = requester.role === "Manager" || requester.permissions?.includes("APPROVE_MANAGER_REQUESTS");
-      const isFinanceManager = requester.role === "Finance Manager" || requester.permissions?.includes("APPROVE_FINANCE_REQUESTS");
-
-      if (isManager || isFinanceManager) {
-        const scope = [requester._id, requester.employeeId].filter(Boolean);
-        const scopeOr = [];
-        if (requester.employeeId) scopeOr.push({ _id: requester.employeeId });
-        if (isManager) scopeOr.push({ designatedManager: { $in: scope } });
-        if (isFinanceManager) scopeOr.push({ designatedFinanceManager: { $in: scope } });
-        andFilters.push({ $or: scopeOr.length ? scopeOr : [{ _id: null }] });
-      }
+      const scope = [requester._id, requester.employeeId].filter(Boolean);
+      const scopeOr = [];
+      if (requester.employeeId) scopeOr.push({ _id: requester.employeeId });
+      scopeOr.push({ designatedManager: { $in: scope } });
+      scopeOr.push({ designatedFinanceManager: { $in: scope } });
+      andFilters.push({ $or: scopeOr.length ? scopeOr : [{ _id: null }] });
     }
 
     if (andFilters.length) {

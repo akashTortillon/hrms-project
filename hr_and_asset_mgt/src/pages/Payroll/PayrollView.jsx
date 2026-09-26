@@ -347,6 +347,15 @@ function Payroll() {
     }
   };
 
+  const handleExportPayrollSheet = async () => {
+    try {
+      await payrollService.exportPayrollSheet(month, year);
+      toast.success("Export Downloaded!");
+    } catch (error) {
+      toast.error(error.message || "Export failed.");
+    }
+  };
+
   const handleGenerateSIF = async () => {
     try {
       // Pass the exact period too, not just the derived month/year - see
@@ -652,6 +661,13 @@ function Payroll() {
                         <div className="tool-content">
                             <h4>MOL Report</h4>
                             <p>Ministry of Labour compliance report</p>
+                        </div>
+                    </div>
+                    <div className="wps-tool-card" onClick={handleExportPayrollSheet}>
+                        <div className="tool-icon-box purple"><SvgIcon name="reports" size={20} /></div>
+                        <div className="tool-content">
+                            <h4>Payroll Sheet</h4>
+                            <p>Export payroll in the standard sheet template</p>
                         </div>
                     </div>
                     <div className="wps-tool-card" onClick={handlePaymentHistory}>
