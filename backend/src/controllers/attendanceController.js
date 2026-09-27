@@ -434,7 +434,7 @@ export const getDailyAttendance = async (req, res) => {
       fullList = fullList.filter(item =>
         item.name.toLowerCase().includes(q) ||
         item.code.toLowerCase().includes(q) ||
-        item.department.toLowerCase().includes(q)
+        (item.department || "").toLowerCase().includes(q)
       );
     }
 

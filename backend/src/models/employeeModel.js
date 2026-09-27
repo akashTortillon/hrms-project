@@ -73,7 +73,9 @@ const employeeSchema = new mongoose.Schema({
   // even after `code` is edited by a user.
   systemCode: { type: String, unique: true, sparse: true },
   role: { type: String, required: true },
-  department: { type: String, required: true },
+  // Optional: small businesses with no department structure (e.g. a single-location
+  // hotel with a handful of staff) organize by branch/location instead.
+  department: { type: String },
   branch: { type: String },
   company: { type: String, default: "" },
   // Optional: an employee without email/phone simply gets no login account provisioned

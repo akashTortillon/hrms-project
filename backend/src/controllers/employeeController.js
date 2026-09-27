@@ -303,11 +303,12 @@ export const addEmployee = async (req, res) => {
     if (!name || name.trim().length < 2) return res.status(400).json({ message: "Valid Name is required" });
     if (!code || !code.trim()) return res.status(400).json({ message: "Employee Code is required" });
     if (!role) return res.status(400).json({ message: "Role is required" });
-    if (!department) return res.status(400).json({ message: "Department is required" });
-    // Email, phone, and joining date are optional - only validated for shape when
-    // actually provided. An employee without email/phone just gets no login account
-    // provisioned yet (see the User-creation step below); joinDate optionality is
-    // already handled everywhere else that reads it (falls back to createdAt/now).
+    // Department, email, phone, and joining date are all optional - only validated for
+    // shape when actually provided. A small business with no department structure (e.g.
+    // a single-location hotel) organizes by branch/location instead. An employee without
+    // email/phone just gets no login account provisioned yet (see the User-creation step
+    // below); joinDate optionality is already handled everywhere else that reads it
+    // (falls back to createdAt/now).
 
     const existingCode = await Employee.findOne({ code: code.trim() });
     if (existingCode) return res.status(409).json({ message: `Employee Code '${code.trim()}' is already in use` });
@@ -1466,8 +1467,8 @@ export const importEmployees = async (req, res) => {
       const phone = (row["Contact Number"] || row["Phone"]) ? String(row["Contact Number"] || row["Phone"]).trim() : "";
       const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
 
-      if (!fullName || !row["Department"]) {
-        errors.push({ row: rowNum, message: "Missing required fields (Name, Department)" });
+      if (!fullName) {
+        errors.push({ row: rowNum, message: "Missing required field (Name)" });
         continue;
       }
 
@@ -1508,7 +1509,7 @@ export const importEmployees = async (req, res) => {
 
       // 3. Strict Master Validation
       let role = row["Role"] ? row["Role"].trim() : "Employee";
-      let department = row["Department"].trim();
+      let department = row["Department"] ? row["Department"].toString().trim() : "";
       // If the sheet has explicit "Company"/"Branch" columns, use them directly.
       // Otherwise split the merged "COMPANY / BRANCH" column against known Company names.
       let company, branch;
@@ -1530,12 +1531,12 @@ export const importEmployees = async (req, res) => {
       }
       role = validRoles.get(role.toLowerCase()) || role;
 
-      if (!validDepartments.has(department.toLowerCase())) {
+      if (department && !validDepartments.has(department.toLowerCase())) {
         missing.departments.add(department);
         errors.push({ row: rowNum, email, message: `Invalid Department: '${department}'. Exact spelling must match Master list.` });
         continue;
       }
-      department = validDepartments.get(department.toLowerCase());
+      if (department) department = validDepartments.get(department.toLowerCase());
 
       if (company && !validCompanies.has(company.toLowerCase())) {
         missing.companies.add(company);
