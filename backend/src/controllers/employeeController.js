@@ -1369,7 +1369,7 @@ export const importEmployees = async (req, res) => {
 
     // Pre-fetch all existing emails and phones to minimize DB calls in loop
     const existingEmployees = await Employee.find({}, { email: 1, phone: 1, code: 1 });
-    const existingEmails = new Set(existingEmployees.map(e => e.email.toLowerCase()));
+    const existingEmails = new Set(existingEmployees.filter(e => e.email).map(e => e.email.toLowerCase()));
     const existingPhones = new Set(existingEmployees.map(e => e.phone));
     const existingCodes = new Set(existingEmployees.map(e => e.code));
 
@@ -1459,28 +1459,34 @@ export const importEmployees = async (req, res) => {
       // template - e.g. a plain "Name" column - was otherwise silently failing every
       // single row with the same "missing" error, even though the data was right there).
       const fullName = (row["Full Name"] || row["Name"] || row["Employee Name"] || "").toString().trim();
-      const emailRaw = (row["Email"] || row["Email Address"] || "").toString().trim();
-      if (!fullName || !emailRaw || !row["Department"]) {
-        errors.push({ row: rowNum, message: "Missing required fields (Name, Email, Department)" });
+      // Email is optional (matches the single Add Employee flow) - plenty of real sheets
+      // (like this one) have no email column at all. Employee Code becomes the
+      // update-vs-create matching key for rows with no email.
+      const email = (row["Email"] || row["Email Address"] || "").toString().trim();
+      const phone = (row["Contact Number"] || row["Phone"]) ? String(row["Contact Number"] || row["Phone"]).trim() : "";
+      const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
+
+      if (!fullName || !row["Department"]) {
+        errors.push({ row: rowNum, message: "Missing required fields (Name, Department)" });
         continue;
       }
 
-      const email = emailRaw;
-      const phone = (row["Contact Number"] || row["Phone"]) ? String(row["Contact Number"] || row["Phone"]).trim() : "";
-
-      // Email Validation
+      // Email Validation - only if provided
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (email && !emailRegex.test(email)) {
         errors.push({ row: rowNum, email, message: "Invalid Email format" });
         continue;
       }
 
-      // 2. Duplicate Check - a row whose email already belongs to an employee UPDATES
-      // that employee instead of being rejected (re-uploading a corrected sheet after
-      // fixing Master data should apply the fix, not skip the row every time).
-      const existingEmployeeDoc = existingEmails.has(email.toLowerCase())
+      // 2. Duplicate Check - a row whose email (or, absent that, Employee Code) already
+      // belongs to an employee UPDATES that employee instead of being rejected
+      // (re-uploading a corrected sheet after fixing Master data should apply the fix,
+      // not skip the row every time).
+      const existingEmployeeDoc = email && existingEmails.has(email.toLowerCase())
         ? await Employee.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } })
-        : null;
+        : (!email && employeeCode && existingCodes.has(employeeCode)
+          ? await Employee.findOne({ code: employeeCode })
+          : null);
 
       // Phone/Code only block the row if they belong to a DIFFERENT employee than the
       // one we're about to update (or a brand new one on create).
@@ -1492,7 +1498,6 @@ export const importEmployees = async (req, res) => {
         }
       }
 
-      const employeeCode = row["Employee Code"] ? row["Employee Code"].toString().trim() : "";
       if (employeeCode && existingCodes.has(employeeCode)) {
         const codeOwner = await Employee.findOne({ code: employeeCode });
         if (!existingEmployeeDoc || String(codeOwner?._id) !== String(existingEmployeeDoc._id)) {
@@ -1620,13 +1625,14 @@ export const importEmployees = async (req, res) => {
         }
       }
 
-      // 4. User Account Creation - only when a phone is actually present. A blank phone
-      // was previously force-formatted into a bare "+971" (no digits), which then failed
-      // User's phone regex and crashed the whole row with a generic Mongoose error - this
-      // was very likely the "mobile number" failures. The Employee record is still
-      // created either way (see below); it just gets no login account until a phone is
-      // added later (same behavior as the single Add Employee flow).
-      if (phone) {
+      // 4. User Account Creation - only when BOTH email and phone are present (User's
+      // schema hard-requires both, unique). A blank phone was previously force-formatted
+      // into a bare "+971" (no digits), which then failed User's phone regex and crashed
+      // the whole row with a generic Mongoose error - this was very likely the "mobile
+      // number" failures. The Employee record is still created either way (see below);
+      // it just gets no login account until both are added later (same behavior as the
+      // single Add Employee flow).
+      if (email && phone) {
         let userPhone = phone.replace(/\s+/g, "");
         if (userPhone.startsWith("0")) {
           userPhone = "+971" + userPhone.substring(1);
@@ -1774,13 +1780,15 @@ export const importEmployees = async (req, res) => {
         // never clobbered. Without this, the employee's own login can't resolve
         // req.user.employeeId (see authMiddleware.js's protect) and self-service
         // endpoints like "My Payslips" silently 400 / show as empty.
-        await User.updateOne(
-          { email, $or: [{ employeeId: null }, { employeeId: { $exists: false } }] },
-          { $set: { employeeId: employeeIdForLink } }
-        );
+        if (email) {
+          await User.updateOne(
+            { email, $or: [{ employeeId: null }, { employeeId: { $exists: false } }] },
+            { $set: { employeeId: employeeIdForLink } }
+          );
+        }
 
         // Add to local sets to prevent duplicates within the same file
-        existingEmails.add(email.toLowerCase());
+        if (email) existingEmails.add(email.toLowerCase());
         if (phone) existingPhones.add(phone);
         existingCodes.add(finalCode);
 
