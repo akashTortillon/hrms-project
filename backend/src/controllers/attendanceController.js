@@ -373,6 +373,26 @@ export const getDailyAttendance = async (req, res) => {
       .populate("employee")
       .populate("editedBy", "name");
 
+    // Raw punch count per employee for this day, so the UI can flag days with more than
+    // a simple check-in+check-out pair (e.g. a break out/in). One batched query across
+    // every employee's badge, not one query per employee - same UAE-anchored day
+    // boundaries already established in attendanceProcessor.js, so this count always
+    // matches what GET /attendance/punches/:employeeId returns for the same day.
+    const badgeCodes = employees.map(e => (e.badgeNumber || e.code || "").trim()).filter(Boolean);
+    const dayStart = new Date(`${date}T00:00:00+04:00`);
+    const dayEnd = new Date(`${date}T23:59:59.999+04:00`);
+    const dayPunches = badgeCodes.length
+      ? await BiometricTransaction.find({
+        badgeNumber: { $in: badgeCodes },
+        timestamp: { $gte: dayStart, $lte: dayEnd }
+      }).select("badgeNumber").lean()
+      : [];
+    const punchCountByBadge = {};
+    dayPunches.forEach(p => {
+      const b = p.badgeNumber.trim();
+      punchCountByBadge[b] = (punchCountByBadge[b] || 0) + 1;
+    });
+
     // Get Approved Leaves for this date
     const leaveMap = await getApprovedLeavesMap(employees);
 
@@ -389,6 +409,7 @@ export const getDailyAttendance = async (req, res) => {
       const isRequestOnLeave = isLeave(emp._id, date, leaveMap);
 
       const calculatedStatus = record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent");
+      const punchCount = punchCountByBadge[(emp.badgeNumber || emp.code || "").trim()] || 0;
 
       return {
         _id: record?._id || null,
@@ -406,7 +427,9 @@ export const getDailyAttendance = async (req, res) => {
         isManuallyEdited: record?.isManuallyEdited || false,
         editedBy: record?.editedBy || null,
         editedAt: record?.editedAt || null,
-        editReason: record?.editReason || null
+        editReason: record?.editReason || null,
+        punchCount,
+        hasMultiplePunches: punchCount > 2
       };
     });
 
@@ -919,6 +942,54 @@ export const getEmployeeAttendanceStats = async (req, res) => {
 /**
  * GET Employee Attendance History (Single Employee, Monthly)
  */
+// Full chronological punch list for one employee+day - powers the "i" info modal shown
+// on Daily Attendance rows flagged hasMultiplePunches (see getDailyAttendance above).
+// Direction is NOT taken from BiometricTransaction.transactionType - this device reports
+// a constant generic status code with no real per-punch direction (see
+// biometricSyncService.js / attendanceProcessor.js), so labels are purely chronological
+// position: 1st = Check-In, last = Check-Out, everything between alternates
+// Break-Out/Break-In.
+export const getEmployeePunches = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    const badge = (employee.badgeNumber || employee.code || "").trim();
+    const dayStart = new Date(`${date}T00:00:00+04:00`);
+    const dayEnd = new Date(`${date}T23:59:59.999+04:00`);
+    const punches = await BiometricTransaction.find({
+      badgeNumber: badge,
+      timestamp: { $gte: dayStart, $lte: dayEnd }
+    }).sort({ timestamp: 1 }).lean();
+
+    const toUaeTimeStr = (d) => {
+      const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
+      return uaeTime.toISOString().split("T")[1].substring(0, 5);
+    };
+
+    const labeled = punches.map((p, i) => {
+      let label;
+      if (i === 0) label = "Check-In";
+      else if (i === punches.length - 1) label = "Check-Out";
+      else label = i % 2 === 0 ? "Break-In" : "Break-Out";
+      return { time: toUaeTimeStr(p.timestamp), label };
+    });
+
+    res.json({
+      employeeName: employee.name,
+      date,
+      punchCount: punches.length,
+      punches: labeled
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getEmployeeAttendanceHistory = async (req, res) => {
   try {
     const { employeeId } = req.params;

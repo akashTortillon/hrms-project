@@ -16,7 +16,7 @@ const toMinutes = (time) => {
    Component
    ========================= */
 
-export default function AttendanceTable({ date, records = [], onEdit, loading, viewMode = "day", daysInMonth, year, month }) {
+export default function AttendanceTable({ date, records = [], onEdit, onShowPunches, loading, viewMode = "day", daysInMonth, year, month }) {
   const handleEditClick = (row) => {
     if (onEdit) {
       onEdit(row);
@@ -226,7 +226,19 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
 
                     <td>{row.shift}</td>
                     <td>{row.checkIn || "-"}</td>
-                    <td>{row.checkOut || "-"}</td>
+                    <td>
+                      {row.checkOut || "-"}
+                      {row.hasMultiplePunches && (
+                        <button
+                          type="button"
+                          className="icon-btn punch-info-btn"
+                          onClick={(e) => { e.stopPropagation(); onShowPunches?.(row); }}
+                          title={`${row.punchCount} punches today - click for details`}
+                        >
+                          <SvgIcon name="info" size={14} />
+                        </button>
+                      )}
+                    </td>
                     <td>{workHours}</td>
 
                     <td>

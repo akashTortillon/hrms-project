@@ -68,3 +68,11 @@ export const markAttendanceBulk = async (data) => {
   const res = await api.post(`${ATTENDANCE_API}/mark-bulk`, data);
   return res.data;
 };
+
+// ✅ Get full chronological punch list for one employee+day (break icon modal)
+export const getAttendancePunches = async (employeeId, date) => {
+  const res = await api.get(`${ATTENDANCE_API}/punches/${employeeId}`, {
+    params: { date }
+  });
+  return res.data;
+};

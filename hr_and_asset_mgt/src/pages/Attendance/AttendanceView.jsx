@@ -10,13 +10,15 @@ import Pagination from "../../components/reusable/Pagination"; // ✅ New
 
 import AttendanceEditModal from "./AttendanceEditModal";
 import BulkAttendanceModal from "./BulkAttendanceModal";
+import AttendancePunchDetailsModal from "./AttendancePunchDetailsModal";
 import {
   getDailyAttendance,
   updateAttendance,
   markAttendance,
   syncBiometrics,
   getMonthlyAttendance,
-  exportAttendanceReport
+  exportAttendanceReport,
+  getAttendancePunches
 } from "../../services/attendanceService.js";
 import { getDepartments, shiftService, getBranches } from "../../services/masterService.js";
 import { toast } from "react-toastify";
@@ -81,6 +83,11 @@ function Attendance() {
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // Punch-details modal (break icon) state
+  const [showPunchModal, setShowPunchModal] = useState(false);
+  const [punchModalData, setPunchModalData] = useState(null);
+  const [punchModalLoading, setPunchModalLoading] = useState(false);
 
   // Setters wrapper
   const updateParams = (updates) => {
@@ -188,7 +195,9 @@ function Attendance() {
         isManuallyEdited: record.isManuallyEdited,
         editedBy: record.editedBy,
         editedAt: record.editedAt,
-        editReason: record.editReason
+        editReason: record.editReason,
+        punchCount: record.punchCount || 0,
+        hasMultiplePunches: record.hasMultiplePunches || false
       }));
 
       setAttendanceRecords(formattedRecords);
@@ -282,6 +291,27 @@ function Attendance() {
   const openAttendanceModal = (employee) => {
     setSelectedEmployee(employee);
     setShowModal(true);
+  };
+
+  const openPunchModal = async (row) => {
+    setShowPunchModal(true);
+    setPunchModalLoading(true);
+    setPunchModalData(null);
+    try {
+      const data = await getAttendancePunches(row.employeeId, selectedDate);
+      setPunchModalData(data);
+    } catch (error) {
+      console.error("Failed to fetch punch details", error);
+      toast.error(error.response?.data?.message || "Failed to load punch details");
+      setShowPunchModal(false);
+    } finally {
+      setPunchModalLoading(false);
+    }
+  };
+
+  const closePunchModal = () => {
+    setShowPunchModal(false);
+    setPunchModalData(null);
   };
 
   const handleSaveAttendance = async (data) => {
@@ -390,6 +420,7 @@ function Attendance() {
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
         onEdit={hasPermission("MANAGE_ATTENDANCE") ? openAttendanceModal : null}
+        onShowPunches={openPunchModal}
         loading={loading}
         year={selectedYear}
         month={selectedMonth}
@@ -421,6 +452,13 @@ function Attendance() {
         isOpen={showBulkModal}
         onClose={() => setShowBulkModal(false)}
         onSuccess={fetchAttendanceData}
+      />
+
+      <AttendancePunchDetailsModal
+        isOpen={showPunchModal}
+        onClose={closePunchModal}
+        loading={punchModalLoading}
+        data={punchModalData}
       />
     </div>
   );

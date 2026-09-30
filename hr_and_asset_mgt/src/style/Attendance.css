@@ -1,3 +1,30 @@
+/* Small inline info-icon button next to a Check Out time, shown on days with more than
+   one check-in/check-out pair (e.g. a break out/in) - deliberately overrides the
+   standalone-button sizing of the global .icon-btn class (36px, bordered box), which is
+   too heavy to sit inline next to table cell text. */
+.punch-info-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 0;
+  cursor: pointer;
+  vertical-align: middle;
+  opacity: 0.65;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.punch-info-btn:hover {
+  opacity: 1;
+  background: var(--color-bg-subtle, #f1f5f9);
+}
+
 /* ===== HEADER LAYOUT ===== */
 
 .attendance-header {
