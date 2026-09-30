@@ -109,7 +109,20 @@ export const calculateLateTier = (checkInTime, rules) => {
     const m = toMinutes(t);
     return m < shiftStartMin ? m + 24 * 60 : m;
   };
-  const checkInMin = normalize(checkInTime);
+
+  // The comment above only reasoned about BUFFERS, but this same normalize() was
+  // also applied unconditionally to checkInTime - for an ORDINARY same-day shift
+  // (e.g. 10:30-19:30), any check-in before the shift's own start (someone simply
+  // arriving early, or exactly on time at 09:59/10:00 for a 10:30 shift) has
+  // checkInMin < shiftStartMin too, so it got pushed into "next day" space and
+  // compared as if arriving ~24h late - the exact "Late at 9:59 for a 10:30 shift"
+  // bug this was meant to fix, just relocated from the wrong-shift-lookup bug to
+  // here. Only genuinely overnight-spanning shifts (end time wraps past midnight,
+  // i.e. end <= start) need the check-in itself normalized; for a normal same-day
+  // shift, arriving before start is unambiguously on time.
+  const shiftEndMin = rules.end ? toMinutes(rules.end) : null;
+  const isOvernightShift = shiftEndMin !== null && shiftEndMin <= shiftStartMin;
+  const checkInMin = isOvernightShift ? normalize(checkInTime) : toMinutes(checkInTime);
 
   // Ensure we have at least one buffer
   const buffers = rules.buffers || [rules.lateLimit];

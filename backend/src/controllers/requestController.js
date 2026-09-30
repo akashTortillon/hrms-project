@@ -1307,24 +1307,34 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       currentReportUserIds = reportUsers.map((u) => u._id);
     }
 
-    if (!canApproveHr && !canApproveFinance) {
+    if (!canApproveHr) {
+      // Was two mutually-exclusive branches (manager-only XOR finance-only) that only
+      // ever checked canApproveFinance to decide between them - a non-HR approver who
+      // holds BOTH permissions (exactly Item 1's same-person Manager+Finance case)
+      // fell into the finance-only branch and lost all visibility into their own
+      // MANAGER-stage pending requests, since canApproveManager was never consulted
+      // here at all.
+      const nonHrStageFilters = [];
+      if (canApproveManager) {
+        nonHrStageFilters.push({
+          currentApprovalStage: "MANAGER",
+          $or: [
+            { designatedManager: { $in: managerScope } },
+            { userId: { $in: currentReportUserIds } }
+          ]
+        });
+      }
+      if (canApproveFinance) {
+        nonHrStageFilters.push({
+          currentApprovalStage: "FINANCE",
+          $or: [
+            { designatedFinanceManager: { $in: financeScope } },
+            { userId: { $in: currentReportUserIds } }
+          ]
+        });
+      }
       query.$and = query.$and || [];
-      query.$and.push({
-        currentApprovalStage: "MANAGER",
-        $or: [
-          { designatedManager: { $in: managerScope } },
-          { userId: { $in: currentReportUserIds } }
-        ]
-      });
-    } else if (!canApproveHr && canApproveFinance) {
-      query.$and = query.$and || [];
-      query.$and.push({
-        currentApprovalStage: "FINANCE",
-        $or: [
-          { designatedFinanceManager: { $in: financeScope } },
-          { userId: { $in: currentReportUserIds } }
-        ]
-      });
+      query.$and.push({ $or: nonHrStageFilters.length ? nonHrStageFilters : [{ _id: null }] });
     } else if (!req.query.stage) {
       const stageFilters = [{ currentApprovalStage: "HR" }];
 
