@@ -88,8 +88,13 @@ export const getShiftRules = async (shiftName) => {
     };
   }
   console.warn(`[attendanceUtils] No Shift Master found matching "${shiftName}" - falling back to default shift rules (09:00-18:00, late limit 09:15). Check Masters > HR Management > Shift for a name/casing mismatch.`);
-  // Default fallback
-  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
+  // `unresolved: true` tells callers this is a guessed default, not the employee's
+  // real configured schedule - a mismatched/misspelled employee.shift value was
+  // previously still compared against this hardcoded 09:00/09:15 default and could
+  // mark someone "Late" purely because their real shift (e.g. starting at 10:30)
+  // never matched any Shift Master, not because they were actually late. Callers
+  // should skip the Late determination entirely when this flag is set.
+  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [], unresolved: true };
 };
 
 export const calculateLateTier = (checkInTime, rules) => {

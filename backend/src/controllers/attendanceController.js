@@ -685,7 +685,10 @@ export const markAttendanceBulk = async (req, res) => {
 
       if (!status) {
         if (checkIn) {
-          lateTier = calculateLateTier(checkIn, rules);
+          // rules.unresolved means no Shift Master matched this employee's shift
+          // name - the 09:00/09:15 default below is a guess, not their real
+          // schedule, so never penalize them with "Late" against it.
+          lateTier = rules.unresolved ? 0 : calculateLateTier(checkIn, rules);
           resolvedStatus = lateTier > 0 ? "Late" : "Present";
         }
       }
@@ -744,7 +747,10 @@ export const markAttendance = async (req, res) => {
     let status = "Absent";
     let lateTier = 0;
     if (checkIn) {
-      lateTier = calculateLateTier(checkIn, rules);
+      // rules.unresolved means no Shift Master matched this employee's shift name -
+      // the 09:00/09:15 default is a guess, not their real schedule, so never
+      // penalize them with "Late" against it.
+      lateTier = rules.unresolved ? 0 : calculateLateTier(checkIn, rules);
       status = lateTier > 0 ? "Late" : "Present";
     }
 
