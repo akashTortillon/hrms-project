@@ -1948,127 +1948,183 @@ export const exportPayroll = async (req, res) => {
 
         const REPORT_TITLE = `${reportPrefix} FOR THE MONTH OF ${monthName} - ${year}`;
 
+        // ✅ The WPS/MOL compliance layout (bank/IBAN/work-permit/LOP columns) is only
+        // required for the Location and Visa reports. The plain Payroll export used to
+        // reuse this exact same layout too, so it never matched the on-screen Payroll
+        // table (EMPLOYEE/BASIC SALARY/ALLOWANCES/DEDUCTIONS/NET SALARY) - branch it.
+        const isWpsReport = reportType === 'permit' || reportType === 'visa';
+
         // 1. Define the Array of Arrays (AoA) Structure
         const aoa = [];
+        let merges = [];
+        let colWidths = [];
 
-        // Row 1: Company Name
-        aoa.push([COMPANY_NAME]);
-        // Row 2: MOL ID
-        aoa.push([MOL_ID]);
-        // Row 3: Report Title
-        aoa.push([REPORT_TITLE]);
-        // Row 4: Empty space
-        aoa.push([]);
+        if (isWpsReport) {
+            // Row 1: Company Name
+            aoa.push([COMPANY_NAME]);
+            // Row 2: MOL ID
+            aoa.push([MOL_ID]);
+            // Row 3: Report Title
+            aoa.push([REPORT_TITLE]);
+            // Row 4: Empty space
+            aoa.push([]);
 
-        // Row 5: Column Headers Top
-        const headerRowTop = [
-            "Sl.No",
-            "NAME OF THE EMPLOYEE",
-            "WORK PERMIT NO (8 DIGIT NO)",
-            "PERSONAL NO (14 DIGIT NO)",
-            "BANK NAME",
-            "FAB CARD NO(16 DIGITS)\nOR IBAN FOR PERSONAL",
-            "LOP DAYS",          // Renamed for clarity
-            "PAID LEAVES",       // ✅ NEW
-            "Employee's Net Salary", // Merged Header
-            "",
-            ""
-        ];
-        aoa.push(headerRowTop);
-
-        // Row 6: Column Headers Bottom (Sub-headers)
-        const headerRowBottom = [
-            "", "", "", "", "", "", "", "", // Empty for merged columns
-            "Fixed",
-            "Variable",
-            "Total"
-        ];
-        aoa.push(headerRowBottom);
-
-        // Data Rows
-        let serialNo = 1;
-        records.forEach(r => {
-            const emp = r.employee || {};
-
-            // Calc Salary Components
-            const fixed = r.basicSalary || 0;
-            const net = r.netSalary || 0;
-            // Assuming Variable = Net - Fixed (includes allowances - deductions + OT)
-            // Ensure no negative variable if net < basic (e.g. absent) might look weird, but mathematically correct for "balancing"
-            let variable = net - fixed;
-
-            // Format to 2 decimals
-            // variable = parseFloat(variable.toFixed(2));
-
-            // "NO OF DAYS" -> Using LOP (Loss of Pay) or 0 if user wants "Days Absent"? 
-            // Image shows "0" for full salary. Let's assume it means "LOP Days".
-            // r.attendanceSummary might have daysAbsent.
-            const lopDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
-            const paidLeaves = r.attendanceSummary ? (r.attendanceSummary.paidLeaves || 0) : 0; // ✅ NEW
-
-            const row = [
-                serialNo++,                          // Sl.No
-                emp.name || "Unknown",               // Name
-                emp.laborCardNumber || "Not Provided",           // Work Permit
-                emp.personalId || "Not Provided",                // Personal No
-                emp.bankName || "Not Provided",                  // Bank Name
-                emp.iban || emp.bankAccount || "Not Provided",   // FAB/IBAN
-                lopDays,                             // LOP Days
-                paidLeaves,                          // Paid Leaves
-                fixed,                               // Fixed
-                variable,                            // Variable
-                net                                  // Total
+            // Row 5: Column Headers Top
+            const headerRowTop = [
+                "Sl.No",
+                "NAME OF THE EMPLOYEE",
+                "WORK PERMIT NO (8 DIGIT NO)",
+                "PERSONAL NO (14 DIGIT NO)",
+                "BANK NAME",
+                "FAB CARD NO(16 DIGITS)\nOR IBAN FOR PERSONAL",
+                "LOP DAYS",          // Renamed for clarity
+                "PAID LEAVES",       // ✅ NEW
+                "Employee's Net Salary", // Merged Header
+                "",
+                ""
             ];
-            aoa.push(row);
-        });
+            aoa.push(headerRowTop);
+
+            // Row 6: Column Headers Bottom (Sub-headers)
+            const headerRowBottom = [
+                "", "", "", "", "", "", "", "", // Empty for merged columns
+                "Fixed",
+                "Variable",
+                "Total"
+            ];
+            aoa.push(headerRowBottom);
+
+            // Data Rows
+            let serialNo = 1;
+            records.forEach(r => {
+                const emp = r.employee || {};
+
+                // Calc Salary Components
+                const fixed = r.basicSalary || 0;
+                const net = r.netSalary || 0;
+                // Assuming Variable = Net - Fixed (includes allowances - deductions + OT)
+                // Ensure no negative variable if net < basic (e.g. absent) might look weird, but mathematically correct for "balancing"
+                let variable = net - fixed;
+
+                // "NO OF DAYS" -> Using LOP (Loss of Pay) or 0 if user wants "Days Absent"?
+                // Image shows "0" for full salary. Let's assume it means "LOP Days".
+                // r.attendanceSummary might have daysAbsent.
+                const lopDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
+                const paidLeaves = r.attendanceSummary ? (r.attendanceSummary.paidLeaves || 0) : 0; // ✅ NEW
+
+                const row = [
+                    serialNo++,                          // Sl.No
+                    emp.name || "Unknown",               // Name
+                    emp.laborCardNumber || "Not Provided",           // Work Permit
+                    emp.personalId || "Not Provided",                // Personal No
+                    emp.bankName || "Not Provided",                  // Bank Name
+                    emp.iban || emp.bankAccount || "Not Provided",   // FAB/IBAN
+                    lopDays,                             // LOP Days
+                    paidLeaves,                          // Paid Leaves
+                    fixed,                               // Fixed
+                    variable,                            // Variable
+                    net                                  // Total
+                ];
+                aoa.push(row);
+            });
+
+            // Define Merges (s: start, e: end. r: row, c: col, 0-indexed)
+            merges = [
+                // Header: Company Name (Row 0, Cols A-J)
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+                // Header: MOL ID (Row 1, Cols A-J)
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+                // Header: Report Title (Row 2, Cols A-J)
+                { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
+
+                // Table Headers (Row 4 & 5)
+                // Sl.No (A5:A6) -> r4,c0 to r5,c0
+                { s: { r: 4, c: 0 }, e: { r: 5, c: 0 } },
+                // Name (B5:B6)
+                { s: { r: 4, c: 1 }, e: { r: 5, c: 1 } },
+                // Work Permit
+                { s: { r: 4, c: 2 }, e: { r: 5, c: 2 } },
+                // Personal No
+                { s: { r: 4, c: 3 }, e: { r: 5, c: 3 } },
+                // Bank Name
+                { s: { r: 4, c: 4 }, e: { r: 5, c: 4 } },
+                // FAB/IBAN
+                { s: { r: 4, c: 5 }, e: { r: 5, c: 5 } },
+                // NO OF DAYS
+                { s: { r: 4, c: 6 }, e: { r: 5, c: 6 } },
+                // Employee's Net Salary (H5:J5) -> Horizontal Merge
+                { s: { r: 4, c: 7 }, e: { r: 4, c: 9 } }
+            ];
+
+            // Set Column Widths (Approximation)
+            colWidths = [
+                { wch: 5 },  // Sl.No
+                { wch: 30 }, // Name
+                { wch: 15 }, // Work Permit
+                { wch: 18 }, // Personal No
+                { wch: 10 }, // Bank Name
+                { wch: 25 }, // FAB/IBAN
+                { wch: 10 }, // No Of Days
+                { wch: 10 }, // Fixed
+                { wch: 10 }, // Variable
+                { wch: 10 }  // Total
+            ];
+        } else {
+            // Plain Payroll export - mirror the on-screen Payroll table columns
+            // (PayrollTable.jsx: EMPLOYEE / BASIC SALARY / ALLOWANCES / DEDUCTIONS /
+            // NET SALARY) instead of the WPS/MOL compliance layout above.
+            aoa.push([COMPANY_NAME]);
+            aoa.push([REPORT_TITLE]);
+            aoa.push([]);
+
+            aoa.push([
+                "Sl.No",
+                "EMPLOYEE",
+                "EMPLOYEE CODE",
+                "BASIC SALARY",
+                "ALLOWANCES",
+                "DEDUCTIONS",
+                "NET SALARY"
+            ]);
+
+            let serialNo = 1;
+            records.forEach(r => {
+                const emp = r.employee || {};
+                aoa.push([
+                    serialNo++,
+                    emp.name || "Unknown",
+                    emp.code || "",
+                    r.basicSalary || 0,
+                    r.totalAllowances || 0,
+                    r.totalDeductions || 0,
+                    r.netSalary || 0
+                ]);
+            });
+
+            merges = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }
+            ];
+
+            colWidths = [
+                { wch: 5 },  // Sl.No
+                { wch: 30 }, // Employee
+                { wch: 15 }, // Code
+                { wch: 14 }, // Basic Salary
+                { wch: 14 }, // Allowances
+                { wch: 14 }, // Deductions
+                { wch: 14 }  // Net Salary
+            ];
+        }
 
         // 2. Create Sheet
         const worksheet = XLSX.utils.aoa_to_sheet(aoa);
 
-        // 3. Define Merges
-        // s: start, e: end. r: row, c: col (0-indexed)
-        const merges = [
-            // Header: Company Name (Row 0, Cols A-J)
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-            // Header: MOL ID (Row 1, Cols A-J)
-            { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
-            // Header: Report Title (Row 2, Cols A-J)
-            { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
-
-            // Table Headers (Row 4 & 5)
-            // Sl.No (A5:A6) -> r4,c0 to r5,c0
-            { s: { r: 4, c: 0 }, e: { r: 5, c: 0 } },
-            // Name (B5:B6)
-            { s: { r: 4, c: 1 }, e: { r: 5, c: 1 } },
-            // Work Permit
-            { s: { r: 4, c: 2 }, e: { r: 5, c: 2 } },
-            // Personal No
-            { s: { r: 4, c: 3 }, e: { r: 5, c: 3 } },
-            // Bank Name
-            { s: { r: 4, c: 4 }, e: { r: 5, c: 4 } },
-            // FAB/IBAN
-            { s: { r: 4, c: 5 }, e: { r: 5, c: 5 } },
-            // NO OF DAYS
-            { s: { r: 4, c: 6 }, e: { r: 5, c: 6 } },
-            // Employee's Net Salary (H5:J5) -> Horizontal Merge
-            { s: { r: 4, c: 7 }, e: { r: 4, c: 9 } }
-        ];
-
+        // 3. Apply Merges
         worksheet['!merges'] = merges;
 
-        // 4. Set Column Widths (Approximation)
-        worksheet['!cols'] = [
-            { wch: 5 },  // Sl.No
-            { wch: 30 }, // Name
-            { wch: 15 }, // Work Permit
-            { wch: 18 }, // Personal No
-            { wch: 10 }, // Bank Name
-            { wch: 25 }, // FAB/IBAN
-            { wch: 10 }, // No Of Days
-            { wch: 10 }, // Fixed
-            { wch: 10 }, // Variable
-            { wch: 10 }  // Total
-        ];
+        // 4. Set Column Widths
+        worksheet['!cols'] = colWidths;
 
         // 5. Build Workbook
         const workbook = XLSX.utils.book_new();
