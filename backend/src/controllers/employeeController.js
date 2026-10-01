@@ -565,11 +565,17 @@ export const getEmployees = async (req, res) => {
     // someone who isn't anyone's designated manager/finance manager and has no
     // employeeId link simply matches nothing (sees only themselves via the {_id:null}
     // fallback... actually matches nobody, which is the correct, safe default).
+    // APPROVE_REQUESTS used to count as full access too, on the assumption it only
+    // ever appears on an HR-equivalent role. In practice a non-HR role (e.g. a real
+    // Finance Manager who's also allowed to approve leave/document requests as a
+    // stand-in for HR) can legitimately hold APPROVE_REQUESTS alongside
+    // APPROVE_FINANCE_REQUESTS/APPROVE_MANAGER_REQUESTS, without that meaning they
+    // should see the entire company's employee directory - that's a separate
+    // concern from being allowed to act at the HR approval stage. Dropped.
     const requester = req.user || {};
     const hasFullAccess = requester.role === "Admin"
       || /^HR/i.test(requester.role || "")
-      || requester.permissions?.includes("ALL")
-      || requester.permissions?.includes("APPROVE_REQUESTS");
+      || requester.permissions?.includes("ALL");
 
     if (!hasFullAccess) {
       const scope = [requester._id, requester.employeeId].filter(Boolean);
