@@ -2,7 +2,7 @@ import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
 
-export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS, hasAbsenceDeductionRule = true }) {
+export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS, onExportPDF, hasAbsenceDeductionRule = true }) {
   // Rolling pay period, force-contiguous: "From" is always locked/auto-computed by
   // the parent (day after the last finalized period's end) — HR only picks "To".
   // Picking "To" is what defines the period; the actual attendance-day count
@@ -73,7 +73,13 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
               <SvgIcon name="download" size={14} />
               Export Record
             </button>
-            
+            {onExportPDF && (
+              <button className="export-record-btn" onClick={onExportPDF}>
+                <SvgIcon name="download" size={14} />
+                Export PDF
+              </button>
+            )}
+
         </div>
       </div>
 

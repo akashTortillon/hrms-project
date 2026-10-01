@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView";
 import PayrollSummaryCards from "./PayrollCards";
@@ -347,6 +349,79 @@ function Payroll() {
     }
   };
 
+  const handleExportPDF = async () => {
+    try {
+      // Pull the full period's records fresh (not the paginated `records` page
+      // state) so the sheet isn't missing rows past the current page - same
+      // approach fetchAllRecords uses for the Location/Visa report tabs.
+      const data = await payrollService.getSummary(month, year, { ...filters, reportType: null, limit: 1000 });
+      const rows = data.records || [];
+      if (!rows.length) {
+        toast.error("No payroll records found for this period.");
+        return;
+      }
+
+      const doc = new jsPDF();
+
+      doc.setFillColor(37, 99, 235);
+      doc.roundedRect(14, 10, 15, 15, 3, 3, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("HR", 18, 19);
+
+      doc.setTextColor(31, 41, 55);
+      doc.setFontSize(14);
+      doc.text("HRMS Pro", 34, 17);
+
+      doc.setTextColor(107, 114, 128);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("UAE Edition", 34, 22);
+
+      doc.setDrawColor(229, 231, 235);
+      doc.line(14, 30, 196, 30);
+
+      const title = `Payroll Sheet - ${new Date(2000, month - 1, 1).toLocaleString('en', { month: 'long' })} ${year}`;
+
+      doc.setTextColor(17, 24, 39);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, 14, 42);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(156, 163, 175);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 48);
+
+      // Same columns as the fixed Excel export - mirrors the on-screen Payroll
+      // table (PayrollTable.jsx) instead of the WPS/MOL compliance layout.
+      const tableData = rows.map(r => [
+        r.employee?.name || "Unknown",
+        r.employee?.code || "",
+        `AED ${(r.basicSalary || 0).toLocaleString()}`,
+        `AED ${(r.totalAllowances || 0).toLocaleString()}`,
+        `AED ${(r.totalDeductions || 0).toLocaleString()}`,
+        `AED ${(r.netSalary || 0).toLocaleString()}`
+      ]);
+
+      autoTable(doc, {
+        startY: 55,
+        head: [["Employee", "Code", "Basic Salary", "Allowances", "Deductions", "Net Salary"]],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [37, 99, 235] },
+        styles: { fontSize: 9 }
+      });
+
+      doc.save(`${title.replace(/\s+/g, '_')}.pdf`);
+      toast.success("PDF Downloaded!");
+    } catch (error) {
+      console.error("Payroll PDF export failed", error);
+      toast.error(error.message || "PDF export failed.");
+    }
+  };
+
   const handleGenerateSIF = async () => {
     try {
       // Pass the exact period too, not just the derived month/year - see
@@ -476,6 +551,7 @@ function Payroll() {
         periodEnd={periodEnd}
         setPeriodEnd={setPeriodEnd}
         onExportWPS={() => handleExportExcel()}
+        onExportPDF={handleExportPDF}
         hasAbsenceDeductionRule={hasAbsenceDeductionRule}
       />
 
