@@ -1819,9 +1819,22 @@ export default function EmployeeDetail() {
                                         
                                         </div>
                                         <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontWeight: '600', color: '#111827' }}>
-                                                {loan.details.amount} AED
-                                            </div>
+                                            {(() => {
+                                                const total = loan.details.totalRepaymentAmount || loan.details.amount;
+                                                const paid = (loan.payrollDeductions || []).reduce((acc, curr) => acc + curr.amount, 0)
+                                                    + (loan.details?.extraPayments || []).reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+                                                const outstanding = Math.max(total - paid, 0);
+                                                return (
+                                                    <>
+                                                        <div style={{ fontWeight: '600', color: '#111827' }}>
+                                                            {outstanding.toFixed(2)} AED
+                                                        </div>
+                                                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                                                            of {Number(total).toFixed(2)} AED
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
                                             {loan.isFullyPaid ? (
                                                 <span style={{ color: '#166534', fontSize: '12px', fontWeight: '500', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Paid Off</span>
                                             ) : (
