@@ -25,7 +25,7 @@ import { fileURLToPath } from "url";
 import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import BiometricTransaction from "../models/biometricTransactionModel.js";
-import { getShiftRules, calculateLateTier, calculateDuration } from "../utils/attendanceUtils.js";
+import { getShiftRules, calculateLateTier } from "../utils/attendanceUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,25 +91,39 @@ async function main() {
   // bucketing only (not shift-day/overnight-aware yet) - matches what's currently live;
   // overnight-shift bucketing for this device needs its own dead-zone strategy since the
   // old computeShiftDayBucket dead-zone logic also relied on transactionType.
-  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, checkIn, checkOut }
+  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, punchMinutes: [] }
   for (const txn of transactions) {
     const code = txn.badgeNumber.trim();
     const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
     const dateStr = uaeTime.toISOString().split("T")[0];
-    const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5);
+    const minutesOfDay = uaeTime.getUTCHours() * 60 + uaeTime.getUTCMinutes();
     const key = `${code}_${dateStr}`;
 
     if (!grouped.has(key)) {
-      grouped.set(key, { badgeNumber: code, date: dateStr, checkIn: null, checkOut: null });
+      grouped.set(key, { badgeNumber: code, date: dateStr, punchMinutes: [] });
     }
-    const g = grouped.get(key);
-    // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so within a key
-    // the first punch seen is the earliest (check-in) and every later punch becomes the
-    // latest (check-out) - a lone punch that day stays check-in only.
-    if (!g.checkIn) {
-      g.checkIn = timeStr;
-    } else {
-      g.checkOut = timeStr;
+    // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so punchMinutes
+    // ends up chronological - the first entry is check-in, the last is check-out, and
+    // keeping every punch (not just first/last) lets work hours exclude break time below.
+    grouped.get(key).punchMinutes.push(minutesOfDay);
+  }
+
+  const toTimeStr = (mins) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+  for (const g of grouped.values()) {
+    const pm = g.punchMinutes;
+    g.checkIn = pm.length ? toTimeStr(pm[0]) : null;
+    g.checkOut = pm.length > 1 ? toTimeStr(pm[pm.length - 1]) : null;
+
+    // Work hours sum only the IN->OUT segments (pairs 0-1, 2-3, ...), NOT a naive
+    // first-punch-to-last-punch span - a break in the middle would otherwise count as
+    // work (see the matching fix in attendanceProcessor.js for the full reasoning). A
+    // trailing unpaired punch (still clocked in) contributes no segment.
+    g.workHours = null;
+    if (pm.length >= 2) {
+      let workMinutes = 0;
+      for (let i = 0; i + 1 < pm.length; i += 2) workMinutes += pm[i + 1] - pm[i];
+      g.workHours = `${Math.floor(workMinutes / 60)}h ${workMinutes % 60}m`;
     }
   }
   console.log(`Recomputed ${grouped.size} true employee-day check-in/check-out pairs from raw punches.`);
@@ -134,7 +148,7 @@ async function main() {
       lateTier = calculateLateTier(g.checkIn, rules);
       status = lateTier > 0 ? "Late" : "Present";
     }
-    const workHours = calculateDuration(g.checkIn, g.checkOut);
+    const workHours = g.workHours;
 
     if (existing) {
       const noChange = existing.checkIn === g.checkIn && existing.checkOut === g.checkOut &&

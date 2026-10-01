@@ -57,23 +57,31 @@ export const getShiftRules = async (shiftName) => {
   const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
   if (shiftMaster && shiftMaster.metadata) {
     const meta = shiftMaster.metadata;
-    // Extract buffers from latePolicy if available, otherwise fallback to buffers or lateLimit
+    // Extract buffers from latePolicy if available, otherwise explicit buffers, otherwise
+    // a single lateLimit. If NONE of these are actually configured, buffers stays [] -
+    // meaning this shift has no late policy at all (calculateLateTier already treats an
+    // empty buffers list as "never late", below) - instead of silently forcing every
+    // employee onto a hardcoded 09:15 wall-clock cutoff that has nothing to do with this
+    // shift's real hours (e.g. a flexible 12h rotation with no fixed arrival time, where
+    // "late" isn't a meaningful concept - only whether the full shift got worked).
     let buffers = [];
-    if (meta.latePolicy && Array.isArray(meta.latePolicy)) {
+    if (meta.latePolicy && Array.isArray(meta.latePolicy) && meta.latePolicy.length > 0) {
       buffers = meta.latePolicy.map(p => p.time).filter(t => t);
-    } else {
-      buffers = meta.buffers || [meta.lateLimit || "09:15"];
+    } else if (Array.isArray(meta.buffers) && meta.buffers.length > 0) {
+      buffers = meta.buffers;
+    } else if (meta.lateLimit) {
+      buffers = [meta.lateLimit];
     }
 
     return {
       start: meta.startTime || "09:00",
       end: meta.endTime || "18:00",
-      lateLimit: meta.lateLimit || "09:15",
+      lateLimit: meta.lateLimit || null,
       latePolicy: meta.latePolicy || [],
-      buffers: buffers.length > 0 ? buffers : ["09:15"]
+      buffers
     };
   }
-  // Default fallback
+  // Default fallback - shift name doesn't match any configured Master at all
   return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
 };
 

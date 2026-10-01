@@ -120,9 +120,28 @@ class AttendanceProcessor {
         const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
         return uaeTime.toISOString().split("T")[1].substring(0, 5);
       };
+      const toUaeMinutesOfDay = (d) => {
+        const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
+        return uaeTime.getUTCHours() * 60 + uaeTime.getUTCMinutes();
+      };
 
       record.checkIn = dayPunches.length ? toUaeTimeStr(dayPunches[0].timestamp) : null;
       record.checkOut = dayPunches.length > 1 ? toUaeTimeStr(dayPunches[dayPunches.length - 1].timestamp) : null;
+
+      // Work hours sum only the IN->OUT segments (punch pairs 0-1, 2-3, ...), NOT a naive
+      // first-punch-to-last-punch span - a break in the middle (e.g. Check-In 01:06,
+      // Break-Out 10:01, Break-In 16:02, Check-Out 19:01) would otherwise count the ~6h
+      // break itself as work (01:06->19:01 = 17h55m instead of the real ~11h worked). A
+      // trailing unpaired punch (still clocked in, no checkout yet) contributes no segment
+      // - matches the existing "no checkout yet" handling elsewhere in this function.
+      record.workHours = null;
+      if (dayPunches.length >= 2) {
+        let workMinutes = 0;
+        for (let i = 0; i + 1 < dayPunches.length; i += 2) {
+          workMinutes += toUaeMinutesOfDay(dayPunches[i + 1].timestamp) - toUaeMinutesOfDay(dayPunches[i].timestamp);
+        }
+        record.workHours = `${Math.floor(workMinutes / 60)}h ${workMinutes % 60}m`;
+      }
 
       // HRMS is the source of truth for employee name - only auto-fill from BioCloud
       // when the HRMS record has no name at all (e.g. a brand-new employee whose
@@ -170,6 +189,13 @@ class AttendanceProcessor {
           .filter(Boolean)
           .sort()
           .pop() ?? null;
+        // record.workHours is already break-aware (summed IN->OUT segments from the full
+        // day's punches, computed above) - only fall back to the naive span if this merge
+        // somehow picked a check-in/check-out that didn't come from record itself (the
+        // safety-net case described above), since there's no punch-segment data for that.
+        const mergedWorkHours = (mergedCheckIn === record.checkIn && mergedCheckOut === record.checkOut)
+          ? record.workHours
+          : calculateDuration(mergedCheckIn, mergedCheckOut);
 
         let mergedStatus = "Absent";
         let mergedLateTier = 0;
@@ -188,8 +214,6 @@ class AttendanceProcessor {
           // employee clearly was here. Flag it the same way as the check-in-only case.
           mergedStatus = "Incomplete";
         }
-        const mergedWorkHours = calculateDuration(mergedCheckIn, mergedCheckOut);
-
         // If times are already identical, skip to prevent unnecessary writes/triggers
         if (
           existingRecord.checkIn === mergedCheckIn &&
@@ -235,7 +259,7 @@ class AttendanceProcessor {
           // employee+date (no existing record to merge against yet).
           status = "Incomplete";
         }
-        const workHours = calculateDuration(record.checkIn, record.checkOut);
+        const workHours = record.workHours;
 
         // Create new record
         await Attendance.create({
