@@ -1826,6 +1826,9 @@ export default function EmployeeDetail() {
                                                 const outstanding = Math.max(total - paid, 0);
                                                 return (
                                                     <>
+                                                        <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                                                            Outstanding
+                                                        </div>
                                                         <div style={{ fontWeight: '600', color: '#111827' }}>
                                                             {outstanding.toFixed(2)} AED
                                                         </div>
