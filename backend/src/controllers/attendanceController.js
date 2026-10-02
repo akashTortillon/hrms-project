@@ -225,7 +225,10 @@ import {
   isLeave,
   isWeekOff,
   holidaySetFromHolidays,
-  applyMonthlyFlexQuota
+  applyMonthlyFlexQuota,
+  getShiftDayPunches,
+  uaeTimeStr,
+  uaeDateStr
 } from "../utils/attendanceUtils.js";
 
 /**
@@ -373,26 +376,6 @@ export const getDailyAttendance = async (req, res) => {
       .populate("employee")
       .populate("editedBy", "name");
 
-    // Raw punch count per employee for this day, so the UI can flag days with more than
-    // a simple check-in+check-out pair (e.g. a break out/in). One batched query across
-    // every employee's badge, not one query per employee - same UAE-anchored day
-    // boundaries already established in attendanceProcessor.js, so this count always
-    // matches what GET /attendance/punches/:employeeId returns for the same day.
-    const badgeCodes = employees.map(e => (e.badgeNumber || e.code || "").trim()).filter(Boolean);
-    const dayStart = new Date(`${date}T00:00:00+04:00`);
-    const dayEnd = new Date(`${date}T23:59:59.999+04:00`);
-    const dayPunches = badgeCodes.length
-      ? await BiometricTransaction.find({
-        badgeNumber: { $in: badgeCodes },
-        timestamp: { $gte: dayStart, $lte: dayEnd }
-      }).select("badgeNumber").lean()
-      : [];
-    const punchCountByBadge = {};
-    dayPunches.forEach(p => {
-      const b = p.badgeNumber.trim();
-      punchCountByBadge[b] = (punchCountByBadge[b] || 0) + 1;
-    });
-
     // Get Approved Leaves for this date
     const leaveMap = await getApprovedLeavesMap(employees);
 
@@ -402,6 +385,18 @@ export const getDailyAttendance = async (req, res) => {
       if (rec.employee) attendanceMap[rec.employee._id.toString()] = rec;
     });
 
+    // Raw punch count per employee for THIS shift occurrence (the one starting on `date`,
+    // which can run past midnight), so the UI can flag shifts with more than a simple
+    // check-in+check-out pair (e.g. a break out/in). One batched query across every
+    // employee's badge, bucketed with the same shift-window logic the attendance
+    // processor uses, so this count always matches the row and GET
+    // /attendance/punches/:employeeId for the same day.
+    const shiftDayPunches = await getShiftDayPunches(
+      employees,
+      date,
+      (e) => attendanceMap[e._id.toString()]?.shift || e.shift
+    );
+
     // 4️⃣ Process Merge to get Full List with Status
     let fullList = employees.map((emp) => {
       const record = attendanceMap[emp._id.toString()];
@@ -409,7 +404,7 @@ export const getDailyAttendance = async (req, res) => {
       const isRequestOnLeave = isLeave(emp._id, date, leaveMap);
 
       const calculatedStatus = record?.status || (isProfileOnLeave || isRequestOnLeave ? "On Leave" : "Absent");
-      const punchCount = punchCountByBadge[(emp.badgeNumber || emp.code || "").trim()] || 0;
+      const punchCount = (shiftDayPunches.get(String(emp._id)) || []).length;
 
       return {
         _id: record?._id || null,
@@ -421,6 +416,7 @@ export const getDailyAttendance = async (req, res) => {
         shift: record?.shift || emp.shift || "Day Shift",
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
+        checkOutNextDay: !!record?.checkOutNextDay,
         workHours: record?.workHours || "-",
         status: calculatedStatus,
         avatar: emp.avatar,
@@ -946,9 +942,11 @@ export const getEmployeeAttendanceStats = async (req, res) => {
 // on Daily Attendance rows flagged hasMultiplePunches (see getDailyAttendance above).
 // Direction is NOT taken from BiometricTransaction.transactionType - this device reports
 // a constant generic status code with no real per-punch direction (see
-// biometricSyncService.js / attendanceProcessor.js), so labels are purely chronological
-// position: 1st = Check-In, last = Check-Out, everything between alternates
-// Break-Out/Break-In.
+// biometricSyncService.js / attendanceProcessor.js), so labels come from chronological
+// position within the shift occurrence that STARTS on `date` (which can run past
+// midnight): even positions are IN (1st = Check-In, later ones Break-In), odd positions
+// are OUT (Break-Out, except the final one of a complete pair = Check-Out). With an odd
+// count the last punch is an IN, so the shift is still open and has no Check-Out yet.
 export const getEmployeePunches = async (req, res) => {
   try {
     const { employeeId } = req.params;
@@ -958,25 +956,15 @@ export const getEmployeePunches = async (req, res) => {
     const employee = await Employee.findById(employeeId);
     if (!employee) return res.status(404).json({ message: "Employee not found" });
 
-    const badge = (employee.badgeNumber || employee.code || "").trim();
-    const dayStart = new Date(`${date}T00:00:00+04:00`);
-    const dayEnd = new Date(`${date}T23:59:59.999+04:00`);
-    const punches = await BiometricTransaction.find({
-      badgeNumber: badge,
-      timestamp: { $gte: dayStart, $lte: dayEnd }
-    }).sort({ timestamp: 1 }).lean();
-
-    const toUaeTimeStr = (d) => {
-      const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
-      return uaeTime.toISOString().split("T")[1].substring(0, 5);
-    };
+    const record = await Attendance.findOne({ employee: employee._id, date }).select("shift").lean();
+    const shiftDayPunches = await getShiftDayPunches([employee], date, () => record?.shift || employee.shift);
+    const punches = shiftDayPunches.get(String(employee._id)) || [];
 
     const labeled = punches.map((p, i) => {
       let label;
-      if (i === 0) label = "Check-In";
-      else if (i === punches.length - 1) label = "Check-Out";
-      else label = i % 2 === 0 ? "Break-In" : "Break-Out";
-      return { time: toUaeTimeStr(p.timestamp), label };
+      if (i % 2 === 0) label = i === 0 ? "Check-In" : "Break-In";
+      else label = i === punches.length - 1 ? "Check-Out" : "Break-Out";
+      return { time: uaeTimeStr(p.timestamp), label, nextDay: uaeDateStr(p.timestamp) !== date };
     });
 
     res.json({

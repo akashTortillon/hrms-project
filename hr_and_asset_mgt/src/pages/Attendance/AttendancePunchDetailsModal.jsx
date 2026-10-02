@@ -33,7 +33,10 @@ export default function AttendancePunchDetailsModal({ isOpen, onClose, loading, 
                 }}
               >
                 <span>{p.label}</span>
-                <strong>{p.time}</strong>
+                <strong>
+                  {p.time}
+                  {p.nextDay && <span className="next-day-badge">Next day</span>}
+                </strong>
               </div>
             ))}
           </div>

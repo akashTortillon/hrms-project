@@ -66,11 +66,7 @@ export default function useHRManagement() {
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
         endTime: '18:00',
-        latePolicy: [
-            { tier: 1, time: '09:15', type: 'FIXED', value: 0 },
-            { tier: 2, time: '09:30', type: 'DAILY_RATE', value: 0.5 },
-            { tier: 3, time: '10:00', type: 'DAILY_RATE', value: 1.0 }
-        ]
+        latePolicy: []
     });
 
     useEffect(() => {
@@ -118,11 +114,7 @@ export default function useHRManagement() {
             startTime: '09:00',
             endTime: '18:00',
             workHours: '',
-            latePolicy: [
-                { tier: 1, time: '09:15', type: 'FIXED', value: 0 },
-                { tier: 2, time: '09:30', type: 'DAILY_RATE', value: 0.5 },
-                { tier: 3, time: '10:00', type: 'DAILY_RATE', value: 1.0 }
-            ]
+            latePolicy: []
         });
         setWorkflowState({ steps: [] });
         setTempStepName("");
@@ -178,13 +170,12 @@ export default function useHRManagement() {
                 startTime: meta.startTime || '09:00',
                 endTime: meta.endTime || '18:00',
                 workHours: meta.workHours ?? '',
+                // Only show tiers that are actually stored - never invent a default late
+                // cutoff. A legacy shift that only has a single stored lateLimit keeps it
+                // as one tier so saving doesn't silently drop it.
                 latePolicy: meta.latePolicy && meta.latePolicy.length > 0
                     ? meta.latePolicy
-                    : [
-                        { tier: 1, time: meta.buffer1 || meta.lateLimit || '09:15', type: 'FIXED', value: 0 },
-                        { tier: 2, time: meta.buffer2 || '09:30', type: 'DAILY_RATE', value: 0.5 },
-                        { tier: 3, time: meta.buffer3 || '10:00', type: 'DAILY_RATE', value: 1.0 }
-                    ]
+                    : (meta.lateLimit ? [{ tier: 1, time: meta.lateLimit, type: 'FIXED', value: 0 }] : [])
             });
             setInputValue(item.name);
         } else if (type === "Workflow Template") {
@@ -321,14 +312,19 @@ export default function useHRManagement() {
                 else await workflowTemplateService.add(payload);
                 setWorkflowTemplates(await workflowTemplateService.getAll());
             } else if (modalType === "Shift") {
+                // Drop tiers added but left without a time, and renumber what remains.
+                const latePolicy = (shiftState.latePolicy || [])
+                    .filter(p => p.time)
+                    .map((p, i) => ({ ...p, tier: i + 1 }));
                 const payload = {
                     name: inputValue,
                     metadata: {
                         startTime: shiftState.startTime,
                         endTime: shiftState.endTime,
                         workHours: shiftState.workHours,
-                        lateLimit: shiftState.latePolicy[0]?.time || '09:15', // Fallback for legacy
-                        latePolicy: shiftState.latePolicy
+                        // null (not a default) when the shift has no late policy at all
+                        lateLimit: latePolicy[0]?.time || null,
+                        latePolicy
                     }
                 };
                 if (editId) await shiftService.update(editId, payload);

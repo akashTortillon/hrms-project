@@ -228,6 +228,11 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
                     <td>{row.checkIn || "-"}</td>
                     <td>
                       {row.checkOut || "-"}
+                      {row.checkOutNextDay && row.checkOut && row.checkOut !== "-" && (
+                        <span className="next-day-badge" title="This check-out happened on the next calendar day">
+                          Next day
+                        </span>
+                      )}
                       {row.hasMultiplePunches && (
                         <button
                           type="button"

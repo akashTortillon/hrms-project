@@ -3,6 +3,7 @@ import Employee from "../models/employeeModel.js";
 import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
+import BiometricTransaction from "../models/biometricTransactionModel.js";
 
 // Helper: Parse time to minutes (HH:MM) -> minutes
 export const toMinutes = (time) => {
@@ -11,30 +12,130 @@ export const toMinutes = (time) => {
   return h * 60 + m;
 };
 
-// Assigns a punch to the correct "shift day" instead of its own raw calendar date.
-// For a same-day shift (start <= end) this is just dateStr. For an overnight shift
-// (start > end, e.g. "Flexible" 05:00->03:00) a punch after midnight but before the
-// shift's end time is really the tail end of the PREVIOUS day's shift, not the start of
-// a new one on its own calendar date - bucketing by raw calendar date splits one shift
-// occurrence's check-in and check-out across two Attendance rows. Punches that fall in
-// the dead zone between one shift's end and the next one's start (rare - late checkout
-// or early arrival) are resolved by punch type: OUT extends the previous shift-day's
-// grace period, IN belongs to the shift about to start today.
-export const computeShiftDayBucket = (dateStr, timeStr, transactionType, rules) => {
+const UAE_OFFSET_MS = 4 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// UAE has no DST, so a fixed +4h shift is enough to read local date/time off a UTC instant.
+export const uaeDateStr = (d) => new Date(new Date(d).getTime() + UAE_OFFSET_MS).toISOString().split("T")[0];
+export const uaeTimeStr = (d) => new Date(new Date(d).getTime() + UAE_OFFSET_MS).toISOString().split("T")[1].substring(0, 5);
+const addDaysStr = (dateStr, n) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().split("T")[0];
+};
+
+// One occurrence of a shift, anchored to the date it STARTS on. end <= start means the
+// shift runs into the next day, so 09:00-03:00 ends 03:00 tomorrow and 00:00-00:00 /
+// 12:00-12:00 are full 24h windows. Returned as UTC instants.
+export const getShiftWindow = (rules, shiftDate) => {
+  const base = new Date(`${shiftDate}T00:00:00+04:00`).getTime();
   const startMin = toMinutes(rules.start);
   const endMin = toMinutes(rules.end);
-  if (startMin <= endMin) return dateStr; // same-day shift, no adjustment needed
+  const start = base + startMin * 60000;
+  let end = base + endMin * 60000;
+  if (endMin <= startMin) end += DAY_MS;
+  return { start: new Date(start), end: new Date(end) };
+};
 
-  const oneDayBack = () => {
-    const d = new Date(`${dateStr}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().split("T")[0];
+// Splits ONE employee's punches into shift occurrences using the shift's real
+// start/end, instead of a calendar day. This device reports every punch with the same
+// generic status (no IN/OUT direction), so direction is never read from the punch -
+// only from chronological order and parity inside an occurrence.
+//   - A punch inside an occurrence's window belongs to it.
+//   - A punch in the gap between one window's end and the next one's start (e.g. Flexible
+//     Day 03:00-09:00) is that previous occurrence's late check-out if it is still OPEN
+//     (odd number of punches so far = currently clocked in), otherwise it is the next
+//     occurrence's check-in.
+// `punches` need `.timestamp` and must be sorted ascending. Returns Map<shiftDate, punch[]>.
+export const assignPunchesToShiftDays = (punches, rules) => {
+  const buckets = new Map();
+
+  for (const p of punches) {
+    const t = new Date(p.timestamp).getTime();
+    const d = uaeDateStr(p.timestamp);
+    const candidates = [addDaysStr(d, -1), d, addDaysStr(d, 1)];
+
+    let owner = null;
+    for (const c of candidates) {
+      const w = getShiftWindow(rules, c);
+      if (t >= w.start.getTime() && t < w.end.getTime()) { owner = c; break; }
+    }
+
+    if (!owner) {
+      let prev = null;
+      for (const c of candidates) {
+        if (getShiftWindow(rules, c).end.getTime() <= t) prev = c;
+      }
+      const prevBucket = prev ? buckets.get(prev) : null;
+      owner = prevBucket && prevBucket.length % 2 === 1 ? prev : addDaysStr(prev || addDaysStr(d, -1), 1);
+    }
+
+    if (!buckets.has(owner)) buckets.set(owner, []);
+    buckets.get(owner).push(p);
+  }
+
+  return buckets;
+};
+
+// Loads the punches of the shift occurrence that STARTS on `shiftDate` for each employee
+// (one batched query for everyone), using the same bucketing as the attendance processor
+// so the daily list, the punch-detail modal and the stored rows always agree. Two days of
+// slack on each side covers the previous occurrences whose open/closed state decides
+// where a gap punch belongs. Returns Map<employeeId string, punch[]>.
+export const getShiftDayPunches = async (employees, shiftDate, shiftNameFor = (e) => e.shift) => {
+  const badgeOf = (e) => (e.badgeNumber || e.code || "").trim();
+  const result = new Map();
+  const badges = [...new Set(employees.map(badgeOf).filter(Boolean))];
+  if (!badges.length) return result;
+
+  const stored = await BiometricTransaction.find({
+    badgeNumber: { $in: badges },
+    timestamp: {
+      $gte: new Date(`${addDaysStr(shiftDate, -2)}T00:00:00+04:00`),
+      $lt: new Date(`${addDaysStr(shiftDate, 2)}T00:00:00+04:00`)
+    }
+  }).select("badgeNumber timestamp").sort({ timestamp: 1 }).lean();
+
+  const byBadge = {};
+  for (const p of stored) (byBadge[p.badgeNumber.trim()] ||= []).push({ timestamp: p.timestamp });
+
+  const rulesCache = new Map();
+  for (const e of employees) {
+    const shiftName = shiftNameFor(e) || e.shift || "Day Shift";
+    if (!rulesCache.has(shiftName)) rulesCache.set(shiftName, await getShiftRules(shiftName));
+    const buckets = assignPunchesToShiftDays(byBadge[badgeOf(e)] || [], rulesCache.get(shiftName));
+    result.set(String(e._id), buckets.get(shiftDate) || []);
+  }
+  return result;
+};
+
+// Turns one occurrence's punches into the Attendance fields. Check-out is only set when
+// the punch count is even (every IN has its OUT) - with an odd count the last punch is an
+// IN (back from a break, or just arrived) so the shift is still open. Work hours sum only
+// completed IN->OUT pairs, so breaks between pairs are excluded.
+export const summarizeShiftDay = (shiftDate, punches, rules) => {
+  const count = punches.length;
+  const first = punches[0];
+  const closed = count >= 2 && count % 2 === 0;
+  const last = closed ? punches[count - 1] : null;
+
+  let workHours = null;
+  if (count >= 2) {
+    let minutes = 0;
+    for (let i = 0; i + 1 < count; i += 2) {
+      minutes += Math.round((new Date(punches[i + 1].timestamp) - new Date(punches[i].timestamp)) / 60000);
+    }
+    workHours = `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  }
+
+  return {
+    checkIn: first ? uaeTimeStr(first.timestamp) : null,
+    checkOut: last ? uaeTimeStr(last.timestamp) : null,
+    checkOutNextDay: last ? uaeDateStr(last.timestamp) !== shiftDate : false,
+    workHours,
+    isOpen: !closed,
+    window: getShiftWindow(rules, shiftDate)
   };
-
-  const punchMin = toMinutes(timeStr);
-  if (punchMin >= startMin) return dateStr;
-  if (punchMin < endMin) return oneDayBack();
-  return transactionType === "OUT" ? oneDayBack() : dateStr;
 };
 
 // Helper: Calculate duration between two times in HH:MM format
@@ -73,16 +174,19 @@ export const getShiftRules = async (shiftName) => {
       buffers = [meta.lateLimit];
     }
 
+    // Missing start/end -> 00:00-00:00, i.e. a plain calendar-day window (the old
+    // behaviour) rather than an invented 09:00-18:00 working day.
     return {
-      start: meta.startTime || "09:00",
-      end: meta.endTime || "18:00",
+      start: meta.startTime || "00:00",
+      end: meta.endTime || "00:00",
       lateLimit: meta.lateLimit || null,
       latePolicy: meta.latePolicy || [],
       buffers
     };
   }
-  // Default fallback - shift name doesn't match any configured Master at all
-  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
+  // Shift name doesn't match any configured Master at all: calendar-day window and no
+  // late policy (never Late unless a shift explicitly configures one).
+  return { start: "00:00", end: "00:00", lateLimit: null, buffers: [], latePolicy: [] };
 };
 
 export const calculateLateTier = (checkInTime, rules) => {
@@ -94,9 +198,8 @@ export const calculateLateTier = (checkInTime, rules) => {
   // since it's numerically smallest, even though it's chronologically LAST relative to
   // the shift's own start - making 02:00 the on-time cutoff instead of 13:15 and
   // pushing every legitimately-on-time check-in into "Late". Normalize any time earlier
-  // than the shift's start into "next day" space before comparing, same fix as
-  // computeShiftDayBucket uses for punch bucketing. No-op for same-day shifts, where
-  // every buffer is already >= start.
+  // than the shift's start into "next day" space before comparing. No-op for same-day
+  // shifts, where every buffer is already >= start.
   const shiftStartMin = toMinutes(rules.start);
   const normalize = (t) => {
     const m = toMinutes(t);

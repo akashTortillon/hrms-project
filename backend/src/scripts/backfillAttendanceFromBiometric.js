@@ -1,31 +1,30 @@
 /**
- * Backfills Attendance.checkIn/checkOut for every employee+date from the raw
- * BiometricTransaction records already stored in the DB — the ground truth —
- * instead of trying to detect/patch the already-corrupted Attendance fields.
+ * Rebuilds Attendance rows from the raw BiometricTransaction records already stored in
+ * the DB (the ground truth), using the exact same shift-occurrence logic as live sync
+ * (services/attendanceProcessor.js) - this script no longer carries its own copy.
  *
- * Root cause (fixed in attendanceProcessor.js): the cross-sync-batch merge used
- * "this batch's checkIn wins if present" instead of "earliest checkIn wins,
- * latest checkOut wins". Any employee whose check-in landed in more than one
- * sync batch for the same day could have their real check-in silently
- * overwritten by a later stray/duplicate IN punch. This script recomputes the
- * correct values for every historical day and reports the diff.
+ * Punches are bucketed per the employee's shift Master (startTime/endTime), so a check-out
+ * after midnight stays on the row of the shift it belongs to.
  *
- * SAFE BY DEFAULT: runs in DRY RUN — prints what would change, writes nothing.
- * Pass --live to actually apply the fixes.
+ * SAFE BY DEFAULT: runs in DRY RUN - prints what would change, writes nothing.
+ * Pass --live to actually apply. Manually edited rows and approved-leave days are kept.
+ *
+ * Rows created by the OLD calendar-day bucketing can be left orphaned (e.g. a row that only
+ * exists because of a 01:18 tail punch that now belongs to the previous day's shift). They
+ * are always LISTED; pass --prune-stale (with --live) to delete them.
  *
  * Usage:
- *   node src/scripts/backfillAttendanceFromBiometric.js            # dry run
- *   node src/scripts/backfillAttendanceFromBiometric.js --live      # apply
- *   node src/scripts/backfillAttendanceFromBiometric.js --live --from=2026-07-01 --to=2026-07-30
+ *   node src/scripts/backfillAttendanceFromBiometric.js --from=2026-09-29 --to=2026-10-02          # dry run
+ *   node src/scripts/backfillAttendanceFromBiometric.js --live --from=2026-09-29 --to=2026-10-02   # apply
+ *   node src/scripts/backfillAttendanceFromBiometric.js --live --prune-stale --from=... --to=...   # apply + delete orphans
  */
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import Employee from "../models/employeeModel.js";
 import Attendance from "../models/attendanceModel.js";
 import BiometricTransaction from "../models/biometricTransactionModel.js";
-import { getShiftRules, calculateLateTier } from "../utils/attendanceUtils.js";
+import attendanceProcessor from "../services/attendanceProcessor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,197 +32,81 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const args = process.argv.slice(2);
 const LIVE = args.includes("--live");
+const PRUNE_STALE = args.includes("--prune-stale");
 const fromArg = args.find(a => a.startsWith("--from="));
 const toArg = args.find(a => a.startsWith("--to="));
 const uriArg = args.find(a => a.startsWith("--uri="));
-const FROM_DATE = fromArg ? fromArg.split("=")[1] : null; // "YYYY-MM-DD", inclusive
-const TO_DATE = toArg ? toArg.split("=")[1] : null;       // "YYYY-MM-DD", inclusive
+const FROM_DATE = fromArg ? fromArg.split("=")[1] : null; // "YYYY-MM-DD" UAE date, inclusive
+const TO_DATE = toArg ? toArg.split("=")[1] : null;       // "YYYY-MM-DD" UAE date, inclusive
 const DB_URI = uriArg ? uriArg.split("=")[1] : process.env.DB_URL; // --uri= overrides .env DB_URL
 
 async function main() {
   await mongoose.connect(DB_URI);
   console.log(`Connected to: ${DB_URI}`);
-  console.log(`Mode: ${LIVE ? "LIVE (will write)" : "DRY RUN (no writes)"}`);
-  if (FROM_DATE || TO_DATE) console.log(`Date range: ${FROM_DATE || "start"} to ${TO_DATE || "today"}`);
+  console.log(`Mode: ${LIVE ? "LIVE (will write)" : "DRY RUN (no writes)"}${PRUNE_STALE ? " + prune stale" : ""}`);
+  if (FROM_DATE || TO_DATE) console.log(`Date range (UAE): ${FROM_DATE || "start"} to ${TO_DATE || "today"}`);
 
-  // 1. Pull every raw transaction, sorted chronologically per badge, and re-bucket into
-  //    true earliest-IN / latest-OUT per employee+shift-day.
   const txnQuery = {};
   if (FROM_DATE || TO_DATE) {
     txnQuery.timestamp = {};
-    if (FROM_DATE) txnQuery.timestamp.$gte = new Date(`${FROM_DATE}T00:00:00Z`);
-    if (TO_DATE) txnQuery.timestamp.$lte = new Date(`${TO_DATE}T23:59:59Z`);
+    if (FROM_DATE) txnQuery.timestamp.$gte = new Date(`${FROM_DATE}T00:00:00+04:00`);
+    if (TO_DATE) txnQuery.timestamp.$lte = new Date(`${TO_DATE}T23:59:59.999+04:00`);
   }
 
   const transactions = await BiometricTransaction.find(txnQuery)
-    .select("badgeNumber timestamp transactionType")
+    .select("badgeNumber timestamp rawData")
     .sort({ badgeNumber: 1, timestamp: 1 })
     .lean();
   console.log(`Loaded ${transactions.length} raw biometric transactions.`);
 
-  // 2. Match employees once, up front - bucketing needs each employee's shift
-  //    start/end (see computeShiftDayBucket) to correctly place a punch into the right
-  //    shift-day for overnight shifts (e.g. "Flexible" 05:00->03:00), where the checkout
-  //    lands on the following calendar date and naive calendar-day bucketing would split
-  //    one shift occurrence's check-in and check-out across two Attendance rows.
-  const badgeCodes = Array.from(new Set(transactions.map(t => t.badgeNumber.trim())));
-  const employees = await Employee.find({
-    $or: [{ badgeNumber: { $in: badgeCodes } }, { code: { $in: badgeCodes } }]
-  });
-  const employeeByBadge = new Map();
-  for (const e of employees) {
-    if (e.badgeNumber) employeeByBadge.set(e.badgeNumber.trim(), e);
-    if (e.code) employeeByBadge.set(e.code.trim(), e);
-  }
-
-  const shiftRulesCache = new Map();
-  const getRulesCached = async (shiftName) => {
-    if (!shiftRulesCache.has(shiftName)) {
-      shiftRulesCache.set(shiftName, await getShiftRules(shiftName));
-    }
-    return shiftRulesCache.get(shiftName);
-  };
-
-  // This device (Tasty/Achara IBILL) reports every punch with the same generic StatusId
-  // (no real Check-In/Check-Out direction), so txn.transactionType can't be trusted -
-  // matches the fix already live in attendanceProcessor.js. Direction is instead purely
-  // first-punch-of-the-shift-day = check-in, last-punch-of-the-shift-day = check-out.
-  //
-  // A plain calendar-day bucket (00:00-23:59 UAE) is wrong for Night/Flexible Night
-  // Shift: a punch just after midnight is the CHECKOUT completing the shift that started
-  // the evening before, not a check-in for the new calendar day. Left as calendar-day,
-  // that leftover morning checkout and the real evening check-in both land in the same
-  // bucket and get picked as one bogus reversed pair. Shift name is the only reliable
-  // signal available here, so any shift with "night" in its name is bucketed on a
-  // noon-to-noon UAE window instead of midnight-to-midnight - a typical evening-in/
-  // morning-out night shift falls entirely inside one such window, while still keeping
-  // consecutive nights separate.
-  const isOvernightShift = (shiftName) => /night/i.test(shiftName || "");
-  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, punches: [{timeOfDay, bucketMinutes}] }
-  for (const txn of transactions) {
-    const code = txn.badgeNumber.trim();
-    const employee = employeeByBadge.get(code);
-    const overnight = isOvernightShift(employee?.shift);
-    const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
-    // Shift the clock back 12h before reading the date for overnight shifts, so noon
-    // becomes the bucket edge instead of midnight - a 00:00-11:59 punch falls onto the
-    // PREVIOUS shift-day (the tail end of a shift that started the evening before).
-    const bucketTime = overnight ? new Date(uaeTime.getTime() - 12 * 60 * 60 * 1000) : uaeTime;
-    const dateStr = bucketTime.toISOString().split("T")[0];
-    // timeOfDay is the real clock time, used to DISPLAY checkIn/checkOut (e.g. "04:20").
-    // bucketMinutes counts from the shift-day's own start (00:00 normal / noon overnight)
-    // instead - monotonically increasing through the whole bucket even when it crosses
-    // midnight, which timeOfDay alone can't be used for: an overnight pair's checkout
-    // (e.g. 04:20 = 260) would otherwise be LESS than its check-in (16:14 = 974) and
-    // produce a negative work-hours segment below.
-    const timeOfDay = uaeTime.getUTCHours() * 60 + uaeTime.getUTCMinutes();
-    const bucketMinutes = overnight ? (timeOfDay - 12 * 60 + 1440) % 1440 : timeOfDay;
-    const key = `${code}_${dateStr}`;
-
-    if (!grouped.has(key)) {
-      grouped.set(key, { badgeNumber: code, date: dateStr, punches: [] });
-    }
-    // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so punches ends
-    // up chronological - the first entry is check-in, the last is check-out, and keeping
-    // every punch (not just first/last) lets work hours exclude break time below.
-    grouped.get(key).punches.push({ timeOfDay, bucketMinutes });
-  }
-
-  const toTimeStr = (mins) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
-
-  for (const g of grouped.values()) {
-    const pm = g.punches;
-    g.checkIn = pm.length ? toTimeStr(pm[0].timeOfDay) : null;
-    g.checkOut = pm.length > 1 ? toTimeStr(pm[pm.length - 1].timeOfDay) : null;
-
-    // Work hours sum only the IN->OUT segments (pairs 0-1, 2-3, ...), NOT a naive
-    // first-punch-to-last-punch span - a break in the middle would otherwise count as
-    // work (see the matching fix in attendanceProcessor.js for the full reasoning). A
-    // trailing unpaired punch (still clocked in) contributes no segment.
-    g.workHours = null;
-    if (pm.length >= 2) {
-      let workMinutes = 0;
-      for (let i = 0; i + 1 < pm.length; i += 2) workMinutes += pm[i + 1].bucketMinutes - pm[i].bucketMinutes;
-      g.workHours = `${Math.floor(workMinutes / 60)}h ${workMinutes % 60}m`;
-    }
-  }
-  console.log(`Recomputed ${grouped.size} true employee-day check-in/check-out pairs from raw punches.`);
-
-  let changed = 0, skippedManual = 0, skippedLeave = 0, skippedNoChange = 0, unmatched = 0, created = 0;
-  const diffs = [];
-
-  for (const g of grouped.values()) {
-    const employee = employeeByBadge.get(g.badgeNumber);
-    if (!employee) { unmatched++; continue; }
-
-    const existing = await Attendance.findOne({ employee: employee._id, date: g.date });
-
-    if (existing?.isManuallyEdited) { skippedManual++; continue; }
-    if (existing?.status === "On Leave") { skippedLeave++; continue; }
-
-    const shiftName = employee.shift || "Day Shift";
-    const rules = await getRulesCached(shiftName);
-
-    let status = "Absent", lateTier = 0;
-    if (g.checkIn) {
-      lateTier = calculateLateTier(g.checkIn, rules);
-      status = lateTier > 0 ? "Late" : "Present";
-    }
-    const workHours = g.workHours;
-
-    if (existing) {
-      const noChange = existing.checkIn === g.checkIn && existing.checkOut === g.checkOut &&
-        existing.status === status && existing.lateTier === lateTier && existing.workHours === workHours;
-      if (noChange) { skippedNoChange++; continue; }
-
-      diffs.push({
-        employee: employee.name, code: employee.code, date: g.date,
-        before: { checkIn: existing.checkIn, checkOut: existing.checkOut, status: existing.status },
-        after: { checkIn: g.checkIn, checkOut: g.checkOut, status }
-      });
-
-      if (LIVE) {
-        existing.checkIn = g.checkIn;
-        existing.checkOut = g.checkOut;
-        existing.status = status;
-        existing.lateTier = lateTier;
-        existing.workHours = workHours;
-        existing.shift = shiftName;
-        await existing.save();
-      }
-      changed++;
-    } else {
-      diffs.push({
-        employee: employee.name, code: employee.code, date: g.date,
-        before: null,
-        after: { checkIn: g.checkIn, checkOut: g.checkOut, status }
-      });
-      if (LIVE) {
-        await Attendance.create({
-          employee: employee._id, date: g.date, shift: shiftName,
-          checkIn: g.checkIn, checkOut: g.checkOut, status, lateTier, workHours
-        });
-      }
-      created++;
-    }
-  }
+  // Always dry-run first so the diff is computed before anything is written, then (live) apply.
+  const preview = await attendanceProcessor.processTransactions(transactions, { dryRun: true, returnKeys: true });
 
   console.log("\n=== Diffs (first 50 shown) ===");
-  for (const d of diffs.slice(0, 50)) {
+  for (const d of preview.diffs.slice(0, 50)) {
     console.log(`${d.date}  ${d.employee} (${d.code})`);
     console.log(`  before: checkIn=${d.before?.checkIn ?? "—"} checkOut=${d.before?.checkOut ?? "—"} status=${d.before?.status ?? "—"}`);
-    console.log(`  after:  checkIn=${d.after.checkIn ?? "—"} checkOut=${d.after.checkOut ?? "—"} status=${d.after.status}`);
+    console.log(`  after:  checkIn=${d.after.checkIn ?? "—"} checkOut=${d.after.checkOut ?? "—"}${d.after.nextDay ? " (next day)" : ""} status=${d.after.status}`);
   }
-  if (diffs.length > 50) console.log(`... and ${diffs.length - 50} more`);
+  if (preview.diffs.length > 50) console.log(`... and ${preview.diffs.length - 50} more`);
+
+  // Orphans: biometric-derived rows in range that no shift occurrence maps to any more.
+  const touched = new Set(preview.touchedKeys);
+  const rowQuery = {
+    isManuallyEdited: { $ne: true },
+    status: { $in: ["Present", "Late", "Incomplete"] },
+    checkIn: { $ne: null }
+  };
+  if (FROM_DATE || TO_DATE) {
+    rowQuery.date = {};
+    if (FROM_DATE) rowQuery.date.$gte = FROM_DATE;
+    if (TO_DATE) rowQuery.date.$lte = TO_DATE;
+  }
+  const rows = await Attendance.find(rowQuery).populate("employee", "name code").lean();
+  const stale = rows.filter(r => r.employee && !touched.has(`${r.employee._id}_${r.date}`));
+
+  console.log(`\n=== Orphaned rows from old calendar-day bucketing (${stale.length}) ===`);
+  for (const r of stale.slice(0, 50)) {
+    console.log(`${r.date}  ${r.employee.name} (${r.employee.code})  checkIn=${r.checkIn} checkOut=${r.checkOut ?? "—"} status=${r.status}`);
+  }
+  if (stale.length > 50) console.log(`... and ${stale.length - 50} more`);
 
   console.log("\n=== Summary ===");
-  console.log(`Existing records that would change: ${changed}`);
-  console.log(`New records that would be created (had punches, no Attendance row yet): ${created}`);
-  console.log(`Skipped — manually edited (preserved): ${skippedManual}`);
-  console.log(`Skipped — on approved leave (preserved): ${skippedLeave}`);
-  console.log(`Skipped — already correct: ${skippedNoChange}`);
-  console.log(`Unmatched badge numbers (no Employee record): ${unmatched}`);
-  console.log(LIVE ? "\nLIVE MODE — all changes above were written." : "\nDRY RUN — nothing written. Re-run with --live to apply.");
+  console.log(`Rows that would change: ${preview.updated}`);
+  console.log(`Rows that would be created: ${preview.created}`);
+  console.log(`Skipped (already correct / manually edited / on leave): ${preview.skipped}`);
+  console.log(`Unmatched badge numbers (no Employee record): ${preview.unmappedBadges.length}`);
+  console.log(`Orphaned rows: ${stale.length}${PRUNE_STALE ? " (will be deleted)" : " (kept - pass --prune-stale to delete)"}`);
+
+  if (LIVE) {
+    await attendanceProcessor.processTransactions(transactions);
+    if (PRUNE_STALE && stale.length) {
+      await Attendance.deleteMany({ _id: { $in: stale.map(r => r._id) } });
+    }
+    console.log("\nLIVE MODE - all changes above were written.");
+  } else {
+    console.log("\nDRY RUN - nothing written. Re-run with --live to apply.");
+  }
 
   await mongoose.disconnect();
 }

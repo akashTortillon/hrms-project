@@ -42,7 +42,7 @@ export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
                             {type === "Shift" && (meta.startTime || meta.endTime) && (
                                 <span style={{ fontSize: '11px', color: '#6b7280' }}>
                                     {meta.startTime || '?'} – {meta.endTime || '?'}
-                                    {meta.lateLimit ? ` · Late after ${meta.lateLimit}` : ''}
+                                    {(meta.latePolicy?.[0]?.time || meta.lateLimit) ? ` · Late after ${meta.latePolicy?.[0]?.time || meta.lateLimit}` : ' · No late policy'}
                                 </span>
                             )}
                         </div>

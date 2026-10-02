@@ -426,6 +426,11 @@ export default function HRManagement() {
                         <div className="mt-4">
                             <h4 className="text-sm font-semibold text-gray-700 mb-2">Late Deductions Policy</h4>
                             <div className="space-y-3">
+                                {(!shiftState.latePolicy || shiftState.latePolicy.length === 0) && (
+                                    <p className="text-xs text-gray-500 p-2 bg-gray-50 rounded border border-dashed border-gray-300">
+                                        No late policy - employees on this shift are never marked Late.
+                                    </p>
+                                )}
                                 {shiftState.latePolicy && shiftState.latePolicy.map((policy, index) => (
                                     <div key={index} className="grid grid-cols-12 gap-2 items-end p-2 bg-gray-50 rounded border border-gray-200">
                                         <div className="col-span-3">
@@ -443,7 +448,7 @@ export default function HRManagement() {
                                                 className="w-full p-1.5 text-sm border rounded focus:ring-1 focus:ring-blue-500"
                                             />
                                         </div>
-                                        <div className="col-span-5">
+                                        <div className="col-span-4">
                                             <label className="text-xs font-medium text-gray-600 block mb-1">
                                                 Deduction Type
                                             </label>
@@ -461,7 +466,7 @@ export default function HRManagement() {
                                                 <option value="DAILY_RATE">Daily Rate Multiplier</option>
                                             </select>
                                         </div>
-                                        <div className="col-span-4">
+                                        <div className="col-span-3">
                                             <label className="text-xs font-medium text-gray-600 block mb-1">
                                                 Value
                                             </label>
@@ -479,12 +484,45 @@ export default function HRManagement() {
                                                 className="w-full p-1.5 text-sm border rounded focus:ring-1 focus:ring-blue-500"
                                             />
                                         </div>
+                                        <div className="col-span-2 flex justify-end">
+                                            <button
+                                                type="button"
+                                                title="Remove this tier"
+                                                onClick={() => {
+                                                    const remaining = shiftState.latePolicy
+                                                        .filter((_, i) => i !== index)
+                                                        .map((p, i) => ({ ...p, tier: i + 1 }));
+                                                    setShiftState({ ...shiftState, latePolicy: remaining });
+                                                }}
+                                                className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
+                                {(shiftState.latePolicy?.length || 0) < 3 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const current = shiftState.latePolicy || [];
+                                            setShiftState({
+                                                ...shiftState,
+                                                latePolicy: [
+                                                    ...current,
+                                                    { tier: current.length + 1, time: '', type: current.length === 0 ? 'FIXED' : 'DAILY_RATE', value: 0 }
+                                                ]
+                                            });
+                                        }}
+                                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                        + Add late tier
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <p className="text-xs text-gray-500 mt-2">
-                            Configure thresholds for late marking. Tier 1 is typically the grace period. Tier 2 & 3 can trigger higher penalties (e.g. Half Day).
+                            Optional. Leave empty for flexible shifts where "late" has no meaning. If added, Tier 1 is typically the grace period and Tier 2 & 3 can trigger higher penalties (e.g. Half Day).
                         </p>
                     </div>
                 ) : modalType === "Leave Type" ? (

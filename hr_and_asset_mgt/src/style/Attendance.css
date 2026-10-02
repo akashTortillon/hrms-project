@@ -25,6 +25,21 @@
   background: var(--color-bg-subtle, #f1f5f9);
 }
 
+/* Check-out that falls on the calendar day after the shift started (shifts past midnight) */
+.next-day-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  white-space: nowrap;
+}
+
 /* ===== HEADER LAYOUT ===== */
 
 .attendance-header {

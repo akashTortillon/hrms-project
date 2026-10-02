@@ -197,7 +197,8 @@ function Attendance() {
         editedAt: record.editedAt,
         editReason: record.editReason,
         punchCount: record.punchCount || 0,
-        hasMultiplePunches: record.hasMultiplePunches || false
+        hasMultiplePunches: record.hasMultiplePunches || false,
+        checkOutNextDay: record.checkOutNextDay || false
       }));
 
       setAttendanceRecords(formattedRecords);
