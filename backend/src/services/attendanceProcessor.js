@@ -38,24 +38,60 @@ class AttendanceProcessor {
       return stats;
     }
 
-    // 1. Group transactions by Employee Code (Badge Number) + Date
-    const grouped = {};
+    // 1. Fetch employees FIRST (not after grouping) - overnight shifts (Night Shift /
+    // Flexible Night Shift) need shift-aware bucketing below, which requires knowing
+    // each punch's employee before it can be placed in the right bucket.
     const employeeCodes = new Set();
+    for (const txn of transactions) {
+      if (!txn.badgeNumber || !txn.timestamp) continue;
+      employeeCodes.add(txn.badgeNumber.trim());
+    }
+    const codesArray = Array.from(employeeCodes);
+    const employeesList = await Employee.find({
+      $or: [
+        { badgeNumber: { $in: codesArray } },
+        { code: { $in: codesArray } }
+      ]
+    });
+    const leaveMap = await getApprovedLeavesMap(employeesList);
+    const findEmployee = (badge) => employeesList.find(e =>
+      (e.badgeNumber && e.badgeNumber.trim() === badge) ||
+      (e.code && e.code.trim() === badge)
+    );
 
+    // A calendar-day bucket (00:00-23:59 UAE) is wrong for Night/Flexible Night Shift:
+    // a punch just after midnight is the CHECKOUT completing the shift that started the
+    // evening before, not a check-in for the new calendar day. Left as calendar-day, the
+    // real evening check-in (e.g. 16:14) and that leftover morning checkout from the
+    // PREVIOUS night (e.g. 04:20) both land in the same bucket and get picked as a single
+    // bogus check-in/check-out pair - reversed and nonsensical. Shift name is the only
+    // reliable signal available (this device's transactionType is generic/untrustworthy -
+    // see below), so any shift with "night" in its name is treated as overnight and
+    // bucketed on a noon-to-noon UAE window instead of midnight-to-midnight: a typical
+    // evening-in/morning-out night shift falls entirely inside one such window, while
+    // still keeping consecutive nights separate.
+    const isOvernightShift = (shiftName) => /night/i.test(shiftName || "");
+    const uaeTimeOf = (d) => new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
+    const shiftDateStrFor = (timestamp, overnight) => {
+      const uaeTime = uaeTimeOf(timestamp);
+      if (!overnight) return uaeTime.toISOString().split("T")[0];
+      // Shift the clock back 12h before reading the date, so noon becomes the bucket
+      // edge instead of midnight - a 00:00-11:59 punch falls onto the PREVIOUS
+      // shift-day (the tail end of a shift that started the evening before).
+      const anchored = new Date(uaeTime.getTime() - 12 * 60 * 60 * 1000);
+      return anchored.toISOString().split("T")[0];
+    };
+
+    // 2. Group transactions by Employee Code (Badge Number) + shift-day
+    const grouped = {};
     for (const txn of transactions) {
       if (!txn.badgeNumber || !txn.timestamp) continue;
 
-      // The stored timestamp is a correct UTC instant (biometricSyncService anchors it to
-      // UAE +04:00 on ingest). Bucketing/display must use UAE LOCAL date+time, not UTC -
-      // otherwise a punch between 00:00-03:59 UAE time (20:00-23:59 UTC the day before)
-      // gets grouped onto the wrong calendar day. UAE has no DST, so a fixed +4h shift is
-      // enough - no timezone-database lookup needed.
-      const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
-      const dateStr = uaeTime.toISOString().split("T")[0];
       const code = txn.badgeNumber.trim();
+      const employee = findEmployee(code);
+      const overnight = isOvernightShift(employee?.shift);
+      const dateStr = shiftDateStrFor(txn.timestamp, overnight);
       const key = `${code}_${dateStr}`;
-
-      employeeCodes.add(code);
 
       if (!grouped[key]) {
         grouped[key] = {
@@ -76,25 +112,10 @@ class AttendanceProcessor {
     // is instead resolved per employee+day just before use, below, from the FULL set of
     // that day's stored punches (not just this batch - see comment there for why).
 
-    // 2. Fetch employees by badgeNumber field for matching. Some employees never got
-    // badgeNumber backfilled and instead have the device's badge value sitting in `code`
-    // (e.g. code: "R106") - fall back to matching on `code` for those.
-    const codesArray = Array.from(employeeCodes);
-    const employeesList = await Employee.find({
-      $or: [
-        { badgeNumber: { $in: codesArray } },
-        { code: { $in: codesArray } }
-      ]
-    });
-    const leaveMap = await getApprovedLeavesMap(employeesList);
-
     // 3. Process each grouped record
     for (const key in grouped) {
       const record = grouped[key];
-      const employee = employeesList.find(e =>
-        (e.badgeNumber && e.badgeNumber.trim() === record.badgeNumber) ||
-        (e.code && e.code.trim() === record.badgeNumber)
-      );
+      const employee = findEmployee(record.badgeNumber);
 
       if (!employee) {
         console.warn(`[AttendanceProcessor] Employee with badge number ${record.badgeNumber} not found.`);
@@ -102,15 +123,20 @@ class AttendanceProcessor {
         continue;
       }
 
-      // Resolve check-in/check-out from the FULL day's punches, not just this batch -
-      // check-in and check-out routinely land in separate sync batches (checked in
-      // mid-morning, synced; checked out in the evening, synced later), and this batch
-      // alone can't tell direction anyway. Mirrors how BioCloud's own "First & Last"
-      // report derives it: earliest punch of the day = check-in, latest = check-out; a
-      // lone punch that day is check-in only (confirmed against BioCloud's own UI, which
-      // shows a single punch the same way rather than guessing a direction for it).
-      const dayStart = new Date(`${record.date}T00:00:00+04:00`);
-      const dayEnd = new Date(`${record.date}T23:59:59.999+04:00`);
+      const overnight = isOvernightShift(employee.shift);
+
+      // Resolve check-in/check-out from the FULL shift-day's punches, not just this
+      // batch - check-in and check-out routinely land in separate sync batches (checked
+      // in mid-morning, synced; checked out in the evening, synced later), and this batch
+      // alone can't tell direction anyway. Window matches how `record.date` was bucketed
+      // above: calendar day (00:00-23:59) for normal shifts, noon-to-noon for overnight
+      // ones, so the re-query here can't disagree with the grouping that produced `record`.
+      const dayStart = overnight
+        ? new Date(`${record.date}T12:00:00+04:00`)
+        : new Date(`${record.date}T00:00:00+04:00`);
+      const dayEnd = overnight
+        ? new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
+        : new Date(`${record.date}T23:59:59.999+04:00`);
       const dayPunches = await BiometricTransaction.find({
         badgeNumber: record.badgeNumber,
         timestamp: { $gte: dayStart, $lte: dayEnd }
@@ -120,10 +146,13 @@ class AttendanceProcessor {
         const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
         return uaeTime.toISOString().split("T")[1].substring(0, 5);
       };
-      const toUaeMinutesOfDay = (d) => {
-        const uaeTime = new Date(new Date(d).getTime() + 4 * 60 * 60 * 1000);
-        return uaeTime.getUTCHours() * 60 + uaeTime.getUTCMinutes();
-      };
+      // Minutes elapsed since this shift-day's bucket start (dayStart, above) - NOT raw
+      // time-of-day. An overnight shift's checkout (e.g. 04:20) now correctly shares a
+      // bucket with its evening check-in (e.g. 16:14), and raw time-of-day minutes would
+      // go negative across that midnight rollover (260 - 974) when summing segments below.
+      // Counting from the bucket start instead increases monotonically through the whole
+      // window regardless of whether it crosses midnight.
+      const minutesSinceBucketStart = (d) => Math.round((new Date(d).getTime() - dayStart.getTime()) / 60000);
 
       record.checkIn = dayPunches.length ? toUaeTimeStr(dayPunches[0].timestamp) : null;
       record.checkOut = dayPunches.length > 1 ? toUaeTimeStr(dayPunches[dayPunches.length - 1].timestamp) : null;
@@ -138,7 +167,7 @@ class AttendanceProcessor {
       if (dayPunches.length >= 2) {
         let workMinutes = 0;
         for (let i = 0; i + 1 < dayPunches.length; i += 2) {
-          workMinutes += toUaeMinutesOfDay(dayPunches[i + 1].timestamp) - toUaeMinutesOfDay(dayPunches[i].timestamp);
+          workMinutes += minutesSinceBucketStart(dayPunches[i + 1].timestamp) - minutesSinceBucketStart(dayPunches[i].timestamp);
         }
         record.workHours = `${Math.floor(workMinutes / 60)}h ${workMinutes % 60}m`;
       }

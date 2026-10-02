@@ -87,33 +87,54 @@ async function main() {
   // This device (Tasty/Achara IBILL) reports every punch with the same generic StatusId
   // (no real Check-In/Check-Out direction), so txn.transactionType can't be trusted -
   // matches the fix already live in attendanceProcessor.js. Direction is instead purely
-  // first-punch-of-the-day = check-in, last-punch-of-the-day = check-out. Calendar-day
-  // bucketing only (not shift-day/overnight-aware yet) - matches what's currently live;
-  // overnight-shift bucketing for this device needs its own dead-zone strategy since the
-  // old computeShiftDayBucket dead-zone logic also relied on transactionType.
-  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, punchMinutes: [] }
+  // first-punch-of-the-shift-day = check-in, last-punch-of-the-shift-day = check-out.
+  //
+  // A plain calendar-day bucket (00:00-23:59 UAE) is wrong for Night/Flexible Night
+  // Shift: a punch just after midnight is the CHECKOUT completing the shift that started
+  // the evening before, not a check-in for the new calendar day. Left as calendar-day,
+  // that leftover morning checkout and the real evening check-in both land in the same
+  // bucket and get picked as one bogus reversed pair. Shift name is the only reliable
+  // signal available here, so any shift with "night" in its name is bucketed on a
+  // noon-to-noon UAE window instead of midnight-to-midnight - a typical evening-in/
+  // morning-out night shift falls entirely inside one such window, while still keeping
+  // consecutive nights separate.
+  const isOvernightShift = (shiftName) => /night/i.test(shiftName || "");
+  const grouped = new Map(); // "badge_date" -> { badgeNumber, date, punches: [{timeOfDay, bucketMinutes}] }
   for (const txn of transactions) {
     const code = txn.badgeNumber.trim();
+    const employee = employeeByBadge.get(code);
+    const overnight = isOvernightShift(employee?.shift);
     const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
-    const dateStr = uaeTime.toISOString().split("T")[0];
-    const minutesOfDay = uaeTime.getUTCHours() * 60 + uaeTime.getUTCMinutes();
+    // Shift the clock back 12h before reading the date for overnight shifts, so noon
+    // becomes the bucket edge instead of midnight - a 00:00-11:59 punch falls onto the
+    // PREVIOUS shift-day (the tail end of a shift that started the evening before).
+    const bucketTime = overnight ? new Date(uaeTime.getTime() - 12 * 60 * 60 * 1000) : uaeTime;
+    const dateStr = bucketTime.toISOString().split("T")[0];
+    // timeOfDay is the real clock time, used to DISPLAY checkIn/checkOut (e.g. "04:20").
+    // bucketMinutes counts from the shift-day's own start (00:00 normal / noon overnight)
+    // instead - monotonically increasing through the whole bucket even when it crosses
+    // midnight, which timeOfDay alone can't be used for: an overnight pair's checkout
+    // (e.g. 04:20 = 260) would otherwise be LESS than its check-in (16:14 = 974) and
+    // produce a negative work-hours segment below.
+    const timeOfDay = uaeTime.getUTCHours() * 60 + uaeTime.getUTCMinutes();
+    const bucketMinutes = overnight ? (timeOfDay - 12 * 60 + 1440) % 1440 : timeOfDay;
     const key = `${code}_${dateStr}`;
 
     if (!grouped.has(key)) {
-      grouped.set(key, { badgeNumber: code, date: dateStr, punchMinutes: [] });
+      grouped.set(key, { badgeNumber: code, date: dateStr, punches: [] });
     }
-    // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so punchMinutes
-    // ends up chronological - the first entry is check-in, the last is check-out, and
-    // keeping every punch (not just first/last) lets work hours exclude break time below.
-    grouped.get(key).punchMinutes.push(minutesOfDay);
+    // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so punches ends
+    // up chronological - the first entry is check-in, the last is check-out, and keeping
+    // every punch (not just first/last) lets work hours exclude break time below.
+    grouped.get(key).punches.push({ timeOfDay, bucketMinutes });
   }
 
   const toTimeStr = (mins) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
 
   for (const g of grouped.values()) {
-    const pm = g.punchMinutes;
-    g.checkIn = pm.length ? toTimeStr(pm[0]) : null;
-    g.checkOut = pm.length > 1 ? toTimeStr(pm[pm.length - 1]) : null;
+    const pm = g.punches;
+    g.checkIn = pm.length ? toTimeStr(pm[0].timeOfDay) : null;
+    g.checkOut = pm.length > 1 ? toTimeStr(pm[pm.length - 1].timeOfDay) : null;
 
     // Work hours sum only the IN->OUT segments (pairs 0-1, 2-3, ...), NOT a naive
     // first-punch-to-last-punch span - a break in the middle would otherwise count as
@@ -122,7 +143,7 @@ async function main() {
     g.workHours = null;
     if (pm.length >= 2) {
       let workMinutes = 0;
-      for (let i = 0; i + 1 < pm.length; i += 2) workMinutes += pm[i + 1] - pm[i];
+      for (let i = 0; i + 1 < pm.length; i += 2) workMinutes += pm[i + 1].bucketMinutes - pm[i].bucketMinutes;
       g.workHours = `${Math.floor(workMinutes / 60)}h ${workMinutes % 60}m`;
     }
   }
