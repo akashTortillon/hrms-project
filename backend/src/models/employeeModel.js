@@ -183,7 +183,15 @@ const employeeSchema = new mongoose.Schema({
   },
   profilePhotoUploadedAt: { type: Date, default: null },
   // Biometric Badge Number (from BioCloud device - e.g. R106, P104, D101)
-  badgeNumber: { type: String, default: null, sparse: true, index: true }
+  badgeNumber: { type: String, default: null, sparse: true, index: true },
+  // Result of the last push of this employee to BioCloud (see bioCloudEmployeeService.js).
+  // FAILED rows can be retried with scripts/syncEmployeesToBiometric.js.
+  biometricSync: {
+    status: { type: String, enum: ["SYNCED", "FAILED", "SKIPPED"], default: undefined },
+    message: { type: String, default: undefined },
+    commandIds: { type: [Number], default: undefined },
+    syncedAt: { type: Date, default: undefined }
+  }
 }, { timestamps: true });
 
 export default mongoose.model("Employee", employeeSchema);

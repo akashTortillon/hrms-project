@@ -9,6 +9,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 import { toNumber, computeTotalSalary, computeCtc, splitIncrement } from "../utils/salaryCalc.js";
 import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
+import { syncEmployeeToBiometric, syncEmployeesToBiometric } from "../services/bioCloudEmployeeService.js";
 
 const buildLaborCards = (payload = {}) => {
   if (Array.isArray(payload.laborCards) && payload.laborCards.length > 0) {
@@ -494,6 +495,11 @@ export const addEmployee = async (req, res) => {
     }
 
     res.status(201).json({ message, employee });
+
+    // Add the employee to the biometric system too. After the response so a slow or
+    // unreachable BioCloud never delays or fails employee creation; the outcome is stored
+    // on employee.biometricSync (never throws).
+    syncEmployeeToBiometric(employee);
 
     // Only when the employee is created directly with status "Onboarding" (today's
     // Add Employee default) - an employee added as already-Active (e.g. inter-branch
@@ -1366,6 +1372,7 @@ export const importEmployees = async (req, res) => {
     const data = XLSX.utils.sheet_to_json(sheet);
 
     let successCount = 0;
+    const employeeIdsForBiometric = []; // pushed to BioCloud after the response is sent
     let errors = [];
 
     // Pre-fetch all existing emails and phones to minimize DB calls in loop
@@ -1771,6 +1778,7 @@ export const importEmployees = async (req, res) => {
           });
           employeeIdForLink = createdEmployee._id;
         }
+        employeeIdsForBiometric.push(employeeIdForLink);
 
         // Link the User account to this Employee record. Covers both: a User just
         // created above (User.create at ~line 1611 never sets employeeId - the
@@ -1824,6 +1832,15 @@ export const importEmployees = async (req, res) => {
       summary,
       errors
     });
+
+    // Add every imported/updated employee to BioCloud, one after another, after the
+    // response so a 90-row import isn't held up by 90 device-box round trips. Re-saving an
+    // existing badge is an upsert on BioCloud's side, so updated rows are safe to re-send.
+    if (employeeIdsForBiometric.length) {
+      syncEmployeesToBiometric(employeeIdsForBiometric).catch((err) => {
+        console.error("[BioCloudEmployee] Batch sync after import failed:", err.message);
+      });
+    }
 
   } catch (error) {
     console.error("Import Error:", error);
