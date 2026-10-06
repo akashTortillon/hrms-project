@@ -13,7 +13,7 @@ import {
 // Shift occurrences can reach into the adjacent calendar days (e.g. 09:00-03:00 ends
 // tomorrow), so the full set of an employee's punches is loaded with this much slack on
 // each side of the batch being processed.
-const LOOKAROUND_MS = 2 * 24 * 60 * 60 * 1000;
+const LOOKAROUND_MS = 3 * 24 * 60 * 60 * 1000;
 
 class AttendanceProcessor {
   /**

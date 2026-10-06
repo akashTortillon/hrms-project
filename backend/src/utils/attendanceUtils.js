@@ -39,17 +39,29 @@ export const getShiftWindow = (rules, shiftDate) => {
 
 // Splits ONE employee's punches into shift occurrences using the shift's real
 // start/end, instead of a calendar day. This device reports every punch with the same
-// generic status (no IN/OUT direction), so direction is never read from the punch -
-// only from chronological order and parity inside an occurrence.
-//   - A punch inside an occurrence's window belongs to it.
+// generic status (no IN/OUT direction), so direction is never read from the punch.
+//   - A punch inside an occurrence's window always belongs to it.
 //   - A punch in the gap between one window's end and the next one's start (e.g. Flexible
-//     Day 03:00-09:00) is that previous occurrence's late check-out if it is still OPEN
-//     (odd number of punches so far = currently clocked in), otherwise it is the next
-//     occurrence's check-in.
+//     Day 03:00-09:00) is either the previous shift's late check-out or the next shift's
+//     early check-in. It is the previous shift's check-out only if (a) it falls in the
+//     first half of the gap (closer to that shift's end than the next shift's start) and
+//     (b) that shift is still OPEN, i.e. has an odd number of punches INSIDE its window
+//     (a check-in with no check-out yet). Otherwise it starts the next occurrence.
+// Every decision uses only the punches inside the one neighbouring window, never an
+// earlier decision, so the result is the same however far back the loaded history starts.
+// (An earlier version tracked running parity across all days; one wrong guess at the start
+// of the loaded history then shifted every later day by a punch, and the daily row, the
+// punch modal and live sync disagreed depending on how much history each happened to load.)
 // `punches` need `.timestamp` and must be sorted ascending. Returns Map<shiftDate, punch[]>.
 export const assignPunchesToShiftDays = (punches, rules) => {
   const buckets = new Map();
+  const add = (date, p) => {
+    if (!buckets.has(date)) buckets.set(date, []);
+    buckets.get(date).push(p);
+  };
 
+  // Pass 1: in-window punches are unambiguous. Gap punches wait for pass 2.
+  const gapPunches = [];
   for (const p of punches) {
     const t = new Date(p.timestamp).getTime();
     const d = uaeDateStr(p.timestamp);
@@ -60,26 +72,40 @@ export const assignPunchesToShiftDays = (punches, rules) => {
       const w = getShiftWindow(rules, c);
       if (t >= w.start.getTime() && t < w.end.getTime()) { owner = c; break; }
     }
-
-    if (!owner) {
-      let prev = null;
-      for (const c of candidates) {
-        if (getShiftWindow(rules, c).end.getTime() <= t) prev = c;
-      }
-      const prevBucket = prev ? buckets.get(prev) : null;
-      owner = prevBucket && prevBucket.length % 2 === 1 ? prev : addDaysStr(prev || addDaysStr(d, -1), 1);
-    }
-
-    if (!buckets.has(owner)) buckets.set(owner, []);
-    buckets.get(owner).push(p);
+    if (owner) add(owner, p);
+    else gapPunches.push({ p, t, d, candidates });
   }
 
+  // Pass 2: decide each gap punch from the in-window count of the window before it.
+  const inWindowCount = (date) => (buckets.get(date) || []).length;
+  const resolved = [];
+  for (const { p, t, d, candidates } of gapPunches) {
+    let prev = null;
+    for (const c of candidates) {
+      if (getShiftWindow(rules, c).end.getTime() <= t) prev = c;
+    }
+    const next = addDaysStr(prev || addDaysStr(d, -1), 1);
+
+    let owner = next;
+    if (prev) {
+      const gapStart = getShiftWindow(rules, prev).end.getTime();
+      const gapEnd = getShiftWindow(rules, next).start.getTime();
+      const midpoint = gapStart + (gapEnd - gapStart) / 2;
+      if (t < midpoint && inWindowCount(prev) % 2 === 1) owner = prev;
+    }
+    resolved.push({ owner, p });
+  }
+  // Add after all decisions so one gap punch never influences another's count.
+  for (const { owner, p } of resolved) add(owner, p);
+
+  // Keep every bucket chronological.
+  for (const list of buckets.values()) list.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   return buckets;
 };
 
 // Loads the punches of the shift occurrence that STARTS on `shiftDate` for each employee
 // (one batched query for everyone), using the same bucketing as the attendance processor
-// so the daily list, the punch-detail modal and the stored rows always agree. Two days of
+// so the daily list, the punch-detail modal and the stored rows always agree. Three days of
 // slack on each side covers the previous occurrences whose open/closed state decides
 // where a gap punch belongs. Returns Map<employeeId string, punch[]>.
 export const getShiftDayPunches = async (employees, shiftDate, shiftNameFor = (e) => e.shift) => {
@@ -91,8 +117,8 @@ export const getShiftDayPunches = async (employees, shiftDate, shiftNameFor = (e
   const stored = await BiometricTransaction.find({
     badgeNumber: { $in: badges },
     timestamp: {
-      $gte: new Date(`${addDaysStr(shiftDate, -2)}T00:00:00+04:00`),
-      $lt: new Date(`${addDaysStr(shiftDate, 2)}T00:00:00+04:00`)
+      $gte: new Date(`${addDaysStr(shiftDate, -3)}T00:00:00+04:00`),
+      $lt: new Date(`${addDaysStr(shiftDate, 3)}T00:00:00+04:00`)
     }
   }).select("badgeNumber timestamp").sort({ timestamp: 1 }).lean();
 
