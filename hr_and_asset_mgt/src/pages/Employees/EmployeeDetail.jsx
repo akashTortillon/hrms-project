@@ -51,6 +51,7 @@ const TrashIcon = () => (
 import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity, deleteAllowance } from "../../services/employeeService";
 import { getEmployeeWorkflow } from "../../services/workflowService";
 import { getDepartments, biometricDeviceService } from "../../services/masterService";
+import TempPasswordToast from "../../components/Employees/TempPasswordToast.jsx";
 import { getEmployeeRequests, updateRepaymentSchedule, createExistingLoan, getLeaveSummary } from "../../services/requestService";
 import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
 
@@ -871,30 +872,14 @@ export default function EmployeeDetail() {
                                                         // Delivery failed but the reset itself succeeded - surface the temp
                                                         // password directly instead of leaving the admin to relay it manually
                                                         // with no way to hand it to the employee.
+                                                        // Stays until copied: no auto-close, and no click/drag/X dismissal -
+                                                        // the app-wide toast defaults (closeOnClick, draggable) would otherwise
+                                                        // close it when the admin clicks or selects the password.
                                                         toast.warn(
                                                             ({ closeToast }) => (
-                                                                <div>
-                                                                    <div style={{ marginBottom: 6 }}>
-                                                                        Password reset, but the email could not be sent.
-                                                                    </div>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                                        <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 'bold' }}>
-                                                                            {result.tempPassword}
-                                                                        </code>
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                navigator.clipboard.writeText(result.tempPassword);
-                                                                                toast.success("Password copied to clipboard");
-                                                                                closeToast();
-                                                                            }}
-                                                                            style={{ padding: '2px 10px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', cursor: 'pointer' }}
-                                                                        >
-                                                                            Copy
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
+                                                                <TempPasswordToast password={result.tempPassword} closeToast={closeToast} />
                                                             ),
-                                                            { autoClose: false }
+                                                            { autoClose: false, closeOnClick: false, draggable: false, closeButton: false }
                                                         );
                                                     } else {
                                                         toast.success("Password reset successfully. Email sent to employee.");
