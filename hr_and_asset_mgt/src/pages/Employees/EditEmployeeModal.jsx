@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService, biometricDeviceService, getBranches, getCompanies } from "../../services/masterService";
 import { getEmployees } from "../../services/employeeService";
 import { COUNTRY_CODES, splitPhone } from "../../constants/countryCodes.js";
 import { useRole } from "../../contexts/RoleContext";
 import SearchableSelect from "../../components/reusable/SearchableSelect.jsx";
+import BiometricDevicePicker from "../../components/Employees/BiometricDevicePicker.jsx";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -24,6 +25,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [managers, setManagers] = useState([]);
@@ -91,6 +93,7 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
       setManagers(Array.isArray(employeesData) ? employeesData : []);
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
+      setDevices(await biometricDeviceService.getAll());
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -405,6 +408,12 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     ))}
                   </select>
                 </div>
+
+                <BiometricDevicePicker
+                  devices={devices}
+                  value={form.biometricDevices || []}
+                  onChange={(biometricDevices) => setForm((prev) => ({ ...prev, biometricDevices }))}
+                />
 
                 <div className="form-group">
                   <label>Working Day Type</label>

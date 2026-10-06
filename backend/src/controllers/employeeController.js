@@ -10,6 +10,7 @@ import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 import { toNumber, computeTotalSalary, computeCtc, splitIncrement } from "../utils/salaryCalc.js";
 import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
 import { syncEmployeeToBiometric, syncEmployeesToBiometric } from "../services/bioCloudEmployeeService.js";
+import { normalizeSerials, buildDeviceLookup, parseDeviceCell } from "../utils/deviceUtils.js";
 
 const buildLaborCards = (payload = {}) => {
   if (Array.isArray(payload.laborCards) && payload.laborCards.length > 0) {
@@ -197,6 +198,14 @@ export const exportEmployees = async (req, res) => {
           "Contact Number": "$phone",
           "Status": "$status",
           "Shift": "$shift",
+          // Serial numbers, comma separated - the import's "Device" column accepts these back
+          "Device": {
+            $reduce: {
+              input: { $ifNull: ["$biometricDevices", []] },
+              initialValue: "",
+              in: { $cond: [{ $eq: ["$$value", ""] }, "$$this", { $concat: ["$$value", ", ", "$$this"] }] }
+            }
+          },
           "Joining Date": safeDateStr("$joinDate"),
           "Date of Birth": safeDateStr("$dob"),
           "Nationality": "$nationality",
@@ -284,6 +293,7 @@ export const addEmployee = async (req, res) => {
       visaFileNo,
       visaExpiry,
       shift,
+      biometricDevices,
       workingDayType,
       weekOffDays,
       laborCardNumber,
@@ -453,6 +463,7 @@ export const addEmployee = async (req, res) => {
       visaFileNo: visaFileNo || "",
       visaExpiry,
       shift: shift || "Day Shift",
+      biometricDevices: normalizeSerials(biometricDevices),
       workingDayType: workingDayType !== undefined ? Number(workingDayType) : 4,
       weekOffDays: Array.isArray(weekOffDays) ? weekOffDays : [0],
       laborCardNumber: laborCardNumber || "",
@@ -798,6 +809,12 @@ export const updateEmployee = async (req, res) => {
 
     const payload = { ...req.body };
     delete payload.systemCode; // internal reference number, never client-editable
+    // Server-written sync result: the edit form sends back whatever it loaded, which would
+    // overwrite a newer result with a stale one.
+    delete payload.biometricSync;
+    if (payload.biometricDevices !== undefined) {
+      payload.biometricDevices = normalizeSerials(payload.biometricDevices);
+    }
 
     // ---- Field-level permission guard ----------------------------------------
     // The route only checks MANAGE_EMPLOYEES, so any HR/manager user reaching here can
@@ -923,6 +940,17 @@ export const updateEmployee = async (req, res) => {
     }
 
     res.json({ employee: updatedEmployee });
+
+    // A device was added to this employee: queue them onto just the NEW device(s) in
+    // BioCloud. Nothing is ever removed from a device automatically - that would delete the
+    // employee's enrolled fingerprint/face there, so removal stays a manual step in BioCloud.
+    if (payload.biometricDevices !== undefined) {
+      const hadDevices = new Set(before?.biometricDevices || []);
+      const addedDevices = (updatedEmployee.biometricDevices || []).filter((serial) => !hadDevices.has(serial));
+      if (addedDevices.length) {
+        syncEmployeeToBiometric(updatedEmployee, { devices: addedDevices });
+      }
+    }
 
     // Build a field-level diff for the activity log. Skip internal/array/helper keys that
     // don't read as clean before/after scalars.
@@ -1393,6 +1421,8 @@ export const importEmployees = async (req, res) => {
     const validDesignations = canonicalMap('DESIGNATION');
     const validContractTypes = canonicalMap('EMPLOYEE_TYPE');
     const validCompanies = canonicalMap('COMPANY');
+    // BioCloud devices: a sheet's "Device" cell may use a device's name or its serial number
+    const deviceLookup = buildDeviceLookup(masters.filter(m => m.type === 'BIOMETRIC_DEVICE'));
 
     // Branch must belong to the row's Company (Branch.parentId === Company._id), not just exist anywhere.
     const companyIdByName = new Map(masters.filter(m => m.type === 'COMPANY').map(m => [m.name.toLowerCase(), String(m._id)]));
@@ -1446,7 +1476,8 @@ export const importEmployees = async (req, res) => {
       roles: new Set(),
       contractTypes: new Set(),
       workLocationCodes: new Set(),
-      visaLocationCodes: new Set()
+      visaLocationCodes: new Set(),
+      devices: new Set()
     };
 
     // Internal auto-incremented reference number (systemCode), independent of the
@@ -1544,6 +1575,16 @@ export const importEmployees = async (req, res) => {
         continue;
       }
       if (department) department = validDepartments.get(department.toLowerCase());
+
+      // Optional "Device" column: one or more device names/serials (comma or semicolon
+      // separated) that this employee punches on. Blank leaves the employee's devices as they are.
+      const deviceCell = row["Device"] ?? row["Biometric Device"] ?? row["Devices"] ?? "";
+      const { serials: deviceSerials, unknown: unknownDevices } = parseDeviceCell(deviceCell, deviceLookup);
+      if (unknownDevices.length) {
+        unknownDevices.forEach(d => missing.devices.add(d));
+        errors.push({ row: rowNum, email, message: `Invalid Device: '${unknownDevices.join("', '")}'. Must match a device name or serial number in Masters.` });
+        continue;
+      }
 
       if (company && !validCompanies.has(company.toLowerCase())) {
         missing.companies.add(company);
@@ -1720,6 +1761,7 @@ export const importEmployees = async (req, res) => {
           dob: parseExcelDate(row["Date of Birth"]),
           designation: designation || role,
           shift: row["Shift"] || "Day Shift",
+      ...(deviceSerials.length ? { biometricDevices: deviceSerials } : {}),
           nationality: row["Nationality"] || "",
           address: row["UAE Address"] || "",
           contractType: contractType || "",
@@ -1822,6 +1864,7 @@ export const importEmployees = async (req, res) => {
     summarize("Designations", missing.designations, "Add these under Masters → HR Management → Designations, then re-upload.");
     summarize("Roles", missing.roles, "Add these under Masters → HR Management → Roles, then re-upload.");
     summarize("Employee Types", missing.contractTypes, "Add these under Masters → HR Management → Employee Types, then re-upload.");
+    summarize("Devices", missing.devices, "Add these under Masters → HR Management → Biometric Devices, then re-upload.");
     summarize("Work Location codes", missing.workLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
     summarize("Visa Location codes", missing.visaLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
 

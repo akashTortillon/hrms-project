@@ -34,6 +34,9 @@ export default function HRManagement() {
         shifts,
         shiftState,
         setShiftState,
+        biometricDevices,
+        deviceSerial,
+        setDeviceSerial,
         workflowState,
         setWorkflowState,
         tempStepName,
@@ -66,6 +69,15 @@ export default function HRManagement() {
                     searchPlaceholder="Search shifts..."
                 >
                     <RenderList items={filteredShifts} type="Shift" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
+                </MastersCard>
+
+                {/* Biometric Devices - employees are linked to these by serial number, and the
+                    employee form / Excel import "Device" column pick from this list */}
+                <MastersCard
+                    title="Biometric Devices"
+                    onAdd={() => handleOpenAdd("Biometric Device")}
+                >
+                    <RenderList items={biometricDevices} type="Biometric Device" handleDelete={handleDelete} handleEdit={handleOpenEdit} />
                 </MastersCard>
 
                 {/* Employee Types */}
@@ -772,6 +784,33 @@ export default function HRManagement() {
                                 ))}
                                 {workflowState.steps.length === 0 && <p className="workflow-step-empty">No steps added yet.</p>}
                             </div>
+                        </div>
+                    </div>
+                ) : modalType === "Biometric Device" ? (
+                    <div className="space-y-4">
+                        <div className="form-group">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Device Name</label>
+                            <input
+                                type="text"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g. My Tasty"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
+                            <input
+                                type="text"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Device serial number as shown in BioCloud"
+                                value={deviceSerial}
+                                onChange={(e) => setDeviceSerial(e.target.value)}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Employees are linked to this device by serial number, so it can't be changed once an employee uses it.
+                            </p>
                         </div>
                     </div>
                 ) : (

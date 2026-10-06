@@ -8,8 +8,9 @@
  *
  * SAFE BY DEFAULT: DRY RUN - lists who would be sent, calls nothing. Pass --live to send.
  *
- * Needs BIOCLOUD_API_URL + BIOCLOUD_API_TOKEN in .env; set BIOCLOUD_DEFAULT_AREA and/or
- * BIOCLOUD_DEVICE_SERIALS (comma separated) to also queue employees onto devices.
+ * Needs BIOCLOUD_API_URL + BIOCLOUD_API_TOKEN in .env. Each employee is queued onto the
+ * device(s) chosen on their profile (Employee.biometricDevices). Employees with none fall
+ * back to BIOCLOUD_DEFAULT_AREA / BIOCLOUD_DEVICE_SERIALS (comma separated) from .env.
  *
  * Usage:
  *   node src/scripts/syncEmployeesToBiometric.js                 # dry run
@@ -38,7 +39,7 @@ async function main() {
   console.log(`Connected to: ${DB_URI}`);
   console.log(`Mode: ${LIVE ? "LIVE (will call BioCloud)" : "DRY RUN (no calls)"}`);
   console.log(`BioCloud: ${process.env.BIOCLOUD_API_URL || "(BIOCLOUD_API_URL not set)"}`);
-  console.log(`Push to area: ${process.env.BIOCLOUD_DEFAULT_AREA || "(none)"} | devices: ${process.env.BIOCLOUD_DEVICE_SERIALS || "(none)"}`);
+  console.log(`Fallback for employees with no device chosen - area: ${process.env.BIOCLOUD_DEFAULT_AREA || "(none)"} | devices: ${process.env.BIOCLOUD_DEVICE_SERIALS || "(none)"}`);
 
   const filter = ALL ? {} : { "biometricSync.status": { $ne: "SYNCED" } };
   const employees = await Employee.find(filter).sort({ code: 1 }).lean();
@@ -51,7 +52,7 @@ async function main() {
     if (!badge) { noBadge.push(emp.name); continue; }
 
     if (!LIVE) {
-      console.log(`  ${badge}  ${emp.name}  (last: ${emp.biometricSync?.status || "never"})`);
+      console.log(`  ${badge}  ${emp.name}  devices: ${(emp.biometricDevices || []).join(", ") || "(fallback)"}  (last: ${emp.biometricSync?.status || "never"})`);
       continue;
     }
     const result = await syncEmployeeToBiometric(emp);

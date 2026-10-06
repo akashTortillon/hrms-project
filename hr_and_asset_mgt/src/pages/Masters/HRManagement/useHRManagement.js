@@ -8,7 +8,8 @@ import {
     nationalityService,
     payrollRuleService,
     workflowTemplateService,
-    shiftService
+    shiftService,
+    biometricDeviceService
 } from "../../../services/masterService";
 
 export default function useHRManagement() {
@@ -63,6 +64,9 @@ export default function useHRManagement() {
     });
 
     const [shifts, setShifts] = useState([]);
+    // BioCloud devices: the modal's name input is the label, deviceSerial is the serial number
+    const [biometricDevices, setBiometricDevices] = useState([]);
+    const [deviceSerial, setDeviceSerial] = useState("");
     const [shiftState, setShiftState] = useState({
         startTime: '09:00',
         endTime: '18:00',
@@ -82,11 +86,13 @@ export default function useHRManagement() {
         try { setPayrollRules(await payrollRuleService.getAll()); } catch (e) { console.error(e); }
         try { setWorkflowTemplates(await workflowTemplateService.getAll()); } catch (e) { console.error(e); }
         try { setShifts(await shiftService.getAll()); } catch (e) { console.error(e); }
+        try { setBiometricDevices(await biometricDeviceService.getAll()); } catch (e) { console.error(e); }
     };
 
     const handleOpenAdd = (type) => {
         setModalType(type);
         setInputValue("");
+        setDeviceSerial("");
         setEditId(null);
         // Reset payroll state
         setPayrollState({
@@ -178,6 +184,9 @@ export default function useHRManagement() {
                     : (meta.lateLimit ? [{ tier: 1, time: meta.lateLimit, type: 'FIXED', value: 0 }] : [])
             });
             setInputValue(item.name);
+        } else if (type === "Biometric Device") {
+            setInputValue(item.name);
+            setDeviceSerial(item.code || "");
         } else if (type === "Workflow Template") {
             const meta = item.metadata || {};
             setWorkflowState({
@@ -209,6 +218,7 @@ export default function useHRManagement() {
         // Validation: For standard masters check inputValue, for Payroll Rule / Leave Type skip this check
         if (modalType === "Leave Type" && !leaveTypeState.name.trim()) return toast.warning("Please enter a name");
         if (modalType !== "Payroll Rule" && modalType !== "Leave Type" && !inputValue.trim()) return toast.warning("Please enter a name");
+        if (modalType === "Biometric Device" && !deviceSerial.trim()) return toast.warning("Please enter the device serial number");
 
         setLoading(true);
 
@@ -311,6 +321,11 @@ export default function useHRManagement() {
                 if (editId) await workflowTemplateService.update(editId, payload);
                 else await workflowTemplateService.add(payload);
                 setWorkflowTemplates(await workflowTemplateService.getAll());
+            } else if (modalType === "Biometric Device") {
+                const payload = { name: inputValue.trim(), code: deviceSerial.trim() };
+                if (editId) await biometricDeviceService.update(editId, payload);
+                else await biometricDeviceService.add(payload);
+                setBiometricDevices(await biometricDeviceService.getAll());
             } else if (modalType === "Shift") {
                 // Drop tiers added but left without a time, and renumber what remains.
                 const latePolicy = (shiftState.latePolicy || [])
@@ -335,7 +350,7 @@ export default function useHRManagement() {
             setShowModal(false);
         } catch (error) {
             console.error(error);
-            toast.error(`Failed to ${editId ? "update" : "add"} ${modalType}`);
+            toast.error(error.response?.data?.message || `Failed to ${editId ? "update" : "add"} ${modalType}`);
         } finally {
             setLoading(false);
             setEditId(null);
@@ -355,6 +370,7 @@ export default function useHRManagement() {
         else if (type === "Payroll Rule") item = payrollRules.find(i => i._id === id);
         else if (type === "Workflow Template") item = workflowTemplates.find(i => i._id === id);
         else if (type === "Shift") item = shifts.find(i => i._id === id);
+        else if (type === "Biometric Device") item = biometricDevices.find(i => i._id === id);
 
         setDeleteConfig({ show: true, type, id, name: item ? item.name : "this item" });
     };
@@ -390,12 +406,16 @@ export default function useHRManagement() {
             } else if (type === "Shift") {
                 await shiftService.delete(id);
                 setShifts(shifts.filter(i => i._id !== id));
+            } else if (type === "Biometric Device") {
+                await biometricDeviceService.delete(id);
+                setBiometricDevices(biometricDevices.filter(i => i._id !== id));
             }
             toast.success("Deleted successfully");
             setDeleteConfig({ ...deleteConfig, show: false });
         } catch (error) {
             console.error(error);
-            toast.error("Failed to delete");
+            // e.g. "Cannot delete: This device is linked to 3 employee(s)" from the backend
+            toast.error(error.response?.data?.message || "Failed to delete");
         } finally {
             setLoading(false);
         }
@@ -429,6 +449,9 @@ export default function useHRManagement() {
         shifts,
         shiftState,
         setShiftState,
+        biometricDevices,
+        deviceSerial,
+        setDeviceSerial,
         workflowState,
         setWorkflowState,
         tempStepName,

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { roleService, employeeTypeService, getDesignations, shiftService, getBranches, getCompanies } from "../../services/masterService";
+import { roleService, employeeTypeService, getDesignations, shiftService, biometricDeviceService, getBranches, getCompanies } from "../../services/masterService";
 import { getEmployees } from "../../services/employeeService";
 import { COUNTRY_CODES } from "../../constants/countryCodes.js";
 import SearchableSelect from "../../components/reusable/SearchableSelect.jsx";
+import BiometricDevicePicker from "../../components/Employees/BiometricDevicePicker.jsx";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -43,6 +44,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
     workBase: "",
     ctc: "",
     shift: "",
+    biometricDevices: [],
     workingDayType: 4,
     weekOffDays: [0],
     laborCardNumber: "",
@@ -63,6 +65,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
   const [contractTypes, setContractTypes] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [managers, setManagers] = useState([]);
@@ -103,6 +106,7 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
 
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
+      setDevices(await biometricDeviceService.getAll());
     } catch (error) {
       console.error("Failed to fetch masters", error);
     }
@@ -437,6 +441,12 @@ export default function AddEmployeeModal({ onClose, onAddEmployee, deptOptions =
                 ))}
               </select>
             </div>
+
+            <BiometricDevicePicker
+              devices={devices}
+              value={form.biometricDevices}
+              onChange={(biometricDevices) => setForm((prev) => ({ ...prev, biometricDevices }))}
+            />
 
             <div className="form-group">
               <label>Working Day Type</label>

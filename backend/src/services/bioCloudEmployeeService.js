@@ -65,11 +65,25 @@ export const getBadgeNumber = (employee) => String(employee.badgeNumber || emplo
 const configuredDeviceSerials = () =>
   (process.env.BIOCLOUD_DEVICE_SERIALS || "").split(",").map((s) => s.trim()).filter(Boolean);
 
+// Explains an error from callBioCloud/fetch. fetch() reports network problems as a bare
+// "fetch failed"; the real reason (ECONNREFUSED, ENOTFOUND, ...) is on error.cause.
+const describeError = (error) => {
+  const causeDetail = error.cause?.code || error.cause?.errors?.[0]?.code || error.cause?.message;
+  return `${error.message}${causeDetail ? ` (${causeDetail})` : ""}`;
+};
+
 /**
- * Adds/updates one employee in BioCloud and queues them onto the configured area/devices.
+ * Adds/updates one employee in BioCloud and queues them onto their devices.
  * Always resolves with { status, message, commandIds } - never throws.
+ *
+ * Devices: the employee's own `biometricDevices` (serial numbers) are used. Only when they
+ * have none does it fall back to BIOCLOUD_DEFAULT_AREA / BIOCLOUD_DEVICE_SERIALS from .env.
+ * Pass `{ devices: [...] }` to push to exactly those serials instead (used when an edit adds
+ * a device - nothing is ever removed from a device automatically, that deletes the
+ * employee's enrolled biometrics there). Each device is tried on its own, so one wrong
+ * serial doesn't stop the others.
  */
-export const syncEmployeeToBiometric = async (employee) => {
+export const syncEmployeeToBiometric = async (employee, { devices } = {}) => {
   const badge = getBadgeNumber(employee);
   let result;
 
@@ -86,25 +100,39 @@ export const syncEmployeeToBiometric = async (employee) => {
       if (employee.designation) payload.positionName = employee.designation;
       await callBioCloud("api_saveemployee", payload);
 
+      const clean = (list) => [...new Set((list || []).map((x) => String(x).trim()).filter(Boolean))];
+      const ownDevices = clean(employee.biometricDevices);
+      const explicit = Array.isArray(devices);
+      const useFallback = !explicit && ownDevices.length === 0;
+      const serials = explicit ? clean(devices) : useFallback ? configuredDeviceSerials() : ownDevices;
+      const area = useFallback ? (process.env.BIOCLOUD_DEFAULT_AREA || "").trim() : "";
+
       const commandIds = [];
-      const area = (process.env.BIOCLOUD_DEFAULT_AREA || "").trim();
-      if (area) {
-        const data = await callBioCloud("api_addemployeearea", { BadgeNumber: badge, AreaName: area });
-        commandIds.push(...[].concat(data.commandId || []));
-      }
-      for (const serial of configuredDeviceSerials()) {
-        const data = await callBioCloud("api_addemployeedevice", { BadgeNumber: badge, DeviceSerialNumber: serial });
-        commandIds.push(...[].concat(data.commandId || []));
+      const failures = [];
+      const attempt = async (label, endpoint, body) => {
+        try {
+          const data = await callBioCloud(endpoint, body);
+          commandIds.push(...[].concat(data.commandId || []));
+        } catch (error) {
+          failures.push(`${label}: ${describeError(error)}`);
+        }
+      };
+
+      if (area) await attempt(`area "${area}"`, "api_addemployeearea", { BadgeNumber: badge, AreaName: area });
+      for (const serial of serials) {
+        await attempt(`device ${serial}`, "api_addemployeedevice", { BadgeNumber: badge, DeviceSerialNumber: serial });
       }
 
-      const pushedTo = area || configuredDeviceSerials().length ? "" : " (not pushed to any device - set BIOCLOUD_DEFAULT_AREA or BIOCLOUD_DEVICE_SERIALS)";
-      result = { status: "SYNCED", message: `Saved in BioCloud as badge ${badge}${pushedTo}`, commandIds };
+      if (failures.length) {
+        result = { status: "FAILED", message: `Saved in BioCloud as badge ${badge}, but not everything was pushed - ${failures.join("; ")}`, commandIds };
+      } else {
+        const pushedNothing = !area && serials.length === 0 && !explicit;
+        const note = pushedNothing ? " (not pushed to any device - pick a device for the employee, or set BIOCLOUD_DEFAULT_AREA / BIOCLOUD_DEVICE_SERIALS)" : "";
+        const where = serials.length ? ` and queued to ${serials.join(", ")}` : "";
+        result = { status: "SYNCED", message: `Saved in BioCloud as badge ${badge}${where}${note}`, commandIds };
+      }
     } catch (error) {
-      // fetch() reports network problems as a bare "fetch failed"; the real reason
-      // (ECONNREFUSED, ENOTFOUND, ...) is on error.cause.
-      const causeDetail = error.cause?.code || error.cause?.errors?.[0]?.code || error.cause?.message;
-      const cause = causeDetail ? ` (${causeDetail})` : "";
-      result = { status: "FAILED", message: `${error.message}${cause}`, commandIds: [] };
+      result = { status: "FAILED", message: describeError(error), commandIds: [] };
     }
   }
 

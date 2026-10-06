@@ -63,6 +63,7 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                 "Contact Number": "971501234567",
                 "Status": "Active",
                 "Shift": "Morning",
+                "Device": "My Tasty",
                 "Joining Date": "2024-03-01",
                 "Employee Type": "Full-Time",
                 "Agent ID (WPS)": "",
@@ -152,6 +153,9 @@ const ImportEmployeeModal = ({ isOpen, onClose, onSuccess }) => {
                                     Department/Designation/Role/Employee Type must match Masters exactly.
                                     WORK LOCATION and VISA LOCATION can be the Company's Code ID (Masters → Companies)
                                     or the name of a Branch nested under that Company (e.g. "MAIN").
+                                    Device is optional: the name or serial number of a device from Masters → Biometric Devices
+                                    (several can be separated by commas). The employee is added to those devices in BioCloud;
+                                    leave it blank to use the default device setting (or keep what an existing employee already has).
                                 </p>
                             </div>
                             <button

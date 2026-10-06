@@ -184,6 +184,10 @@ const employeeSchema = new mongoose.Schema({
   profilePhotoUploadedAt: { type: Date, default: null },
   // Biometric Badge Number (from BioCloud device - e.g. R106, P104, D101)
   badgeNumber: { type: String, default: null, sparse: true, index: true },
+  // Serial numbers of the BioCloud devices this employee is exported to (api_addemployeedevice).
+  // Serials, not names, so renaming a device in Masters doesn't break the link. Empty means
+  // "use the BIOCLOUD_DEFAULT_AREA / BIOCLOUD_DEVICE_SERIALS fallback from .env".
+  biometricDevices: { type: [String], default: [] },
   // Result of the last push of this employee to BioCloud (see bioCloudEmployeeService.js).
   // FAILED rows can be retried with scripts/syncEmployeesToBiometric.js.
   biometricSync: {

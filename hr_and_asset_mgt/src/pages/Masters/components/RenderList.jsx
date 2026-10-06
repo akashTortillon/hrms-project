@@ -38,6 +38,11 @@ export const RenderList = ({ items, type, handleDelete, handleEdit }) => (
                                     {new Date(item.date).toLocaleDateString()}
                                 </span>
                             )}
+                            {type === "Biometric Device" && (
+                                <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                                    Serial: {item.code || '?'}
+                                </span>
+                            )}
                             {/* Show shift timing so the list isn't just a bare name */}
                             {type === "Shift" && (meta.startTime || meta.endTime) && (
                                 <span style={{ fontSize: '11px', color: '#6b7280' }}>

@@ -56,6 +56,7 @@ export const payrollRuleService = createGenericService('payroll-rules');
 export const repaymentPeriodService = createGenericService('repayment-periods');
 export const workflowTemplateService = createGenericService('workflow-templates');
 export const shiftService = createGenericService('shifts');
+export const biometricDeviceService = createGenericService('biometric-devices');
 
 
 // Asset Masters

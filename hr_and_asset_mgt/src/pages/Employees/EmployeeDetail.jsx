@@ -50,7 +50,7 @@ const TrashIcon = () => (
 
 import { getEmployeeById, getMyProfile, updateEmployee, getEmployeeDocuments, uploadEmployeeDocument, deleteEmployeeDocument, uploadEmployeePhoto, transferEmployee, confirmProbation, resetEmployeePassword, getEmployeeGratuity, deleteAllowance } from "../../services/employeeService";
 import { getEmployeeWorkflow } from "../../services/workflowService";
-import { getDepartments } from "../../services/masterService";
+import { getDepartments, biometricDeviceService } from "../../services/masterService";
 import { getEmployeeRequests, updateRepaymentSchedule, createExistingLoan, getLeaveSummary } from "../../services/requestService";
 import { downloadEmployeeDocument } from "../../services/employeeDocumentService.js";
 
@@ -134,6 +134,7 @@ export default function EmployeeDetail() {
     const [allowanceSubmitting, setAllowanceSubmitting] = useState(false);
     const [editMode, setEditMode] = useState("all");
     const [deptOptions, setDeptOptions] = useState([]);
+    const [deviceMasters, setDeviceMasters] = useState([]);
     const [photoUploading, setPhotoUploading] = useState(false);
     const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
     const photoInputRef = useRef(null);
@@ -308,6 +309,11 @@ export default function EmployeeDetail() {
             }
         } catch (err) {
             console.error("Failed to load departments", err);
+        }
+        try {
+            setDeviceMasters(await biometricDeviceService.getAll());
+        } catch (err) {
+            console.error("Failed to load biometric devices", err);
         }
     };
 
@@ -1086,6 +1092,16 @@ export default function EmployeeDetail() {
                             <div className="info-group">
                                 <label>Shift</label>
                                 <div>{employee.shift || "N/A"}</div>
+                            </div>
+                            <div className="info-group">
+                                <label>Biometric Devices</label>
+                                <div>
+                                    {(employee.biometricDevices || []).length
+                                        ? employee.biometricDevices
+                                            .map((serial) => deviceMasters.find((d) => d.code === serial)?.name || serial)
+                                            .join(", ")
+                                        : "Default"}
+                                </div>
                             </div>
                             <div className="info-group">
                                 <label>Working Day Type</label>

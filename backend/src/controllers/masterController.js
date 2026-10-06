@@ -19,6 +19,8 @@ const TYPE_MAPPING = {
     "workflow-templates": "WORKFLOW_TEMPLATE",
     "repayment-periods": "REPAYMENT_PERIOD",
     "shifts": "SHIFT",
+    // BioCloud devices: `name` is a label, `code` is the device serial number
+    "biometric-devices": "BIOMETRIC_DEVICE",
 
     // Asset
     "asset-types": "ASSET_TYPE",
@@ -28,6 +30,19 @@ const TYPE_MAPPING = {
     "service-types": "SERVICE_TYPE",
     "roles": "ROLE",
     "maintenance-shops": "MAINTENANCE_SHOP"
+};
+
+// A biometric device master needs a serial number (stored in `code`), and serials must be
+// unique - employees are linked to a device by serial. Returns an error message or null.
+const validateDevicePayload = async (payload, excludeId = null) => {
+    payload.code = String(payload.code || "").trim();
+    if (!payload.code) return "A device needs a serial number";
+    const duplicate = await Master.findOne({
+        type: "BIOMETRIC_DEVICE",
+        code: payload.code,
+        ...(excludeId ? { _id: { $ne: excludeId } } : {})
+    });
+    return duplicate ? `A device with serial number "${payload.code}" already exists (${duplicate.name})` : null;
 };
 
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -177,6 +192,11 @@ export const addItem = async (req, res) => {
             delete payload.parentId;
         }
 
+        if (dbType === "BIOMETRIC_DEVICE") {
+            const deviceError = await validateDevicePayload(payload);
+            if (deviceError) return res.status(400).json({ message: deviceError });
+        }
+
         const newItem = new Master(payload);
         await newItem.save();
         
@@ -237,6 +257,20 @@ export const updateItem = async (req, res) => {
             delete payload.parentId;
         }
 
+        if (dbType === "BIOMETRIC_DEVICE") {
+            const deviceError = await validateDevicePayload(payload, id);
+            if (deviceError) return res.status(400).json({ message: deviceError });
+
+            // Employees point at a device by serial, so the serial can't change under them.
+            const existing = await Master.findById(id);
+            if (existing && existing.code !== payload.code) {
+                const linked = await Employee.countDocuments({ biometricDevices: existing.code });
+                if (linked > 0) {
+                    return res.status(400).json({ message: `Cannot change the serial number: this device is linked to ${linked} employee(s).` });
+                }
+            }
+        }
+
         const updated = await Master.findByIdAndUpdate(id, payload, { new: true });
         if (!updated) return res.status(404).json({ message: "Item not found" });
 
@@ -292,6 +326,16 @@ export const deleteItem = async (req, res) => {
             return res.status(400).json({ 
                 message: `Cannot delete: This ${item.type.toLowerCase()} is linked to ${linkedEmployees} employee(s).` 
             });
+        }
+
+        // Devices are linked to employees by serial number (stored in `code`)
+        if (item.type === "BIOMETRIC_DEVICE") {
+            const linkedToDevice = await Employee.countDocuments({ biometricDevices: item.code });
+            if (linkedToDevice > 0) {
+                return res.status(400).json({
+                    message: `Cannot delete: This device is linked to ${linkedToDevice} employee(s). Remove it from them first.`
+                });
+            }
         }
 
         // 2. Check Assets (String and ID-based)
