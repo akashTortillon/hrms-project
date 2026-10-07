@@ -1291,11 +1291,13 @@ export const getPendingRequestsForAdmin = async (req, res) => {
     // never show up in the NEW manager's pending list at all (matching
     // isManagerApprover's identical live-lookup fallback for the action-button
     // check, which is moot if the request isn't even visible here first).
-    let currentReportUserIds = [];
-    if (req.user?.employeeId) {
-      const reports = await Employee.find({
-        $or: [{ designatedManager: req.user.employeeId }, { designatedFinanceManager: req.user.employeeId }]
-      }).select("_id email");
+    // Resolved per STAGE: someone who is only an employee's finance designee must not
+    // be handed that employee's MANAGER-stage request (they can't act on it - it showed
+    // as a dead "Waiting for manager approval" row), and vice versa. Both lists are
+    // identical for a person who holds both roles for the employee.
+    const reportUserIdsFor = async (field) => {
+      if (!req.user?.employeeId) return [];
+      const reports = await Employee.find({ [field]: req.user.employeeId }).select("_id email");
       const reportEmployeeIds = reports.map((e) => e._id);
       const reportEmails = reports.map((e) => e.email).filter(Boolean);
       const reportUsers = await User.find({
@@ -1304,8 +1306,10 @@ export const getPendingRequestsForAdmin = async (req, res) => {
           ...(reportEmails.length ? [{ email: { $in: reportEmails.map((e) => new RegExp(`^${escapeRegex(e)}$`, "i")) } }] : [])
         ]
       }).select("_id");
-      currentReportUserIds = reportUsers.map((u) => u._id);
-    }
+      return reportUsers.map((u) => u._id);
+    };
+    const managerReportUserIds = await reportUserIdsFor("designatedManager");
+    const financeReportUserIds = await reportUserIdsFor("designatedFinanceManager");
 
     if (!canApproveHr) {
       // Was two mutually-exclusive branches (manager-only XOR finance-only) that only
@@ -1320,7 +1324,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
           currentApprovalStage: "MANAGER",
           $or: [
             { designatedManager: { $in: managerScope } },
-            { userId: { $in: currentReportUserIds } }
+            { userId: { $in: managerReportUserIds } }
           ]
         });
       }
@@ -1329,7 +1333,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
           currentApprovalStage: "FINANCE",
           $or: [
             { designatedFinanceManager: { $in: financeScope } },
-            { userId: { $in: currentReportUserIds } }
+            { userId: { $in: financeReportUserIds } }
           ]
         });
       }
@@ -1343,7 +1347,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
           currentApprovalStage: "MANAGER",
           $or: [
             { designatedManager: { $in: managerScope } },
-            { userId: { $in: currentReportUserIds } }
+            { userId: { $in: managerReportUserIds } }
           ]
         });
       } else if (canApproveHr) {
@@ -1355,7 +1359,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
           currentApprovalStage: "FINANCE",
           $or: [
             { designatedFinanceManager: { $in: financeScope } },
-            { userId: { $in: currentReportUserIds } }
+            { userId: { $in: financeReportUserIds } }
           ]
         });
       } else if (canApproveHr) {
@@ -1396,14 +1400,57 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       .skip(skip)
       .limit(limitNum);
 
+    // The list is visible to more people than can actually act on each row (e.g. a
+    // finance-only designee sees the employee's MANAGER-stage loan; HR sees every
+    // stage). The UI used to re-derive "can this viewer act?" from a snapshot-only
+    // id compare, which diverged from the real check updateRequestStatus applies
+    // (live employee fallback, permission rules) - leaving a dead "Waiting for ..."
+    // badge where the backend would have accepted the click. Compute it here with
+    // the exact same helpers instead, and say who the row is waiting on.
+    const viewerId = (req.user._id || req.user.id)?.toString();
+    const data = await Promise.all(requests.map(async (doc) => {
+      const plain = doc.toObject();
+      // Helpers compare raw ids, but the response copy has them populated.
+      const raw = {
+        userId: doc.userId?._id || doc.userId,
+        designatedManager: doc.designatedManager?._id || doc.designatedManager,
+        designatedFinanceManager: doc.designatedFinanceManager?._id || doc.designatedFinanceManager
+      };
+      const isOwnRequest = raw.userId?.toString() === viewerId;
+      const stage = doc.currentApprovalStage;
+      let canActNow = false;
+      let alsoFinanceApprover = false;
+      if (!isOwnRequest) {
+        if (stage === "MANAGER") {
+          canActNow = await isManagerApprover(req.user, raw);
+          if (canActNow && doc.financeApproval?.status === "PENDING") {
+            alsoFinanceApprover = await isFinanceApprover(req.user, raw);
+          }
+        } else if (stage === "FINANCE") {
+          canActNow = await isFinanceApprover(req.user, raw);
+        } else if (stage === "HR") {
+          canActNow = isHrApprover(req.user);
+        }
+      }
+      const awaiting = stage === "MANAGER" ? doc.designatedManager
+        : stage === "FINANCE" ? doc.designatedFinanceManager
+        : null;
+      return {
+        ...plain,
+        canActNow,
+        alsoFinanceApprover,
+        awaitingApproverName: awaiting?.name || null
+      };
+    }));
+
     res.status(200).json({
       success: true,
-      count: requests.length,
+      count: data.length,
       limit: limitNum,
       page: pageNum,
       totalPages: Math.ceil(totalRequests / limitNum),
       totalDocs: totalRequests,
-      data: requests
+      data
     });
   } catch (error) {
     // console.error("Admin pending requests error:", error);
@@ -2100,7 +2147,7 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       });
     }
 
-    if (!["SKIP_MONTH", "ADJUST", "EXTRA_PAYMENT"].includes(action)) {
+    if (!["SKIP_MONTH", "ADJUST", "EXTRA_PAYMENT", "DELETE_EXTRA_PAYMENT"].includes(action)) {
       return res.status(400).json({
         success: false,
         message: "Invalid repayment schedule action."
@@ -2119,6 +2166,113 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Only loan and salary advance requests support repayment scheduling."
+      });
+    }
+
+    // Deleting an extra payment must work on a COMPLETED (fully repaid) loan too - the
+    // delete is what reopens it - so it is handled BEFORE the approved-only and
+    // isFullyPaid guards below, which apply to the other actions.
+    if (action === "DELETE_EXTRA_PAYMENT") {
+      const { extraPaymentRecordedAt, extraPaymentIndex } = req.body;
+      if (!["APPROVED", "COMPLETED"].includes(request.status)) {
+        return res.status(400).json({ success: false, message: "Extra payments can only be deleted on approved or completed loans." });
+      }
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ success: false, message: "A reason is required to delete an extra payment." });
+      }
+
+      const details = request.details || {};
+      const extras = Array.isArray(details.extraPayments) ? [...details.extraPayments] : [];
+      // Entries carry no _id (details is Mixed) - match on the exact recordedAt, falling
+      // back to the list index for any entry that lacks a timestamp.
+      let idx = -1;
+      if (extraPaymentRecordedAt) {
+        const target = new Date(extraPaymentRecordedAt).getTime();
+        idx = extras.findIndex((e) => e.recordedAt && new Date(e.recordedAt).getTime() === target);
+      } else if (Number.isInteger(Number(extraPaymentIndex))) {
+        idx = Number(extraPaymentIndex);
+      }
+      if (idx < 0 || idx >= extras.length) {
+        return res.status(404).json({ success: false, message: "Extra payment entry not found." });
+      }
+      // The onboarding "already repaid" opening entry is written at loan creation (same
+      // timestamp as the request itself) - the user-supplied reason can be anything, so
+      // identify it by position + creation time rather than by its text.
+      const isOpeningEntry = details.isPreExisting
+        && idx === 0
+        && extras[idx]?.recordedAt
+        && Math.abs(new Date(extras[idx].recordedAt) - new Date(request.createdAt)) < 60 * 1000;
+      if (isOpeningEntry) {
+        return res.status(400).json({ success: false, message: "The opening 'already repaid' entry of an existing loan cannot be deleted here." });
+      }
+
+      const [removed] = extras.splice(idx, 1);
+      const deletedEntry = {
+        ...removed,
+        deletedBy: req.user._id,
+        deletedByName: req.user.name || "",
+        deletedAt: new Date(),
+        deleteReason: reason.trim()
+      };
+
+      // Recompute everything derived from the extra-payment list.
+      const totalPayable = Number(details.totalRepaymentAmount) || Number(details.amount) || 0;
+      const existingDeductions = Array.isArray(request.payrollDeductions) ? request.payrollDeductions : [];
+      const payrollPaid = existingDeductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      let running = totalPayable - payrollPaid;
+      const rebuilt = extras
+        .slice()
+        .sort((a, b) => new Date(a.recordedAt || 0) - new Date(b.recordedAt || 0))
+        .map((e) => {
+          running = Math.max(0, running - (Number(e.amount) || 0));
+          return { ...e, remainingBalanceAfter: running };
+        });
+      const remainingAfter = Math.max(0, totalPayable - payrollPaid - rebuilt.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
+      const monthlyRepayment = Number(details.monthlyRepaymentAmount) || 0;
+      const additionalMonths = (remainingAfter > 0 && monthlyRepayment > 0) ? Math.ceil(remainingAfter / monthlyRepayment) : 0;
+
+      request.details = {
+        ...details,
+        extraPayments: rebuilt,
+        deletedExtraPayments: [...(Array.isArray(details.deletedExtraPayments) ? details.deletedExtraPayments : []), deletedEntry],
+        repaymentPeriod: existingDeductions.length + additionalMonths
+      };
+
+      if (remainingAfter > 0.01 && (request.isFullyPaid || request.status === "COMPLETED")) {
+        request.isFullyPaid = false;
+        request.status = "APPROVED";
+      }
+
+      await request.save();
+
+      logActivity({
+        req,
+        action: "DELETE",
+        module: "REQUESTS",
+        description: `Deleted extra payment of ${removed.amount} AED on loan ${request.requestId}: ${reason.trim()}`,
+        targetId: request._id,
+        targetName: request.requestId,
+        metadata: { deletedEntry, remainingAfter }
+      });
+
+      createNotification({
+        recipient: request.userId,
+        title: "Extra loan payment removed",
+        message: `An extra payment of ${removed.amount} AED recorded against your loan ${request.requestId} was removed: ${reason.trim()}`,
+        type: "REQUEST",
+        link: "/app/requests"
+      }).catch((error) => console.error("Notification error:", error));
+
+      const populatedAfterDelete = await Request.findById(request._id)
+        .populate("approvedBy", "name role")
+        .populate("managerApproval.actedBy", "name role")
+        .populate("financeApproval.actedBy", "name role")
+        .populate("hrApproval.actedBy", "name role");
+
+      return res.status(200).json({
+        success: true,
+        message: `Extra payment of ${removed.amount} AED deleted. Remaining balance: ${remainingAfter.toFixed(2)} AED.`,
+        data: populatedAfterDelete
       });
     }
 
@@ -2290,6 +2444,16 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       }
 
       await request.save();
+
+      logActivity({
+        req,
+        action: "CREATE",
+        module: "REQUESTS",
+        description: `Recorded extra payment of ${amount} AED on loan ${request.requestId}: ${reason.trim()}`,
+        targetId: request._id,
+        targetName: request.requestId,
+        metadata: { extraPaymentEntry, remainingAfter }
+      });
 
       createNotification({
         recipient: request.userId,

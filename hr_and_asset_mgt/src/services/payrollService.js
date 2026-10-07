@@ -127,22 +127,45 @@ export const payrollService = {
         link.parentNode.removeChild(link);
     },
 
-    // Export "Payroll Sheet" - separate template-matched layout from exportExcel's
-    // WPS-format report, requested alongside it (see Item 8).
-    exportPayrollSheet: async (month, year) => {
-        let response;
+    // Payroll reports (Payroll Sheet / Location / Visa) as xlsx or PDF. `kind`:
+    // "sheet" | "permit" | "visa". `filters` only applies to permit/visa. PDFs are
+    // requested inline so the same Blob can be previewed in-app or downloaded.
+    fetchReportBlob: async ({ kind, month, year, format = "pdf", filters = {} }) => {
+        const isSheet = kind === "sheet";
+        const params = { month, year, format };
+        if (format === "pdf") params.inline = 1;
+        if (!isSheet) {
+            params.reportType = kind;
+            if (filters.visaCompany) params.visaCompany = filters.visaCompany;
+            if (filters.workPermitCompany) params.workPermitCompany = filters.workPermitCompany;
+            if (filters.company) params.company = filters.company;
+            if (filters.branch) params.branch = filters.branch;
+        }
         try {
-            response = await api.get(`/payroll/export-sheet?month=${month}&year=${year}`, { responseType: 'blob' });
+            const response = await api.get(isSheet ? "/payroll/export-sheet" : "/payroll/export", { params, responseType: 'blob' });
+            return new Blob([response.data], {
+                type: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            });
         } catch (error) {
             throw new Error(await blobErrorMessage(error, "Export failed."));
         }
-        const url = window.URL.createObjectURL(new Blob([response.data]));
+    },
+
+    reportFileName: ({ kind, month, year, format = "pdf" }) => {
+        const base = kind === "sheet" ? "Payroll_Sheet" : (kind === "permit" ? "Location_Report" : "Visa_Report");
+        return `${base}_${month}_${year}.${format === "pdf" ? "pdf" : "xlsx"}`;
+    },
+
+    downloadReport: async (opts) => {
+        const blob = await payrollService.fetchReportBlob(opts);
+        const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `Payroll_Sheet_${month}_${year}.xlsx`);
+        link.setAttribute('download', payrollService.reportFileName(opts));
         document.body.appendChild(link);
         link.click();
         link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(url);
     },
 
     // Generate SIF — periodStart/periodEnd (optional) are the exact period the
@@ -248,12 +271,24 @@ export const payrollService = {
     },
 
     // Download Employee Payslip PDF
+    // Payslip PDF as a Blob (inline=1 so it can also be opened in a viewer). The
+    // backend builder is the single source for every payslip surface.
+    fetchPayslipPdfBlob: async (payrollId) => {
+        try {
+            const response = await api.get(`/payroll/download/${payrollId}`, {
+                params: { inline: 1 },
+                responseType: 'blob'
+            });
+            return new Blob([response.data], { type: "application/pdf" });
+        } catch (error) {
+            throw new Error(await blobErrorMessage(error, "Failed to load payslip."));
+        }
+    },
+
     downloadPayslipPdf: async (payrollId, employeeName = "employee") => {
-        const response = await api.get(`/payroll/download/${payrollId}`, {
-            responseType: 'blob'
-        });
+        const blob = await payrollService.fetchPayslipPdfBlob(payrollId);
         const safeName = String(employeeName || "employee").replace(/[^a-z0-9_-]+/gi, "_");
-        const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+        const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.setAttribute('download', `Payslip_${safeName}.pdf`);
@@ -264,8 +299,9 @@ export const payrollService = {
     },
 
     // Self-service: employee's own processed payslips
-    getMyPayslips: async () => {
-        const response = await api.get("/payroll/my-payslips");
+    // params: { year, month } - both optional (the endpoint already filters on them)
+    getMyPayslips: async (params = {}) => {
+        const response = await api.get("/payroll/my-payslips", { params });
         return response.data;
     }
 };

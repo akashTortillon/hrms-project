@@ -6,6 +6,7 @@ import PayrollSummaryCards from "./PayrollCards";
 import PayrollEmployeesTable from "./PayrollTable";
 import { EmployeePayrollOverviewChart, LoansAdvancesChart } from "./PayrollCharts";
 import { payrollService } from "../../services/payrollService";
+import ReportExportBar from "./ReportExportBar.jsx";
 import { getCompanies, getBranches } from "../../services/masterService.js";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import CustomButton from "../../components/reusable/Button.jsx";
@@ -51,7 +52,7 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
 }
 
 // Work Permit / Visa Report Table (Original columns + New Style)
-function WorkReportTable({ records, reportType, loading, onExport }) {
+function WorkReportTable({ records, reportType, loading, month, year, filters }) {
   const companyKey = reportType === 'permit' ? 'workPermitCompany' : 'visaCompany';
   const label = reportType === 'permit' ? 'Location' : 'Visa';
 
@@ -59,12 +60,15 @@ function WorkReportTable({ records, reportType, loading, onExport }) {
 
   return (
     <div className="payroll-list-table-wrapper">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px' }}>
-          <button className="export-record-btn" onClick={onExport}>
-              <SvgIcon name="download" size={14} />
-              Export Record
-          </button>
-      </div>
+      <ReportExportBar
+        kind={reportType}
+        title={`${label} Report`}
+        description="Export this report as PDF or Excel for a month, or preview it here"
+        defaultMonth={month}
+        defaultYear={year}
+        filters={filters}
+        style={{ marginBottom: '15px' }}
+      />
 
       <table className="payroll-modern-table">
         <thead>
@@ -343,15 +347,6 @@ function Payroll() {
       // was a hardcoded "Export failed." regardless of the real reason (e.g. "No
       // records found for this month") - payrollService now extracts the actual
       // backend message even though these are blob responses, see blobErrorMessage.
-      toast.error(error.message || "Export failed.");
-    }
-  };
-
-  const handleExportPayrollSheet = async () => {
-    try {
-      await payrollService.exportPayrollSheet(month, year);
-      toast.success("Export Downloaded!");
-    } catch (error) {
       toast.error(error.message || "Export failed.");
     }
   };
@@ -663,13 +658,6 @@ function Payroll() {
                             <p>Ministry of Labour compliance report</p>
                         </div>
                     </div>
-                    <div className="wps-tool-card" onClick={handleExportPayrollSheet}>
-                        <div className="tool-icon-box purple"><SvgIcon name="reports" size={20} /></div>
-                        <div className="tool-content">
-                            <h4>Payroll Sheet</h4>
-                            <p>Export payroll in the standard sheet template</p>
-                        </div>
-                    </div>
                     <div className="wps-tool-card" onClick={handlePaymentHistory}>
                         <div className="tool-icon-box orange"><SvgIcon name="clock (1)" size={20} /></div>
                         <div className="tool-content">
@@ -701,6 +689,16 @@ function Payroll() {
                         </div>
                     </div>
                 </div>
+
+                {/* Payroll Sheet: own full-width row (month filter + View / PDF / Excel). */}
+                <ReportExportBar
+                    kind="sheet"
+                    title="Payroll Sheet"
+                    description="Export payroll in the standard sheet template (PDF or Excel), or preview it"
+                    defaultMonth={month}
+                    defaultYear={year}
+                    style={{ marginTop: '16px' }}
+                />
 
                 {/* Own full-width row, not a grid cell - needs room for selectors AND
                     an Export button side by side, which a 1/3-width tool-card can't fit. */}
@@ -765,7 +763,9 @@ function Payroll() {
                 records={allRecords} 
                 reportType="permit" 
                 loading={loading} 
-                onExport={() => handleExportExcel('permit')} 
+                month={month}
+                year={year}
+                filters={filters}
             />
         </div>
       )}
@@ -788,7 +788,9 @@ function Payroll() {
                 records={allRecords}
                 reportType="visa"
                 loading={loading}
-                onExport={() => handleExportExcel('visa')}
+                month={month}
+                year={year}
+                filters={filters}
             />
         </div>
       )}

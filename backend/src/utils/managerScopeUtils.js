@@ -27,3 +27,31 @@ export const isFinanceManagerOfEmployee = (reqUser, employee) => {
     || (reqUser.employeeId && financeManagerId === reqUser.employeeId.toString())
   );
 };
+
+// Single source of truth for "which employees may this requester see in a list/search".
+// Returns null for full access (Admin / HR* role / ALL permission - APPROVE_REQUESTS
+// deliberately does NOT count, see getEmployees' history), otherwise a Mongo filter
+// scoping to the requester's own record plus anyone whose designatedManager /
+// designatedFinanceManager is the requester (User._id or linked Employee._id - both
+// have been written there historically). With no employeeId and no reports it
+// matches nothing, which is the safe default.
+export const hasFullEmployeeAccess = (reqUser) => Boolean(
+  reqUser
+  && (
+    reqUser.role === "Admin"
+    || /^HR/i.test(reqUser.role || "")
+    || reqUser.permissions?.includes("ALL")
+  )
+);
+
+export const buildEmployeeScopeFilter = (reqUser) => {
+  if (hasFullEmployeeAccess(reqUser)) return null;
+  const scope = [reqUser?._id, reqUser?.employeeId].filter(Boolean);
+  const or = [];
+  if (reqUser?.employeeId) or.push({ _id: reqUser.employeeId });
+  if (scope.length) {
+    or.push({ designatedManager: { $in: scope } });
+    or.push({ designatedFinanceManager: { $in: scope } });
+  }
+  return { $or: or.length ? or : [{ _id: null }] };
+};

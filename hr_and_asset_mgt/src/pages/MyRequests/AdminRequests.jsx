@@ -112,6 +112,10 @@ export default function AdminRequests() {
     isDesignatedFinanceManager(req)
   );
   const canShowActionButtons = (req) => {
+    // The backend computes this with the same helpers updateRequestStatus enforces
+    // (live employee fallback, permission rules) - authoritative. The id-compare
+    // logic below is only a fallback for responses that predate the field.
+    if (typeof req.canActNow === "boolean") return req.canActNow;
     if (req.currentApprovalStage === "MANAGER") return canActAsManager(req);
     if (req.currentApprovalStage === "FINANCE") return canShowFinanceButtons(req);
     if (req.currentApprovalStage === "HR") return canActAsHr;
@@ -539,6 +543,11 @@ export default function AdminRequests() {
                         Stage: {getStageLabel(req)}
                       </div>
                       {renderRequestDetails(req)}
+                      {req.alsoFinanceApprover && (
+                        <div style={{ fontSize: "12px", color: "#15803d", marginTop: "4px" }}>
+                          You are also this employee's designated Finance Manager - one approval covers both steps.
+                        </div>
+                      )}
                     </div>
 
                     <div className="request-actions">
@@ -550,6 +559,7 @@ export default function AdminRequests() {
                           {req.currentApprovalStage === "MANAGER"
                             ? "Waiting for manager approval"
                             : (req.currentApprovalStage === "FINANCE" ? "Waiting for finance approval" : "HR approval pending")}
+                          {req.awaitingApproverName ? ` — ${req.awaitingApproverName}` : ""}
                         </div>
                       ) : (
                         <>

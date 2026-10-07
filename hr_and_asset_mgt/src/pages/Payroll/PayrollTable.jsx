@@ -5,9 +5,8 @@ import AdjustmentModal from "./AdjustmentModal";
 import CTCModal from "./CTCModal.jsx";
 import { toast } from "react-toastify";
 import { payrollService } from "../../services/payrollService";
-import { downloadPayslipPdf } from "./payslipPdf.js";
 
-export default function PayrollEmployeesTable({ employees = [], loading, onRefresh, isFinalized, onExport, activeTab, setActiveTab, companies = [] }) {
+export default function PayrollEmployeesTable({ employees = [], loading, onRefresh, isFinalized, onExport, activeTab, setActiveTab }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -65,7 +64,7 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
   const handleDownloadPdf = async (record) => {
     try {
       setActiveMenu(null);
-      await downloadPayslipPdf(record, companies);
+      await payrollService.downloadPayslipPdf(record._id, record.employee?.name);
       toast.success("Payslip PDF downloaded");
     } catch (err) {
       console.error("Failed to download payslip PDF", err);
@@ -130,7 +129,6 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
         show={showModal}
         onClose={() => setShowModal(false)}
         record={selectedRecord}
-        companies={companies}
       />
 
       <AdjustmentModal
