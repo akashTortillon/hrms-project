@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { normalizeEmail, emailMatchFilter } from "../utils/emailUtils.js";
 import User from "../models/userModel.js";
 import { generateAccessToken, generateRefreshToken } from "../utils/token.js";
 import { generateOtp } from "../utils/generateOtp.js";
@@ -87,10 +88,9 @@ export const login = async (req, res) => {
     const { email, password } = req.body;
 
 
-    // ✅ Make email case-insensitive
-    const user = await User.findOne({
-      email: { $regex: new RegExp(`^${email}$`, 'i') }
-    });
+    // Case-insensitive, whitespace-trimmed and regex-safe (see utils/emailUtils.js)
+    if (!normalizeEmail(email) || !password) return res.status(401).json({ message: "Invalid credentials" });
+    const user = await User.findOne(emailMatchFilter(email));
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, user.password);

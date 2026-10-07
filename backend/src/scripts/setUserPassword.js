@@ -22,6 +22,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import User from "../models/userModel.js";
 import Employee from "../models/employeeModel.js";
+import { emailMatchFilter, normalizeEmail } from "../utils/emailUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,11 +49,26 @@ async function main() {
   console.log(`Mode: ${LIVE ? "LIVE (will set the password)" : "DRY RUN (no writes)"}`);
 
   // Same lookup as authController.login
-  const escaped = EMAIL.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const users = await User.find({ email: { $regex: new RegExp(`^${escaped}$`, "i") } });
+  const users = await User.find(emailMatchFilter(EMAIL));
 
   if (users.length === 0) {
-    console.log(`\nNo login account has the email "${EMAIL}". Login will answer 401 "Invalid credentials" for it.`);
+    console.log(`\nNo login account has the email "${normalizeEmail(EMAIL)}". Login will answer 401 "Invalid credentials" for it.`);
+
+    // Near misses: accounts whose email merely CONTAINS the part before the @. A stored email
+    // with a trailing space or look-alike character prints identically in most tools, so show
+    // it as a JSON string with its length and any non-plain-ASCII characters.
+    const local = normalizeEmail(EMAIL).split("@")[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const near = await User.find({ email: { $regex: new RegExp(local, "i") } }).select("email role employeeId");
+    if (near.length) {
+      console.log("\nSimilar accounts (raw stored value):");
+      for (const u of near) {
+        const odd = [...u.email].filter((c) => c.charCodeAt(0) < 33 || c.charCodeAt(0) > 126)
+          .map((c) => "U+" + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0"));
+        console.log(`  ${JSON.stringify(u.email)}  length ${u.email.length}  role ${u.role}  employeeId ${u.employeeId}${odd.length ? "  <-- unexpected characters: " + odd.join(" ") : ""}`);
+      }
+    } else {
+      console.log("No similar accounts either.");
+    }
     await mongoose.disconnect();
     return;
   }
