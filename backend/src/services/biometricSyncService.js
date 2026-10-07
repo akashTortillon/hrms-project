@@ -38,6 +38,26 @@ export const parseBioCloudTimestamp = (verifyTime) => {
   return new Date(hasOffset ? verifyTime : `${verifyTime}+04:00`);
 };
 
+// Works out the date window for a sync run.
+//   - Explicit startDate/endDate (API call or script): used as given.
+//   - A MANUAL sync with no dates (the UI "Sync" button): starts at BIOCLOUD_SYNC_START_DATE
+//     (YYYY-MM-DD) when that is set and not in the future, so the button can pull history
+//     from a chosen date instead of only today.
+//   - Anything else (the 10-minute scheduler): today only, continuing from the saved cursor.
+// `historical` is true whenever the window starts before today / was asked for explicitly -
+// those runs ask BioCloud from IdFrom 0 and rebuild attendance for every punch in the window.
+export const resolveSyncWindow = ({ syncType, startDate, endDate, configuredStart, todayStr }) => {
+  const validConfigured = /^\d{4}-\d{2}-\d{2}$/.test(configuredStart || "") && configuredStart <= todayStr
+    ? configuredStart
+    : null;
+  const effectiveStart = startDate || (syncType === "MANUAL" ? validConfigured : null);
+  return {
+    startDate: effectiveStart || todayStr,
+    endDate: endDate || todayStr,
+    historical: !!startDate || (!!effectiveStart && effectiveStart < todayStr)
+  };
+};
+
 class BiometricSyncService {
   constructor() {
     this.isSyncing = false;
@@ -121,8 +141,15 @@ class BiometricSyncService {
       };
       
       const todayStr = formatYYYYMMDD(new Date());
-      const finalStartDate = `${startDate || todayStr} 00:00:00`;
-      const finalEndDate = `${endDate || todayStr} 23:59:59`;
+      const syncWindow = resolveSyncWindow({
+        syncType,
+        startDate,
+        endDate,
+        configuredStart: process.env.BIOCLOUD_SYNC_START_DATE,
+        todayStr
+      });
+      const finalStartDate = `${syncWindow.startDate} 00:00:00`;
+      const finalEndDate = `${syncWindow.endDate} 23:59:59`;
 
       // BioCloud ANDs the IdFrom cursor with the StartDate/EndDate window - it does not
       // treat an explicit date range as overriding the ID floor. Once the live cursor has
@@ -134,9 +161,9 @@ class BiometricSyncService {
       // backfill is asking for data BEFORE the current cursor by definition, so it must
       // not be floored by it - only scheduled "catch up from where we left off" runs
       // should use the live cursor as IdFrom.
-      const idFrom = startDate ? 0 : lastSyncedTransactionId;
+      const idFrom = syncWindow.historical ? 0 : lastSyncedTransactionId;
 
-      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | IdFrom: ${idFrom}${startDate ? " (backfill - ignoring live cursor)" : ""}`);
+      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | IdFrom: ${idFrom}${syncWindow.historical ? " (backfill - ignoring live cursor)" : ""}`);
 
       // 3. Fetch from BioCloud API with retry logic
       const apiResponse = await this._fetchFromApiWithRetries(idFrom, finalStartDate, finalEndDate);
@@ -170,6 +197,12 @@ class BiometricSyncService {
       // overlapping scheduled/manual syncs), so a duplicate-key error on the unique
       // `transactionId` index is expected and treated as "already synced" rather than a
       // fatal error that aborts the whole sync with a 500.
+      const fetchedIds = transactions.filter((t) => t.Id).map((t) => t.Id);
+      const alreadyStored = new Set(
+        (await BiometricTransaction.find({ transactionId: { $in: fetchedIds } }).select("transactionId").lean())
+          .map((t) => t.transactionId)
+      );
+
       for (const txn of transactions) {
         if (!txn.Id) continue;
 
@@ -178,8 +211,7 @@ class BiometricSyncService {
           highestTransactionId = txn.Id;
         }
 
-        const exists = await BiometricTransaction.findOne({ transactionId: txn.Id });
-        if (exists) continue;
+        if (alreadyStored.has(txn.Id)) continue;
 
         try {
           // Map API fields to database schema
@@ -209,8 +241,16 @@ class BiometricSyncService {
 
       console.log(`[BiometricSyncService] Stored ${transactionsStored} new unique transactions in database.`);
 
-      // 5. Process new transactions to generate attendance records
-      const processingStats = await attendanceProcessor.processTransactions(newTransactions);
+      // 5. Generate attendance records. A normal run only needs the punches that are new. A
+      // historical/manual window must cover EVERY punch BioCloud returned, including ones
+      // already stored - otherwise attendance that was cleared or never built (e.g. after
+      // employees were re-imported) is never rebuilt and the sync reports 0 created. The
+      // processor is idempotent: unchanged rows are skipped, manual edits are kept.
+      const toProcess = syncWindow.historical
+        ? await BiometricTransaction.find({ transactionId: { $in: fetchedIds } })
+        : newTransactions;
+      const processingStats = await attendanceProcessor.processTransactions(toProcess);
+      const unmappedBadges = Array.from(processingStats.unmappedBadges || []);
 
       // 6. Update transaction processed state
       for (const newTxn of newTransactions) {
@@ -232,7 +272,7 @@ class BiometricSyncService {
       );
 
       // 8. Log successful history run
-      const hasUnmapped = processingStats.unmappedBadges.size > 0;
+      const hasUnmapped = unmappedBadges.length > 0;
       history.endTime = new Date();
       history.status = hasUnmapped ? "PARTIAL_SUCCESS" : "SUCCESS";
       history.transactionsFetched = transactionsFetched;
@@ -240,7 +280,7 @@ class BiometricSyncService {
       history.recordsCreated = processingStats.created;
       history.recordsUpdated = processingStats.updated;
       history.recordsSkipped = processingStats.skipped;
-      history.unmappedBadges = Array.from(processingStats.unmappedBadges);  // Convert Set to Array
+      history.unmappedBadges = unmappedBadges;
       await history.save();
 
       console.log(`[BiometricSyncService] Completed ${syncType} sync job successfully in ${history.endTime - startTime}ms.`);
@@ -251,7 +291,7 @@ class BiometricSyncService {
         recordsCreated: processingStats.created,
         recordsUpdated: processingStats.updated,
         recordsSkipped: processingStats.skipped,
-        unmappedBadges: Array.from(processingStats.unmappedBadges),  // Convert Set to Array
+        unmappedBadges,
         duration: history.endTime - startTime
       };
 
