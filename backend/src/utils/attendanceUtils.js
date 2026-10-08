@@ -38,32 +38,53 @@ export const getShiftWindow = (rules, shiftDate) => {
   return { start: new Date(start), end: new Date(end) };
 };
 
+// A person who scans twice within a minute or so (finger not read, double tap) produces two
+// punches that are really one. Counting both flips the open/closed state of the shift and
+// every later punch lands on the wrong side, so near-duplicates are collapsed first.
+const DUPLICATE_SCAN_MS = 90 * 1000;
+// Longest a punch can come BEFORE a shift's start and still be treated as that shift's early
+// arrival. A punch much earlier than that (e.g. yesterday's 16:00 check-out, 12h before
+// tomorrow's 04:00 start) is a stray punch of the previous shift, never tomorrow's check-in.
+const MAX_EARLY_ARRIVAL_MS = 6 * 60 * 60 * 1000;
+
 // Splits ONE employee's punches into shift occurrences using the shift's real
 // start/end, instead of a calendar day. This device reports every punch with the same
 // generic status (no IN/OUT direction), so direction is never read from the punch.
 //   - A punch inside an occurrence's window always belongs to it.
 //   - A punch in the gap between one window's end and the next one's start (e.g. Flexible
 //     Day 03:00-09:00) is either the previous shift's late check-out or the next shift's
-//     early check-in. It is the previous shift's check-out only if (a) it falls in the
-//     first half of the gap (closer to that shift's end than the next shift's start) and
-//     (b) that shift is still OPEN, i.e. has an odd number of punches INSIDE its window
-//     (a check-in with no check-out yet). Otherwise it starts the next occurrence.
-// Every decision uses only the punches inside the one neighbouring window, never an
-// earlier decision, so the result is the same however far back the loaded history starts.
-// (An earlier version tracked running parity across all days; one wrong guess at the start
-// of the loaded history then shifted every later day by a punch, and the daily row, the
-// punch modal and live sync disagreed depending on how much history each happened to load.)
-// `punches` need `.timestamp` and must be sorted ascending. Returns Map<shiftDate, punch[]>.
-export const assignPunchesToShiftDays = (punches, rules) => {
+//     early arrival. Second half of the gap (closer to the next start): an early arrival for
+//     the next shift. First half: the previous shift's check-out if that shift is still OPEN
+//     (odd number of punches, counting its early arrival), otherwise the next shift's early
+//     arrival - unless that would be more than MAX_EARLY_ARRIVAL_MS before the next start.
+// Every decision uses only the punches around that one gap, never an earlier decision, so the
+// result is the same however far back the loaded history starts.
+// `punches` need `.timestamp`. `trace` (optional array) receives one entry per punch saying
+// where it went and why - used by scripts/explainAttendance.js.
+// Returns Map<shiftDate, punch[]>.
+export const assignPunchesToShiftDays = (punches, rules, trace = null) => {
   const buckets = new Map();
   const add = (date, p) => {
     if (!buckets.has(date)) buckets.set(date, []);
     buckets.get(date).push(p);
   };
+  const note = (p, bucket, reason) => { if (trace) trace.push({ timestamp: p.timestamp, bucket, reason }); };
+
+  // Collapse near-duplicate scans (keep the first of each cluster).
+  const sorted = [...punches].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const unique = [];
+  for (const p of sorted) {
+    const last = unique[unique.length - 1];
+    if (last && new Date(p.timestamp) - new Date(last.timestamp) < DUPLICATE_SCAN_MS) {
+      note(p, null, "ignored: duplicate scan within 90 seconds of the previous punch");
+      continue;
+    }
+    unique.push(p);
+  }
 
   // Pass 1: in-window punches are unambiguous. Gap punches wait for pass 2.
   const gapPunches = [];
-  for (const p of punches) {
+  for (const p of unique) {
     const t = new Date(p.timestamp).getTime();
     const d = uaeDateStr(p.timestamp);
     const candidates = [addDaysStr(d, -1), d, addDaysStr(d, 1)];
@@ -73,15 +94,11 @@ export const assignPunchesToShiftDays = (punches, rules) => {
       const w = getShiftWindow(rules, c);
       if (t >= w.start.getTime() && t < w.end.getTime()) { owner = c; break; }
     }
-    if (owner) add(owner, p);
+    if (owner) { add(owner, p); note(p, owner, `inside the ${owner} shift window`); }
     else gapPunches.push({ p, t, d, candidates });
   }
 
   // Pass 2: split every gap into its two halves around the midpoint.
-  //   - 2nd half (closer to the NEXT window's start): an early arrival for the next shift.
-  //     Always belongs to that next occurrence, and counts as one of its punches.
-  //   - 1st half (closer to the PREVIOUS window's end): either that shift's late check-out or,
-  //     rarely, a very early arrival for the next one. Decided below.
   const gapInfo = gapPunches.map(({ p, t, d, candidates }) => {
     let prev = null;
     for (const c of candidates) {
@@ -89,12 +106,12 @@ export const assignPunchesToShiftDays = (punches, rules) => {
     }
     const next = addDaysStr(prev || addDaysStr(d, -1), 1);
     let isLate = false; // second half of the gap = early arrival for `next`
+    const nextStart = getShiftWindow(rules, next).start.getTime();
     if (prev) {
       const gapStart = getShiftWindow(rules, prev).end.getTime();
-      const gapEnd = getShiftWindow(rules, next).start.getTime();
-      isLate = t >= gapStart + (gapEnd - gapStart) / 2;
+      isLate = t >= gapStart + (nextStart - gapStart) / 2;
     }
-    return { p, prev, next, isLate };
+    return { p, t, prev, next, nextStart, isLate };
   });
 
   // A shift is OPEN (checked in, not yet out) when it has an odd number of punches. Its punches
@@ -110,12 +127,26 @@ export const assignPunchesToShiftDays = (punches, rules) => {
   const punchCount = (date) => (buckets.get(date) || []).length + (earlyArrivals.get(date) || 0);
 
   const resolved = [];
-  for (const { p, prev, next, isLate } of gapInfo) {
-    const owner = !isLate && prev && punchCount(prev) % 2 === 1 ? prev : next;
-    resolved.push({ owner, p });
+  for (const { p, t, prev, next, nextStart, isLate } of gapInfo) {
+    let owner = next;
+    let reason;
+    if (isLate) {
+      reason = `early arrival for the ${next} shift (second half of the gap before it)`;
+    } else if (!prev) {
+      reason = `starts the ${next} shift (no earlier shift found)`;
+    } else if (punchCount(prev) % 2 === 1) {
+      owner = prev;
+      reason = `check-out of the ${prev} shift (it has ${punchCount(prev)} punch(es) so far = still open)`;
+    } else if (nextStart - t > MAX_EARLY_ARRIVAL_MS) {
+      owner = prev;
+      reason = `stray punch of the ${prev} shift (${punchCount(prev)} punch(es) there) - too long before the ${next} start to be its arrival`;
+    } else {
+      reason = `starts the ${next} shift (the ${prev} shift already has ${punchCount(prev)} punch(es) = closed)`;
+    }
+    resolved.push({ owner, p, reason });
   }
   // Add after all decisions so one gap punch never influences another's count.
-  for (const { owner, p } of resolved) add(owner, p);
+  for (const { owner, p, reason } of resolved) { add(owner, p); note(p, owner, reason); }
 
   // Keep every bucket chronological.
   for (const list of buckets.values()) list.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
