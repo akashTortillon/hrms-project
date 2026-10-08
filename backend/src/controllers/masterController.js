@@ -3,6 +3,8 @@ import Employee from "../models/employeeModel.js";
 import Asset from "../models/assetModel.js";
 import Assignment from "../models/assignmentModel.js";
 import Request from "../models/requestModel.js";
+import Attendance from "../models/attendanceModel.js";
+import { shiftKey } from "../utils/shiftName.js";
 
 // Mapping frontend "slugs" to db types
 const TYPE_MAPPING = {
@@ -271,8 +273,26 @@ export const updateItem = async (req, res) => {
             }
         }
 
+        const previous = dbType === "SHIFT" ? await Master.findById(id) : null;
         const updated = await Master.findByIdAndUpdate(id, payload, { new: true });
         if (!updated) return res.status(404).json({ message: "Item not found" });
+
+        // Employees (and attendance rows) point at a shift by NAME, so a rename must follow
+        // them, otherwise everyone on it silently ends up on an unknown shift. Compared by
+        // the whitespace/case-insensitive key so a slightly different spelling moves too.
+        if (previous && previous.name !== updated.name) {
+            const oldKey = shiftKey(previous.name);
+            const employeeIds = (await Employee.find({ shift: { $ne: null } }).select("shift").lean())
+                .filter((e) => shiftKey(e.shift) === oldKey)
+                .map((e) => e._id);
+            if (employeeIds.length) {
+                await Employee.updateMany({ _id: { $in: employeeIds } }, { $set: { shift: updated.name } });
+            }
+            const oldRowNames = (await Attendance.distinct("shift")).filter((n) => shiftKey(n) === oldKey);
+            if (oldRowNames.length) {
+                await Attendance.updateMany({ shift: { $in: oldRowNames } }, { $set: { shift: updated.name } });
+            }
+        }
 
         let itemObj = updated.toObject();
         if (itemObj.image && itemObj.image.includes("amazonaws.com")) {
@@ -326,6 +346,19 @@ export const deleteItem = async (req, res) => {
             return res.status(400).json({ 
                 message: `Cannot delete: This ${item.type.toLowerCase()} is linked to ${linkedEmployees} employee(s).` 
             });
+        }
+
+        // Employees are linked to a shift by name; deleting one in use would leave them on an
+        // unknown shift (no hours, no late rules).
+        if (item.type === "SHIFT") {
+            const key = shiftKey(item.name);
+            const usingShift = (await Employee.find({ shift: { $ne: null } }).select("shift").lean())
+                .filter((e) => shiftKey(e.shift) === key).length;
+            if (usingShift > 0) {
+                return res.status(400).json({
+                    message: `Cannot delete: This shift is assigned to ${usingShift} employee(s). Move them to another shift first.`
+                });
+            }
         }
 
         // Devices are linked to employees by serial number (stored in `code`)

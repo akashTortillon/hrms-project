@@ -5,6 +5,7 @@ import { COUNTRY_CODES, splitPhone } from "../../constants/countryCodes.js";
 import { useRole } from "../../contexts/RoleContext";
 import SearchableSelect from "../../components/reusable/SearchableSelect.jsx";
 import BiometricDevicePicker from "../../components/Employees/BiometricDevicePicker.jsx";
+import { findShiftByName } from "../../utils/shiftName.js";
 import "../../style/AddEmployeeModal.css";
 
 
@@ -93,6 +94,12 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
       setManagers(Array.isArray(employeesData) ? employeesData : []);
       const shiftsData = await shiftService.getAll();
       setShifts(shiftsData);
+      // The saved shift can differ from the Masters name only in spacing/case; select the
+      // real master so the dropdown shows it and saving writes the exact name.
+      setForm((prev) => {
+        const match = prev.shift ? findShiftByName(shiftsData, prev.shift) : null;
+        return match && match.name !== prev.shift ? { ...prev, shift: match.name } : prev;
+      });
       setDevices(await biometricDeviceService.getAll());
     } catch (error) {
       console.error("Failed to fetch masters", error);
@@ -403,6 +410,9 @@ export default function EditEmployeeModal({ employee, onClose, onUpdate, deptOpt
                     }}
                   >
                     <option value="">Select Shift</option>
+                    {form.shift && !shifts.some(s => s.name === form.shift) && (
+                      <option value={form.shift}>{form.shift} (not in Masters)</option>
+                    )}
                     {shifts.map(s => (
                       <option key={s.name} value={s.name}>{s.name}</option>
                     ))}

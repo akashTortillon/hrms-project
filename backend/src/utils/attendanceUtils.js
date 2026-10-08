@@ -4,6 +4,7 @@ import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
 import BiometricTransaction from "../models/biometricTransactionModel.js";
+import { shiftKey, findShiftByName, parseShiftHoursFromName } from "./shiftName.js";
 
 // Helper: Parse time to minutes (HH:MM) -> minutes
 export const toMinutes = (time) => {
@@ -180,39 +181,70 @@ export const calculateDuration = (start, end) => {
 /**
  * Get Shift Rules from Master
  */
-export const getShiftRules = async (shiftName) => {
-  const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
-  if (shiftMaster && shiftMaster.metadata) {
-    const meta = shiftMaster.metadata;
-    // Extract buffers from latePolicy if available, otherwise explicit buffers, otherwise
-    // a single lateLimit. If NONE of these are actually configured, buffers stays [] -
-    // meaning this shift has no late policy at all (calculateLateTier already treats an
-    // empty buffers list as "never late", below) - instead of silently forcing every
-    // employee onto a hardcoded 09:15 wall-clock cutoff that has nothing to do with this
-    // shift's real hours (e.g. a flexible 12h rotation with no fixed arrival time, where
-    // "late" isn't a meaningful concept - only whether the full shift got worked).
-    let buffers = [];
-    if (meta.latePolicy && Array.isArray(meta.latePolicy) && meta.latePolicy.length > 0) {
-      buffers = meta.latePolicy.map(p => p.time).filter(t => t);
-    } else if (Array.isArray(meta.buffers) && meta.buffers.length > 0) {
-      buffers = meta.buffers;
-    } else if (meta.lateLimit) {
-      buffers = [meta.lateLimit];
-    }
+const warnedShiftNames = new Set();
+const warnOnce = (message) => {
+  if (warnedShiftNames.has(message)) return;
+  warnedShiftNames.add(message);
+  console.warn(`[getShiftRules] ${message}`);
+};
 
-    // Missing start/end -> 00:00-00:00, i.e. a plain calendar-day window (the old
-    // behaviour) rather than an invented 09:00-18:00 working day.
-    return {
-      start: meta.startTime || "00:00",
-      end: meta.endTime || "00:00",
-      lateLimit: meta.lateLimit || null,
-      latePolicy: meta.latePolicy || [],
-      buffers
-    };
+export const getShiftRules = async (shiftName) => {
+  // Exact name first (fast, the normal case). Employee.shift is the master's NAME, and the
+  // same shift is often typed slightly differently ("1 PM - 4 PM" vs "1 PM-4 PM", "4AM" vs
+  // "4 AM"), so on a miss compare ignoring case and spacing instead of silently treating it
+  // as an unknown shift (which loses the shift's hours entirely).
+  let shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
+  if (!shiftMaster && shiftKey(shiftName)) {
+    const allShifts = await Master.find({ type: "SHIFT" });
+    shiftMaster = findShiftByName(allShifts, shiftName);
   }
-  // Shift name doesn't match any configured Master at all: calendar-day window and no
-  // late policy (never Late unless a shift explicitly configures one).
-  return { start: "00:00", end: "00:00", lateLimit: null, buffers: [], latePolicy: [] };
+
+  if (!shiftMaster) {
+    warnOnce(`No shift in Masters matches "${shiftName}" - treating it as a plain calendar day with no late policy.`);
+    // Shift name doesn't match any configured Master at all: calendar-day window and no
+    // late policy (never Late unless a shift explicitly configures one).
+    return { start: "00:00", end: "00:00", lateLimit: null, buffers: [], latePolicy: [] };
+  }
+
+  const meta = shiftMaster.metadata || {};
+  // Extract buffers from latePolicy if available, otherwise explicit buffers, otherwise
+  // a single lateLimit. If NONE of these are actually configured, buffers stays [] -
+  // meaning this shift has no late policy at all (calculateLateTier already treats an
+  // empty buffers list as "never late", below) - instead of silently forcing every
+  // employee onto a hardcoded 09:15 wall-clock cutoff that has nothing to do with this
+  // shift's real hours (e.g. a flexible 12h rotation with no fixed arrival time, where
+  // "late" isn't a meaningful concept - only whether the full shift got worked).
+  let buffers = [];
+  if (meta.latePolicy && Array.isArray(meta.latePolicy) && meta.latePolicy.length > 0) {
+    buffers = meta.latePolicy.map(p => p.time).filter(t => t);
+  } else if (Array.isArray(meta.buffers) && meta.buffers.length > 0) {
+    buffers = meta.buffers;
+  } else if (meta.lateLimit) {
+    buffers = [meta.lateLimit];
+  }
+
+  // Hours: the master's saved start/end. Shifts created by name only (e.g. "Shift ->
+  // 6:30 PM-4 AM") have none, so read them from the name; otherwise 00:00-00:00, i.e. a
+  // plain calendar-day window rather than an invented 09:00-18:00 working day.
+  let start = meta.startTime;
+  let end = meta.endTime;
+  if (!start || !end) {
+    const fromName = parseShiftHoursFromName(shiftMaster.name);
+    if (fromName) {
+      start = start || fromName.start;
+      end = end || fromName.end;
+    } else {
+      warnOnce(`Shift "${shiftMaster.name}" has no start/end time and none can be read from its name - using a plain calendar day.`);
+    }
+  }
+
+  return {
+    start: start || "00:00",
+    end: end || "00:00",
+    lateLimit: meta.lateLimit || null,
+    latePolicy: meta.latePolicy || [],
+    buffers
+  };
 };
 
 export const calculateLateTier = (checkInTime, rules) => {

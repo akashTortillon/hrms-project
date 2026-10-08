@@ -11,6 +11,7 @@ import { toNumber, computeTotalSalary, computeCtc, splitIncrement } from "../uti
 import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
 import { syncEmployeeToBiometric, syncEmployeesToBiometric } from "../services/bioCloudEmployeeService.js";
 import { normalizeSerials, buildDeviceLookup, parseDeviceCell } from "../utils/deviceUtils.js";
+import { canonicalShiftName, findShiftByName } from "../utils/shiftName.js";
 
 const buildLaborCards = (payload = {}) => {
   if (Array.isArray(payload.laborCards) && payload.laborCards.length > 0) {
@@ -462,7 +463,8 @@ export const addEmployee = async (req, res) => {
       visaNo: visaNo || "",
       visaFileNo: visaFileNo || "",
       visaExpiry,
-      shift: shift || "Day Shift",
+      // Saved as the shift master's exact name so it always matches Masters (see utils/shiftName.js)
+      shift: shift ? canonicalShiftName(await Master.find({ type: "SHIFT" }), shift) : "Day Shift",
       biometricDevices: normalizeSerials(biometricDevices),
       workingDayType: workingDayType !== undefined ? Number(workingDayType) : 4,
       weekOffDays: Array.isArray(weekOffDays) ? weekOffDays : [0],
@@ -814,6 +816,9 @@ export const updateEmployee = async (req, res) => {
     delete payload.biometricSync;
     if (payload.biometricDevices !== undefined) {
       payload.biometricDevices = normalizeSerials(payload.biometricDevices);
+    }
+    if (payload.shift) {
+      payload.shift = canonicalShiftName(await Master.find({ type: "SHIFT" }), payload.shift);
     }
 
     // ---- Field-level permission guard ----------------------------------------
@@ -1423,6 +1428,7 @@ export const importEmployees = async (req, res) => {
     const validCompanies = canonicalMap('COMPANY');
     // BioCloud devices: a sheet's "Device" cell may use a device's name or its serial number
     const deviceLookup = buildDeviceLookup(masters.filter(m => m.type === 'BIOMETRIC_DEVICE'));
+    const shiftMasters = masters.filter(m => m.type === 'SHIFT');
 
     // Branch must belong to the row's Company (Branch.parentId === Company._id), not just exist anywhere.
     const companyIdByName = new Map(masters.filter(m => m.type === 'COMPANY').map(m => [m.name.toLowerCase(), String(m._id)]));
@@ -1477,7 +1483,8 @@ export const importEmployees = async (req, res) => {
       contractTypes: new Set(),
       workLocationCodes: new Set(),
       visaLocationCodes: new Set(),
-      devices: new Set()
+      devices: new Set(),
+      shifts: new Set()
     };
 
     // Internal auto-incremented reference number (systemCode), independent of the
@@ -1579,6 +1586,21 @@ export const importEmployees = async (req, res) => {
       // Optional "Device" column: one or more device names/serials (comma or semicolon
       // separated) that this employee punches on. Blank leaves the employee's devices as they are.
       const deviceCell = row["Device"] ?? row["Biometric Device"] ?? row["Devices"] ?? "";
+      // Shift: matched to a shift in Masters ignoring case/spacing ("1 PM - 4 PM" = "1 PM-4 PM")
+      // and saved under the master's exact name, so attendance and the employee form can find
+      // it. A blank cell keeps an existing employee's shift (new employees get the default).
+      const shiftCell = String(row["Shift"] ?? "").trim();
+      let resolvedShift = null;
+      if (shiftCell) {
+        const shiftMaster = findShiftByName(shiftMasters, shiftCell);
+        if (!shiftMaster) {
+          missing.shifts.add(shiftCell);
+          errors.push({ row: rowNum, email, message: `Invalid Shift: '${shiftCell}'. Must match a shift name in Masters (spacing and case are ignored).` });
+          continue;
+        }
+        resolvedShift = shiftMaster.name;
+      }
+
       const { serials: deviceSerials, unknown: unknownDevices } = parseDeviceCell(deviceCell, deviceLookup);
       if (unknownDevices.length) {
         unknownDevices.forEach(d => missing.devices.add(d));
@@ -1760,7 +1782,7 @@ export const importEmployees = async (req, res) => {
           status: sheetStatus || (existingEmployeeDoc ? existingEmployeeDoc.status : "Onboarding"),
           dob: parseExcelDate(row["Date of Birth"]),
           designation: designation || role,
-          shift: row["Shift"] || "Day Shift",
+          ...(resolvedShift ? { shift: resolvedShift } : {}),
       ...(deviceSerials.length ? { biometricDevices: deviceSerials } : {}),
           nationality: row["Nationality"] || "",
           address: row["UAE Address"] || "",
@@ -1864,6 +1886,7 @@ export const importEmployees = async (req, res) => {
     summarize("Designations", missing.designations, "Add these under Masters → HR Management → Designations, then re-upload.");
     summarize("Roles", missing.roles, "Add these under Masters → HR Management → Roles, then re-upload.");
     summarize("Employee Types", missing.contractTypes, "Add these under Masters → HR Management → Employee Types, then re-upload.");
+    summarize("Shifts", missing.shifts, "Add these under Masters → HR Management → Shifts (or fix the spelling in the sheet), then re-upload.");
     summarize("Devices", missing.devices, "Add these under Masters → HR Management → Biometric Devices, then re-upload.");
     summarize("Work Location codes", missing.workLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
     summarize("Visa Location codes", missing.visaLocationCodes, "Set the matching Company's Code ID under Masters → Company Structure → Companies, then re-upload.");
