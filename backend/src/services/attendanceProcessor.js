@@ -179,6 +179,12 @@ class AttendanceProcessor {
         if (summary.isOpen && Date.now() > summary.window.end.getTime()) {
           status = "Incomplete";
         }
+        // Only a check-out scan, no check-in: not Present - the employee's start of shift
+        // was never recorded.
+        if (summary.missingCheckIn) {
+          status = "Incomplete";
+          lateTier = 0;
+        }
 
         if (existingRecord) {
           // If times are already identical, skip to prevent unnecessary writes/triggers

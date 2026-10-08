@@ -189,9 +189,34 @@ export const getShiftDayPunches = async (employees, shiftDate, shiftNameFor = (e
 // the punch count is even (every IN has its OUT) - with an odd count the last punch is an
 // IN (back from a break, or just arrived) so the shift is still open. Work hours sum only
 // completed IN->OUT pairs, so breaks between pairs are excluded.
+//
+// Missing check-in: when EVERY punch of the shift falls in the last quarter of its window or
+// later (e.g. only a 04:29 scan for a 15:00-05:00 shift) nobody badged in - the scan is the
+// person leaving. Reporting it as the check-in (the first-punch convention) put a check-out in
+// the Check In column. It is reported as the check-out instead, with no check-in, no work hours
+// and flagged `missingCheckIn` so the status becomes Incomplete. Not applied to whole-day
+// windows (start == end, incl. shifts with unknown hours), where there is no "end" to measure.
 export const summarizeShiftDay = (shiftDate, punches, rules) => {
   const count = punches.length;
   const first = punches[0];
+  const window = getShiftWindow(rules, shiftDate);
+
+  const wholeDay = rules.start === rules.end;
+  const cutoff = window.start.getTime() + (window.end.getTime() - window.start.getTime()) * 0.75;
+  const missingCheckIn = !wholeDay && count >= 1 && punches.every((p) => new Date(p.timestamp).getTime() >= cutoff);
+
+  if (missingCheckIn) {
+    return {
+      checkIn: null,
+      checkOut: uaeTimeStr(first.timestamp),
+      checkOutNextDay: uaeDateStr(first.timestamp) !== shiftDate,
+      workHours: null,
+      isOpen: false,
+      missingCheckIn: true,
+      window
+    };
+  }
+
   const closed = count >= 2 && count % 2 === 0;
   const last = closed ? punches[count - 1] : null;
 
@@ -210,7 +235,8 @@ export const summarizeShiftDay = (shiftDate, punches, rules) => {
     checkOutNextDay: last ? uaeDateStr(last.timestamp) !== shiftDate : false,
     workHours,
     isOpen: !closed,
-    window: getShiftWindow(rules, shiftDate)
+    missingCheckIn: false,
+    window
   };
 };
 

@@ -98,7 +98,7 @@ async function main() {
   for (const date of [...buckets.keys()].sort()) {
     if (date < from || date > to) continue;
     const s = summarizeShiftDay(date, buckets.get(date), rules);
-    console.log(`  ${date}  in ${s.checkIn ?? "-"}  out ${s.checkOut ?? "-"}${s.checkOutNextDay ? " (next day)" : ""}  work ${s.workHours ?? "-"}  punches ${buckets.get(date).length}`);
+    console.log(`  ${date}  in ${s.checkIn ?? "-"}  out ${s.checkOut ?? "-"}${s.checkOutNextDay ? " (next day)" : ""}  work ${s.workHours ?? "-"}  punches ${buckets.get(date).length}${s.missingCheckIn ? "  <- no check-in scan, only the check-out" : ""}`);
   }
 
   console.log(`\nStored now:`);

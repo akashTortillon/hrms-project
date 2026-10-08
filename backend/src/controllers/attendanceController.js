@@ -227,6 +227,7 @@ import {
   holidaySetFromHolidays,
   applyMonthlyFlexQuota,
   getShiftDayPunches,
+  summarizeShiftDay,
   uaeTimeStr,
   uaeDateStr
 } from "../utils/attendanceUtils.js";
@@ -960,9 +961,15 @@ export const getEmployeePunches = async (req, res) => {
     const shiftDayPunches = await getShiftDayPunches([employee], date, () => record?.shift || employee.shift);
     const punches = shiftDayPunches.get(String(employee._id)) || [];
 
+    // Same decision the attendance row uses: if every punch is at the very end of the shift
+    // nobody badged in, so the first scan is the Check-Out (and later ones are extra scans).
+    const rules = await getShiftRules(record?.shift || employee.shift || "Day Shift");
+    const missingCheckIn = summarizeShiftDay(date, punches, rules).missingCheckIn;
+
     const labeled = punches.map((p, i) => {
       let label;
-      if (i % 2 === 0) label = i === 0 ? "Check-In" : "Break-In";
+      if (missingCheckIn) label = i === 0 ? "Check-Out" : "Extra scan";
+      else if (i % 2 === 0) label = i === 0 ? "Check-In" : "Break-In";
       else label = i === punches.length - 1 ? "Check-Out" : "Break-Out";
       return { time: uaeTimeStr(p.timestamp), label, nextDay: uaeDateStr(p.timestamp) !== date };
     });
