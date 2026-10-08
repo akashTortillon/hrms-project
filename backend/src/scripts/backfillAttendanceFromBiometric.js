@@ -17,12 +17,14 @@
  *   node src/scripts/backfillAttendanceFromBiometric.js --from=2026-09-29 --to=2026-10-02          # dry run
  *   node src/scripts/backfillAttendanceFromBiometric.js --live --from=2026-09-29 --to=2026-10-02   # apply
  *   node src/scripts/backfillAttendanceFromBiometric.js --live --prune-stale --from=... --to=...   # apply + delete orphans
+ *   node src/scripts/backfillAttendanceFromBiometric.js --from=2026-09-30 --badge=T03                # check ONE employee (dry run)
  */
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import Attendance from "../models/attendanceModel.js";
+import Employee from "../models/employeeModel.js";
 import BiometricTransaction from "../models/biometricTransactionModel.js";
 import attendanceProcessor from "../services/attendanceProcessor.js";
 
@@ -35,6 +37,8 @@ const LIVE = args.includes("--live");
 const PRUNE_STALE = args.includes("--prune-stale");
 const fromArg = args.find(a => a.startsWith("--from="));
 const toArg = args.find(a => a.startsWith("--to="));
+const badgeArg = args.find(a => a.startsWith("--badge="));
+const BADGE = badgeArg ? badgeArg.split("=")[1].trim() : null; // limit to one employee, e.g. --badge=T03
 const uriArg = args.find(a => a.startsWith("--uri="));
 const FROM_DATE = fromArg ? fromArg.split("=")[1] : null; // "YYYY-MM-DD" UAE date, inclusive
 const TO_DATE = toArg ? toArg.split("=")[1] : null;       // "YYYY-MM-DD" UAE date, inclusive
@@ -47,6 +51,10 @@ async function main() {
   if (FROM_DATE || TO_DATE) console.log(`Date range (UAE): ${FROM_DATE || "start"} to ${TO_DATE || "today"}`);
 
   const txnQuery = {};
+  if (BADGE) {
+    txnQuery.badgeNumber = BADGE;
+    console.log(`Employee filter: badge ${BADGE} only`);
+  }
   if (FROM_DATE || TO_DATE) {
     txnQuery.timestamp = {};
     if (FROM_DATE) txnQuery.timestamp.$gte = new Date(`${FROM_DATE}T00:00:00+04:00`);
@@ -77,6 +85,10 @@ async function main() {
     status: { $in: ["Present", "Late", "Incomplete"] },
     checkIn: { $ne: null }
   };
+  if (BADGE) {
+    const ids = (await Employee.find({ $or: [{ badgeNumber: BADGE }, { code: BADGE }] }).select("_id").lean()).map(e => e._id);
+    rowQuery.employee = { $in: ids };
+  }
   if (FROM_DATE || TO_DATE) {
     rowQuery.date = {};
     if (FROM_DATE) rowQuery.date.$gte = FROM_DATE;

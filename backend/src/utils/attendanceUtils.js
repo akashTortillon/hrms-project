@@ -77,23 +77,41 @@ export const assignPunchesToShiftDays = (punches, rules) => {
     else gapPunches.push({ p, t, d, candidates });
   }
 
-  // Pass 2: decide each gap punch from the in-window count of the window before it.
-  const inWindowCount = (date) => (buckets.get(date) || []).length;
-  const resolved = [];
-  for (const { p, t, d, candidates } of gapPunches) {
+  // Pass 2: split every gap into its two halves around the midpoint.
+  //   - 2nd half (closer to the NEXT window's start): an early arrival for the next shift.
+  //     Always belongs to that next occurrence, and counts as one of its punches.
+  //   - 1st half (closer to the PREVIOUS window's end): either that shift's late check-out or,
+  //     rarely, a very early arrival for the next one. Decided below.
+  const gapInfo = gapPunches.map(({ p, t, d, candidates }) => {
     let prev = null;
     for (const c of candidates) {
       if (getShiftWindow(rules, c).end.getTime() <= t) prev = c;
     }
     const next = addDaysStr(prev || addDaysStr(d, -1), 1);
-
-    let owner = next;
+    let isLate = false; // second half of the gap = early arrival for `next`
     if (prev) {
       const gapStart = getShiftWindow(rules, prev).end.getTime();
       const gapEnd = getShiftWindow(rules, next).start.getTime();
-      const midpoint = gapStart + (gapEnd - gapStart) / 2;
-      if (t < midpoint && inWindowCount(prev) % 2 === 1) owner = prev;
+      isLate = t >= gapStart + (gapEnd - gapStart) / 2;
     }
+    return { p, prev, next, isLate };
+  });
+
+  // A shift is OPEN (checked in, not yet out) when it has an odd number of punches. Its punches
+  // are the ones inside its window PLUS any early arrival before the window start: a person who
+  // badges in at 15:52 for a 16:00 shift has that punch outside the window, and leaving it out
+  // flipped the count so the next morning's check-out was taken for a new check-in. Only
+  // second-half gap punches are counted here, which depend on the punch time alone (not on any
+  // other decision), so the result never depends on how much history was loaded.
+  const earlyArrivals = new Map();
+  for (const g of gapInfo) {
+    if (g.isLate) earlyArrivals.set(g.next, (earlyArrivals.get(g.next) || 0) + 1);
+  }
+  const punchCount = (date) => (buckets.get(date) || []).length + (earlyArrivals.get(date) || 0);
+
+  const resolved = [];
+  for (const { p, prev, next, isLate } of gapInfo) {
+    const owner = !isLate && prev && punchCount(prev) % 2 === 1 ? prev : next;
     resolved.push({ owner, p });
   }
   // Add after all decisions so one gap punch never influences another's count.

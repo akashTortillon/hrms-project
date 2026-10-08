@@ -39,8 +39,12 @@ class AttendanceProcessor {
     const diffs = [];
     const touchedKeys = new Set(); // "<employeeId>_<shiftDate>" of every occurrence this batch touched
 
+    // Same result shape every time (callers read .diffs / .touchedKeys / .unmappedBadges), also when
+    // there is nothing to process.
+    const emptyResult = () => ({ created: 0, updated: 0, skipped: 0, unmappedBadges: [], diffs: [], touchedKeys: [] });
+
     if (!transactions || transactions.length === 0) {
-      return stats;
+      return emptyResult();
     }
 
     // 1. Collect badges, the batch's time span and a lookup of the batch's own punches.
@@ -64,7 +68,7 @@ class AttendanceProcessor {
     }
 
     if (employeeCodes.size === 0) {
-      return stats;
+      return emptyResult();
     }
 
     // 2. Fetch employees by badgeNumber field for matching. Some employees never got
