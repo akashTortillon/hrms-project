@@ -277,13 +277,24 @@ export const getShiftRules = async (shiftName) => {
   // plain calendar-day window rather than an invented 09:00-18:00 working day.
   let start = meta.startTime;
   let end = meta.endTime;
+  const fromName = parseShiftHoursFromName(shiftMaster.name);
   if (!start || !end) {
-    const fromName = parseShiftHoursFromName(shiftMaster.name);
     if (fromName) {
       start = start || fromName.start;
       end = end || fromName.end;
     } else {
       warnOnce(`Shift "${shiftMaster.name}" has no start/end time and none can be read from its name - using a plain calendar day.`);
+    }
+  } else if (fromName) {
+    // Saved hours that disagree with the hours written in the shift's own name by more than 2h
+    // are a data-entry slip (e.g. "4 AM-4 PM" saved as 03:00-05:00, 5 PM typed as 05:00). The
+    // wrong window pairs punches the wrong way round, so trust the name. A small difference
+    // (a deliberate 1h grace either side) is kept.
+    const apart = (a, b) => { const d = Math.abs(toMinutes(a) - toMinutes(b)); return Math.min(d, 24 * 60 - d); };
+    if (apart(start, fromName.start) > 120 || apart(end, fromName.end) > 120) {
+      warnOnce(`Shift "${shiftMaster.name}" is saved as ${start}-${end} but its name says ${fromName.start}-${fromName.end} - using the hours from the name. Fix the shift in Masters.`);
+      start = fromName.start;
+      end = fromName.end;
     }
   }
 
@@ -308,6 +319,15 @@ export const calculateLateTier = (checkInTime, rules) => {
   // than the shift's start into "next day" space before comparing. No-op for same-day
   // shifts, where every buffer is already >= start.
   const shiftStartMin = toMinutes(rules.start);
+
+  // Arriving BEFORE the shift starts is on time, not a day late. The normalising below
+  // treats any time earlier than the start as "tomorrow", which is right for a late arrival
+  // after midnight on an overnight shift but made 09:57 for a 12:00 shift (or 03:59 for a
+  // 04:00 shift) count as ~22h late. Up to 6h before the start is an early arrival; the same
+  // limit assignPunchesToShiftDays uses when placing early punches.
+  const minutesBeforeStart = (shiftStartMin - toMinutes(checkInTime) + 24 * 60) % (24 * 60);
+  if (minutesBeforeStart > 0 && minutesBeforeStart <= 6 * 60) return 0;
+
   const normalize = (t) => {
     const m = toMinutes(t);
     return m < shiftStartMin ? m + 24 * 60 : m;
