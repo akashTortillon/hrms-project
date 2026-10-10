@@ -2897,17 +2897,34 @@ const drawKayzanPayslip = (doc, d) => {
     let y = startY;
 
     // ---- Header: brand (left) | SALARY SLIP + month (right)
+    // Brand = the employee's OWN company logo (Masters > Company Structure). Only when
+    // that company has no (usable) logo does it fall back to the Kayzan Group mark, so a
+    // payslip never goes out unbranded. Leptis payslips get the letterhead's branding.
     if (!letterhead) {
-        doc.save();
-        doc.translate(L, y).scale(58 / 200);
-        doc.lineWidth(9).strokeColor(GOLD).circle(100, 100, 90).stroke();
-        doc.lineWidth(18).lineCap("round").lineJoin("round").strokeColor(GOLD);
-        doc.moveTo(72, 52).lineTo(72, 148).stroke();
-        doc.moveTo(72, 100).lineTo(128, 52).stroke();
-        doc.moveTo(72, 100).lineTo(128, 148).stroke();
-        doc.restore();
-        doc.font("Helvetica-Bold").fontSize(30).fillColor(GOLD).text("KAYZAN", L + 70, y + 2, { characterSpacing: 3, lineBreak: false });
-        doc.font("Helvetica").fontSize(12).fillColor(GOLD_DARK).text("GROUP", L + 72, y + 38, { characterSpacing: 9, lineBreak: false });
+        let drewCompanyLogo = false;
+        const logoSource = d.companyLogoBuffer || d.companyLogoPath;
+        if (logoSource) {
+            try {
+                // fit keeps the aspect ratio inside a 200x58 box; PDFKit only reads
+                // PNG/JPEG, so any other format throws and drops to the fallback below.
+                doc.image(logoSource, L, y, { fit: [200, 58], align: "left", valign: "center" });
+                drewCompanyLogo = true;
+            } catch (imageError) {
+                console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
+            }
+        }
+        if (!drewCompanyLogo) {
+            doc.save();
+            doc.translate(L, y).scale(58 / 200);
+            doc.lineWidth(9).strokeColor(GOLD).circle(100, 100, 90).stroke();
+            doc.lineWidth(18).lineCap("round").lineJoin("round").strokeColor(GOLD);
+            doc.moveTo(72, 52).lineTo(72, 148).stroke();
+            doc.moveTo(72, 100).lineTo(128, 52).stroke();
+            doc.moveTo(72, 100).lineTo(128, 148).stroke();
+            doc.restore();
+            doc.font("Helvetica-Bold").fontSize(30).fillColor(GOLD).text("KAYZAN", L + 70, y + 2, { characterSpacing: 3, lineBreak: false });
+            doc.font("Helvetica").fontSize(12).fillColor(GOLD_DARK).text("GROUP", L + 72, y + 38, { characterSpacing: 9, lineBreak: false });
+        }
         doc.save().lineWidth(1).strokeColor(GOLD_LINE).moveTo(300, y + 2).lineTo(300, y + 56).stroke().restore();
     }
     const titleX = letterhead ? L : 310;
@@ -3062,9 +3079,10 @@ const buildPayslipPdfBuffer = async (payroll, brandingCache) => {
 
         drawKayzanPayslip(doc, {
             employee,
-            // The group header carries the Kayzan brand; the company line says which
-            // legal entity pays this employee.
+            // Header shows the employee's own company logo (Kayzan mark only as fallback).
             companyName: employee?.company || "",
+            companyLogoBuffer,
+            companyLogoPath,
             attendanceSummary,
             netSalary,
             rows,
