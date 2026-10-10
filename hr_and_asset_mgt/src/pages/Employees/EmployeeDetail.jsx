@@ -1836,7 +1836,9 @@ export default function EmployeeDetail() {
                                                 </span>
                                             </div>
                                             <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                                                Approved: {new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}
+                                                {loan.status === 'PENDING'
+                                                    ? `Submitted: ${new Date(loan.createdAt || loan.updatedAt).toLocaleDateString()}`
+                                                    : `Approved: ${new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}`}
                                             </div>
                                         
                                         </div>
@@ -1862,6 +1864,10 @@ export default function EmployeeDetail() {
                                             })()}
                                             {loan.isFullyPaid ? (
                                                 <span style={{ color: '#166534', fontSize: '12px', fontWeight: '500', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Paid Off</span>
+                                            ) : loan.status === 'PENDING' ? (
+                                                <span style={{ color: '#1d4ed8', fontSize: '12px', fontWeight: '500', background: '#dbeafe', padding: '2px 8px', borderRadius: '4px' }}>
+                                                    {loan.currentApprovalStage === 'HR' ? 'Awaiting HR approval' : 'Pending approval'}
+                                                </span>
                                             ) : (
                                                 <span style={{ color: '#854d0e', fontSize: '12px', fontWeight: '500', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Active</span>
                                             )}
@@ -1897,7 +1903,7 @@ export default function EmployeeDetail() {
                                             ))}
                                     </div>
 
-                                    {canManageRepayments && !loan.isFullyPaid && (
+                                    {canManageRepayments && !loan.isFullyPaid && loan.status === 'APPROVED' && (
                                         <div style={{ marginBottom: '14px', display: 'flex', gap: '8px' }}>
                                             <button
                                                 type="button"

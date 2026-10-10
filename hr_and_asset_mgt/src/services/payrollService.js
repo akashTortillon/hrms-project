@@ -26,8 +26,9 @@ const blobErrorMessage = async (error, fallback) => {
 
 export const payrollService = {
     // Generate Payroll for a rolling period — periodStart/periodEnd are "YYYY-MM-DD" strings
-    generate: async (periodStart, periodEnd) => {
-        const response = await api.post("/payroll/generate", { periodStart, periodEnd });
+    // `force` (Admin only, enforced server-side) bypasses the overlapping-period guard.
+    generate: async (periodStart, periodEnd, force = false) => {
+        const response = await api.post("/payroll/generate", force ? { periodStart, periodEnd, force: true } : { periodStart, periodEnd });
         return response.data;
     },
 

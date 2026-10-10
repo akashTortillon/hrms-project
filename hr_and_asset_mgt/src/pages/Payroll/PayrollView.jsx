@@ -10,6 +10,7 @@ import ReportExportBar from "./ReportExportBar.jsx";
 import { getCompanies, getBranches } from "../../services/masterService.js";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import CustomButton from "../../components/reusable/Button.jsx";
+import { useRole } from "../../contexts/RoleContext";
 
 // Reusable filter section (Original logic + New Style)
 function PayrollFilters({ filters, setFilters, companies, branches }) {
@@ -135,6 +136,11 @@ function Payroll() {
   // purely for the existing month/year-based read endpoints (summary, exports,
   // SIF, MOL) — the real period identity lives in periodStart/periodEnd.
   const today = new Date();
+  const { currentUser } = useRole();
+  // Only an Admin may override the overlapping-period guard (also enforced by the API).
+  const isAdmin = currentUser?.role === "Admin";
+  const [forceGenerate, setForceGenerate] = useState(null); // { message } while the override dialog is open
+  const [forceConfirmText, setForceConfirmText] = useState("");
   const [periodStart, setPeriodStart] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [periodEnd, setPeriodEnd] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
   // Guards fetchPayroll/fetchAllRecords against out-of-order responses: on mount, the
@@ -283,17 +289,25 @@ function Payroll() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (force = false) => {
     try {
       setLoading(true);
-      const result = await payrollService.generate(periodStart, periodEnd);
+      const result = await payrollService.generate(periodStart, periodEnd, force === true);
       toast.success("Payroll Generated Successfully!");
       if (typeof result?.hasActiveAbsenceDeductionRule === "boolean") {
         setHasAbsenceDeductionRule(result.hasActiveAbsenceDeductionRule);
       }
       fetchPayroll();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to generate payroll");
+      const data = error.response?.data;
+      // Overlap with an existing period: an Admin gets the option to override it; everyone
+      // else just sees the reason.
+      if (error.response?.status === 409 && data?.conflictPeriodStart && isAdmin && force !== true) {
+        setForceConfirmText("");
+        setForceGenerate({ message: data.message });
+      } else {
+        toast.error(data?.message || "Failed to generate payroll");
+      }
     } finally {
       setLoading(false);
     }
@@ -528,7 +542,7 @@ function Payroll() {
                  <div className="action-btns-group">
                     <button 
                       className="gen-btn" 
-                      onClick={handleGenerate} 
+                      onClick={() => handleGenerate()} 
                       disabled={loading || isFinalized}
                     >
                         {loading ? 'Processing...' : isGenerated ? 'Regenerate' : 'Generate Payroll'}
@@ -825,6 +839,47 @@ function Payroll() {
           type="text"
           value={finalizeConfirmText}
           onChange={(e) => setFinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
+
+      <CustomModal
+        show={!!forceGenerate}
+        title="Generate Payroll Anyway?"
+        onClose={() => { setForceGenerate(null); setForceConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setForceGenerate(null); setForceConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton
+              onClick={() => { setForceGenerate(null); setForceConfirmText(""); handleGenerate(true); }}
+              disabled={forceConfirmText.trim().toLowerCase() !== "yes"}
+            >
+              Generate Anyway
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>{forceGenerate?.message}</p>
+        <p style={{ marginBottom: "12px", color: "#b91c1c", fontWeight: 500 }}>
+          Overriding creates a second payroll run for {periodStart} to {periodEnd} next to the existing one.
+          Overlapping days can be counted twice (attendance, deductions). Prefer finalizing or deleting the
+          existing period, or generating the exact same period again.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={forceConfirmText}
+          onChange={(e) => setForceConfirmText(e.target.value)}
           placeholder="Yes"
           style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
           autoFocus

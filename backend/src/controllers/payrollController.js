@@ -815,6 +815,11 @@ export const generatePayroll = async (req, res) => {
             return res.status(400).json({ message: "periodStart and periodEnd are required." });
         }
 
+        // `force` skips the overlapping-period guard below, so it is Admin-only.
+        if (force && req.user?.role !== "Admin") {
+            return res.status(403).json({ message: "Only an Admin can force payroll generation over an overlapping period." });
+        }
+
         const periodStart = toDayStart(periodStartRaw);
         const periodEnd = toDayEnd(periodEndRaw);
 
