@@ -494,6 +494,19 @@ const isHrApprover = (user = {}) =>
   || user.permissions?.includes("ALL")
   || user.permissions?.includes("APPROVE_REQUESTS");
 
+// Final (HR-stage) approval of a loan / salary advance belongs to Admin and HR only. A
+// Finance Manager role commonly also carries APPROVE_REQUESTS (so it can stand in for HR on
+// leave/document requests), which made isHrApprover() true for it - so a loan the Finance
+// Manager had just approved stayed in their own list with Approve/Reject buttons instead of
+// moving on to HR alone.
+const isStrictHrApprover = (user = {}) =>
+  user.role === "Admin"
+  || /^HR/i.test(user.role || "")
+  || Boolean(user.permissions?.includes("ALL"));
+
+const isHrApproverForRequest = (user = {}, request = {}) =>
+  request.requestType === "SALARY" ? isStrictHrApprover(user) : isHrApprover(user);
+
 // Resolves `request`'s employee doc fresh - a live lookup, not the possibly-
 // stale designatedManager/designatedFinanceManager value stored on the request
 // itself at submission time. Mirrors createRequest's own User->Employee
@@ -621,15 +634,19 @@ const resolveFinanceRecipient = async (employee) => {
 /**
  * Helper to notify all Admins and HR (Authorized Users)
  */
-const notifyAdmins = async (title, message, link) => {
+const notifyAdmins = async (title, message, link, { hrOnly = false } = {}) => {
   try {
     // 1. Find roles that have 'APPROVE_REQUESTS' or 'ALL' permission
     const authorizedRoles = await Master.find({
       type: 'ROLE',
       permissions: { $in: ['APPROVE_REQUESTS', 'ALL'] }
-    }).select('name');
+    }).select('name permissions');
 
-    const roleNames = authorizedRoles.map(r => r.name);
+    // hrOnly (loan/advance HR stage): skip non-HR roles that merely hold APPROVE_REQUESTS
+    // (e.g. Finance Manager) - they cannot act at that stage.
+    const roleNames = authorizedRoles
+      .filter(r => !hrOnly || /^HR/i.test(r.name || "") || r.permissions?.includes("ALL"))
+      .map(r => r.name);
 
     // 2. Add 'Admin' as it always has 'ALL' permission
     if (!roleNames.includes("Admin")) roleNames.push("Admin");
@@ -1241,6 +1258,8 @@ export const getPendingRequestsForAdmin = async (req, res) => {
     let query = {};
     const isManagerOnlyRole = req.user.role === "Manager";
     const canApproveHr = !isManagerOnlyRole && isHrApprover(req.user);
+    // Loans/advances: the HR stage is Admin/HR only (see isStrictHrApprover).
+    const canApproveHrSalary = !isManagerOnlyRole && isStrictHrApprover(req.user);
     const canApproveFinance = (
       req.user.role === "Finance Manager"
       || /^Finance/i.test(req.user.role || "")
@@ -1340,7 +1359,11 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       query.$and = query.$and || [];
       query.$and.push({ $or: nonHrStageFilters.length ? nonHrStageFilters : [{ _id: null }] });
     } else if (!req.query.stage) {
-      const stageFilters = [{ currentApprovalStage: "HR" }];
+      const stageFilters = [
+        canApproveHrSalary
+          ? { currentApprovalStage: "HR" }
+          : { currentApprovalStage: "HR", requestType: { $ne: "SALARY" } }
+      ];
 
       if (canApproveManager) {
         stageFilters.push({
@@ -1412,6 +1435,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       const plain = doc.toObject();
       // Helpers compare raw ids, but the response copy has them populated.
       const raw = {
+        requestType: doc.requestType,
         userId: doc.userId?._id || doc.userId,
         designatedManager: doc.designatedManager?._id || doc.designatedManager,
         designatedFinanceManager: doc.designatedFinanceManager?._id || doc.designatedFinanceManager
@@ -1429,7 +1453,7 @@ export const getPendingRequestsForAdmin = async (req, res) => {
         } else if (stage === "FINANCE") {
           canActNow = await isFinanceApprover(req.user, raw);
         } else if (stage === "HR") {
-          canActNow = isHrApprover(req.user);
+          canActNow = isHrApproverForRequest(req.user, raw);
         }
       }
       const awaiting = stage === "MANAGER" ? doc.designatedManager
@@ -1484,7 +1508,7 @@ export const updateRequestStatus = async (req, res) => {
 
     const isManagerStage = request.currentApprovalStage === "MANAGER";
     const isFinanceStage = request.currentApprovalStage === "FINANCE";
-    const canApproveHr = isHrApprover(req.user);
+    const canApproveHr = isHrApproverForRequest(req.user, request);
     const canApproveManager = await isManagerApprover(req.user, request);
     const canApproveFinance = await isFinanceApprover(req.user, request);
     let salaryChangeNotification = null;
@@ -1574,7 +1598,8 @@ export const updateRequestStatus = async (req, res) => {
           await notifyAdmins(
             "Request awaiting HR approval",
             `Request ${request.requestId} has been approved by the manager and is awaiting HR approval.`,
-            "/app/requests"
+            "/app/requests",
+            { hrOnly: request.requestType === "SALARY" }
           );
 
           // Notify the employee that the manager approved
@@ -1639,7 +1664,8 @@ export const updateRequestStatus = async (req, res) => {
         await notifyAdmins(
           "Salary request awaiting HR approval",
           `Request ${request.requestId} has been approved by finance and is awaiting HR approval.`,
-          "/app/requests"
+          "/app/requests",
+          { hrOnly: true }
         );
 
         try {

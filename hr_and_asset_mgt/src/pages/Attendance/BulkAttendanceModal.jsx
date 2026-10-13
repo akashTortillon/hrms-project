@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getEmployees } from "../../services/employeeService.js";
 import { markAttendanceBulk } from "../../services/attendanceService.js";
 import { toast } from "react-toastify";
+import SearchableSelect from "../../components/reusable/SearchableSelect.jsx";
 
 export default function BulkAttendanceModal({ isOpen, onClose, onSuccess }) {
   const [employees, setEmployees] = useState([]);
@@ -98,14 +99,17 @@ export default function BulkAttendanceModal({ isOpen, onClose, onSuccess }) {
           {/* Employee */}
           <div>
             <label style={labelStyle}>Employee *</label>
-            <select name="employeeId" value={form.employeeId} onChange={handleChange} style={inputStyle}>
-              <option value="">Select Employee</option>
-              {employees.map((e) => (
-                <option key={e._id} value={e._id}>
-                  {e.name} ({e.code}) — {e.department}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              name="employeeId"
+              value={form.employeeId}
+              onChange={handleChange}
+              placeholder="Search employee by name, code or department..."
+              emptyLabel="Select Employee"
+              options={employees.map((e) => ({
+                value: e._id,
+                label: `${e.name} (${e.code}) — ${e.department}`,
+              }))}
+            />
           </div>
 
           {/* Date Range */}

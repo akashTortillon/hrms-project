@@ -1836,7 +1836,7 @@ export default function EmployeeDetail() {
                                                 </span>
                                             </div>
                                             <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                                                {loan.status === 'PENDING'
+                                                {!['APPROVED', 'COMPLETED'].includes(loan.status)
                                                     ? `Submitted: ${new Date(loan.createdAt || loan.updatedAt).toLocaleDateString()}`
                                                     : `Approved: ${new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}`}
                                             </div>
@@ -1864,9 +1864,9 @@ export default function EmployeeDetail() {
                                             })()}
                                             {loan.isFullyPaid ? (
                                                 <span style={{ color: '#166534', fontSize: '12px', fontWeight: '500', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Paid Off</span>
-                                            ) : loan.status === 'PENDING' ? (
+                                            ) : !['APPROVED', 'COMPLETED'].includes(loan.status) ? (
                                                 <span style={{ color: '#1d4ed8', fontSize: '12px', fontWeight: '500', background: '#dbeafe', padding: '2px 8px', borderRadius: '4px' }}>
-                                                    {loan.currentApprovalStage === 'HR' ? 'Awaiting HR approval' : 'Pending approval'}
+                                                    {{ MANAGER: 'Awaiting manager approval', FINANCE: 'Awaiting finance approval', HR: 'Awaiting HR approval' }[loan.currentApprovalStage] || 'Pending approval'}
                                                 </span>
                                             ) : (
                                                 <span style={{ color: '#854d0e', fontSize: '12px', fontWeight: '500', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Active</span>

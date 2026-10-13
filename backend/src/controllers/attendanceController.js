@@ -210,6 +210,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
+import { displayEmployeeCode } from "../utils/employeeCode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1066,7 +1067,7 @@ export const exportAttendance = async (req, res) => {
       // Build Matrix
       finalRows = employees.map(emp => {
         const row = {
-          "Employee ID": emp.code,
+          "Employee ID": displayEmployeeCode(emp),
           "Name": emp.name,
           "Department": emp.department,
           "Shift": emp.shift || "Day Shift"
@@ -1162,7 +1163,7 @@ export const exportAttendance = async (req, res) => {
         if (shift && effectiveShift !== shift) return null;
 
         return {
-          "Employee ID": emp.code,
+          "Employee ID": displayEmployeeCode(emp),
           "Name": emp.name,
           "Department": emp.department,
           "Shift": effectiveShift,

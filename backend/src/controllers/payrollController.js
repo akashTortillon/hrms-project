@@ -21,6 +21,7 @@ import { holidaySetFromHolidays, isWeekOff, applyMonthlyFlexQuota } from "../uti
 import { resolveCompanyLogoBuffer } from "./masterController.js";
 import { escapeRegex } from "../utils/stringUtils.js";
 import { amountToWordsAED } from "../utils/numberToWords.js";
+import { displayEmployeeCode } from "../utils/employeeCode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2325,7 +2326,7 @@ const buildPayrollSheetRows = (validRecords) => validRecords.flatMap((r) => {
         const ded = deductions[idx];
         const first = idx === 0;
         return [
-            first ? (emp.code || "") : "",
+            first ? displayEmployeeCode(emp) : "",
             first ? (emp.name || "") : "",
             first ? (emp.personalId || "") : "",
             first ? (emp.iban || emp.bankAccount || "") : "",
@@ -2357,7 +2358,7 @@ export const exportPayrollSheet = async (req, res) => {
 
         const records = await Payroll.find({ month, year }).populate({
             path: "employee",
-            select: "name code personalId iban bankAccount company branch allowance hra"
+            select: "name code systemCode personalId iban bankAccount company branch allowance hra"
         });
 
         const validRecords = records.filter((r) => r.employee);
@@ -2473,7 +2474,7 @@ export const generateSIF = async (req, res) => {
         }
         // A bank payment file should only ever be built from finalized payroll -
         // was pulling DRAFT records too, contrary to this comment's own stated intent.
-        const records = await Payroll.find(query).populate("employee", "name code bankName laborCardNumber bankAccount iban agentId");
+        const records = await Payroll.find(query).populate("employee", "name code systemCode bankName laborCardNumber bankAccount iban agentId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No finalized payroll records found for this period. SIF can only be generated after Finalize." });
@@ -2515,7 +2516,7 @@ export const generateSIF = async (req, res) => {
         if (req.query.format === "json") {
             const previewData = records.map(r => ({
                 "Employee": r.employee?.name || "N/A",
-                "Code": r.employee?.code || "N/A",
+                "Code": displayEmployeeCode(r.employee) || "N/A",
                 "IBAN/Account": r.employee?.iban || r.employee?.bankAccount || "N/A",
                 "Total Net": (r.netSalary || 0).toFixed(2),
                 "Basic": (r.basicSalary || 0).toFixed(2),
@@ -2616,7 +2617,7 @@ export const generateMOLReport = async (req, res) => {
 
             return {
                 "Visa Company": emp.visaCompany || "N/A",
-                "Employee ID": emp.code,
+                "Employee ID": displayEmployeeCode(emp),
                 "Name": emp.name,
                 "Labor Card No.": emp.laborCardNumber || "N/A",
                 "Contract Basic": emp.basicSalary,
@@ -2654,7 +2655,7 @@ export const getPaymentHistory = async (req, res) => {
         const query = { year, status: "PROCESSED" };
         if (month) query.month = month;
         const records = await Payroll.find(query)
-            .populate("employee", "name code department");
+            .populate("employee", "name code systemCode department");
 
         if (records.length === 0) {
             return res.status(404).json({ message: month ? `No payment history found for ${month}/${year}` : `No payment history found for ${year}` });
@@ -2663,7 +2664,7 @@ export const getPaymentHistory = async (req, res) => {
         const historyData = records.map(r => ({
             "Month": r.month,
             "Year": r.year,
-            "Employee ID": r.employee?.code,
+            "Employee ID": displayEmployeeCode(r.employee),
             "Name": r.employee?.name,
             "Department": r.employee?.department,
             "Basic Salary": r.basicSalary,
@@ -2785,7 +2786,7 @@ const resolveCompanyBranding = async (companyName, brandingCache) => {
 
 // Employee fields buildPayslipPdfBuffer needs (accommodation/vehicle are rendered on the
 // slip only - see buildPayslipRows).
-const PAYSLIP_EMPLOYEE_FIELDS = "name code designation department company accommodationAllowance vehicleAllowance";
+const PAYSLIP_EMPLOYEE_FIELDS = "name code systemCode designation department company accommodationAllowance vehicleAllowance";
 
 const payslipMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -2872,7 +2873,7 @@ const drawKayzanPayslip = (doc, d) => {
     const colW = W / 4;
     const fields = [
         ["EMPLOYEE NAME", d.employee?.name || "Unknown"],
-        ["EMPLOYEE ID", d.employee?.code || "N/A"],
+        ["EMPLOYEE ID", displayEmployeeCode(d.employee) || "N/A"],
         ["DESIGNATION", d.employee?.designation || "N/A"],
         ["DEPARTMENT", d.employee?.department || "N/A"]
     ];

@@ -6,6 +6,7 @@ import EmployeeDocument from "../models/employeeDocumentModel.js";
 import CompanyDocument from "../models/companyDocModel.js";
 import Payroll from "../models/payrollModel.js";
 import Master from "../models/masterModel.js";
+import { displayEmployeeCode } from "../utils/employeeCode.js";
 
 /**
  * Get Departmental Attendance Report (Monthly)
@@ -418,7 +419,7 @@ export const getAttendanceReport = async ({ month, year, branch, department, com
   if (company && company !== "All Companies") empFilter.company = company;
   if (employeeId) empFilter._id = new (await import("mongoose")).default.Types.ObjectId(employeeId);
 
-  const employees = await Employee.find(empFilter).select("_id name code department branch company").lean();
+  const employees = await Employee.find(empFilter).select("_id name code systemCode department branch company").lean();
   const empIds = employees.map(e => e._id);
   const empMap = {};
   employees.forEach(e => { empMap[e._id.toString()] = e; });
@@ -445,7 +446,7 @@ export const getAttendanceReport = async ({ month, year, branch, department, com
   return employees.map(emp => {
     const stats = grouped[emp._id.toString()] || { present: 0, absent: 0, late: 0, onLeave: 0, totalDays: 0 };
     return {
-      employeeId: emp.code,
+      employeeId: displayEmployeeCode(emp) || "N/A",
       employeeName: emp.name,
       department: emp.department || "N/A",
       branch: emp.branch || "N/A",
@@ -467,7 +468,7 @@ export const getSalaryPaidReport = async ({ month, year, branch, department, com
   if (department && department !== "All Departments") empFilter.department = department;
   if (company && company !== "All Companies") empFilter.company = company;
 
-  const employees = await Employee.find(empFilter).select("_id name code department branch company").lean();
+  const employees = await Employee.find(empFilter).select("_id name code systemCode department branch company").lean();
   const empIds = employees.map(e => e._id);
   const empMap = {};
   employees.forEach(e => { empMap[e._id.toString()] = e; });
@@ -487,7 +488,7 @@ export const getSalaryPaidReport = async ({ month, year, branch, department, com
     const deductionBreakdown = (p.deductions || []).map(d => `${d.name}: ${d.amount}`).join(" | ");
 
     return {
-      employeeId: emp.code || "N/A",
+      employeeId: displayEmployeeCode(emp) || "N/A",
       employeeName: emp.name || "N/A",
       department: emp.department || "N/A",
       branch: emp.branch || "N/A",
@@ -513,7 +514,7 @@ export const getSalaryRevisionReport = async ({ branch, department, company, emp
   if (employeeId) empFilter._id = employeeId;
 
   const employees = await Employee.find(empFilter)
-    .select("_id name code department branch company salaryHistory")
+    .select("_id name code systemCode department branch company salaryHistory")
     .lean();
 
   const rows = [];
@@ -524,7 +525,7 @@ export const getSalaryRevisionReport = async ({ branch, department, company, emp
       if (toDate && effectiveDate > new Date(toDate)) return;
 
       rows.push({
-        employeeId: emp.code,
+        employeeId: displayEmployeeCode(emp) || "N/A",
         employeeName: emp.name,
         department: emp.department || "N/A",
         branch: emp.branch || "N/A",
@@ -549,7 +550,7 @@ export const getLeaveBalanceReport = async ({ branch, department, company, year 
   if (department && department !== "All Departments") empFilter.department = department;
   if (company && company !== "All Companies") empFilter.company = company;
 
-  const employees = await Employee.find(empFilter).select("_id name code department branch company").lean();
+  const employees = await Employee.find(empFilter).select("_id name code systemCode department branch company").lean();
   const empIds = employees.map(e => e._id);
   const empMap = {};
   employees.forEach(e => { empMap[e._id.toString()] = e; });
@@ -581,7 +582,7 @@ export const getLeaveBalanceReport = async ({ branch, department, company, year 
     const stats = grouped[emp._id.toString()] || { sick: 0, annual: 0, casual: 0, unpaid: 0, maternity: 0, other: 0 };
     const totalTaken = Object.values(stats).reduce((a, b) => a + b, 0);
     return {
-      employeeId: emp.code,
+      employeeId: displayEmployeeCode(emp) || "N/A",
       employeeName: emp.name,
       department: emp.department || "N/A",
       branch: emp.branch || "N/A",
@@ -643,11 +644,11 @@ export const getEmployeeSalaryReport = async ({ branch, company } = {}) => {
   if (company) matchFilter.company = company;
 
   const employees = await Employee.find(matchFilter)
-    .select("code name branch company basicSalary allowance hra totalSalary ctc")
+    .select("code systemCode name branch company basicSalary allowance hra totalSalary ctc")
     .lean();
 
   return employees.map(e => ({
-    code: e.code || "N/A",
+    code: displayEmployeeCode(e) || "N/A",
     name: e.name || "N/A",
     branch: e.branch || "N/A",
     company: e.company || "N/A",
@@ -667,7 +668,7 @@ export const getAssetAssignmentReport = async ({ branch, department, company, em
   if (company && company !== "All Companies") empFilter.company = company;
   if (employeeId) empFilter._id = employeeId;
 
-  const employees = await Employee.find(empFilter).select("_id name code department branch company").lean();
+  const employees = await Employee.find(empFilter).select("_id name code systemCode department branch company").lean();
   const empIds = employees.map(e => e._id);
   const empMap = {};
   employees.forEach(e => { empMap[e._id.toString()] = e; });
@@ -686,7 +687,7 @@ export const getAssetAssignmentReport = async ({ branch, department, company, em
       assetType: a.type || "N/A",
       category: a.category || "N/A",
       serialNumber: a.serialNumber || "N/A",
-      employeeId: emp.code || "N/A",
+      employeeId: displayEmployeeCode(emp) || "N/A",
       employeeName: emp.name || "N/A",
       department: emp.department || "N/A",
       branch: emp.branch || a.branch || "N/A",
@@ -706,7 +707,7 @@ export const getOvertimeAllowanceReport = async ({ month, year, branch, departme
   if (department && department !== "All Departments") empFilter.department = department;
   if (company && company !== "All Companies") empFilter.company = company;
 
-  const employees = await Employee.find(empFilter).select("_id name code department branch company").lean();
+  const employees = await Employee.find(empFilter).select("_id name code systemCode department branch company").lean();
   const empIds = employees.map(e => e._id);
   const empMap = {};
   employees.forEach(e => { empMap[e._id.toString()] = e; });
@@ -749,7 +750,7 @@ export const getOvertimeAllowanceReport = async ({ month, year, branch, departme
       .join(" | ");
 
     return {
-      employeeId: emp.code || "N/A",
+      employeeId: displayEmployeeCode(emp) || "N/A",
       employeeName: emp.name || "N/A",
       department: emp.department || "N/A",
       branch: emp.branch || "N/A",
