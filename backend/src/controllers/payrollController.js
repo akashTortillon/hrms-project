@@ -2287,20 +2287,15 @@ export const exportPayroll = async (req, res) => {
 // overtime, manual adjustments) collapses into one ADDITIONS row.
 const FIXED_ALLOWANCE_NAMES = new Set(["Housing Rent Allowance (HRA)", "Other Allowance"]);
 
-// Collapses a payroll's allowances/deductions array into one {name, amount, comments}
-// triple for the template's single NAME/AMOUNT/COMMENTS column group - joins names
-// and any reason/meta text with ", ", sums amounts via sumAmounts (same 2dp-rounded
-// summation every other total on the payslip uses).
-const collapseLineItems = (items = [], { exclude } = {}) => {
-    const filtered = exclude ? items.filter((i) => !exclude.has(i?.name)) : items;
-    if (!filtered.length) return { name: "", amount: 0, comments: "" };
-    const name = filtered.map((i) => i.name).filter(Boolean).join(", ");
-    const comments = filtered
-        .map((i) => i.reason || (typeof i.meta === "string" ? i.meta : ""))
-        .filter(Boolean)
-        .join(", ");
-    return { name, amount: sumAmounts(filtered), comments };
-};
+// Turns a payroll's allowances/deductions array into one {name, amount, comments}
+// entry per line item, so the template's NAME/AMOUNT/COMMENTS column group can list
+// each addition/deduction on its own row instead of a single comma-joined total.
+const toSheetLines = (items = [], { exclude } = {}) => (exclude ? items.filter((i) => !exclude.has(i?.name)) : items)
+    .map((i) => ({
+        name: i?.name || "",
+        amount: round2(Number(i?.amount) || 0),
+        comments: i?.reason || (typeof i?.meta === "string" ? i.meta : "") || ""
+    }));
 
 const PAYROLL_SHEET_HEADERS = [
     "ID", "NAME", "PERSONAL ID", "IBAN", "COMPANY", "BRANCH",
@@ -2310,36 +2305,45 @@ const PAYROLL_SHEET_HEADERS = [
     "NET SALARY"
 ];
 
-// One 17-value row per employee in the client's Payroll Sheet template (used by both the
-// Excel and PDF exports).
-const buildPayrollSheetRows = (validRecords) => validRecords.map((r) => {
+// 17-value rows in the client's Payroll Sheet template (used by both the Excel and PDF
+// exports). Each employee gets one row per addition/deduction line (whichever list is
+// longer), with the employee/salary/net columns on the first row only - so every
+// allowance, overtime, absence, loan etc. shows with its own name, amount and comment.
+const buildPayrollSheetRows = (validRecords) => validRecords.flatMap((r) => {
     const emp = r.employee || {};
     const basicSalary = round2(r.basicSalary || 0);
     const allowance = Number(emp.allowance) || 0;
     const hra = Number(emp.hra) || 0;
     const totalAllowances = round2(r.totalAllowances || 0);
     const salary = round2(basicSalary + totalAllowances);
-    const additions = collapseLineItems(r.allowances || [], { exclude: FIXED_ALLOWANCE_NAMES });
-    const deductions = collapseLineItems(r.deductions || []);
-    return [
-        emp.code || "",
-        emp.name || "",
-        emp.personalId || "",
-        emp.iban || emp.bankAccount || "",
-        emp.company || "",
-        emp.branch || "",
-        basicSalary,
-        allowance,
-        hra,
-        salary,
-        additions.name,
-        additions.amount,
-        additions.comments,
-        deductions.name,
-        deductions.amount,
-        deductions.comments,
-        round2(r.netSalary || 0)
-    ];
+    const additions = toSheetLines(r.allowances || [], { exclude: FIXED_ALLOWANCE_NAMES });
+    const deductions = toSheetLines(r.deductions || []);
+    const rowCount = Math.max(1, additions.length, deductions.length);
+
+    return Array.from({ length: rowCount }, (_, idx) => {
+        const add = additions[idx];
+        const ded = deductions[idx];
+        const first = idx === 0;
+        return [
+            first ? (emp.code || "") : "",
+            first ? (emp.name || "") : "",
+            first ? (emp.personalId || "") : "",
+            first ? (emp.iban || emp.bankAccount || "") : "",
+            first ? (emp.company || "") : "",
+            first ? (emp.branch || "") : "",
+            first ? basicSalary : "",
+            first ? allowance : "",
+            first ? hra : "",
+            first ? salary : "",
+            add ? add.name : "",
+            add ? add.amount : (first ? 0 : ""),
+            add ? add.comments : "",
+            ded ? ded.name : "",
+            ded ? ded.amount : (first ? 0 : ""),
+            ded ? ded.comments : "",
+            first ? round2(r.netSalary || 0) : ""
+        ];
+    });
 });
 
 // --- API: Export "Payroll Sheet" (client-template-matched export, alongside the
@@ -2939,10 +2943,6 @@ const drawKayzanPayslip = (doc, d) => {
         .text("SALARY SLIP", titleX, y + (letterhead ? 0 : 2), { width: titleW, align: titleAlign, lineBreak: false });
     doc.font("Helvetica").fontSize(letterhead ? 12 : 14).fillColor(MUTED)
         .text(`Month: ${d.monthLabel}`, titleX, y + (letterhead ? 28 : 38), { width: titleW, align: titleAlign, lineBreak: false });
-    if (d.periodRangeText) {
-        doc.fontSize(8.5).fillColor(MUTED)
-            .text(d.periodRangeText, titleX, y + (letterhead ? 46 : 58), { width: titleW, align: titleAlign, lineBreak: false });
-    }
     y += letterhead ? 62 : 72;
     hRule(y);
     y += 8;

@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Master from "../models/masterModel.js";
 import Employee from "../models/employeeModel.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { resolveRolePermissions } from "../utils/rolePermissions.js";
 
 // Helper to set refresh token cookie
 const setRefreshTokenCookie = (res, token) => {
@@ -116,13 +117,7 @@ export const login = async (req, res) => {
     }
 
     // Fetch Permissions from Master DB
-    let permissions = [];
-    if (user.role === 'Admin') {
-      permissions = ["ALL"];
-    } else {
-      const roleDef = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${user.role}$`, 'i') } });
-      permissions = roleDef ? roleDef.permissions : [];
-    }
+    const permissions = await resolveRolePermissions(user.role);
 
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
@@ -257,13 +252,7 @@ export const getMe = async (req, res) => {
   try {
     const user = req.user;
 
-    let permissions = [];
-    if (user.role === "Admin") {
-      permissions = ["ALL"];
-    } else {
-      const roleDef = await Master.findOne({ type: "ROLE", name: { $regex: new RegExp(`^${user.role}$`, "i") } });
-      permissions = roleDef ? roleDef.permissions || [] : [];
-    }
+    const permissions = await resolveRolePermissions(user.role);
 
     let finalEmployeeId = user.employeeId;
     if (!finalEmployeeId) {

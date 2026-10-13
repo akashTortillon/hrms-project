@@ -12,7 +12,9 @@ const allNavItems = [
   // the list to a Manager's own direct reports. Gating the nav link on MANAGE_EMPLOYEES
   // left Managers with no click-path to any report's page at all, even though the
   // list endpoint behind it was already correctly scoped for them.
-  { path: "/app/employees", icon: "users", label: "Employees", permission: "VIEW_ALL_EMPLOYEES" },
+  // MANAGE_EMPLOYEES (a role that edits employees) also needs the link - a custom role
+  // granted only that previously got no Employees item at all.
+  { path: "/app/employees", icon: "users", label: "Employees", permission: "VIEW_ALL_EMPLOYEES", orPermission: "MANAGE_EMPLOYEES" },
   { path: "/app/probation", icon: "clock (1)", label: "Probation", permission: "MANAGE_EMPLOYEES" },
   { path: "/app/onboarding", icon: "clipboard-list", label: "Onboarding", permission: "MANAGE_ONBOARDING" }, // New Onboarding
   { path: "/app/offboarding", icon: "briefcase", label: "Offboarding", permission: "MANAGE_OFFBOARDING" }, // New Offboarding
@@ -27,7 +29,7 @@ const allNavItems = [
   // Own profile (EmployeeDetail with id "me"). Only for plain employees - anyone holding
   // VIEW_ALL_EMPLOYEES (Manager / Finance Manager / HR / Admin) already has the Employees
   // item and reaches their own profile from the header menu.
-  { path: "/app/employees/me", icon: "user", label: "My Profile", permission: "VIEW_DASHBOARD", hideIfPermission: "VIEW_ALL_EMPLOYEES" },
+  { path: "/app/employees/me", icon: "user", label: "My Profile", permission: "VIEW_DASHBOARD", hideIfPermission: "VIEW_ALL_EMPLOYEES", hideIfOrPermission: "MANAGE_EMPLOYEES" },
   { path: "/app/reports", icon: "reports", label: "Reports", permission: "VIEW_REPORTS" },
   { path: "/app/activity-log", icon: "document (1)", label: "Activity Log", permission: "MANAGE_MASTERS" },
   { path: "/app/masters", icon: "settings", label: "Masters", permission: "MANAGE_MASTERS" },
@@ -42,8 +44,8 @@ export default function Sidebar({ isMobileOpen, setMobileOpen }) {
   // Filter navigation items based on user role
   const navItems = useMemo(() => {
     return allNavItems.filter((item) =>
-      hasPermission(item.permission)
-      && !(item.hideIfPermission && hasPermission(item.hideIfPermission))
+      (hasPermission(item.permission) || (item.orPermission && hasPermission(item.orPermission)))
+      && !(item.hideIfPermission && (hasPermission(item.hideIfPermission) || (item.hideIfOrPermission && hasPermission(item.hideIfOrPermission))))
     );
   }, [role, hasPermission]);
 

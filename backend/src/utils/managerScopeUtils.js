@@ -29,8 +29,8 @@ export const isFinanceManagerOfEmployee = (reqUser, employee) => {
 };
 
 // Single source of truth for "which employees may this requester see in a list/search".
-// Returns null for full access (Admin / HR* role / ALL permission - APPROVE_REQUESTS
-// deliberately does NOT count, see getEmployees' history), otherwise a Mongo filter
+// Returns null for full access (Admin / HR* role / ALL / MANAGE_EMPLOYEES / MANAGE_PAYROLL
+// permission - APPROVE_REQUESTS deliberately does NOT count, see getEmployees' history), otherwise a Mongo filter
 // scoping to the requester's own record plus anyone whose designatedManager /
 // designatedFinanceManager is the requester (User._id or linked Employee._id - both
 // have been written there historically). With no employeeId and no reports it
@@ -41,6 +41,11 @@ export const hasFullEmployeeAccess = (reqUser) => Boolean(
     reqUser.role === "Admin"
     || /^HR/i.test(reqUser.role || "")
     || reqUser.permissions?.includes("ALL")
+    // Roles that explicitly manage employees or run payroll (e.g. a custom "Payroll
+    // Officer") work across the whole company - without this they were scoped like a
+    // manager to their own (zero) direct reports and saw an empty employee list.
+    || reqUser.permissions?.includes("MANAGE_EMPLOYEES")
+    || reqUser.permissions?.includes("MANAGE_PAYROLL")
   )
 );
 
