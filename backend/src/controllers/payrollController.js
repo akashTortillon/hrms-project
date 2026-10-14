@@ -989,7 +989,14 @@ export const generatePayroll = async (req, res) => {
             );
 
             // Derived Rates
-            const dailySalary = basicSalary / 30; // Standard 30 days
+            const dailySalary = basicSalary / 30; // Standard 30 days (basic-only: late tiers, OT)
+            // Absence / leave deductions take a day's FULL salary - Total Salary (basic +
+            // HRA + fixed allowance, the figure on the employee's salary card, no
+            // accommodation/vehicle) / 30 - not basic / 30, which under-deducted anyone whose
+            // pay is split into basic + allowance (e.g. 27 absent days on 1,400 basic +
+            // 1,400 allowance deducted 1,260 instead of 2,520).
+            const grossFixedSalary = basicSalary + (Number(emp.hra) || 0) + (Number(emp.allowance) || 0);
+            const absenceDailySalary = grossFixedSalary / 30;
 
             // Determine Employee's Standard Hourly Rate based on THEIR assigned shift
             const empShiftName = emp.shift || "Day Shift";
@@ -1007,7 +1014,7 @@ export const generatePayroll = async (req, res) => {
             );
 
             if (stats.halfPaidLeaves > 0) {
-                const halfPayDeduction = stats.halfPaidLeaves * (dailySalary / 2);
+                const halfPayDeduction = stats.halfPaidLeaves * (absenceDailySalary / 2);
                 deductionList.push({
                     name: "Sick Leave Half Pay Adjustment",
                     amount: parseFloat(halfPayDeduction.toFixed(2)),
@@ -1215,8 +1222,10 @@ export const generatePayroll = async (req, res) => {
                     // 2. Determine Unit Rate (Hourly or Daily)
                     if (meta.calculationType === "HOURLY_RATE" || basis === "OVERTIME_HOURS") { // Default OT to Hourly
                         unitRate = hourlySalary;
+                    } else if (basis === "ABSENT_DAYS") {
+                        unitRate = absenceDailySalary; // full day's salary per absent / unpaid-leave day
                     } else {
-                        unitRate = dailySalary; // Default Late/Absent to Daily
+                        unitRate = dailySalary; // Default Late to Daily
                     }
 
                     // 3. Apply Multiplier
@@ -1230,45 +1239,18 @@ export const generatePayroll = async (req, res) => {
                         if (multiplier !== 1) description += ` (x${multiplier})`;
                     }
 
-                    // --- CAP / ADJUSTMENT FOR ABSENT DAYS ---
-                    // Issue: If Absent Days > 30 (e.g. 31), Deduction (31 * Basic/30) > Basic Salary.
-                    // Fix: If Basis is ABSENT_DAYS, we should ensure deduction doesn't exceed 100% of applicable salary components?
-                    // Simple Fix: For "LOP", if stats.daysPresent == 0, Deduction = Basic.
-                    // Or Cap amount at Basic Salary?
-
-                    if (basis === "ABSENT_DAYS") {
-                        // If daysPresent is 0, employee should get 0 Basic. 
-                        // So Deduction should exactly equal Basic (if no other components involved).
-                        // Current logic: Basic - (Absent * Basic/30) = Net.
-                        // If Absent=31, Net = -Basic/30.
-
-                        // Strict Pro-rating for Full Month Absence?
-                        if (stats.daysPresent === 0) {
-                            // Full Month Absent
-                            // Cap deduction at Basic Salary (to zero it out)
-                            // NOTE: If we have allowances, they might also need LOP deduction separately!
-                            // But usually allowances are paid if present? 
-                            // Current rule engine only deducts from "Net Payable" essentially.
-
-                            // Let's cap the Calculated LOP AMOUNT at the Basic Salary for now.
-                            if (amount > basicSalary) {
-                                amount = basicSalary;
-                                description += " (Capped at Basic)";
-                            }
-                        } else {
-                            // Partial presence.
-                            // If we use 30-day fixed basis, we suffer from 31st day issue.
-                            // Ideally, we should use `daysInMonth` for rate calculation?
-                            // Standard UAE/Labor practice often uses 30 days regardless.
-                            // But for deductions, usually: Pay = Basic * (WorkedDays / 30).
-                            // If WorkedDays < 0 ?? No.
-                            // Correct formula: Pay = Basic - (Absent * Basic/30).
-
-                            // If Absent=31? Pay = 20000 - 20666 = -666.
-                            // We should Cap Deduction at Basic Salary always.
-                            if (amount > basicSalary) {
-                                amount = basicSalary;
-                            }
+                    // --- CAP / FULL-MONTH RULE FOR ABSENT DAYS ---
+                    // Absent + unpaid-leave days deduct a full day's salary each (see
+                    // absenceDailySalary above). Absence covering the whole period deducts the
+                    // full month's salary exactly (a 28-day month at /30 would otherwise stop
+                    // short), and a deduction can never exceed Total Salary (31 absent days).
+                    if (basis === "ABSENT_DAYS" && statValue > 0) {
+                        if (statValue >= stats.totalDays && multiplier === 1) {
+                            amount = grossFixedSalary;
+                            description += " (Full month)";
+                        } else if (amount > grossFixedSalary) {
+                            amount = grossFixedSalary;
+                            description += " (Capped at Total Salary)";
                         }
                     }
                 } else {
