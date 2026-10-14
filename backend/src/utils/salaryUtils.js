@@ -28,9 +28,11 @@ export const resolveEffectiveSalary = (employee, month, year) => {
   };
 };
 
-// Daily rate convention used everywhere in payroll: basic / 30.
+// Daily rate for absence/leave deductions: a full day's salary = Total Salary (basic + HRA
+// + fixed allowance, no accommodation/vehicle) / 30 - same rate generatePayroll uses for
+// absent / unpaid-leave days.
 export const getDailySalary = (employee, month, year) => {
   const effective = resolveEffectiveSalary(employee, month, year);
-  const basicSalary = effective.visaBase || effective.basicSalary;
-  return basicSalary / 30;
+  const basicSalary = effective.basicSalary || effective.visaBase;
+  return (basicSalary + toNumber(employee.hra) + toNumber(employee.allowance)) / 30;
 };
