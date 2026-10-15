@@ -45,10 +45,32 @@ const ensureDefaultRoles = async () => {
   }
 };
 
+// Older databases still carry the unique (employee, month, year) index from when payroll
+// was one-record-per-calendar-month. A payroll's real identity is (employee, periodStart,
+// periodEnd) (see payrollModel.js) and month/year are just derived from periodEnd, so a
+// rolling period whose month matches an existing record (a period regenerated with
+// different dates, a forced overlapping run) fails with
+// "E11000 duplicate key ... employee_1_month_1_year_1". Mongoose never drops indexes it
+// no longer defines, so remove the stale one here (idempotent; a missing index is fine).
+const dropLegacyPayrollIndexes = async () => {
+  try {
+    const payrolls = mongoose.connection.collection("payrolls");
+    const indexes = await payrolls.indexes().catch(() => []);
+    const legacy = indexes.find((i) => i.name === "employee_1_month_1_year_1");
+    if (legacy) {
+      await payrolls.dropIndex("employee_1_month_1_year_1");
+      console.log("Dropped legacy payroll index employee_1_month_1_year_1");
+    }
+  } catch (error) {
+    console.error(`Could not drop legacy payroll index: ${error.message}`);
+  }
+};
+
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.DB_URL);
     await ensureDefaultRoles();
+    await dropLegacyPayrollIndexes();
     console.log(`MongoDB Connected: ${conn.connection.host}`);
     console.log(`Database Name: ${conn.connection.name}`);
   } catch (error) {
