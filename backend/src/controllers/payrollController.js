@@ -2782,8 +2782,9 @@ const payslipMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFrac
 //    payroll's earnings (see generatePayroll). The slip layout still shows them in both
 //    columns, so they are added to Earnings AND Deductions in equal amounts at render
 //    time - Total Earnings / Total Deductions include them, Net Salary is unchanged.
-//  - "Salary Advance" lines stay hidden from the list (existing behaviour) while still
-//    being reflected in net salary.
+//  - Every payroll deduction is listed, "Salary Advance" lines included (they used to be
+//    hidden while still reducing net, so Earnings - Deductions never matched Net Salary
+//    and manual advance adjustments never showed up on the slip).
 const buildPayslipRows = (payroll) => {
     const emp = payroll.employee || {};
     const lines = payroll.allowances || [];
@@ -2806,12 +2807,7 @@ const buildPayslipRows = (payroll) => {
     if (vehicle) earnings.push({ name: "Vehicle Expense", amount: vehicle });
 
     const deductions = [];
-    let hiddenAdvance = 0;
     for (const d of payroll.deductions || []) {
-        if (/salary advance/i.test(d.name || "")) {
-            hiddenAdvance += Number(d.amount) || 0;
-            continue;
-        }
         // The absence deduction's NAME is whatever the admin called the Payroll Rule
         // (e.g. "UNPAID"); its meta is the stable "<n> Absent" marker generatePayroll writes.
         const isAbsent = /\babsent\b/i.test(String(d.meta || ""));
@@ -2821,7 +2817,7 @@ const buildPayslipRows = (payroll) => {
     if (vehicle) deductions.push({ name: "Vehicle Expense", amount: vehicle });
 
     const totalEarnings = round2(basic + (payroll.totalAllowances || 0) + accommodation + vehicle);
-    const totalDeductions = round2((payroll.totalDeductions || 0) - hiddenAdvance + accommodation + vehicle);
+    const totalDeductions = round2((payroll.totalDeductions || 0) + accommodation + vehicle);
     return { earnings, deductions, totalEarnings, totalDeductions };
 };
 
