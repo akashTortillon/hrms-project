@@ -10,9 +10,13 @@
  *
  * Note the app logs in with the EMAIL only - an employee code like EMP004 is not accepted.
  *
+ * If NO account has the email you can create one with --create (needs --name and --phone with
+ * the country code; --role defaults to Admin). Dry run unless --live is also given.
+ *
  * Usage:
  *   node src/scripts/setUserPassword.js --email=person@example.com --password='Temp#12345'          # check only
  *   node src/scripts/setUserPassword.js --email=person@example.com --password='Temp#12345' --live   # set it
+ *   node src/scripts/setUserPassword.js --email=boss@example.com --password='Temp#12345' --create --name='Admin' --phone=+971500000000 --live   # create an Admin
  * (single quotes keep the shell from touching characters like ! $ & in the password)
  */
 import mongoose from "mongoose";
@@ -36,6 +40,10 @@ const valueOf = (name) => {
 };
 const EMAIL = valueOf("email");
 const PASSWORD = valueOf("password");
+const CREATE = args.includes("--create");
+const NAME = valueOf("name");
+const PHONE = valueOf("phone");
+const ROLE = valueOf("role") || "Admin";
 const DB_URI = valueOf("uri") || process.env.DB_URL;
 
 async function main() {
@@ -51,8 +59,39 @@ async function main() {
   // Same lookup as authController.login
   const users = await User.find(emailMatchFilter(EMAIL));
 
+  if (users.length === 0 && CREATE) {
+    if (!NAME || !PHONE || !/^\+[1-9]\d{6,14}$/.test(PHONE)) {
+      console.error("\n--create needs --name='...' and --phone=+<country code><number>, e.g. --phone=+971500000000");
+      await mongoose.disconnect();
+      process.exit(1);
+    }
+    const phoneTaken = await User.findOne({ phone: PHONE });
+    if (phoneTaken) {
+      console.error(`\nThat phone number is already used by ${phoneTaken.email}. Pick another --phone.`);
+      await mongoose.disconnect();
+      process.exit(1);
+    }
+    console.log(`\nNo account has "${normalizeEmail(EMAIL)}". Would create: name "${NAME}", phone ${PHONE}, role ${ROLE}, must change password at first login.`);
+    if (LIVE) {
+      await User.create({
+        name: NAME,
+        email: normalizeEmail(EMAIL),
+        phone: PHONE,
+        password: await bcrypt.hash(PASSWORD, 10),
+        role: ROLE,
+        mustChangePassword: true
+      });
+      console.log("-> Account created. Log in with that email and password.");
+    } else {
+      console.log("DRY RUN - nothing created. Re-run with --live to create it.");
+    }
+    await mongoose.disconnect();
+    return;
+  }
+
   if (users.length === 0) {
     console.log(`\nNo login account has the email "${normalizeEmail(EMAIL)}". Login will answer 401 "Invalid credentials" for it.`);
+    console.log("To create it, add:  --create --name='Admin' --phone=+971500000000  (and --live)");
 
     // Near misses: accounts whose email merely CONTAINS the part before the @. A stored email
     // with a trailing space or look-alike character prints identically in most tools, so show
