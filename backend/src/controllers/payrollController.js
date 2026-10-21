@@ -807,6 +807,10 @@ export const setPayrollAnchor = async (req, res) => {
     }
 };
 
+// Admin or an HR role (HR, HR Manager, ...): may override payroll-period guards.
+const isAdminOrHr = (user = {}) =>
+    user.role === "Admin" || /^HR/i.test(user.role || "") || Boolean(user.permissions?.includes("ALL"));
+
 // --- API: Generate Payroll for a Month ---
 export const generatePayroll = async (req, res) => {
     try {
@@ -816,9 +820,9 @@ export const generatePayroll = async (req, res) => {
             return res.status(400).json({ message: "periodStart and periodEnd are required." });
         }
 
-        // `force` skips the overlapping-period guard below, so it is Admin-only.
-        if (force && req.user?.role !== "Admin") {
-            return res.status(403).json({ message: "Only an Admin can force payroll generation over an overlapping period." });
+        // `force` skips the overlapping-period guard below, so it is limited to Admin and HR.
+        if (force && !isAdminOrHr(req.user)) {
+            return res.status(403).json({ message: "Only Admin or HR can force payroll generation over an overlapping period." });
         }
 
         const periodStart = toDayStart(periodStartRaw);
@@ -852,11 +856,12 @@ export const generatePayroll = async (req, res) => {
         // (employee, periodStart, periodEnd), so it updates the existing docs in place
         // rather than creating a duplicate. Flagging that as a conflict would block routine
         // re-generation, not just genuine overlaps.
-        const overlapping = await Payroll.findOne({
+        const overlappingDocs = await Payroll.find({
             periodStart: { $lte: periodEnd },
             periodEnd: { $gte: periodStart },
             $nor: [{ periodStart, periodEnd }]
         }).select("periodStart periodEnd status employee");
+        const overlapping = overlappingDocs[0];
 
         if (overlapping && !force) {
             return res.status(409).json({
@@ -867,6 +872,22 @@ export const generatePayroll = async (req, res) => {
                 conflictPeriodEnd: formatYMD(overlapping.periodEnd),
                 conflictStatus: overlapping.status
             });
+        }
+
+        // Forcing replaces overlapping DRAFT runs (they are superseded by this one, see the
+        // delete after the bulkWrite below) - leaving them next to the new run listed the same
+        // employee twice for the month. A finalized/paid run can never be overridden: that is a
+        // double payment, un-finalize or delete it first.
+        const overlappingDraftIds = [];
+        if (overlapping && force) {
+            const locked = overlappingDocs.find(d => d.status !== "DRAFT");
+            if (locked) {
+                return res.status(409).json({
+                    message: `Requested period (${formatYMD(periodStart)} to ${formatYMD(periodEnd)}) overlaps a ${locked.status} payroll period `
+                        + `(${formatYMD(locked.periodStart)} to ${formatYMD(locked.periodEnd)}). A finalized period cannot be overridden - un-finalize or delete it first.`
+                });
+            }
+            overlappingDocs.forEach(d => overlappingDraftIds.push(d._id));
         }
 
         // Force-contiguous: the new period must start the day right after the last
@@ -896,13 +917,37 @@ export const generatePayroll = async (req, res) => {
         // addAdjustment (or a loan override) since the draft was first created. Pull
         // the current draft per employee up front so its MANUAL items can be carried
         // forward into the freshly-computed arrays instead of being wiped.
+        // When forcing over overlapping drafts, their MANUAL items carry forward too (merged
+        // per employee, de-duplicated) so an adjustment made before regenerating isn't lost.
         const existingDraftPayrolls = await Payroll.find({
-            periodStart, periodEnd, status: "DRAFT",
+            status: "DRAFT",
+            $or: [{ periodStart, periodEnd }, ...(overlappingDraftIds.length ? [{ _id: { $in: overlappingDraftIds } }] : [])],
             employee: { $in: employees.map(e => e._id) }
         }).select("employee allowances deductions").lean();
-        const existingDraftByEmployee = new Map(
-            existingDraftPayrolls.map(p => [p.employee.toString(), p])
-        );
+        const existingDraftByEmployee = new Map();
+        for (const p of existingDraftPayrolls) {
+            const key = p.employee.toString();
+            const prev = existingDraftByEmployee.get(key);
+            if (!prev) {
+                existingDraftByEmployee.set(key, p);
+                continue;
+            }
+            const mergeManual = (a = [], b = []) => {
+                const seen = new Set();
+                return [...a, ...b].filter(item => {
+                    if (item?.type !== "MANUAL") return true;
+                    const sig = JSON.stringify([item.name, item.amount, item.meta, item.reason]);
+                    if (seen.has(sig)) return false;
+                    seen.add(sig);
+                    return true;
+                });
+            };
+            existingDraftByEmployee.set(key, {
+                ...prev,
+                allowances: mergeManual(prev.allowances, p.allowances),
+                deductions: mergeManual(prev.deductions, p.deductions)
+            });
+        }
 
         // Absence is always tracked correctly in attendanceSummary (shown on the
         // payslip) regardless of this - but it only ever reduces pay if an active
@@ -1399,6 +1444,22 @@ export const generatePayroll = async (req, res) => {
         // Execute Batch
         if (payrollRecords.length > 0) {
             await Payroll.bulkWrite(payrollRecords);
+
+            // Remove the overlapping drafts this forced run replaced (after the new run is
+            // safely written, so a failed generation never loses them).
+            if (overlappingDraftIds.length) {
+                const removed = await Payroll.deleteMany({ _id: { $in: overlappingDraftIds }, status: "DRAFT" });
+                PayrollAudit.create({
+                    action: "GENERATED",
+                    performedBy: req.user ? req.user._id : null,
+                    performedByName: req.user ? req.user.name : "System",
+                    month,
+                    year,
+                    periodStart,
+                    periodEnd,
+                    details: `Forced generation replaced ${removed.deletedCount} overlapping draft payroll record(s)`
+                }).catch(console.error);
+            }
 
             // AUDIT LOG
             await PayrollAudit.create({

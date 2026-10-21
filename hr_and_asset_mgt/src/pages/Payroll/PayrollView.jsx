@@ -137,8 +137,8 @@ function Payroll() {
   // SIF, MOL) — the real period identity lives in periodStart/periodEnd.
   const today = new Date();
   const { currentUser } = useRole();
-  // Only an Admin may override the overlapping-period guard (also enforced by the API).
-  const isAdmin = currentUser?.role === "Admin";
+  // Only Admin / HR may override the overlapping-period guard (also enforced by the API).
+  const isAdmin = currentUser?.role === "Admin" || /^HR/i.test(currentUser?.role || "");
   const [forceGenerate, setForceGenerate] = useState(null); // { message } while the override dialog is open
   const [forceConfirmText, setForceConfirmText] = useState("");
   const [periodStart, setPeriodStart] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)));
@@ -869,9 +869,8 @@ function Payroll() {
       >
         <p style={{ marginBottom: "12px", color: "#374151" }}>{forceGenerate?.message}</p>
         <p style={{ marginBottom: "12px", color: "#b91c1c", fontWeight: 500 }}>
-          Overriding creates a second payroll run for {periodStart} to {periodEnd} next to the existing one.
-          Overlapping days can be counted twice (attendance, deductions). Prefer finalizing or deleting the
-          existing period, or generating the exact same period again.
+          Overriding replaces the overlapping draft payroll with a new run for {periodStart} to {periodEnd}. Manual adjustments
+          already on that draft are kept. A finalized period can never be overridden.
         </p>
         <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
           Type <strong>Yes</strong> to confirm

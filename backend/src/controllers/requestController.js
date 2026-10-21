@@ -1512,9 +1512,6 @@ export const updateRequestStatus = async (req, res) => {
     const canApproveManager = await isManagerApprover(req.user, request);
     const canApproveFinance = await isFinanceApprover(req.user, request);
     let salaryChangeNotification = null;
-    // Set when one person is both the designated manager and finance manager: their
-    // single approval is final (no HR stage), see the manager-stage branch below.
-    let autoFinalRemarks = null;
 
     if (isManagerStage && !canApproveManager) {
       return res.status(403).json({ success: false, message: "Waiting for manager approval. Only the designated manager can act on this request." });
@@ -1578,49 +1575,46 @@ export const updateRequestStatus = async (req, res) => {
           });
         }
 
+        // Same person is the designated manager AND finance manager for this employee: their
+        // one approval covers both stages, but HR still gives the final approval - a loan or
+        // leave never completes on a manager/finance approval alone.
         if (sameApproverHandlesFinance) {
-          // Same person is the designated manager AND finance manager for this employee
-          // (e.g. a senior approver): their one approval is the whole chain, so skip the
-          // HR stage entirely and fall through to the final-approval block below instead
-          // of leaving the loan PENDING for HR.
           request.financeApproval = {
             status: "APPROVED",
             actedBy: req.user.id,
             actedAt: new Date(),
             remarks: "Auto-approved: same person is the designated Finance Manager for this employee."
           };
-          autoFinalRemarks = "Auto-approved: approver is both the designated Manager and Finance Manager; HR approval not required.";
-        } else {
-          request.status = "MANAGER_APPROVED";
-          request.currentApprovalStage = "HR";
-          await request.save();
-
-          await notifyAdmins(
-            "Request awaiting HR approval",
-            `Request ${request.requestId} has been approved by the manager and is awaiting HR approval.`,
-            "/app/requests",
-            { hrOnly: request.requestType === "SALARY" }
-          );
-
-          // Notify the employee that the manager approved
-          try {
-            await createNotification({
-              recipient: request.userId,
-              title: "Manager Approved Request",
-              message: `Your request ${request.requestId} has been approved by your manager and forwarded to HR.`,
-              type: "REQUEST",
-              link: "/app/requests"
-            });
-          } catch (notifErr) {
-            console.error("Failed to notify employee of manager approval:", notifErr);
-          }
-
-          return res.json({
-            success: true,
-            message: "Request approved by manager and forwarded to HR",
-            data: request
-          });
         }
+        request.status = sameApproverHandlesFinance ? "FINANCE_APPROVED" : "MANAGER_APPROVED";
+        request.currentApprovalStage = "HR";
+        await request.save();
+
+        await notifyAdmins(
+          "Request awaiting HR approval",
+          `Request ${request.requestId} has been approved by the manager${sameApproverHandlesFinance ? " (also the designated finance manager)" : ""} and is awaiting HR approval.`,
+          "/app/requests",
+          { hrOnly: request.requestType === "SALARY" }
+        );
+
+        // Notify the employee that the manager approved
+        try {
+          await createNotification({
+            recipient: request.userId,
+            title: "Manager Approved Request",
+            message: `Your request ${request.requestId} has been approved by your manager and forwarded to HR.`,
+            type: "REQUEST",
+            link: "/app/requests"
+          });
+        } catch (notifErr) {
+          console.error("Failed to notify employee of manager approval:", notifErr);
+        }
+
+        return res.json({
+          success: true,
+          message: "Request approved by manager and forwarded to HR",
+          data: request
+        });
       }
 
       if (isFinanceStage) {
@@ -1758,7 +1752,7 @@ export const updateRequestStatus = async (req, res) => {
         status: "APPROVED",
         actedBy: req.user.id,
         actedAt: new Date(),
-        remarks: autoFinalRemarks || req.body.remarks || ""
+        remarks: req.body.remarks || ""
       };
       request.currentApprovalStage = "COMPLETED";
       request.status = "APPROVED";
