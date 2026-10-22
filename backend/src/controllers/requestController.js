@@ -488,24 +488,17 @@ const getNextPayrollCycle = (baseDate = new Date()) => {
 const getScheduleOverrides = (details = {}) =>
   Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
 
+// HR-stage (final) approval of any request - leave, loan, salary advance, document - belongs to
+// Admin and HR roles only. APPROVE_REQUESTS deliberately does NOT count: a Finance Manager role
+// commonly carries it, which made Finance see (and be able to approve/revoke) every request's
+// HR stage and the whole company's request history instead of finishing at its own stage.
 const isHrApprover = (user = {}) =>
-  user.role === "Admin"
-  || /^HR/i.test(user.role || "")
-  || user.permissions?.includes("ALL")
-  || user.permissions?.includes("APPROVE_REQUESTS");
-
-// Final (HR-stage) approval of a loan / salary advance belongs to Admin and HR only. A
-// Finance Manager role commonly also carries APPROVE_REQUESTS (so it can stand in for HR on
-// leave/document requests), which made isHrApprover() true for it - so a loan the Finance
-// Manager had just approved stayed in their own list with Approve/Reject buttons instead of
-// moving on to HR alone.
-const isStrictHrApprover = (user = {}) =>
   user.role === "Admin"
   || /^HR/i.test(user.role || "")
   || Boolean(user.permissions?.includes("ALL"));
 
-const isHrApproverForRequest = (user = {}, request = {}) =>
-  request.requestType === "SALARY" ? isStrictHrApprover(user) : isHrApprover(user);
+const isStrictHrApprover = isHrApprover;
+const isHrApproverForRequest = (user = {}) => isHrApprover(user);
 
 // Resolves `request`'s employee doc fresh - a live lookup, not the possibly-
 // stale designatedManager/designatedFinanceManager value stored on the request
@@ -642,7 +635,7 @@ const notifyAdmins = async (title, message, link, { hrOnly = false } = {}) => {
       permissions: { $in: ['APPROVE_REQUESTS', 'ALL'] }
     }).select('name permissions');
 
-    // hrOnly (loan/advance HR stage): skip non-HR roles that merely hold APPROVE_REQUESTS
+    // hrOnly (HR stage): skip non-HR roles that merely hold APPROVE_REQUESTS
     // (e.g. Finance Manager) - they cannot act at that stage.
     const roleNames = authorizedRoles
       .filter(r => !hrOnly || /^HR/i.test(r.name || "") || r.permissions?.includes("ALL"))
@@ -1122,7 +1115,8 @@ export const createRequest = async (req, res) => {
         notifyAdmins(
           `New ${requestType} Request`,
           `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
-          `/app/requests`
+          `/app/requests`,
+          { hrOnly: true }
         ).catch(e => console.error("Notify error:", e));
       }
     }
@@ -1594,7 +1588,7 @@ export const updateRequestStatus = async (req, res) => {
           "Request awaiting HR approval",
           `Request ${request.requestId} has been approved by the manager${sameApproverHandlesFinance ? " (also the designated finance manager)" : ""} and is awaiting HR approval.`,
           "/app/requests",
-          { hrOnly: request.requestType === "SALARY" }
+          { hrOnly: true }
         );
 
         // Notify the employee that the manager approved
