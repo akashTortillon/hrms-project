@@ -1406,16 +1406,32 @@ export const getPendingRequestsForAdmin = async (req, res) => {
 
     const totalRequests = await Request.countDocuments(query);
 
-    const requests = await Request.find(query)
+    const findRequests = (q) => Request.find(q)
       .populate("userId", "name email department avatar role") // Added more user details
       .populate("designatedManager", "name role")
       .populate("designatedFinanceManager", "name role")
       .populate("managerApproval.actedBy", "name role")
       .populate("financeApproval.actedBy", "name role")
       .populate("hrApproval.actedBy", "name role")
-      .sort({ submittedAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
+      .sort({ submittedAt: -1 });
+
+    // The approvals page asks for this list with no paging params, and HR/Admin's query also
+    // pulls in every COMPLETED request (the "Requests History" panel). One newest-first page
+    // of 10 meant the 10 most recent items of ANY status filled it, so a request still waiting
+    // on someone but submitted a bit earlier (e.g. a loan waiting at the finance or HR stage)
+    // never appeared in the pending list at all. Without explicit paging: return EVERY request
+    // still awaiting action, plus the latest 100 completed ones for the history panel.
+    const explicitPaging = req.query.limit !== undefined || req.query.page !== undefined;
+    let requests;
+    if (explicitPaging) {
+      requests = await findRequests(query).skip(skip).limit(limitNum);
+    } else {
+      const [awaiting, history] = await Promise.all([
+        findRequests({ $and: [query, { currentApprovalStage: { $ne: "COMPLETED" } }] }),
+        findRequests({ $and: [query, { currentApprovalStage: "COMPLETED" }] }).limit(100)
+      ]);
+      requests = [...awaiting, ...history];
+    }
 
     // The list is visible to more people than can actually act on each row (e.g. a
     // finance-only designee sees the employee's MANAGER-stage loan; HR sees every
@@ -1464,9 +1480,9 @@ export const getPendingRequestsForAdmin = async (req, res) => {
     res.status(200).json({
       success: true,
       count: data.length,
-      limit: limitNum,
+      limit: explicitPaging ? limitNum : data.length,
       page: pageNum,
-      totalPages: Math.ceil(totalRequests / limitNum),
+      totalPages: explicitPaging ? Math.ceil(totalRequests / limitNum) : 1,
       totalDocs: totalRequests,
       data
     });
