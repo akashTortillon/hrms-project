@@ -218,7 +218,23 @@ function Payroll() {
   };
 
   const fetchLatestFinalized = async () => {
-    const latest = await refreshLatestFinalized();
+    let latest = null;
+    let currentDraft = null;
+    try {
+      ({ latestFinalized: latest, currentDraft } = await payrollService.getLatestPeriods());
+      setLatestFinalized(latest);
+    } catch (error) {
+      console.error(error);
+    }
+
+    // A draft was already generated after the last finalized period: reopen on exactly that
+    // period instead of falling back to the end of the calendar month (the "To" date used to
+    // jump from 25/10 to 31/10 on every visit).
+    if (currentDraft) {
+      setPeriodStart(currentDraft.periodStartStr);
+      setPeriodEnd(currentDraft.periodEndStr);
+      return;
+    }
 
     // periodStart is always locked to the day after the last finalized period's
     // end (force-contiguous — no gaps, no overlaps). If the current periodEnd
@@ -236,12 +252,12 @@ function Payroll() {
       requiredStart.setDate(requiredStart.getDate() + 1);
       setPeriodStart(toDateStr(requiredStart));
 
-      if (periodEnd <= lockedEndStr) {
-        const suggestedEnd = new Date(requiredStart);
-        suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
-        suggestedEnd.setDate(suggestedEnd.getDate() - 1);
-        setPeriodEnd(toDateStr(suggestedEnd));
-      }
+      // Rolling pay cycle: next period runs one month from its start (26th -> 25th), not to
+      // the end of the calendar month.
+      const suggestedEnd = new Date(requiredStart);
+      suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
+      suggestedEnd.setDate(suggestedEnd.getDate() - 1);
+      setPeriodEnd(toDateStr(suggestedEnd));
     }
   };
 

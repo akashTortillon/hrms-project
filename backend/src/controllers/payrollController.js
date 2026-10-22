@@ -596,6 +596,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
     let lateCount = 0;
     let lateTier1 = 0, lateTier2 = 0, lateTier3 = 0;
     let unpaidLeavesCount = 0;
+    let sandwichLeavesCount = 0; // subset of unpaidLeavesCount: weekend/holiday between two absences
     let paidLeavesCount = 0;
     let halfPaidLeavesCount = 0;
 
@@ -632,7 +633,8 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
                 // lopDays++; // Removed to prevent double counting in generatePayroll (which adds Absent + Unpaid)
                 break;
             case 'SANDWICH_LEAVE': // Treated as Unpaid
-                unpaidLeavesCount++; // Or separate 'sandwichLeavesCount'?
+                unpaidLeavesCount++;
+                sandwichLeavesCount++;
                 // lopDays++; // Removed
                 break;
             case 'ABSENT':
@@ -663,6 +665,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         // Yes, my switch case matches this logic.
         daysAbsent: lopDays,
         unpaidLeaves: unpaidLeavesCount,
+        sandwichLeaves: sandwichLeavesCount,
         paidLeaves: paidLeavesCount,
         halfPaidLeaves: halfPaidLeavesCount,
         overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
@@ -722,7 +725,20 @@ export const validatePayrollGeneration = async (req, res) => {
 export const getLatestFinalizedPeriod = async (req, res) => {
     try {
         const latest = await getLatestFinalizedCycle();
-        res.json({ success: true, latestFinalized: latest });
+
+        // The period currently sitting as a DRAFT after the last finalized one (the one HR
+        // generated and hasn't finalized yet), so the Payroll page can reopen on it. Without
+        // this the "To" date reset to the end of the calendar month on every visit (31/10)
+        // even though the draft had been generated up to 25/10, and Regenerate then collided
+        // with the existing draft.
+        const draftQuery = { status: "DRAFT" };
+        if (latest?.periodEnd) draftQuery.periodStart = { $gt: latest.periodEnd };
+        const draft = await Payroll.findOne(draftQuery).sort({ periodEnd: -1 }).select("periodStart periodEnd");
+        const currentDraft = draft?.periodStart && draft?.periodEnd
+            ? { periodStartStr: formatYMD(toDayStart(draft.periodStart)), periodEndStr: formatYMD(toDayEnd(draft.periodEnd)) }
+            : null;
+
+        res.json({ success: true, latestFinalized: latest, currentDraft });
     } catch (error) {
         res.status(500).json({ message: "Failed to fetch latest finalized payroll period" });
     }
@@ -1255,7 +1271,13 @@ export const generatePayroll = async (req, res) => {
                         if (statValue > 0) {
                             const parts = [];
                             if (stats.daysAbsent > 0) parts.push(`${stats.daysAbsent} Absent`);
-                            if (stats.unpaidLeaves > 0) parts.push(`${stats.unpaidLeaves} Unpaid Leave`);
+                            // Show the weekend/holiday days that became unpaid (sandwich rule) on
+                            // their own: the attendance grid draws them as "W", so folding them
+                            // into "Unpaid Leave" made the deduction look like it disagreed with
+                            // the attendance sheet.
+                            const plainUnpaid = (stats.unpaidLeaves || 0) - (stats.sandwichLeaves || 0);
+                            if (plainUnpaid > 0) parts.push(`${plainUnpaid} Unpaid Leave`);
+                            if (stats.sandwichLeaves > 0) parts.push(`${stats.sandwichLeaves} Weekend/Holiday between absences`);
                             description = parts.join(' + ');
                         }
                     }

@@ -165,7 +165,7 @@ export default function BulkAttendanceModal({ isOpen, onClose, onSuccess }) {
               checked={form.skipWeekends}
               onChange={handleChange}
             />
-            Skip weekends (Saturday & Sunday)
+            Skip weekly off days (follows the employee's Working Day Type / Week Off Days - Sunday by default)
           </label>
 
           {/* Reason */}

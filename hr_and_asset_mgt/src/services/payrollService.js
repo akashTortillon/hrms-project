@@ -45,6 +45,15 @@ export const payrollService = {
         return response.data.latestFinalized; // { month, year, periodStart, periodEnd, finalizedAt } or null
     },
 
+    // Latest finalized period plus the draft period generated after it (if any).
+    getLatestPeriods: async () => {
+        const response = await api.get("/payroll/latest-finalized");
+        return {
+            latestFinalized: response.data.latestFinalized,
+            currentDraft: response.data.currentDraft || null // { periodStartStr, periodEndStr } | null
+        };
+    },
+
     // Cheap check for whether an active absence-deduction Payroll Rule exists —
     // lets the dashboard warn before Generate that absent days won't reduce pay.
     getRuleHealth: async () => {
