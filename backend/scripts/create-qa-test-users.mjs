@@ -16,6 +16,8 @@
  *     - QA Test Manager      (role: Manager)
  *     - QA Test Finance Mgr  (role: Finance Manager)
  *     - QA Test Dual Approver (role: QA Dual Approver - both permissions)
+ *     - QA Test HR           (role: the existing HR* role, else a new "HR Manager" -
+ *                              final approval stage for loans and leave)
  *     - QA Test Employee A   - designatedManager = QA Test Manager,
  *                              designatedFinanceManager = QA Test Finance Mgr
  *                              (different people - tests the normal two-step flow)
@@ -81,6 +83,17 @@ const PEOPLE = [
     role: "QA Dual Approver"
   },
   {
+    // Final (HR-stage) approver for loans/leave. The role is resolved at runtime from an
+    // existing HR* role (see ensureHrRole) - loan/advance HR approval only accepts
+    // Admin / a role whose name starts with "HR" / ALL, so the name has to start with HR.
+    key: "hr",
+    code: "QA-HR",
+    name: "QA Test HR",
+    email: "qa-test-hr@test.internal",
+    phone: "+971500000006",
+    role: "__HR__"
+  },
+  {
     key: "employeeA",
     code: "QA-EMP-A",
     name: "QA Test Employee A",
@@ -130,6 +143,35 @@ async function run() {
   } else {
     console.log('[preview] Would create role "QA Dual Approver".');
   }
+
+  // 1b. QA Test HR needs a role whose name starts with "HR". Reuse the live HR role if one
+  // exists (preferring "HR Manager") and never modify it; only create "HR Manager" when no
+  // HR* role exists at all.
+  const hrRoles = await Master.find({ type: "ROLE", name: /^HR/i });
+  const hrRole = hrRoles.find((r) => /^HR Manager$/i.test(r.name)) || hrRoles[0];
+  let hrRoleName = hrRole?.name;
+  if (hrRoleName) {
+    console.log(`QA Test HR will use the existing role "${hrRoleName}" - leaving it as-is.`);
+  } else {
+    hrRoleName = "HR Manager";
+    if (MODE === "apply") {
+      await Master.create({
+        type: "ROLE",
+        name: hrRoleName,
+        description: "HR: final approval of loan and leave requests, plus employee and payroll management.",
+        permissions: [
+          "VIEW_DASHBOARD", "VIEW_ADMIN_DASHBOARD", "MANAGE_EMPLOYEES", "VIEW_ALL_EMPLOYEES",
+          "MANAGE_PAYROLL", "MANAGE_ATTENDANCE", "VIEW_ALL_ATTENDANCE", "MANAGE_DOCUMENTS",
+          "APPROVE_REQUESTS", "VIEW_REPORTS"
+        ],
+        isActive: true
+      });
+      console.log(`Created role "${hrRoleName}".`);
+    } else {
+      console.log(`[preview] Would create role "${hrRoleName}".`);
+    }
+  }
+  PEOPLE.forEach((p) => { if (p.role === "__HR__") p.role = hrRoleName; });
 
   const createdEmployeeIds = {};
   const summary = [];
@@ -206,6 +248,7 @@ async function run() {
   if (MODE === "apply") {
     console.log(`\nAll test accounts use the password: ${TEST_PASSWORD}`);
     console.log("\nWho to use for which of the 10 points:");
+    console.log("  HR final approval (loans + leave)     -> log in as QA Test HR after the manager / finance / dual approver has approved");
     console.log("  1 (duplicate approval, same person)   -> log in as QA Test Dual Approver, approve a loan submitted by QA Test Employee B");
     console.log("  1 (two different people, contrast)    -> log in as QA Test Manager, then QA Test Finance Mgr, for a loan from QA Test Employee A");
     console.log("  2 (leave buttons + medical doc)        -> QA Test Employee A submits sick leave w/ doc, QA Test Manager approves");
