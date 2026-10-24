@@ -25,6 +25,7 @@ import "dotenv/config";
 import mongoose from "mongoose";
 import Employee from "../src/models/employeeModel.js";
 import { resolveEffectiveSalaryAsOf, toNumber } from "../src/utils/salaryUtils.js";
+import { applyDuePendingSalaryChanges } from "../src/controllers/employeeController.js";
 
 const DB_URL = process.env.DB_URL;
 const MODE = process.argv.includes("--apply") ? "apply" : "preview";
@@ -45,24 +46,66 @@ async function run() {
   let scanned = 0;
   let inSync = 0;
   let mismatched = 0;
+  let pendingDue = 0;
   let updated = 0;
   let failed = 0;
   const samples = [];
+  const pendingSamples = [];
+
+  // Latest history entry payroll would pick as of `today` (same ordering as the resolver).
+  const latestEntryAsOf = (doc) => {
+    const end = new Date(today);
+    end.setHours(23, 59, 59, 999);
+    return [...(doc.salaryHistory || [])]
+      .filter((e) => e.effectiveDate && new Date(e.effectiveDate) <= end)
+      .sort((a, b) => (new Date(b.effectiveDate) - new Date(a.effectiveDate)) || (new Date(b.createdAt || 0) - new Date(a.createdAt || 0)))[0];
+  };
 
   for await (const doc of cursor) {
     scanned++;
-    const live = toNumber(doc.basicSalary);
-    const resolved = resolveEffectiveSalaryAsOf(doc, today).basicSalary;
+    let live = toNumber(doc.basicSalary);
+    let resolved = resolveEffectiveSalaryAsOf(doc, today).basicSalary;
 
     if (live === resolved) {
       inSync++;
       continue;
     }
 
-    mismatched++;
-    if (samples.length < 20) {
-      samples.push({ code: doc.code, name: doc.name, liveBasic: live, payrollBasic: resolved });
+    // A due history entry that was never applied to the live fields (applied:false, date
+    // reached - e.g. an approved appraisal increment nobody opened the profile for) is NOT
+    // a stale-history case: history is right and live is behind. Apply those (apply mode)
+    // or just report them (preview); never overwrite them with the old live value.
+    const latest = latestEntryAsOf(doc);
+    if (latest && latest.applied === false) {
+      pendingDue++;
+      if (pendingSamples.length < 100) {
+        pendingSamples.push({
+          code: doc.code, name: doc.name, liveBasic: live, historyBasic: resolved,
+          type: latest.salaryType, effectiveDate: latest.effectiveDate?.toISOString?.().slice(0, 10)
+        });
+      }
+      if (MODE === "apply") {
+        try {
+          await applyDuePendingSalaryChanges(doc);
+          live = toNumber(doc.basicSalary);
+          resolved = resolveEffectiveSalaryAsOf(doc, today).basicSalary;
+        } catch (err) {
+          failed++;
+          console.error(`Failed to apply due change for ${doc._id}: ${err.message}`);
+          continue;
+        }
+        if (live === resolved) continue;
+      } else {
+        continue;
+      }
     }
+
+    mismatched++;
+    samples.push({
+      code: doc.code, name: doc.name, liveBasic: live, payrollBasic: resolved,
+      latestEntry: latest ? `${latest.salaryType} ${latest.effectiveDate?.toISOString?.().slice(0, 10)} applied=${latest.applied}` : "none",
+      latestBy: latest?.createdByName || ""
+    });
 
     if (MODE !== "apply") continue;
 
@@ -89,12 +132,15 @@ async function run() {
     }
   }
 
-  console.log("Mismatches (first 20):");
+  console.log("Due-but-unapplied history entries (history is right, live is behind - fixed by applying them, NOT by backfill):");
+  console.log(JSON.stringify(pendingSamples, null, 2));
+  console.log("\nStale-history mismatches (live differs from history, history entry already applied):");
   console.log(JSON.stringify(samples, null, 2));
   console.log("\nSummary:");
-  console.log(`  Scanned:    ${scanned}`);
-  console.log(`  In sync:    ${inSync}`);
-  console.log(`  Mismatched: ${mismatched}`);
+  console.log(`  Scanned:         ${scanned}`);
+  console.log(`  In sync:         ${inSync}`);
+  console.log(`  Due, unapplied:  ${pendingDue}`);
+  console.log(`  Stale history:   ${mismatched}`);
 
   if (MODE === "apply") {
     console.log(`  Updated:    ${updated}`);
@@ -102,7 +148,7 @@ async function run() {
     console.log("\nDone. Regenerate the draft payroll next.");
   } else {
     console.log("\nPreview only - no DB writes made.");
-    console.log(`Run with --apply to fix these ${mismatched} records:`);
+    console.log(`Run with --apply to apply the ${pendingDue} due entries and backfill the ${mismatched} stale-history records:`);
     console.log("    node scripts/backfill-salary-history.mjs --apply");
   }
 
