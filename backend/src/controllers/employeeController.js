@@ -59,6 +59,44 @@ const buildInitialSalaryHistory = (payload = {}) => {
   }];
 };
 
+const SALARY_TRACKED_FIELDS = [
+  "basicSalary", "visaBase", "workBase", "allowance", "hra",
+  "accommodationAllowance", "vehicleAllowance"
+];
+
+// Builds a MANUAL_ADJUSTMENT salaryHistory entry when an edit changed any salary field.
+// Payroll resolves the basic salary from the latest salaryHistory entry (see
+// utils/salaryUtils.js), so an edit that never wrote one (the Excel-import JOINING entry
+// kept winning) was invisible to payroll and to the Salary tab. Returns null when nothing
+// salary-related changed.
+const buildSalaryChangeEntry = (before = {}, after = {}, user = null, { notes = "", effectiveDate = null } = {}) => {
+  const changes = [];
+  for (const field of SALARY_TRACKED_FIELDS) {
+    const from = toNumber(before[field]);
+    const to = toNumber(after[field]);
+    if (from !== to) changes.push({ field, from, to });
+  }
+  if (!changes.length) return null;
+
+  const basicSalary = toNumber(after.basicSalary);
+  return {
+    salaryType: "MANUAL_ADJUSTMENT",
+    basicSalary,
+    visaBase: toNumber(after.visaBase || basicSalary),
+    workBase: toNumber(after.workBase || basicSalary),
+    allowance: toNumber(after.allowance),
+    hra: toNumber(after.hra),
+    ctc: toNumber(after.ctc || after.workBase || basicSalary),
+    incrementAmount: 0,
+    effectiveDate: effectiveDate || new Date(),
+    notes: notes || `Salary edited: ${changes.map((c) => `${c.field} ${c.from} -> ${c.to}`).join(", ")}`,
+    createdBy: user?._id || null,
+    createdByName: user?.name || "",
+    changes,
+    applied: true
+  };
+};
+
 const getProbationStatus = (payload = {}) => {
   if (!payload.probationEndDate) return "NOT_APPLICABLE";
   const today = new Date();
@@ -648,6 +686,23 @@ export const getEmployeeById = async (req, res) => {
     }
 
     const responseData = await attachManagerNames(await attachSignedProfilePhotoUrl(employee));
+
+    // Older salary history entries (appraisals etc.) only carry a createdBy id; resolve a
+    // display name so the Salary tab log can show who made each change.
+    try {
+      const history = Array.isArray(responseData.salaryHistory) ? responseData.salaryHistory : [];
+      const missing = [...new Set(history.filter((h) => h.createdBy && !h.createdByName).map((h) => String(h.createdBy)))];
+      if (missing.length) {
+        const users = await User.find({ _id: { $in: missing } }).select("name");
+        const names = Object.fromEntries(users.map((u) => [String(u._id), u.name]));
+        responseData.salaryHistory = history.map((h) => (
+          h.createdByName || !h.createdBy ? h : { ...h, createdByName: names[String(h.createdBy)] || "" }
+        ));
+      }
+    } catch (nameError) {
+      console.error("Resolving salary history names failed:", nameError.message);
+    }
+
     res.json(responseData);
   } catch (error) {
     console.error("Get Employee By ID Error:", error);
@@ -752,6 +807,9 @@ export const updateEmployee = async (req, res) => {
 
     const payload = { ...req.body };
     delete payload.systemCode; // internal reference number, never client-editable
+    // History is append-only and written by the server: the edit form sends back the whole
+    // (possibly stale) array, which used to overwrite entries added in the meantime.
+    delete payload.salaryHistory;
 
     // ---- Field-level permission guard ----------------------------------------
     // The route only checks MANAGE_EMPLOYEES, so any HR/manager user reaching here can
@@ -858,6 +916,18 @@ export const updateEmployee = async (req, res) => {
         byNewEmail.employeeId = updatedEmployee._id;
         if (role) byNewEmail.role = role;
         await byNewEmail.save();
+      }
+    }
+
+    // Every manual salary edit is logged (who, when, from -> to) so payroll's history-based
+    // lookup picks it up and the Salary tab shows an audit trail.
+    if (!req.body.appendSalaryHistory && salaryEditAllowed && before) {
+      const salaryEntry = buildSalaryChangeEntry(before, updatedEmployee, req.user, {
+        effectiveDate: req.body.effectiveSalaryDate || null
+      });
+      if (salaryEntry) {
+        updatedEmployee.salaryHistory.push(salaryEntry);
+        await updatedEmployee.save();
       }
     }
 
@@ -1174,41 +1244,79 @@ export const transferEmployee = async (req, res) => {
   }
 };
 
+// Roles that receive HR-level notifications. Matched case-insensitively with a regex: the
+// role names are free text from Masters, and an exact-case list silently missed e.g.
+// "HR MANAGER" (so that HR user never got the reminder).
+const HR_NOTIFY_ROLE_REGEX = /^(admin|super admin|hr.*)$/i;
+
 export const getProbationReminders = async (req, res) => {
   try {
-    const today = new Date();
-    const inSevenDays = new Date();
-    inSevenDays.setDate(today.getDate() + 7);
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
     // Don't filter on the stored `probationStatus` field - it's only recalculated
     // when the employee record is saved, so an employee whose probation quietly
     // lapsed without any other edit stays stuck as "ACTIVE" and would be missed.
-    // Instead: anyone not yet confirmed, due within 7 days OR already overdue.
-    const employees = await Employee.find({
-      probationEndDate: { $exists: true, $ne: null, $lte: inSevenDays },
+    // Every active, unconfirmed employee with a probation end date is listed (the
+    // page's day chips narrow it down) - this used to cut off at "due in 7 days",
+    // so anyone further out (e.g. 20+ days left) was invisible to HR.
+    const all = await Employee.find({
+      status: "Active",
+      probationEndDate: { $exists: true, $ne: null },
       probationConfirmedAt: null
     }).sort({ probationEndDate: 1 });
 
-    employees.forEach((employee) => {
+    const withDays = all.map((employee) => {
       employee.probationStatus = getProbationStatus(employee);
+      const end = new Date(employee.probationEndDate);
+      end.setHours(0, 0, 0, 0);
+      const daysRemaining = Math.round((end - startOfToday) / DAY_MS);
+      return { employee, daysRemaining };
     });
 
-    const toNotify = employees.filter((employee) => !employee.probationReminderSentAt);
-
-    for (const employee of toNotify) {
-      const admins = await User.find({ role: { $in: ["Admin", "HR Admin", "HR Manager"] } }).select("_id");
-      await Promise.all(admins.map((admin) => createNotification({
-        recipient: admin._id,
-        title: "Probation confirmation due",
-        message: `${employee.name} probation ends on ${new Date(employee.probationEndDate).toLocaleDateString()}.`,
-        type: "INFO",
-        link: `/app/employees/${employee._id}`
-      })));
-      employee.probationReminderSentAt = new Date();
-      await employee.save();
+    // Notifications only fire for the genuinely imminent ones (due within 7 days or overdue).
+    const toNotify = withDays.filter(({ employee, daysRemaining }) => daysRemaining <= 7 && !employee.probationReminderSentAt);
+    if (toNotify.length) {
+      const admins = await User.find({ role: { $regex: HR_NOTIFY_ROLE_REGEX } }).select("_id");
+      for (const { employee } of toNotify) {
+        await Promise.all(admins.map((admin) => createNotification({
+          recipient: admin._id,
+          title: "Probation confirmation due",
+          message: `${employee.name} probation ends on ${new Date(employee.probationEndDate).toLocaleDateString()}.`,
+          type: "INFO",
+          link: `/app/employees/${employee._id}`
+        })));
+        employee.probationReminderSentAt = new Date();
+        await employee.save();
+      }
     }
 
-    res.json({ success: true, data: employees });
+    // ?days=overdue | <n> | all (default all). A number includes overdue employees too.
+    const daysFilter = String(req.query.days ?? "all").toLowerCase();
+    let filtered = withDays;
+    if (daysFilter === "overdue") {
+      filtered = withDays.filter((item) => item.daysRemaining < 0);
+    } else if (daysFilter !== "all" && Number.isFinite(Number(daysFilter))) {
+      filtered = withDays.filter((item) => item.daysRemaining <= Number(daysFilter));
+    }
+
+    const data = filtered.map(({ employee, daysRemaining }) => ({
+      ...employee.toObject(),
+      daysRemaining,
+      overdue: daysRemaining < 0,
+      dueSoon: daysRemaining <= 7
+    }));
+
+    res.json({
+      success: true,
+      data,
+      counts: {
+        total: withDays.length,
+        overdue: withDays.filter((item) => item.daysRemaining < 0).length,
+        dueSoon: withDays.filter((item) => item.daysRemaining <= 7).length
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch probation reminders" });
   }
@@ -1694,7 +1802,15 @@ export const importEmployees = async (req, res) => {
         if (existingEmployeeDoc) {
           // Update path: never touch systemCode (immutable) or salaryHistory/probation
           // confirmation state (real history, not something a re-upload should overwrite).
-          await Employee.findByIdAndUpdate(existingEmployeeDoc._id, employeeFields);
+          const importedSalaryEntry = buildSalaryChangeEntry(existingEmployeeDoc, employeeFields, req.user, {
+            notes: "Salary updated via Excel import"
+          });
+          await Employee.findByIdAndUpdate(
+            existingEmployeeDoc._id,
+            importedSalaryEntry
+              ? { ...employeeFields, $push: { salaryHistory: importedSalaryEntry } }
+              : employeeFields
+          );
           employeeIdForLink = existingEmployeeDoc._id;
         } else {
           const createdEmployee = await Employee.create({

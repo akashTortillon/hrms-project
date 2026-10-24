@@ -36,12 +36,13 @@ const getEmployeeLabel = (employee) => {
     : employee.name;
 };
 
-// Increments most commonly need to take effect on the 1st of next month rather than
-// immediately, so default the picker there instead of "today" — still fully editable.
+// Default to today (the change applies the same day); the picker stays editable for
+// scheduling a later date. Built from local date parts - toISOString() shifts the day
+// back by one in timezones ahead of UTC (e.g. UAE early morning).
 const getDefaultEffectiveDate = () => {
   const now = new Date();
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return nextMonth.toISOString().slice(0, 10);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 };
 
 const isFutureDate = (dateStr) => {
@@ -93,9 +94,6 @@ export default function AppraisalsView() {
         setSelectedEmployeeId(preferredEmployeeId);
         const matchedEmployee = employeeData.find((employee) => employee._id === preferredEmployeeId);
         setEmployeeSearch(getEmployeeLabel(matchedEmployee));
-      } else if (!selectedEmployeeId && employeeData.length) {
-        setSelectedEmployeeId(employeeData[0]._id);
-        setEmployeeSearch(getEmployeeLabel(employeeData[0]));
       } else if (!employeeData.length) {
         setSelectedEmployeeId("");
         setEmployeeSearch("");

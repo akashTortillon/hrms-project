@@ -22,6 +22,9 @@ import { resolveCompanyLogoBuffer } from "./masterController.js";
 import { escapeRegex } from "../utils/stringUtils.js";
 import { amountToWordsAED } from "../utils/numberToWords.js";
 import { displayEmployeeCode } from "../utils/employeeCode.js";
+import { resolveEffectiveSalaryAsOf } from "../utils/salaryUtils.js";
+import { applyDuePendingSalaryChanges } from "./employeeController.js";
+import { isEmployeeOnProbation } from "../utils/probationUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -180,37 +183,6 @@ const hasScheduledSkip = (details = {}, month, year) => {
         && Number(entry.month) === Number(month)
         && Number(entry.year) === Number(year)
     );
-};
-
-const resolveEffectiveSalary = (employee, asOfDate) => {
-    const periodEnd = toDayEnd(asOfDate);
-    const history = [...(employee.salaryHistory || [])]
-        .filter(entry => entry.effectiveDate && new Date(entry.effectiveDate) <= periodEnd)
-        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
-
-    const latest = history[0];
-    if (latest) {
-        return {
-            basicSalary: toNumber(latest.basicSalary),
-            visaBase: toNumber(latest.visaBase || latest.basicSalary),
-            workBase: toNumber(latest.workBase || latest.basicSalary),
-            ctc: toNumber(latest.ctc || latest.workBase || latest.basicSalary)
-        };
-    }
-
-    return {
-        basicSalary: toNumber(employee.basicSalary),
-        visaBase: toNumber(employee.visaBase || employee.basicSalary),
-        workBase: toNumber(employee.workBase || employee.basicSalary),
-        ctc: toNumber(employee.ctc || employee.workBase || employee.basicSalary)
-    };
-};
-
-const isEmployeeOnProbation = (employee, dateStr) => {
-    if (!employee?.probationEndDate) return false;
-    if (employee.probationStatus === "CONFIRMED") return false;
-    const checkDate = new Date(dateStr);
-    return checkDate <= new Date(employee.probationEndDate);
 };
 
 const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}, sickLeaveConfig = {}) => {
@@ -925,6 +897,16 @@ export const generatePayroll = async (req, res) => {
 
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
+        // Future-dated increments are only applied lazily when a profile is opened; apply
+        // any that are now due so basic (resolved from history) and HRA/allowance (live
+        // fields) never disagree inside one payroll row.
+        for (const emp of employees) {
+            try {
+                await applyDuePendingSalaryChanges(emp);
+            } catch (err) {
+                console.error("applyDuePendingSalaryChanges failed for employee", emp._id.toString(), ":", err.message);
+            }
+        }
         const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
 
         // Regenerating an existing DRAFT period used to rebuild allowances/deductions
@@ -1018,7 +1000,7 @@ export const generatePayroll = async (req, res) => {
         const payrollRecords = [];
 
         for (const emp of employees) {
-            const effectiveSalary = resolveEffectiveSalary(emp, periodEnd);
+            const effectiveSalary = resolveEffectiveSalaryAsOf(emp, periodEnd);
             // Use basicSalary, not visaBase. An appraisal splits the increment 50/30/20
             // across basicSalary/hra/allowance but adds the FULL increment to visaBase.
             // Paying visaBase as "Basic" while also paying the split hra/allowance double-
@@ -1092,8 +1074,8 @@ export const generatePayroll = async (req, res) => {
             // figure. Paying them out here as cash allowances contradicted that
             // convention (and the client's own expectation) - removed.
             const fixedAllowances = [
-                { name: "Housing Rent Allowance (HRA)", value: emp.hra },
-                { name: "Other Allowance", value: emp.allowance }
+                { name: "Housing Rent Allowance (HRA)", value: emp.hra, category: "FIXED_HRA" },
+                { name: "Other Allowance", value: emp.allowance, category: "FIXED_OTHER" }
             ];
 
             fixedAllowances.forEach(fa => {
@@ -1103,6 +1085,7 @@ export const generatePayroll = async (req, res) => {
                         name: fa.name,
                         amount: amount,
                         type: "AUTO",
+                        category: fa.category,
                         meta: "Fixed Monthly Allowance"
                     });
                     totalAllowances += amount;
@@ -1115,12 +1098,15 @@ export const generatePayroll = async (req, res) => {
                 // pre-existing entries (field absent / undefined) still pass through —
                 // no data migration required.
                 if (item.includeInPayroll === false) return;
+                // Future-dated allowances start counting only from their effective date.
+                if (item.effectiveDate && new Date(item.effectiveDate) > periodEnd) return;
                 const amount = Number(item.amount) || 0;
                 if (amount > 0) {
                     allowanceList.push({
                         name: item.typeName,
                         amount: amount,
                         type: "AUTO",
+                        category: "CUSTOM_ALLOWANCE",
                         meta: "Fixed Monthly Allowance"
                     });
                     totalAllowances += amount;
@@ -2849,9 +2835,40 @@ const resolveCompanyBranding = async (companyName, brandingCache) => {
     return branding;
 };
 
+// Resolves the logo + display name for the employee's VISA company. The visaCompany value
+// is a name that may be a company (Masters > Company Structure) or a branch of one; a
+// branch resolves to its parent company's logo. Returns null when it can't be matched to
+// a company with a usable logo so the caller keeps the employee's own company branding.
+const resolveVisaCompanyBranding = async (visaCompanyName, brandingCache) => {
+    const name = String(visaCompanyName || "").trim();
+    if (!name) return null;
+    const cacheKey = `visa:${name.toLowerCase()}`;
+    if (brandingCache.has(cacheKey)) return brandingCache.get(cacheKey);
+
+    const byName = new RegExp(`^${escapeRegex(name)}$`, "i");
+    let companyMaster = await Master.findOne({ type: "COMPANY", name: byName }).lean();
+    if (!companyMaster) {
+        const branchMaster = await Master.findOne({ type: "BRANCH", name: byName, parentId: { $ne: null } }).lean();
+        if (branchMaster) {
+            companyMaster = await Master.findOne({ _id: branchMaster.parentId, type: "COMPANY" }).lean();
+        }
+    }
+
+    let result = null;
+    if (companyMaster) {
+        const companyLogoBuffer = await fetchRemoteLogoBuffer(companyMaster.image);
+        const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyMaster.image);
+        if (companyLogoBuffer || companyLogoPath) {
+            result = { companyName: companyMaster.name, companyLogoBuffer, companyLogoPath };
+        }
+    }
+    brandingCache.set(cacheKey, result);
+    return result;
+};
+
 // Employee fields buildPayslipPdfBuffer needs (accommodation/vehicle are rendered on the
 // slip only - see buildPayslipRows).
-const PAYSLIP_EMPLOYEE_FIELDS = "name code systemCode designation department company accommodationAllowance vehicleAllowance";
+const PAYSLIP_EMPLOYEE_FIELDS = "name code systemCode designation department company visaCompany accommodationAllowance vehicleAllowance";
 
 const payslipMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -2859,8 +2876,9 @@ const payslipMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFrac
 // touches stored payroll figures:
 //  - Basic Salary, Housing Rent Allowance (HRA) and Other Allowance come from the
 //    payroll's own fixed allowance lines.
-//  - "Allowances" is the sum of the remaining ad-hoc lines (appraisal add-ons, manual
-//    adjustments); overtime is kept as its own "Overtime" row so it stays visible.
+//  - HRA and Other Allowance rows are always shown; every remaining allowance line
+//    (custom allowance types, manual adjustments) is its own row under its own name;
+//    overtime is kept as its own "Overtime" row so it stays visible.
 //  - Accommodation / Vehicle Expense are CTC-only and deliberately NOT part of the
 //    payroll's earnings (see generatePayroll). The slip layout still shows them in both
 //    columns, so they are added to Earnings AND Deductions in equal amounts at render
@@ -2872,19 +2890,36 @@ const buildPayslipRows = (payroll) => {
     const emp = payroll.employee || {};
     const lines = payroll.allowances || [];
     const sum = (arr) => round2(arr.reduce((s, a) => s + (Number(a?.amount) || 0), 0));
-    const hraLines = lines.filter((a) => a.name === "Housing Rent Allowance (HRA)");
-    const otherLines = lines.filter((a) => a.name === "Other Allowance");
+    const isHraLine = (a) => a.category === "FIXED_HRA" || a.name === "Housing Rent Allowance (HRA)";
+    // A custom allowance type literally named "Other Allowance" keeps its CUSTOM category,
+    // so only the employee's own fixed field (FIXED_OTHER, or the legacy name match on
+    // snapshots that predate categories) counts as the fixed row.
+    const isOtherLine = (a) => a.category === "FIXED_OTHER" || (!a.category && a.name === "Other Allowance");
+    const hraLines = lines.filter(isHraLine);
+    const otherLines = lines.filter(isOtherLine);
     const overtimeLines = lines.filter((a) => a.category === "OVERTIME");
-    const adhocLines = lines.filter((a) => !FIXED_ALLOWANCE_NAMES.has(a.name) && a.category !== "OVERTIME");
+    const adhocLines = lines.filter((a) => !isHraLine(a) && !isOtherLine(a) && a.category !== "OVERTIME");
 
     const accommodation = round2(Number(emp.accommodationAllowance) || 0);
     const vehicle = round2(Number(emp.vehicleAllowance) || 0);
     const basic = round2(payroll.basicSalary || 0);
 
-    const earnings = [{ name: "Basic Salary", amount: basic }];
-    if (sum(adhocLines)) earnings.push({ name: "Allowances", amount: sum(adhocLines) });
-    if (sum(hraLines)) earnings.push({ name: "Housing Rent Allowance (HRA)", amount: sum(hraLines) });
-    if (sum(otherLines)) earnings.push({ name: "Other Allowance", amount: sum(otherLines) });
+    // HRA and Other Allowance are always listed (even at 0) so the slip shows the
+    // employee's full fixed pay structure; each custom/manual allowance appears under its
+    // own name (lines sharing a name are summed into one row).
+    const earnings = [
+        { name: "Basic Salary", amount: basic },
+        { name: "Housing Rent Allowance (HRA)", amount: sum(hraLines) },
+        { name: "Other Allowance", amount: sum(otherLines) }
+    ];
+    const adhocByName = new Map();
+    for (const a of adhocLines) {
+        const key = String(a.name || "Allowance").trim() || "Allowance";
+        adhocByName.set(key, round2((adhocByName.get(key) || 0) + (Number(a.amount) || 0)));
+    }
+    for (const [name, amount] of adhocByName) {
+        if (amount) earnings.push({ name, amount });
+    }
     if (sum(overtimeLines)) earnings.push({ name: "Overtime", amount: sum(overtimeLines) });
     if (accommodation) earnings.push({ name: "Accommodation Expense", amount: accommodation });
     if (vehicle) earnings.push({ name: "Vehicle Expense", amount: vehicle });
@@ -3117,7 +3152,13 @@ const drawKayzanPayslip = (doc, d) => {
 const buildPayslipPdfBuffer = async (payroll, brandingCache) => {
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year, periodStart, periodEnd } = payroll;
         const companyName = employee?.company || process.env.COMPANY_NAME || "Company";
-        const { companyLogoBuffer, companyLogoPath, isLeptisCompany } = await resolveCompanyBranding(companyName, brandingCache);
+        const companyBranding = await resolveCompanyBranding(companyName, brandingCache);
+        const { isLeptisCompany } = companyBranding;
+        // Header logo + "Employer" follow the employee's VISA company (the entity that
+        // sponsors and pays them); employees without a resolvable visa company keep their
+        // own company's branding. The Leptis letterhead still keys off employee.company.
+        const visaBranding = await resolveVisaCompanyBranding(employee?.visaCompany, brandingCache);
+        const { companyLogoBuffer, companyLogoPath } = visaBranding || companyBranding;
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         // "Period" used to always show just periodEnd's calendar month/year (e.g.
         // "August 2026"), even when the actual pay period (this app uses a rolling,
@@ -3146,8 +3187,9 @@ const buildPayslipPdfBuffer = async (payroll, brandingCache) => {
 
         drawKayzanPayslip(doc, {
             employee,
-            // Header shows the employee's own company logo (Kayzan mark only as fallback).
-            companyName: employee?.company || "",
+            // Header shows the visa company's logo, else the employee's own company logo
+            // (Kayzan mark only as fallback).
+            companyName: visaBranding?.companyName || employee?.company || "",
             companyLogoBuffer,
             companyLogoPath,
             attendanceSummary,

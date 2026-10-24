@@ -265,7 +265,11 @@ export default function EmployeeDetail() {
     const handleAddAllowance = async ({ typeName, amount, includeInPayroll }) => {
         setAllowanceSubmitting(true);
         try {
-            const today = new Date().toISOString().slice(0, 10);
+            // Local date parts: toISOString() would give yesterday's date early in the
+            // day for timezones ahead of UTC.
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, "0");
+            const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
             await appraisalService.applyAdjustment({
                 employee: effectiveId,
                 type: "ALLOWANCE",
@@ -1754,8 +1758,12 @@ export default function EmployeeDetail() {
                             {(employee.salaryHistory && employee.salaryHistory.length > 0) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     {[...employee.salaryHistory]
-                                        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                                        .sort((a, b) => (new Date(b.effectiveDate) - new Date(a.effectiveDate)) || (new Date(b.createdAt || 0) - new Date(a.createdAt || 0)))
                                         .map((entry, index) => {
+                                            const fieldLabels = {
+                                                basicSalary: 'Basic', visaBase: 'Visa Base', workBase: 'Work Base', allowance: 'Allowance',
+                                                hra: 'HRA', accommodationAllowance: 'Accommodation', vehicleAllowance: 'Vehicle'
+                                            };
                                             const typeLabels = {
                                                 JOINING: 'Joining Salary',
                                                 APPRAISAL: 'Appraisal',
@@ -1771,6 +1779,20 @@ export default function EmployeeDetail() {
                                                         <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
                                                             Effective: {entry.effectiveDate ? new Date(entry.effectiveDate).toISOString().split('T')[0] : 'N/A'}
                                                             {entry.notes ? ` • ${entry.notes}` : ''}
+                                                        </div>
+                                                        {Array.isArray(entry.changes) && entry.changes.length > 0 && (
+                                                            <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                                {entry.changes.map((c) => (
+                                                                    <span key={c.field} style={{ background: '#f3f4f6', borderRadius: '6px', padding: '2px 8px' }}>
+                                                                        {fieldLabels[c.field] || c.field}: {Number(c.from).toLocaleString()} → {Number(c.to).toLocaleString()} AED
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+                                                            {entry.createdByName ? `By ${entry.createdByName}` : 'System'}
+                                                            {entry.createdAt ? ` • ${new Date(entry.createdAt).toLocaleString()}` : ''}
+                                                            {entry.applied === false ? ' • Scheduled (not yet applied)' : ''}
                                                         </div>
                                                     </div>
                                                     <div style={{ textAlign: 'right' }}>

@@ -38,6 +38,20 @@ export const computeShiftDayBucket = (dateStr, timeStr, transactionType, rules) 
   return transactionType === "OUT" ? oneDayBack() : dateStr;
 };
 
+// UAE local "today" (UTC+4, no DST) as YYYY-MM-DD - the calendar day attendance rows are
+// bucketed onto. Shared by the processor, the Incomplete sweep and the mass-complete flow.
+export const getUaeTodayDateStr = () => {
+  const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+  return uaeNow.toISOString().split("T")[0];
+};
+
+// Shifts YYYY-MM-DD by a whole number of days (calendar arithmetic in UTC, so no DST drift).
+export const shiftDateStr = (dateStr, days) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+};
+
 // Helper: Calculate duration between two times in HH:MM format
 export const calculateDuration = (start, end) => {
   if (!start || !end) return null;

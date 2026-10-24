@@ -20,7 +20,7 @@ export const getNotifications = async (req, res) => {
             .lean();
 
         // 🔹 DYNAMIC LOGIC FOR ADMINS / HR
-        const isAdmin = ["Admin", "HR Admin", "HR Manager", "Super Admin"].includes(req.user.role) || req.user.permissions?.includes("APPROVE_REQUESTS");
+        const isAdmin = /^(admin|super admin|hr.*)$/i.test(String(req.user.role || "")) || req.user.permissions?.includes("APPROVE_REQUESTS");
 
         if (isAdmin) {
             const summaryNotifications = [];
@@ -112,7 +112,7 @@ export const getNotifications = async (req, res) => {
  */
 export const getUnreadCount = async (req, res) => {
     try {
-        const isAdmin = ["Admin", "HR Admin", "HR Manager", "Super Admin"].includes(req.user.role);
+        const isAdmin = /^(admin|super admin|hr.*)$/i.test(String(req.user.role || ""));
 
         if (isAdmin) {
             let virtualCount = 0;

@@ -6,20 +6,60 @@ import {
   calculateLateTier,
   calculateDuration,
   getApprovedLeavesMap,
-  isLeave
+  isLeave,
+  toMinutes,
+  getUaeTodayDateStr,
+  shiftDateStr
 } from "../utils/attendanceUtils.js";
 
-// UAE local "today" as YYYY-MM-DD, matching the +4h anchor this file already uses to
-// bucket transactions onto a calendar day. A lone check-in on TODAY just means the
-// employee hasn't left yet (mid-shift, not an error) - it only becomes a genuine
-// "missing checkout" data problem once the day itself has passed with no checkout ever
-// recorded, so this is compared against `record.date` before ever assigning Incomplete.
-const getUaeTodayDateStr = () => {
-  const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
-  return uaeNow.toISOString().split("T")[0];
-};
-
 class AttendanceProcessor {
+  /**
+   * A lone check-in (no check-out) is stored Present/Late while its day is still running,
+   * and processTransactions only re-evaluates a row when new punches for it arrive - so
+   * once midnight passes with nobody badging out, the row stayed Present/Late forever
+   * (and payroll/attendance never saw an Incomplete). This flips those past-day rows to
+   * Incomplete. Idempotent and cheap; run from the scheduled sync tick, the daily sweep
+   * and reprocess. Manually edited rows are left alone (HR already decided them).
+   * Overnight shifts get one extra day of grace because their check-out lands on the
+   * next calendar day.
+   * @returns {Promise<number>} number of rows flipped
+   */
+  async markStaleLoneCheckinsIncomplete() {
+    const today = getUaeTodayDateStr();
+    const candidates = await Attendance.find({
+      date: { $lt: today },
+      checkIn: { $nin: [null, ""] },
+      $or: [{ checkOut: null }, { checkOut: "" }],
+      status: { $in: ["Present", "Late"] },
+      isManuallyEdited: { $ne: true }
+    }).select("_id date shift");
+
+    if (!candidates.length) return 0;
+
+    const overnightByShift = new Map();
+    const isOvernight = async (shiftName) => {
+      if (!overnightByShift.has(shiftName)) {
+        const rules = await getShiftRules(shiftName);
+        overnightByShift.set(shiftName, toMinutes(rules.start) > toMinutes(rules.end));
+      }
+      return overnightByShift.get(shiftName);
+    };
+
+    const yesterday = shiftDateStr(today, -1);
+    const ids = [];
+    for (const row of candidates) {
+      if (row.date >= yesterday && await isOvernight(row.shift || "Day Shift")) continue;
+      ids.push(row._id);
+    }
+    if (!ids.length) return 0;
+
+    const result = await Attendance.updateMany(
+      { _id: { $in: ids } },
+      { $set: { status: "Incomplete" } }
+    );
+    return result.modifiedCount || 0;
+  }
+
   /**
    * Processes an array of raw biometric transactions into Attendance records
    * @param {Array} transactions Array of biometric transactions

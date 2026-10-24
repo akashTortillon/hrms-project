@@ -423,6 +423,7 @@ import LeaveWallet from "../models/leaveWalletModel.js";
 import leaveWalletService from "../services/leaveWalletService.js";
 import { isManagerOfEmployee, isFinanceManagerOfEmployee } from "../utils/managerScopeUtils.js";
 import { escapeRegex } from "../utils/stringUtils.js";
+import { isEmployeeOnProbation, isLeaveTypeAllowedInProbation } from "../utils/probationUtils.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -774,7 +775,7 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
       return;
     }
 
-    const hrAdmins = await User.find({ role: { $in: ["HR Admin", "HR Manager", "Admin"] } });
+    const hrAdmins = await User.find({ role: { $regex: /^(admin|super admin|hr.*)$/i } });
     const financeTeam = await User.find({ role: { $in: ["Finance", "Finance Manager"] } });
 
     const toEmails = [
@@ -940,6 +941,18 @@ export const createRequest = async (req, res) => {
           success: false,
           message: "Unable to calculate leave days for the selected dates"
         });
+      }
+
+      // "Include in probation?" (Masters > Leave Types): reject types HR has closed to
+      // probationers when the leave starts inside the probation period.
+      if (details.leaveTypeId && employee && isEmployeeOnProbation(employee, details.fromDate || details.startDate)) {
+        const requestedLeaveType = await Master.findOne({ _id: details.leaveTypeId, type: "LEAVE_TYPE" }).select("name metadata");
+        if (requestedLeaveType && !isLeaveTypeAllowedInProbation(requestedLeaveType)) {
+          return res.status(400).json({
+            success: false,
+            message: `${requestedLeaveType.name} is not available during probation.`
+          });
+        }
       }
 
       // Wallet balance check — employees can't self-submit past their balance.

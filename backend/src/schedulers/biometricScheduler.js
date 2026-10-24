@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import biometricSyncService from "../services/biometricSyncService.js";
+import attendanceProcessor from "../services/attendanceProcessor.js";
 
 // BioCloud's transaction Id is assigned in per-device upload order, not global event
 // time. The scheduled 10-min tick uses `IdFrom = lastSyncedTransactionId` (a one-way
@@ -49,6 +50,9 @@ class BiometricScheduler {
       try {
         console.log("[BiometricScheduler] Triggered automated sync execution tick...");
         await biometricSyncService.executeSyncJob("SCHEDULED");
+        // Past-day lone check-ins become Incomplete (see attendanceProcessor).
+        const flipped = await attendanceProcessor.markStaleLoneCheckinsIncomplete();
+        if (flipped) console.log(`[BiometricScheduler] Marked ${flipped} stale lone check-in(s) Incomplete.`);
       } catch (error) {
         console.error("[BiometricScheduler] Automated sync execution failed:", error);
       } finally {
@@ -72,6 +76,7 @@ class BiometricScheduler {
         const startDate = formatYYYYMMDD(new Date(Date.now() - SWEEP_TRAILING_DAYS * 24 * 60 * 60 * 1000));
         console.log(`[BiometricScheduler] Triggered daily trailing sweep: ${startDate} to ${endDate}...`);
         await biometricSyncService.executeSyncJob("SWEEP", startDate, endDate);
+        await attendanceProcessor.markStaleLoneCheckinsIncomplete();
       } catch (error) {
         console.error("[BiometricScheduler] Daily trailing sweep failed:", error);
       } finally {
