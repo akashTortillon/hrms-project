@@ -14,6 +14,12 @@
  * USAGE:
  *   node scripts/backfill-salary-history.mjs            # Preview mode (no DB writes)
  *   node scripts/backfill-salary-history.mjs --apply     # Append the missing entries
+ *   node scripts/backfill-salary-history.mjs --apply --effective=2026-09-23
+ *       # Date the new entries from 2026-09-23 instead of today. Use the START date of the
+ *       # unfinalized draft payroll period you are about to regenerate: payroll ignores a
+ *       # history entry dated after the period end, so a today-dated entry would not reach
+ *       # a period that has already ended. Never earlier than an employee's latest existing
+ *       # entry (their joining date, for example), so the entry always wins.
  *
  *   After applying, Regenerate the draft payroll (payroll rows are snapshots).
  *
@@ -29,6 +35,12 @@ import { applyDuePendingSalaryChanges } from "../src/controllers/employeeControl
 
 const DB_URL = process.env.DB_URL;
 const MODE = process.argv.includes("--apply") ? "apply" : "preview";
+const effectiveArg = (process.argv.find((a) => a.startsWith("--effective=")) || "").split("=")[1];
+const EFFECTIVE_DATE = effectiveArg ? new Date(`${effectiveArg}T00:00:00Z`) : null;
+if (effectiveArg && (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveArg) || Number.isNaN(EFFECTIVE_DATE.getTime()))) {
+  console.error("--effective must be YYYY-MM-DD");
+  process.exit(1);
+}
 
 async function run() {
   if (!DB_URL) {
@@ -118,7 +130,10 @@ async function run() {
         allowance: toNumber(doc.allowance),
         hra: toNumber(doc.hra),
         ctc: toNumber(doc.ctc),
-        effectiveDate: today,
+        // Backdated to --effective when given, but never before the latest existing entry.
+        effectiveDate: EFFECTIVE_DATE
+          ? new Date(Math.max(EFFECTIVE_DATE.getTime(), latest?.effectiveDate ? new Date(latest.effectiveDate).getTime() : 0))
+          : today,
         notes: "Backfill: live salary differed from salary history",
         createdByName: "System (backfill)",
         applied: true,
