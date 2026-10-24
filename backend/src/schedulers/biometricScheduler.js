@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import biometricSyncService from "../services/biometricSyncService.js";
+import { uaeDateStr } from "../utils/attendanceUtils.js";
 
 // BioCloud's transaction Id is assigned in per-device upload order, not global event
 // time. The scheduled 10-min tick uses `IdFrom = lastSyncedTransactionId` (a one-way
@@ -10,17 +11,13 @@ import biometricSyncService from "../services/biometricSyncService.js";
 // CQZ7231961693 on 2026-08-15, Ids 427456-427478 landed under a cursor already at
 // 427656). The daily sweep below re-requests a trailing window with IdFrom=0
 // (bypassing the cursor entirely) so any such straggler gets picked up automatically.
+// (The 10-minute tick now also asks from IdFrom=0 over yesterday+today, so late uploads are normally
+// picked up within minutes; the sweep stays as the wider safety net.)
+// Dates are UAE calendar dates - BioCloud filters by the device's local date, and the server runs in UTC.
 // It's cheap to re-run: every transaction already stored is skipped via the unique
 // `transactionId` index (see biometricSyncService.js), so only genuinely new/orphaned
 // rows get inserted and reprocessed into Attendance.
 const SWEEP_TRAILING_DAYS = parseInt(process.env.BIOCLOUD_SWEEP_TRAILING_DAYS) || 3;
-
-const formatYYYYMMDD = (d) => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
 
 class BiometricScheduler {
   constructor() {
@@ -68,8 +65,8 @@ class BiometricScheduler {
 
       this.isSweeping = true;
       try {
-        const endDate = formatYYYYMMDD(new Date());
-        const startDate = formatYYYYMMDD(new Date(Date.now() - SWEEP_TRAILING_DAYS * 24 * 60 * 60 * 1000));
+        const endDate = uaeDateStr(new Date());
+        const startDate = uaeDateStr(new Date(Date.now() - SWEEP_TRAILING_DAYS * 24 * 60 * 60 * 1000));
         console.log(`[BiometricScheduler] Triggered daily trailing sweep: ${startDate} to ${endDate}...`);
         await biometricSyncService.executeSyncJob("SWEEP", startDate, endDate);
       } catch (error) {

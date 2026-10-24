@@ -7,13 +7,18 @@ import {
   getApprovedLeavesMap,
   isLeave,
   assignPunchesToShiftDays,
-  summarizeShiftDay
+  summarizeShiftDay,
+  getShiftWindow,
+  uaeDateStr
 } from "../utils/attendanceUtils.js";
 
 // Shift occurrences can reach into the adjacent calendar days (e.g. 09:00-03:00 ends
 // tomorrow), so the full set of an employee's punches is loaded with this much slack on
 // each side of the batch being processed.
 const LOOKAROUND_MS = 3 * 24 * 60 * 60 * 1000;
+
+// How many days back finalizeOpenShifts() looks for shifts that ended without a check-out.
+const FINALIZE_DAYS = 3;
 
 class AttendanceProcessor {
   /**
@@ -257,6 +262,82 @@ class AttendanceProcessor {
       ...(dryRun ? { diffs } : {}),
       ...(returnKeys ? { touchedKeys: Array.from(touchedKeys) } : {})
     };
+  }
+
+  /**
+   * Builds attendance from punches that are ALREADY stored for these badges. For a newly
+   * created / imported employee: their punches usually arrived before they existed in HRMS (the
+   * device uploads regardless), and a normal sync only processes punches it has just fetched, so
+   * without this they would have no attendance until someone clicked Sync.
+   * Looks back to BIOCLOUD_SYNC_START_DATE when set (and not in the future), else 7 days.
+   * Never throws into the caller.
+   */
+  async reprocessStoredPunches(badges, { fromDate } = {}) {
+    try {
+      const list = [...new Set((badges || []).map((b) => String(b || "").trim()).filter(Boolean))];
+      if (!list.length) return null;
+
+      const today = uaeDateStr(new Date());
+      const configured = process.env.BIOCLOUD_SYNC_START_DATE || "";
+      const from = fromDate
+        || (/^\d{4}-\d{2}-\d{2}$/.test(configured) && configured <= today ? configured : uaeDateStr(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+
+      const punches = await BiometricTransaction.find({
+        badgeNumber: { $in: list },
+        timestamp: { $gte: new Date(`${from}T00:00:00+04:00`) }
+      });
+      if (!punches.length) return null;
+
+      const stats = await this.processTransactions(punches);
+      const unmapped = new Set(stats.unmappedBadges);
+      const doneIds = punches.filter((t) => !unmapped.has((t.badgeNumber || "").trim()) && !t.processed).map((t) => t._id);
+      if (doneIds.length) {
+        await BiometricTransaction.updateMany({ _id: { $in: doneIds } }, { $set: { processed: true, processedAt: new Date() } });
+      }
+      await this.finalizeOpenShifts();
+      console.log(`[AttendanceProcessor] Built attendance from ${punches.length} stored punch(es) for ${list.join(", ")}: ${stats.created} created, ${stats.updated} updated.`);
+      return stats;
+    } catch (error) {
+      console.error("[AttendanceProcessor] reprocessStoredPunches failed:", error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Marks shifts that have ENDED without a check-out as "Incomplete".
+   *
+   * processTransactions only rewrites an occurrence when a new punch for it arrives, so a row
+   * written as Present at check-in would otherwise stay Present after the shift window closes
+   * (nobody badges out, so nothing re-processes it) until the next day's sweep. Run every sync.
+   * Only rows with a check-in, no check-out, status Present/Late, not manually edited and whose
+   * shift window has already ended are touched.
+   *
+   * @param {Object} [options]
+   * @param {number} [options.now=Date.now()] "current time" in ms (tests)
+   * @returns {Promise<number>} how many rows were changed
+   */
+  async finalizeOpenShifts({ now = Date.now() } = {}) {
+    const fromDate = uaeDateStr(new Date(now - FINALIZE_DAYS * 24 * 60 * 60 * 1000));
+    const open = await Attendance.find({
+      date: { $gte: fromDate },
+      checkIn: { $nin: [null, ""] },
+      checkOut: { $in: [null, ""] },
+      status: { $in: ["Present", "Late"] },
+      isManuallyEdited: { $ne: true }
+    });
+
+    const rulesCache = new Map();
+    let changed = 0;
+    for (const row of open) {
+      const shiftName = row.shift || "Day Shift";
+      if (!rulesCache.has(shiftName)) rulesCache.set(shiftName, await getShiftRules(shiftName));
+      const { end } = getShiftWindow(rulesCache.get(shiftName), row.date);
+      if (now <= end.getTime()) continue; // shift still running
+      row.status = "Incomplete";
+      await row.save();
+      changed++;
+    }
+    return changed;
   }
 }
 

@@ -3,6 +3,7 @@ import BiometricTransaction from "../models/biometricTransactionModel.js";
 import SyncState from "../models/syncStateModel.js";
 import SyncHistory from "../models/syncHistoryModel.js";
 import attendanceProcessor from "./attendanceProcessor.js";
+import { uaeDateStr } from "../utils/attendanceUtils.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -38,25 +39,35 @@ export const parseBioCloudTimestamp = (verifyTime) => {
   return new Date(hasOffset ? verifyTime : `${verifyTime}+04:00`);
 };
 
-// Works out the date window for a sync run.
-//   - Explicit startDate/endDate (API call or script): used as given.
+// Works out the date window for a sync run. Dates are UAE calendar dates (BioCloud filters by the
+// device's local date), never the server's own (UTC) date.
+//   - Explicit startDate/endDate (API call, sweep or script): used as given, from IdFrom 0, and
+//     attendance is rebuilt for every punch in the window.
 //   - A MANUAL sync with no dates (the UI "Sync" button): starts at BIOCLOUD_SYNC_START_DATE
-//     (YYYY-MM-DD) when that is set and not in the future, so the button can pull history
-//     from a chosen date instead of only today.
-//   - Anything else (the 10-minute scheduler): today only, continuing from the saved cursor.
-// `historical` is true whenever the window starts before today / was asked for explicitly -
-// those runs ask BioCloud from IdFrom 0 and rebuild attendance for every punch in the window.
-export const resolveSyncWindow = ({ syncType, startDate, endDate, configuredStart, todayStr }) => {
+//     (YYYY-MM-DD) when that is set and not in the future (same rebuild), so the button can pull
+//     history from a chosen date instead of only recent days.
+//   - Anything else (the 10-minute scheduler, or Sync with nothing configured): yesterday + today,
+//     from IdFrom 0. The saved Id cursor is not used as a floor: a device that uploads late gets
+//     Ids below it and would be skipped until the next daily sweep. Stored punches are skipped by
+//     their unique transactionId, so re-asking for two days is cheap.
+// `ignoreCursor` = ask BioCloud from IdFrom 0. `rebuildAll` = also reprocess every punch BioCloud
+// returned (not just new/unprocessed ones).
+export const resolveSyncWindow = ({ syncType, startDate, endDate, configuredStart, todayStr, yesterdayStr }) => {
   const validConfigured = /^\d{4}-\d{2}-\d{2}$/.test(configuredStart || "") && configuredStart <= todayStr
     ? configuredStart
     : null;
   const effectiveStart = startDate || (syncType === "MANUAL" ? validConfigured : null);
+  const rebuildAll = !!startDate || (!!effectiveStart && effectiveStart < todayStr);
   return {
-    startDate: effectiveStart || todayStr,
+    startDate: effectiveStart || yesterdayStr || todayStr,
     endDate: endDate || todayStr,
-    historical: !!startDate || (!!effectiveStart && effectiveStart < todayStr)
+    ignoreCursor: true,
+    rebuildAll
   };
 };
+
+// How far back stored-but-unprocessed punches are retried each run (see step 5).
+const RETRY_UNPROCESSED_DAYS = parseInt(process.env.BIOCLOUD_RETRY_UNPROCESSED_DAYS) || 3;
 
 class BiometricSyncService {
   constructor() {
@@ -132,38 +143,29 @@ class BiometricSyncService {
         await SyncState.create({ key: "biocloud_sync", lastSyncedTransactionId: 0 });
       }
 
-      // 2. Determine date range (default to current day for scheduled runs to keep it fast and precise)
-      const formatYYYYMMDD = (d) => {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
-        const dd = String(d.getDate()).padStart(2, "0");
-        return `${yyyy}-${mm}-${dd}`;
-      };
-      
-      const todayStr = formatYYYYMMDD(new Date());
+      // 2. Determine date range (UAE dates - see resolveSyncWindow)
+      const todayStr = uaeDateStr(new Date());
+      const yesterdayStr = uaeDateStr(new Date(Date.now() - 24 * 60 * 60 * 1000));
       const syncWindow = resolveSyncWindow({
         syncType,
         startDate,
         endDate,
         configuredStart: process.env.BIOCLOUD_SYNC_START_DATE,
-        todayStr
+        todayStr,
+        yesterdayStr
       });
       const finalStartDate = `${syncWindow.startDate} 00:00:00`;
       const finalEndDate = `${syncWindow.endDate} 23:59:59`;
 
       // BioCloud ANDs the IdFrom cursor with the StartDate/EndDate window - it does not
-      // treat an explicit date range as overriding the ID floor. Once the live cursor has
-      // advanced past today's transaction IDs, requesting an EARLIER date (a manual
-      // backfill) with that same high IdFrom silently returns nothing, even though the
-      // date range is correct and BioCloud genuinely has the data (confirmed directly:
-      // the same StartDate/EndDate with IdFrom=0 via a raw API call returned real 2026-08-12
-      // records that a sync using the live cursor as IdFrom did not). A manual/dated
-      // backfill is asking for data BEFORE the current cursor by definition, so it must
-      // not be floored by it - only scheduled "catch up from where we left off" runs
-      // should use the live cursor as IdFrom.
-      const idFrom = syncWindow.historical ? 0 : lastSyncedTransactionId;
+      // treat an explicit date range as overriding the ID floor, so a backfill with the live
+      // cursor as IdFrom silently returns nothing. And a device that uploads late gets Ids BELOW
+      // the cursor, so using it as a floor skips those punches until the daily sweep. Every run
+      // therefore asks from IdFrom 0 over a short date window instead (duplicates are dropped
+      // below via the unique transactionId); the cursor is still saved for reference.
+      const idFrom = syncWindow.ignoreCursor ? 0 : lastSyncedTransactionId;
 
-      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | IdFrom: ${idFrom}${syncWindow.historical ? " (backfill - ignoring live cursor)" : ""}`);
+      console.log(`[BiometricSyncService] Sync window: "${finalStartDate}" to "${finalEndDate}" | IdFrom: ${idFrom}${syncWindow.ignoreCursor ? " (ignoring live cursor)" : ""}${syncWindow.rebuildAll ? " | rebuilding all punches" : ""}`);
 
       // 3. Fetch from BioCloud API with retry logic
       const apiResponse = await this._fetchFromApiWithRetries(idFrom, finalStartDate, finalEndDate);
@@ -241,23 +243,42 @@ class BiometricSyncService {
 
       console.log(`[BiometricSyncService] Stored ${transactionsStored} new unique transactions in database.`);
 
-      // 5. Generate attendance records. A normal run only needs the punches that are new. A
-      // historical/manual window must cover EVERY punch BioCloud returned, including ones
-      // already stored - otherwise attendance that was cleared or never built (e.g. after
-      // employees were re-imported) is never rebuilt and the sync reports 0 created. The
-      // processor is idempotent: unchanged rows are skipped, manual edits are kept.
-      const toProcess = syncWindow.historical
-        ? await BiometricTransaction.find({ transactionId: { $in: fetchedIds } })
-        : newTransactions;
+      // 5. Generate attendance records. A normal run processes the punches that are new PLUS any
+      // stored punch from the last few days that was never processed - one whose employee did not
+      // exist yet when it arrived (e.g. employees imported after the device already uploaded
+      // punches) would otherwise stay without attendance until someone clicked Sync. A
+      // historical/manual window must cover EVERY punch BioCloud returned, including ones already
+      // stored - otherwise attendance that was cleared or never built is never rebuilt and the
+      // sync reports 0 created. The processor is idempotent: unchanged rows are skipped, manual
+      // edits are kept.
+      let toProcess;
+      if (syncWindow.rebuildAll) {
+        toProcess = await BiometricTransaction.find({ transactionId: { $in: fetchedIds } });
+      } else {
+        const retryFrom = new Date(Date.now() - RETRY_UNPROCESSED_DAYS * 24 * 60 * 60 * 1000);
+        const leftovers = await BiometricTransaction.find({ processed: false, timestamp: { $gte: retryFrom } });
+        const byId = new Map(leftovers.map((t) => [String(t._id), t]));
+        for (const t of newTransactions) byId.set(String(t._id), t);
+        toProcess = [...byId.values()];
+      }
       const processingStats = await attendanceProcessor.processTransactions(toProcess);
       const unmappedBadges = Array.from(processingStats.unmappedBadges || []);
 
-      // 6. Update transaction processed state
-      for (const newTxn of newTransactions) {
-        newTxn.processed = true;
-        newTxn.processedAt = new Date();
-        await newTxn.save();
+      // 6. Mark punches processed - but not those of a badge with no employee yet, so they are
+      // retried once the employee exists.
+      const unmapped = new Set(unmappedBadges);
+      const doneIds = toProcess.filter((t) => !unmapped.has((t.badgeNumber || "").trim())).map((t) => t._id);
+      if (doneIds.length) {
+        await BiometricTransaction.updateMany(
+          { _id: { $in: doneIds }, processed: { $ne: true } },
+          { $set: { processed: true, processedAt: new Date() } }
+        );
       }
+
+      // Shifts that ended without a check-out are only noticed when something re-processes them;
+      // do it every run so "Incomplete" shows up right after the shift window closes.
+      const finalized = await attendanceProcessor.finalizeOpenShifts();
+      if (finalized) console.log(`[BiometricSyncService] Marked ${finalized} ended shift(s) without a check-out as Incomplete.`);
 
       // 7. Update Sync State atomically
       await SyncState.findOneAndUpdate(

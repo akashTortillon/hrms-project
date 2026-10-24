@@ -9,7 +9,8 @@ import { logActivity } from "../utils/activityLogger.js";
 import { getSignedFileUrl, storeUploadedFile } from "../utils/storage.js";
 import { toNumber, computeTotalSalary, computeCtc, splitIncrement } from "../utils/salaryCalc.js";
 import { createOnboardingWorkflowForEmployee } from "./workflowController.js";
-import { syncEmployeeToBiometric, syncEmployeesToBiometric } from "../services/bioCloudEmployeeService.js";
+import { syncEmployeeToBiometric, syncEmployeesToBiometric, getBadgeNumber } from "../services/bioCloudEmployeeService.js";
+import attendanceProcessor from "../services/attendanceProcessor.js";
 import { normalizeSerials, buildDeviceLookup, parseDeviceCell } from "../utils/deviceUtils.js";
 import { canonicalShiftName, findShiftByName } from "../utils/shiftName.js";
 
@@ -514,6 +515,10 @@ export const addEmployee = async (req, res) => {
     // on employee.biometricSync (never throws).
     syncEmployeeToBiometric(employee);
 
+    // Punches this badge already made (the device uploads whether or not HRMS knows the person
+    // yet) get turned into attendance now instead of waiting for someone to click Sync.
+    attendanceProcessor.reprocessStoredPunches([getBadgeNumber(employee)]);
+
     // Only when the employee is created directly with status "Onboarding" (today's
     // Add Employee default) - an employee added as already-Active (e.g. inter-branch
     // transfer) gets no checklist forced on them. Fire-and-forget: a template hiccup
@@ -946,14 +951,31 @@ export const updateEmployee = async (req, res) => {
 
     res.json({ employee: updatedEmployee });
 
-    // A device was added to this employee: queue them onto just the NEW device(s) in
-    // BioCloud. Nothing is ever removed from a device automatically - that would delete the
-    // employee's enrolled fingerprint/face there, so removal stays a manual step in BioCloud.
-    if (payload.biometricDevices !== undefined) {
-      const hadDevices = new Set(before?.biometricDevices || []);
-      const addedDevices = (updatedEmployee.biometricDevices || []).filter((serial) => !hadDevices.has(serial));
-      if (addedDevices.length) {
-        syncEmployeeToBiometric(updatedEmployee, { devices: addedDevices });
+    // Keep BioCloud in step with the edit. api_saveemployee is an upsert by badge number, so a
+    // changed name/department/designation is pushed by calling it again. Devices: only ones
+    // ADDED by this edit are queued (re-queueing every device each time would re-export the
+    // employee's templates needlessly). Nothing is ever removed from a device automatically -
+    // that would delete the employee's enrolled fingerprint/face there, so removal stays a
+    // manual step in BioCloud.
+    // A changed code/badge is a different employee as far as BioCloud is concerned (the badge is
+    // its key): the new badge is created and put on all of the employee's devices; the old badge
+    // is left alone in BioCloud for the same reason as above.
+    if (before) {
+      const BIOCLOUD_FIELDS = ["name", "department", "designation", "code", "badgeNumber"];
+      const profileChanged = BIOCLOUD_FIELDS.some(
+        (field) => payload[field] !== undefined && String(before[field] ?? "") !== String(updatedEmployee[field] ?? "")
+      );
+      const badgeChanged = getBadgeNumber(before) !== getBadgeNumber(updatedEmployee);
+      const hadDevices = new Set(before.biometricDevices || []);
+      const addedDevices = payload.biometricDevices !== undefined
+        ? (updatedEmployee.biometricDevices || []).filter((serial) => !hadDevices.has(serial))
+        : [];
+      if (profileChanged || addedDevices.length) {
+        const devices = badgeChanged ? [...(updatedEmployee.biometricDevices || [])] : addedDevices;
+        if (badgeChanged) {
+          console.warn(`[updateEmployee] Badge changed ${getBadgeNumber(before)} -> ${getBadgeNumber(updatedEmployee)}: pushing the new badge to BioCloud; the old badge stays there until removed manually.`);
+        }
+        syncEmployeeToBiometric(updatedEmployee, { devices });
       }
     }
 
@@ -1906,6 +1928,11 @@ export const importEmployees = async (req, res) => {
       syncEmployeesToBiometric(employeeIdsForBiometric).catch((err) => {
         console.error("[BioCloudEmployee] Batch sync after import failed:", err.message);
       });
+
+      // Same for punches already stored for the imported badges.
+      Employee.find({ _id: { $in: employeeIdsForBiometric } }).select("code badgeNumber").lean()
+        .then((list) => attendanceProcessor.reprocessStoredPunches(list.map(getBadgeNumber)))
+        .catch((err) => console.error("[AttendanceProcessor] Reprocess after import failed:", err.message));
     }
 
   } catch (error) {
