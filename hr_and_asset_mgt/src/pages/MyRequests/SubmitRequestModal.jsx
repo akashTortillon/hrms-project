@@ -50,35 +50,41 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
     purpose: ""
   });
 
-  // ✅ NEW: Fetch Leave Types
+  // Leave types + wallet balances load together: the wallet response says which types this
+  // employee may use right now (Masters > Leave Types > "Include in probation?"), so the
+  // dropdown only lists those, and the default selection is the first allowed one.
   useEffect(() => {
-    const fetchLeaveTypes = async () => {
+    const load = async () => {
+      let types = [];
+      let wallets = [];
       try {
-        const data = await leaveTypeService.getAll();
-        setLeaveTypes(data);
-        if (data.length > 0) {
-          setLeaveForm(prev => ({
-            ...prev,
-            leaveType: data[0].name,
-            leaveTypeId: data[0]._id,
-            isPaid: data[0].metadata?.isPaid !== false // Default to true if not specified
-          }));
-        }
+        types = await leaveTypeService.getAll();
       } catch (error) {
         console.error("Failed to fetch leave types:", error);
       }
-    };
-    fetchLeaveTypes();
-
-    const fetchWallets = async () => {
       try {
         const res = await getMyWallets();
-        setWalletBalances(res.data || []);
+        wallets = res.data || [];
       } catch (error) {
         console.error("Failed to fetch leave balances:", error);
       }
+      setWalletBalances(wallets);
+
+      const allowed = types.filter((type) => {
+        const wallet = wallets.find((w) => w.leaveTypeId === type._id);
+        return !wallet || wallet.allowedForSelf !== false;
+      });
+      setLeaveTypes(allowed);
+      if (allowed.length > 0) {
+        setLeaveForm(prev => ({
+          ...prev,
+          leaveType: allowed[0].name,
+          leaveTypeId: allowed[0]._id,
+          isPaid: allowed[0].metadata?.isPaid !== false // Default to true if not specified
+        }));
+      }
     };
-    fetchWallets();
+    load();
   }, []);
 
   const selectedBalance = walletBalances.find(w => w.leaveTypeId === leaveForm.leaveTypeId);

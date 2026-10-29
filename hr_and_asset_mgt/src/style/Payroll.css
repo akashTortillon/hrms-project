@@ -673,6 +673,31 @@
 
 .wps-tool-card:hover { border-color: #3b82f6; background: #f8fbff; }
 
+/* Export All Payslips is a row with its own selects/button, not a click-the-
+   whole-card action like the other tool cards - no pointer cursor, no hover
+   border-color/background swap on the card itself. */
+.export-payslips-bar {
+  cursor: default;
+}
+.export-payslips-bar:hover {
+  border-color: #f1f5f9;
+  background: transparent;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(15, 23, 42, 0.2);
+  border-top-color: #0f172a;
+  border-radius: 50%;
+  animation: payroll-btn-spin 0.7s linear infinite;
+}
+
+@keyframes payroll-btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 .tool-icon-box {
   width: 44px;
   height: 44px;
@@ -692,4 +717,69 @@
 /* Purge Old Golden Remnants */
 .payroll-golden-card, .payroll-golden-header, .golden-tab-btn, .payroll-golden-card table {
     display: none !important;
+}
+
+.tool-icon-box.purple { background: #f5f3ff; color: #7c3aed; }
+
+/* ==========================================================================
+   RESPONSIVE - this file previously had zero @media queries, the only
+   page-specific stylesheet in the app without any. Below breaks fixed-grid/
+   no-wrap layouts down at the app's established breakpoints (768px = primary
+   mobile cut, 480px = narrow-phone fine-tuning - see Attendance.css/Assets.css
+   for the same convention).
+   ========================================================================== */
+
+/* Missing scroll container for the employee table - JSX already wraps the
+   table in .payroll-list-table-wrapper (PayrollTable.jsx/PayrollView.jsx) but
+   no rule for that class existed anywhere, so the table just overflowed the
+   page with no way to scroll to it. Unconditional (not just mobile) since a
+   wide table benefits from this at any width. */
+.payroll-list-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.payroll-modern-table {
+  min-width: 720px;
+}
+
+@media (max-width: 768px) {
+  .payroll-new-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .payroll-header-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .payroll-stat-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .payroll-action-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .action-btns-group {
+    margin-left: 0;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .wps-tools-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .payroll-stat-row {
+    grid-template-columns: 1fr;
+  }
 }

@@ -2,7 +2,7 @@ import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
 
-export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS }) {
+export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS, hasAbsenceDeductionRule = true }) {
   // Rolling pay period, force-contiguous: "From" is always locked/auto-computed by
   // the parent (day after the last finalized period's end) — HR only picks "To".
   // Picking "To" is what defines the period; the actual attendance-day count
@@ -10,7 +10,7 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
   const cards = [
     {
       title: "Most recent payroll",
-      amount: `₦${(stats?.totalNet || 0).toLocaleString()}`,
+      amount: `${(stats?.totalNet || 0).toLocaleString()} AED`,
       trend: stats?.lastMonthComparison || "+2.4%",
       trendTerm: "vs last month",
       icon: "users",
@@ -33,7 +33,7 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
     },
     {
         title: "Total Deductions",
-        amount: `₦${(stats?.totalDeductions || 0).toLocaleString()}`,
+        amount: `${(stats?.totalDeductions || 0).toLocaleString()} AED`,
         trend: "For this month",
         icon: "dollar",
         color: "#f43f5e"
@@ -77,7 +77,16 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
         </div>
       </div>
 
-      
+      {!hasAbsenceDeductionRule && (
+        <div className="payroll-alert-bar">
+          <div className="alert-content">
+            <span className="alert-icon">⚠️</span>
+            <span className="alert-text">
+              No automatic absence deduction rule is configured — absent days will be tracked but will NOT reduce pay. Go to Masters → Payroll Rules to activate one.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="payroll-stat-row">
         {cards.map((item, index) => (

@@ -49,6 +49,9 @@ export default function useHRManagement() {
         allocationType: 'YEARLY', // YEARLY | SERVICE_ANNIVERSARY | POLICY_BASED
         daysPerCycle: '',
         carryForward: true,
+        // Whether employees still on probation can use this leave type. Unset on legacy
+        // types = allowed (see includeInProbation !== false checks server-side).
+        includeInProbation: true,
         tiers: [], // [{ afterYears, days }] — optional service-year step-up, overrides daysPerCycle once met
         // Sick-leave pay tiers, cumulative per calendar year (only consumed when this
         // leave type's name contains "sick" - see resolveLeaveDayStatus in
@@ -132,6 +135,7 @@ export default function useHRManagement() {
             allocationType: 'YEARLY',
             daysPerCycle: '',
             carryForward: true,
+            includeInProbation: true,
             tiers: [],
             paidThresholdDays: 15,
             halfPaidThresholdDays: 45,
@@ -201,6 +205,7 @@ export default function useHRManagement() {
                 allocationType: meta.allocationType || 'YEARLY',
                 daysPerCycle: meta.daysPerCycle ?? '',
                 carryForward: meta.carryForward ?? true,
+                includeInProbation: meta.includeInProbation !== false,
                 tiers: Array.isArray(meta.tiers) ? meta.tiers : [],
                 paidThresholdDays: meta.paidThresholdDays ?? 15,
                 halfPaidThresholdDays: meta.halfPaidThresholdDays ?? 45,
@@ -238,6 +243,7 @@ export default function useHRManagement() {
                         allocationType: leaveTypeState.allocationType,
                         daysPerCycle: Number(leaveTypeState.daysPerCycle) || 0,
                         carryForward: leaveTypeState.carryForward,
+                        includeInProbation: leaveTypeState.includeInProbation !== false,
                         tiers: cleanTiers,
                         paidThresholdDays: Number(leaveTypeState.paidThresholdDays) || 15,
                         halfPaidThresholdDays: Number(leaveTypeState.halfPaidThresholdDays) || 45,

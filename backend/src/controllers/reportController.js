@@ -1,4 +1,5 @@
 import * as reportService from "../services/reportService.js";
+import { displayEmployeeCode } from "../utils/employeeCode.js";
 import * as XLSX from "xlsx";
 import ReportSchedule from "../models/reportScheduleModel.js";
 import CustomReport from "../models/customReportModel.js";
@@ -189,7 +190,7 @@ export const getBranchWiseEmployeeReport = async (req, res) => {
 
     if (isExport) {
       const exportData = result.rows.map((item) => ({
-        "Employee Code": item.code,
+        "Employee Code": displayEmployeeCode(item),
         "Employee Name": item.name,
         "Company": item.company || "—",
         "Branch": item.branch || "—",
@@ -416,7 +417,7 @@ export const getLoanReport = async (req, res) => {
       .map((r) => r.userId?.employeeId)
       .filter(Boolean);
     const employees = await Employee.find({ _id: { $in: employeeIds } })
-      .select("_id code department branch");
+      .select("_id code systemCode department branch");
     const empMap = {};
     employees.forEach((e) => { empMap[e._id.toString()] = e; });
 
@@ -431,7 +432,7 @@ export const getLoanReport = async (req, res) => {
       const loanType = r.details?.subType === "loan" ? "Loan" : "Salary Advance";
 
       return {
-        employeeId: emp.code || r.userId?.employeeId || "N/A",
+        employeeId: displayEmployeeCode(emp) || r.userId?.employeeId || "N/A",
         employeeName: r.userId?.name || "N/A",
         department: emp.department || "N/A",
         branch: emp.branch || "N/A",
@@ -493,14 +494,14 @@ export const getAppraisalReport = async (req, res) => {
     }
 
     const appraisals = await Appraisal.find(filter)
-      .populate("employee", "name code department branch")
+      .populate("employee", "name code systemCode department branch")
       .populate("cycle", "name startDate endDate")
       .populate("createdBy", "name")
       .populate("approvedBy", "name")
       .sort({ effectiveDate: -1 });
 
     const data = appraisals.map((a) => ({
-      employeeId: a.employee?.code || "N/A",
+      employeeId: displayEmployeeCode(a.employee) || "N/A",
       employeeName: a.employee?.name || "N/A",
       department: a.employee?.department || "N/A",
       branch: a.employee?.branch || "N/A",

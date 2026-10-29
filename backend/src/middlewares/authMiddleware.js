@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { jwtConfig } from "../config/jwt.js";
 import User from "../models/userModel.js";
 import Master from "../models/masterModel.js";
+import { resolveRolePermissions } from "../utils/rolePermissions.js";
 
 export const protect = async (req, res, next) => {
   let token;
@@ -46,14 +47,7 @@ export const protect = async (req, res, next) => {
 
 
       // Fetch Role Permissions
-      let permissions = [];
-      if (user.role === "Admin") {
-        permissions = ["ALL"];
-      } else {
-        const escapedRole = (user.role || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const roleData = await Master.findOne({ type: 'ROLE', name: { $regex: new RegExp(`^${escapedRole}$`, 'i') } });
-        permissions = roleData ? roleData.permissions || [] : [];
-      }
+      const permissions = await resolveRolePermissions(user.role);
 
       // Attach to request
       req.user = user;

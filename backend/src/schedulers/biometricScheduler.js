@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import biometricSyncService from "../services/biometricSyncService.js";
+import attendanceProcessor from "../services/attendanceProcessor.js";
 
 class BiometricScheduler {
   constructor() {
@@ -26,6 +27,9 @@ class BiometricScheduler {
       try {
         console.log("[BiometricScheduler] Triggered automated sync execution tick...");
         await biometricSyncService.executeSyncJob("SCHEDULED");
+        // Past-day lone check-ins become Incomplete (see attendanceProcessor).
+        const flipped = await attendanceProcessor.markStaleLoneCheckinsIncomplete();
+        if (flipped) console.log(`[BiometricScheduler] Marked ${flipped} stale lone check-in(s) Incomplete.`);
       } catch (error) {
         console.error("[BiometricScheduler] Automated sync execution failed:", error);
       } finally {

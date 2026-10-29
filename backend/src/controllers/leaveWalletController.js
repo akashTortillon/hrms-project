@@ -5,6 +5,7 @@ import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
 import Master from "../models/masterModel.js";
 import leaveWalletService from "../services/leaveWalletService.js";
+import { isEmployeeOnProbation, isLeaveTypeAllowedInProbation } from "../utils/probationUtils.js";
 
 // GET /api/leave-wallet/employee/:employeeId
 // Returns every leave type's wallet balance for one employee (dashboard card).
@@ -14,13 +15,21 @@ export const getEmployeeWallets = async (req, res) => {
     const leaveTypes = await Master.find({ type: "LEAVE_TYPE", isActive: true });
     const wallets = await LeaveWallet.find({ employee: employeeId });
     const walletByType = new Map(wallets.map(w => [String(w.leaveType), w]));
+    const employee = await Employee.findById(employeeId).select("probationEndDate probationStatus");
+    const onProbation = isEmployeeOnProbation(employee, new Date());
 
     const data = leaveTypes.map(lt => {
       const w = walletByType.get(String(lt._id));
+      const includeInProbation = isLeaveTypeAllowedInProbation(lt);
       return {
         leaveTypeId: lt._id,
         leaveTypeName: lt.name,
         isPaid: lt.metadata?.isPaid !== false,
+        // "Include in probation?" flag from Masters > Leave Types; allowedForSelf is what
+        // the request form uses to hide types this employee can't take right now.
+        includeInProbation,
+        onProbation,
+        allowedForSelf: !onProbation || includeInProbation,
         creditedDays: w?.creditedDays || 0,
         usedDays: w?.usedDays || 0,
         balanceDays: w?.balanceDays || 0,

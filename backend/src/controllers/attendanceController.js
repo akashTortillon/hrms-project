@@ -210,6 +210,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
+import { displayEmployeeCode } from "../utils/employeeCode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -225,8 +226,37 @@ import {
   isLeave,
   isWeekOff,
   holidaySetFromHolidays,
-  applyMonthlyFlexQuota
+  applyMonthlyFlexQuota,
+  getUaeTodayDateStr,
+  shiftDateStr
 } from "../utils/attendanceUtils.js";
+
+const DATE_STR_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_RANGE_DAYS = 62;
+
+// Resolves the list of YYYY-MM-DD days a monthly view/export covers. Either a calendar
+// month (month + year) or an explicit from/to range - the range exists because attendance
+// cycles don't follow calendar months (e.g. 22nd to 22nd). Returns { error } on bad input.
+const resolveDateWindow = ({ month, year, from, to }) => {
+  if (from || to) {
+    if (!from || !to) return { error: "Both from and to dates are required" };
+    const valid = (d) => DATE_STR_RE.test(d) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d);
+    if (!valid(from) || !valid(to)) return { error: "Dates must be valid YYYY-MM-DD values" };
+    if (to < from) return { error: "'to' date must be on or after 'from' date" };
+    const days = [];
+    for (let d = from; d <= to; d = shiftDateStr(d, 1)) {
+      days.push(d);
+      if (days.length > MAX_RANGE_DAYS) return { error: `Date range cannot exceed ${MAX_RANGE_DAYS} days` };
+    }
+    return { days, start: from, end: to, isRange: true };
+  }
+
+  if (!month || !year) return { error: "Month and Year are required" };
+  const mm = String(month).padStart(2, "0");
+  const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => `${year}-${mm}-${String(i + 1).padStart(2, "0")}`);
+  return { days, start: days[0], end: days[days.length - 1], isRange: false };
+};
 
 /**
  * SYNC Biometrics
@@ -292,6 +322,7 @@ export const reprocessBiometrics = async (req, res) => {
     console.log(`[attendanceController] Manual reprocess triggered by user ${req.user?._id}. Badge: ${badgeNumber || "ALL"}, Range: ${startDate} to ${endDate}, Found: ${transactions.length} transactions.`);
 
     const stats = await attendanceProcessor.processTransactions(transactions);
+    await attendanceProcessor.markStaleLoneCheckinsIncomplete();
 
     return res.status(200).json({
       success: true,
@@ -416,6 +447,7 @@ export const getDailyAttendance = async (req, res) => {
       Present: 0,
       Absent: 0,
       Late: 0,
+      Incomplete: 0,
       "On Leave": 0
     };
 
@@ -484,20 +516,14 @@ export const getDailyAttendance = async (req, res) => {
  */
 export const getMonthlyAttendance = async (req, res) => {
   try {
-    const { month, year } = req.query;
+    const { month, year, from, to } = req.query;
 
-    if (!month || !year) {
-      return res.status(400).json({ message: "Month and Year are required" });
+    // Calendar month, or an explicit from/to range (e.g. 22nd -> 22nd pay cycle).
+    const window = resolveDateWindow({ month, year, from, to });
+    if (window.error) {
+      return res.status(400).json({ message: window.error });
     }
-
-    const startDate = `${year}-${month.padStart(2, "0")}-01`;
-    // Calculate end date properly
-    const nextMonth = new Date(parseInt(year), parseInt(month), 1); // Month is 0-indexed in Date constructor? No, wait. 
-    // Actually, simple string match is safer for YYYY-MM prefix if we store as String.
-    // But let's stick to the stored Date String format YYYY-MM-DD.
-
-    // Construct regex or range query
-    const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+    const days = window.days;
 
     // Get employees (Personalized for users without VIEW_ALL_ATTENDANCE permission)
     const canViewAll = req.user.role === "Admin" || req.user.permissions.includes("ALL") || req.user.permissions.includes("VIEW_ALL_ATTENDANCE");
@@ -528,7 +554,7 @@ export const getMonthlyAttendance = async (req, res) => {
 
     const employees = await Employee.find(employeeQuery).sort({ code: 1 });
     const attendanceRecords = await Attendance.find({
-      date: { $regex: regex }
+      date: { $gte: window.start, $lte: window.end }
     }).populate("editedBy", "name"); // ✅ Populate Editor
 
     // Get Holidays + company-wide default week-off day
@@ -545,17 +571,11 @@ export const getMonthlyAttendance = async (req, res) => {
       attendanceMap[rec.employee][rec.date] = rec;
     });
 
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => {
-      const d = i + 1;
-      return `${year}-${month.padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
-    });
-
     const result = employees.map(emp => {
       const empAttendance = attendanceMap[emp._id] || {};
       const attendanceData = {};
 
-      let present = 0, late = 0, absent = 0, leave = 0;
+      let present = 0, late = 0, absent = 0, leave = 0, incomplete = 0;
 
       // Two passes: first resolve each day's raw status, then (for a workingDayType
       // 2 employee) convert their first 2 no-record "Absent" days per period into
@@ -619,6 +639,7 @@ export const getMonthlyAttendance = async (req, res) => {
           // but the total `leave` will render correctly on the dashboard visually (e.g. 1.5).
         }
         else if (status === "Absent") absent++;
+        else if (status === "Incomplete") incomplete++;
         // Weekends/Holidays/Flex Off don't count towards absent
       });
 
@@ -629,7 +650,7 @@ export const getMonthlyAttendance = async (req, res) => {
         department: emp.department,
         branch: emp.branch,
         shift: emp.shift || "Day Shift",
-        stats: { present, late, absent, leave },
+        stats: { present, late, absent, leave, incomplete },
         attendance: attendanceData
       };
     });
@@ -638,6 +659,174 @@ export const getMonthlyAttendance = async (req, res) => {
 
   } catch (error) {
     // console.error("Get monthly attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * GET employees whose attendance for a day is Incomplete (check-in without a check-out).
+ * /api/attendance/incomplete?date=YYYY-MM-DD   (date defaults to UAE "today")
+ *
+ * Lists rows already flagged Incomplete plus - for today only - rows still Present/Late
+ * with a check-in and no check-out (the day isn't over, so they aren't flagged yet but HR
+ * may want to close them at end of shift). `shiftEnd` is what a mass "Present" will set
+ * as the check-out; `canComplete` is false when that can't be done safely.
+ */
+export const getIncompleteAttendance = async (req, res) => {
+  try {
+    const today = getUaeTodayDateStr();
+    const date = req.query.date || today;
+    if (!DATE_STR_RE.test(date)) {
+      return res.status(400).json({ message: "date must be YYYY-MM-DD" });
+    }
+
+    const statusFilter = date === today ? ["Incomplete", "Present", "Late"] : ["Incomplete"];
+    const records = await Attendance.find({ date, status: { $in: statusFilter } })
+      .populate("employee", "name code department branch shift status");
+
+    const rulesCache = new Map();
+    const getRules = async (shiftName) => {
+      if (!rulesCache.has(shiftName)) rulesCache.set(shiftName, await getShiftRules(shiftName));
+      return rulesCache.get(shiftName);
+    };
+
+    const rows = [];
+    for (const rec of records) {
+      const emp = rec.employee;
+      if (!emp || emp.status !== "Active") continue;
+      const isIncomplete = rec.status === "Incomplete";
+      const lonePunchToday = !isIncomplete && rec.checkIn && !rec.checkOut;
+      if (!isIncomplete && !lonePunchToday) continue;
+
+      const shiftName = rec.shift || emp.shift || "Day Shift";
+      const rules = await getRules(shiftName);
+      let canComplete = true;
+      let reason = "";
+      if (!rec.checkIn) {
+        canComplete = false;
+        reason = "No check-in recorded";
+      } else if (rules.unresolved) {
+        canComplete = false;
+        reason = `Shift "${shiftName}" is not configured in Masters`;
+      }
+
+      rows.push({
+        attendanceId: rec._id,
+        employeeId: emp._id,
+        name: emp.name,
+        code: emp.code,
+        department: emp.department,
+        branch: emp.branch,
+        shift: shiftName,
+        checkIn: rec.checkIn || "-",
+        checkOut: rec.checkOut || "-",
+        status: rec.status,
+        shiftEnd: rules.unresolved ? null : rules.end,
+        canComplete,
+        reason
+      });
+    }
+
+    rows.sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true }));
+    res.json({ date, count: rows.length, data: rows });
+  } catch (error) {
+    console.error("Get incomplete attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * POST mass-complete: mark selected Incomplete employees Present for a day, setting the
+ * check-out to the END OF THEIR OWN SHIFT (e.g. 17:00) - they never badged out, so the
+ * scheduled shift end is the agreed stand-in.
+ * Body: { date, employeeIds: [], reason? }
+ * Responds with a per-employee result so the UI can report what was skipped and why.
+ */
+export const massCompleteAttendance = async (req, res) => {
+  try {
+    const { date, employeeIds, reason } = req.body || {};
+    const today = getUaeTodayDateStr();
+
+    if (!date || !DATE_STR_RE.test(date)) {
+      return res.status(400).json({ message: "date is required (YYYY-MM-DD)" });
+    }
+    if (date > today) {
+      return res.status(400).json({ message: "Cannot complete attendance for a future date" });
+    }
+    if (!Array.isArray(employeeIds) || !employeeIds.length) {
+      return res.status(400).json({ message: "Select at least one employee" });
+    }
+    if (employeeIds.length > 500) {
+      return res.status(400).json({ message: "Too many employees in one request (max 500)" });
+    }
+    if (employeeIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      return res.status(400).json({ message: "Invalid employee id in selection" });
+    }
+
+    const editReason = (reason && String(reason).trim()) || "Mass update: incomplete attendance marked present (checkout set to shift end)";
+    const results = [];
+    const rulesCache = new Map();
+
+    for (const employeeId of [...new Set(employeeIds.map(String))]) {
+      const record = await Attendance.findOne({ employee: employeeId, date }).populate("employee", "name code shift");
+      const label = record?.employee?.name || employeeId;
+
+      if (!record) {
+        results.push({ employeeId, name: label, success: false, message: "No attendance record for this date" });
+        continue;
+      }
+      // Only rows this flow is meant for: Incomplete, or (today) a lone check-in still
+      // Present/Late. Anything else (Absent, On Leave, complete rows) is left untouched.
+      const isIncomplete = record.status === "Incomplete";
+      const lonePunchToday = date === today && ["Present", "Late"].includes(record.status) && record.checkIn && !record.checkOut;
+      if (!isIncomplete && !lonePunchToday) {
+        results.push({ employeeId, name: label, success: false, message: `Not incomplete (status: ${record.status})` });
+        continue;
+      }
+      if (!record.checkIn) {
+        results.push({ employeeId, name: label, success: false, message: "No check-in recorded" });
+        continue;
+      }
+
+      const shiftName = record.shift || record.employee?.shift || "Day Shift";
+      if (!rulesCache.has(shiftName)) rulesCache.set(shiftName, await getShiftRules(shiftName));
+      const rules = rulesCache.get(shiftName);
+      if (rules.unresolved) {
+        results.push({ employeeId, name: label, success: false, message: `Shift "${shiftName}" is not configured in Masters` });
+        continue;
+      }
+
+      const lateTier = calculateLateTier(record.checkIn, rules);
+      record.checkOut = rules.end;
+      record.status = lateTier > 0 ? "Late" : "Present";
+      record.lateTier = lateTier;
+      record.workHours = calculateDuration(record.checkIn, rules.end);
+      record.isManuallyEdited = true;
+      record.editedBy = req.user._id;
+      record.editedAt = new Date();
+      record.editReason = editReason;
+      await record.save();
+
+      results.push({
+        employeeId,
+        name: label,
+        success: true,
+        status: record.status,
+        checkOut: record.checkOut,
+        message: `Marked ${record.status}, check-out ${record.checkOut}`
+      });
+    }
+
+    const updated = results.filter((r) => r.success).length;
+    res.json({
+      success: true,
+      message: `${updated} of ${results.length} employee(s) updated`,
+      updated,
+      skipped: results.length - updated,
+      results
+    });
+  } catch (error) {
+    console.error("Mass complete attendance error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -685,7 +874,10 @@ export const markAttendanceBulk = async (req, res) => {
 
       if (!status) {
         if (checkIn) {
-          lateTier = calculateLateTier(checkIn, rules);
+          // rules.unresolved means no Shift Master matched this employee's shift
+          // name - the 09:00/09:15 default below is a guess, not their real
+          // schedule, so never penalize them with "Late" against it.
+          lateTier = rules.unresolved ? 0 : calculateLateTier(checkIn, rules);
           resolvedStatus = lateTier > 0 ? "Late" : "Present";
         }
       }
@@ -744,7 +936,10 @@ export const markAttendance = async (req, res) => {
     let status = "Absent";
     let lateTier = 0;
     if (checkIn) {
-      lateTier = calculateLateTier(checkIn, rules);
+      // rules.unresolved means no Shift Master matched this employee's shift name -
+      // the 09:00/09:15 default is a guess, not their real schedule, so never
+      // penalize them with "Late" against it.
+      lateTier = rules.unresolved ? 0 : calculateLateTier(checkIn, rules);
       status = lateTier > 0 ? "Late" : "Present";
     }
 
@@ -1009,7 +1204,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
  */
 export const exportAttendance = async (req, res) => {
   try {
-    const { view, date, month, year, department, shift, search } = req.query;
+    const { view, date, month, year, from, to, department, shift, search } = req.query;
 
     // 1. Fetch Employees (with Filters)
     let matchStage = { status: "Active" };
@@ -1035,12 +1230,14 @@ export const exportAttendance = async (req, res) => {
     let headers = [];
     let cols = [];
 
-    if (view === "month" && month && year) {
-      // --- MONTHLY EXPORT ---
-      const startDate = `${year}-${month.padStart(2, "0")}-01`;
-      const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+    const exportWindow = view === "month" ? resolveDateWindow({ month, year, from, to }) : null;
+    if (exportWindow?.error && (from || to || (month && year))) {
+      return res.status(400).json({ message: exportWindow.error });
+    }
 
-      const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
+    if (view === "month" && exportWindow && !exportWindow.error) {
+      // --- MONTHLY EXPORT (calendar month, or from/to range) ---
+      const attendanceRecords = await Attendance.find({ date: { $gte: exportWindow.start, $lte: exportWindow.end } });
       const holidaySet = await getHolidaysSet();
       const exportSettings = await SystemSettings.findOne().select("defaultWorkingDayType defaultWeekOffDays");
       const exportDefault = { workingDayType: exportSettings?.defaultWorkingDayType, weekOffDays: exportSettings?.defaultWeekOffDays };
@@ -1054,23 +1251,31 @@ export const exportAttendance = async (req, res) => {
         attendanceMap[rec.employee][rec.date] = rec;
       });
 
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+      const dateKeys = exportWindow.days;
+      // Column headers: plain day numbers inside one calendar month; "DD-MMM" once the
+      // range crosses months (22..31 then 01..21 would otherwise repeat day numbers and
+      // collapse into duplicate keys).
+      const crossesMonths = dateKeys[0].slice(0, 7) !== dateKeys[dateKeys.length - 1].slice(0, 7);
+      const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const dayLabel = (dateKey) => crossesMonths
+        ? `${dateKey.slice(8, 10)}-${MONTH_ABBR[parseInt(dateKey.slice(5, 7), 10) - 1]}`
+        : String(parseInt(dateKey.slice(8, 10), 10));
+      const days = dateKeys;
 
       // Build Matrix
       finalRows = employees.map(emp => {
         const row = {
-          "Employee ID": emp.code,
+          "Employee ID": displayEmployeeCode(emp),
           "Name": emp.name,
           "Department": emp.department,
           "Shift": emp.shift || "Day Shift"
         };
 
         const empAttendance = attendanceMap[emp._id] || {};
-        let present = 0, late = 0, absent = 0, leave = 0;
+        let present = 0, late = 0, absent = 0, leave = 0, incomplete = 0;
 
-        const dayList = days.map(d => {
-          const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const dayList = days.map(dateKey => {
+          const d = dateKey;
           const record = empAttendance[dateKey];
           const dateObj = new Date(dateKey);
           const isEmployeeWeekOff = isWeekOff(dateObj, emp, exportDefault);
@@ -1100,12 +1305,13 @@ export const exportAttendance = async (req, res) => {
           const cellValue = status === "Present" ? "P" :
             status === "Late" ? "L" :
               status === "Absent" ? "A" :
+              status === "Incomplete" ? "I" :
                 status === "On Leave" ? "OL" :
                   status === "Holiday" ? "H" :
                     status === "Weekend" ? "W" :
                       status === "Flex Off" ? "F" : status;
 
-          row[String(d)] = cellValue;
+          row[dayLabel(d)] = cellValue;
 
           // Stats
           if (status === "Present") present++;
@@ -1115,11 +1321,13 @@ export const exportAttendance = async (req, res) => {
             leave += duration;
           }
           else if (status === "Absent") absent++;
+          else if (status === "Incomplete") incomplete++;
         });
 
         row["Present"] = present;
         row["Late"] = late;
         row["Absent"] = absent;
+        row["Incomplete"] = incomplete;
         row["Leave"] = leave;
 
         // Determine if row matches Shift Filter (if applied)
@@ -1129,7 +1337,7 @@ export const exportAttendance = async (req, res) => {
         return row;
       }).filter(r => r !== null);
 
-      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(String)];
+      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Incomplete", "Leave", ...days.map(dayLabel)];
 
     } else {
       // --- DAILY EXPORT ---
@@ -1156,7 +1364,7 @@ export const exportAttendance = async (req, res) => {
         if (shift && effectiveShift !== shift) return null;
 
         return {
-          "Employee ID": emp.code,
+          "Employee ID": displayEmployeeCode(emp),
           "Name": emp.name,
           "Department": emp.department,
           "Shift": effectiveShift,
@@ -1189,8 +1397,8 @@ export const exportAttendance = async (req, res) => {
 
     const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-    const cleanupName = (view === "month" && month)
-      ? `Attendance_${month}-${year}`
+    const cleanupName = (view === "month" && exportWindow && !exportWindow.error)
+      ? (exportWindow.isRange ? `Attendance_${exportWindow.start}_to_${exportWindow.end}` : `Attendance_${month}-${year}`)
       : `Attendance_${date}`;
 
     res.setHeader("Content-Disposition", `attachment; filename="${cleanupName}.xlsx"`);

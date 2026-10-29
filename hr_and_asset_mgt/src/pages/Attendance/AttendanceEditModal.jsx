@@ -83,6 +83,14 @@ const AttendanceEditModal = ({
       return;
     }
 
+    // A row flagged Incomplete (check-in, no check-out) must keep that status on open -
+    // otherwise this effect would silently recompute it to Present/Late. Adding a
+    // check-out time falls through to the normal calculation below.
+    if (employee?.status === "Incomplete" && checkIn && !checkOut) {
+      setStatus("Incomplete");
+      return;
+    }
+
     const inMin = toMinutes(checkIn);
     if (inMin === null) {
       // invalid time
@@ -102,7 +110,7 @@ const AttendanceEditModal = ({
       setStatus(inMin > nightLateMin ? "Late" : "Present");
       return;
     }
-  }, [checkIn, checkOut, shift, onLeave]);
+  }, [checkIn, checkOut, shift, onLeave, employee]);
 
   /* =========================
      WORK HOURS CALCULATION
@@ -247,6 +255,7 @@ const AttendanceEditModal = ({
                 <option value="Present">Present</option>
                 <option value="Absent">Absent</option>
                 <option value="Late">Late</option>
+                <option value="Incomplete">Incomplete</option>
                 <option value="On Leave">On Leave</option>
               </select>
             </div>

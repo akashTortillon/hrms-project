@@ -423,11 +423,8 @@ export default function Employees() {
         onExport={hasPermission("MANAGE_EMPLOYEES") ? handleExport : null}
         onImport={
           hasPermission("MANAGE_EMPLOYEES")
-            ? () => {
-              console.log("Import clicked in View");
-              setShowImportModal(true);
-            }
-            : () => console.log("Import permission denied or missing")
+            ? () => setShowImportModal(true)
+            : null
         }
         count={totalEmployees}
       />
