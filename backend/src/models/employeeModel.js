@@ -19,6 +19,16 @@ const salaryHistorySchema = new mongoose.Schema({
   effectiveDate: { type: Date, required: true },
   notes: { type: String, default: "" },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // Display name of whoever made the change, captured at write time so the salary log
+  // still reads correctly if the user is later renamed or removed.
+  createdByName: { type: String, default: "" },
+  // Field-level before/after for manual edits (e.g. basicSalary 1450 -> 1200).
+  changes: [{
+    _id: false,
+    field: { type: String },
+    from: { type: Number, default: 0 },
+    to: { type: Number, default: 0 }
+  }],
   createdAt: { type: Date, default: Date.now },
   // Whether this salary change has actually been applied to the employee's live
   // basicSalary/visaBase/workBase/allowance/hra/totalSalary/ctc fields. Immediate

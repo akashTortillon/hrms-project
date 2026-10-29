@@ -10,6 +10,31 @@ const formatDate = (value) => {
   return new Date(value).toISOString().split("T")[0];
 };
 
+// Day chips narrow the list by days left until probation ends; numeric chips include
+// overdue employees too (they are the most urgent), "overdue" shows only those.
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "overdue", label: "Overdue" },
+  { key: "7", label: "7 days" },
+  { key: "15", label: "15 days" },
+  { key: "30", label: "30 days" },
+  { key: "60", label: "60 days" },
+  { key: "90", label: "90 days" }
+];
+
+const matchesFilter = (employee, key) => {
+  if (key === "all") return true;
+  if (key === "overdue") return employee.daysRemaining < 0;
+  return employee.daysRemaining <= Number(key);
+};
+
+const daysLabel = (employee) => {
+  const days = employee.daysRemaining;
+  if (days < 0) return `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"}`;
+  if (days === 0) return "Ends today";
+  return `${days} day${days === 1 ? "" : "s"} left`;
+};
+
 export default function ProbationRemindersView() {
   const navigate = useNavigate();
   const { hasPermission } = useRole();
@@ -18,6 +43,7 @@ export default function ProbationRemindersView() {
   const [loading, setLoading] = useState(true);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [filter, setFilter] = useState("all");
 
   const loadReminders = async () => {
     try {
@@ -51,12 +77,14 @@ export default function ProbationRemindersView() {
     }
   };
 
+  const visibleEmployees = employees.filter((employee) => matchesFilter(employee, filter));
+
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <div>
         <h2 style={{ marginBottom: "6px" }}>Probation Reminders</h2>
         <p style={{ color: "#6b7280" }}>
-          Employees whose probation is due within the next 7 days or waiting for confirmation.
+          Employees on probation who are not confirmed yet. Use the day filters to see who is due soon.
         </p>
       </div>
 
@@ -74,15 +102,41 @@ export default function ProbationRemindersView() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
           <div style={{ fontWeight: 700, color: "#1f2937" }}>Pending confirmations</div>
           <div style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#3562a6" }}>
-            {employees.length} employees
+            {visibleEmployees.length} of {employees.length} employees
           </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {FILTERS.map(({ key, label }) => {
+            const active = filter === key;
+            const count = employees.filter((employee) => matchesFilter(employee, key)).length;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "999px",
+                  border: `1px solid ${active ? "#1c4f9e" : "#dbe7fa"}`,
+                  background: active ? "#1c4f9e" : "#fff",
+                  color: active ? "#fff" : "#1f2937",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                {label} ({count})
+              </button>
+            );
+          })}
         </div>
 
         {loading ? (
           <div style={{ padding: "26px 12px", textAlign: "center", color: "#64748b" }}>Loading probation reminders...</div>
-        ) : employees.length ? (
+        ) : visibleEmployees.length ? (
           <div style={{ display: "grid", gap: "12px" }}>
-            {employees.map((employee) => (
+            {visibleEmployees.map((employee) => (
               <div
                 key={employee._id}
                 style={{
@@ -107,6 +161,9 @@ export default function ProbationRemindersView() {
                     End Date
                   </div>
                   <div style={{ marginTop: "6px", fontWeight: 600, color: "#1f2937" }}>{formatDate(employee.probationEndDate)}</div>
+                  <div style={{ marginTop: "2px", fontSize: "12px", fontWeight: 700, color: employee.overdue ? "#dc2626" : employee.dueSoon ? "#d97706" : "#64748b" }}>
+                    {daysLabel(employee)}
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#97a0af" }}>
@@ -158,7 +215,7 @@ export default function ProbationRemindersView() {
               border: "1px dashed #d8dee8"
             }}
           >
-            No probation reminders are due right now.
+            {employees.length ? "No employees match this filter." : "No employees are on probation right now."}
           </div>
         )}
       </div>

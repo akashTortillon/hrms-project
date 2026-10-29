@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import "../../style/EmployeeRequests.css";
 import SubmitRequestModal from "./SubmitRequestModal";
-import { getMyRequests, withdrawRequest, downloadDocument } from "../../services/requestService.js";
+import { getMyRequests, withdrawRequest, downloadDocument, getMedicalDocumentUrl } from "../../services/requestService.js";
 import { toast } from "react-toastify";
 import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
@@ -237,6 +237,17 @@ export default function EmployeeRequests() {
         parts.push(`Final approved: AED ${finalApprovedAmount}`);
       }
 
+      // Same paid/outstanding computation as EmployeeDetail.jsx's admin Loans tab
+      // progress bar - only meaningful once the loan is actually disbursed/approved.
+      if (request.details?.subType === "loan" && request.status === "APPROVED") {
+        const total = request.details?.totalRepaymentAmount || request.details?.amount;
+        const paid = (request.payrollDeductions || []).reduce((acc, curr) => acc + curr.amount, 0)
+          + (request.details?.extraPayments || []).reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        const outstanding = Math.max(Number(total) - paid, 0);
+        parts.push(`Paid: AED ${paid.toFixed(2)}`);
+        parts.push(`Outstanding: AED ${outstanding.toFixed(2)}`);
+      }
+
       return parts.join(" • ");
     }
     if (request.requestType === "DOCUMENT") {
@@ -246,6 +257,25 @@ export default function EmployeeRequests() {
   };
 
   // ✅ UPDATED: Use service function for download
+  // A LOCAL-storage url comes back as a relative path (e.g. "/leave-medical-
+  // documents/xyz.pdf") - same convention DocumentsTable.jsx's getFileUrl uses -
+  // so prefix it with the API origin before opening; an S3 url is already absolute.
+  const handleViewMedicalDocument = async (requestId) => {
+    try {
+      const { url } = await getMedicalDocumentUrl(requestId);
+      const resolvedUrl = /^https?:\/\//i.test(url)
+        ? url
+        : `${(import.meta.env.VITE_API_BASE || "").replace(/\/api\/?$/, "")}${url}`;
+      window.open(resolvedUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load medical document"
+      );
+    }
+  };
+
   const handleDownloadDocument = async (requestId) => {
     try {
       const blob = await downloadDocument(requestId);
@@ -470,6 +500,15 @@ export default function EmployeeRequests() {
                         Withdraw
                       </button>
                     )}
+                    {request.requestType === "LEAVE" &&
+                      request.details?.hasMedicalDocument && (
+                        <button
+                          className="download-btn"
+                          onClick={() => handleViewMedicalDocument(request._id)}
+                        >
+                          📄 View Medical Document
+                        </button>
+                      )}
                     {/* ✅ UPDATED: Download button for completed document requests */}
                     {request.requestType === "DOCUMENT" &&
                       request.status === "COMPLETED" &&

@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import Card from "../../components/reusable/Card.jsx";
 import SvgIcon from "../../components/svgIcon/svgView";
 import PayrollSummaryCards from "./PayrollCards";
 import PayrollEmployeesTable from "./PayrollTable";
 import { EmployeePayrollOverviewChart, LoansAdvancesChart } from "./PayrollCharts";
 import { payrollService } from "../../services/payrollService";
+import ReportExportBar from "./ReportExportBar.jsx";
 import { getCompanies, getBranches } from "../../services/masterService.js";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import CustomButton from "../../components/reusable/Button.jsx";
+import { useRole } from "../../contexts/RoleContext";
 
 // Reusable filter section (Original logic + New Style)
 function PayrollFilters({ filters, setFilters, companies, branches }) {
@@ -53,7 +53,7 @@ function PayrollFilters({ filters, setFilters, companies, branches }) {
 }
 
 // Work Permit / Visa Report Table (Original columns + New Style)
-function WorkReportTable({ records, reportType, loading, onExport }) {
+function WorkReportTable({ records, reportType, loading, month, year, filters }) {
   const companyKey = reportType === 'permit' ? 'workPermitCompany' : 'visaCompany';
   const label = reportType === 'permit' ? 'Location' : 'Visa';
 
@@ -61,12 +61,15 @@ function WorkReportTable({ records, reportType, loading, onExport }) {
 
   return (
     <div className="payroll-list-table-wrapper">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px' }}>
-          <button className="export-record-btn" onClick={onExport}>
-              <SvgIcon name="download" size={14} />
-              Export Record
-          </button>
-      </div>
+      <ReportExportBar
+        kind={reportType}
+        title={`${label} Report`}
+        description="Export this report as PDF or Excel for a month, or preview it here"
+        defaultMonth={month}
+        defaultYear={year}
+        filters={filters}
+        style={{ marginBottom: '15px' }}
+      />
 
       <table className="payroll-modern-table">
         <thead>
@@ -133,6 +136,11 @@ function Payroll() {
   // purely for the existing month/year-based read endpoints (summary, exports,
   // SIF, MOL) — the real period identity lives in periodStart/periodEnd.
   const today = new Date();
+  const { currentUser } = useRole();
+  // Only Admin / HR may override the overlapping-period guard (also enforced by the API).
+  const isAdmin = currentUser?.role === "Admin" || /^HR/i.test(currentUser?.role || "");
+  const [forceGenerate, setForceGenerate] = useState(null); // { message } while the override dialog is open
+  const [forceConfirmText, setForceConfirmText] = useState("");
   const [periodStart, setPeriodStart] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [periodEnd, setPeriodEnd] = useState(toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
   // Guards fetchPayroll/fetchAllRecords against out-of-order responses: on mount, the
@@ -210,7 +218,23 @@ function Payroll() {
   };
 
   const fetchLatestFinalized = async () => {
-    const latest = await refreshLatestFinalized();
+    let latest = null;
+    let currentDraft = null;
+    try {
+      ({ latestFinalized: latest, currentDraft } = await payrollService.getLatestPeriods());
+      setLatestFinalized(latest);
+    } catch (error) {
+      console.error(error);
+    }
+
+    // A draft was already generated after the last finalized period: reopen on exactly that
+    // period instead of falling back to the end of the calendar month (the "To" date used to
+    // jump from 25/10 to 31/10 on every visit).
+    if (currentDraft) {
+      setPeriodStart(currentDraft.periodStartStr);
+      setPeriodEnd(currentDraft.periodEndStr);
+      return;
+    }
 
     // periodStart is always locked to the day after the last finalized period's
     // end (force-contiguous — no gaps, no overlaps). If the current periodEnd
@@ -228,12 +252,12 @@ function Payroll() {
       requiredStart.setDate(requiredStart.getDate() + 1);
       setPeriodStart(toDateStr(requiredStart));
 
-      if (periodEnd <= lockedEndStr) {
-        const suggestedEnd = new Date(requiredStart);
-        suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
-        suggestedEnd.setDate(suggestedEnd.getDate() - 1);
-        setPeriodEnd(toDateStr(suggestedEnd));
-      }
+      // Rolling pay cycle: next period runs one month from its start (26th -> 25th), not to
+      // the end of the calendar month.
+      const suggestedEnd = new Date(requiredStart);
+      suggestedEnd.setMonth(suggestedEnd.getMonth() + 1);
+      suggestedEnd.setDate(suggestedEnd.getDate() - 1);
+      setPeriodEnd(toDateStr(suggestedEnd));
     }
   };
 
@@ -281,17 +305,25 @@ function Payroll() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (force = false) => {
     try {
       setLoading(true);
-      const result = await payrollService.generate(periodStart, periodEnd);
+      const result = await payrollService.generate(periodStart, periodEnd, force === true);
       toast.success("Payroll Generated Successfully!");
       if (typeof result?.hasActiveAbsenceDeductionRule === "boolean") {
         setHasAbsenceDeductionRule(result.hasActiveAbsenceDeductionRule);
       }
       fetchPayroll();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to generate payroll");
+      const data = error.response?.data;
+      // Overlap with an existing period: an Admin gets the option to override it; everyone
+      // else just sees the reason.
+      if (error.response?.status === 409 && data?.conflictPeriodStart && isAdmin && force !== true) {
+        setForceConfirmText("");
+        setForceGenerate({ message: data.message });
+      } else {
+        toast.error(data?.message || "Failed to generate payroll");
+      }
     } finally {
       setLoading(false);
     }
@@ -346,79 +378,6 @@ function Payroll() {
       // records found for this month") - payrollService now extracts the actual
       // backend message even though these are blob responses, see blobErrorMessage.
       toast.error(error.message || "Export failed.");
-    }
-  };
-
-  const handleExportPDF = async () => {
-    try {
-      // Pull the full period's records fresh (not the paginated `records` page
-      // state) so the sheet isn't missing rows past the current page - same
-      // approach fetchAllRecords uses for the Location/Visa report tabs.
-      const data = await payrollService.getSummary(month, year, { ...filters, reportType: null, limit: 1000 });
-      const rows = data.records || [];
-      if (!rows.length) {
-        toast.error("No payroll records found for this period.");
-        return;
-      }
-
-      const doc = new jsPDF();
-
-      doc.setFillColor(37, 99, 235);
-      doc.roundedRect(14, 10, 15, 15, 3, 3, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("HR", 18, 19);
-
-      doc.setTextColor(31, 41, 55);
-      doc.setFontSize(14);
-      doc.text("HRMS Pro", 34, 17);
-
-      doc.setTextColor(107, 114, 128);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.text("UAE Edition", 34, 22);
-
-      doc.setDrawColor(229, 231, 235);
-      doc.line(14, 30, 196, 30);
-
-      const title = `Payroll Sheet - ${new Date(2000, month - 1, 1).toLocaleString('en', { month: 'long' })} ${year}`;
-
-      doc.setTextColor(17, 24, 39);
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.text(title, 14, 42);
-
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(156, 163, 175);
-      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 48);
-
-      // Same columns as the fixed Excel export - mirrors the on-screen Payroll
-      // table (PayrollTable.jsx) instead of the WPS/MOL compliance layout.
-      const tableData = rows.map(r => [
-        r.employee?.name || "Unknown",
-        r.employee?.code || "",
-        `AED ${(r.basicSalary || 0).toLocaleString()}`,
-        `AED ${(r.totalAllowances || 0).toLocaleString()}`,
-        `AED ${(r.totalDeductions || 0).toLocaleString()}`,
-        `AED ${(r.netSalary || 0).toLocaleString()}`
-      ]);
-
-      autoTable(doc, {
-        startY: 55,
-        head: [["Employee", "Code", "Basic Salary", "Allowances", "Deductions", "Net Salary"]],
-        body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: [37, 99, 235] },
-        styles: { fontSize: 9 }
-      });
-
-      doc.save(`${title.replace(/\s+/g, '_')}.pdf`);
-      toast.success("PDF Downloaded!");
-    } catch (error) {
-      console.error("Payroll PDF export failed", error);
-      toast.error(error.message || "PDF export failed.");
     }
   };
 
@@ -551,7 +510,6 @@ function Payroll() {
         periodEnd={periodEnd}
         setPeriodEnd={setPeriodEnd}
         onExportWPS={() => handleExportExcel()}
-        onExportPDF={handleExportPDF}
         hasAbsenceDeductionRule={hasAbsenceDeductionRule}
       />
 
@@ -600,7 +558,7 @@ function Payroll() {
                  <div className="action-btns-group">
                     <button 
                       className="gen-btn" 
-                      onClick={handleGenerate} 
+                      onClick={() => handleGenerate()} 
                       disabled={loading || isFinalized}
                     >
                         {loading ? 'Processing...' : isGenerated ? 'Regenerate' : 'Generate Payroll'}
@@ -762,6 +720,16 @@ function Payroll() {
                     </div>
                 </div>
 
+                {/* Payroll Sheet: own full-width row (month filter + View / PDF / Excel). */}
+                <ReportExportBar
+                    kind="sheet"
+                    title="Payroll Sheet"
+                    description="Export payroll in the standard sheet template (PDF or Excel), or preview it"
+                    defaultMonth={month}
+                    defaultYear={year}
+                    style={{ marginTop: '16px' }}
+                />
+
                 {/* Own full-width row, not a grid cell - needs room for selectors AND
                     an Export button side by side, which a 1/3-width tool-card can't fit. */}
                 <div className="wps-tool-card export-payslips-bar" style={{ marginTop: '16px', flexWrap: 'wrap' }}>
@@ -825,7 +793,9 @@ function Payroll() {
                 records={allRecords} 
                 reportType="permit" 
                 loading={loading} 
-                onExport={() => handleExportExcel('permit')} 
+                month={month}
+                year={year}
+                filters={filters}
             />
         </div>
       )}
@@ -848,7 +818,9 @@ function Payroll() {
                 records={allRecords}
                 reportType="visa"
                 loading={loading}
-                onExport={() => handleExportExcel('visa')}
+                month={month}
+                year={year}
+                filters={filters}
             />
         </div>
       )}
@@ -883,6 +855,46 @@ function Payroll() {
           type="text"
           value={finalizeConfirmText}
           onChange={(e) => setFinalizeConfirmText(e.target.value)}
+          placeholder="Yes"
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
+          autoFocus
+        />
+      </CustomModal>
+
+      <CustomModal
+        show={!!forceGenerate}
+        title="Generate Payroll Anyway?"
+        onClose={() => { setForceGenerate(null); setForceConfirmText(""); }}
+        footer={
+          <>
+            <CustomButton
+              variant="secondary"
+              onClick={() => { setForceGenerate(null); setForceConfirmText(""); }}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </CustomButton>
+            <CustomButton
+              onClick={() => { setForceGenerate(null); setForceConfirmText(""); handleGenerate(true); }}
+              disabled={forceConfirmText.trim().toLowerCase() !== "yes"}
+            >
+              Generate Anyway
+            </CustomButton>
+          </>
+        }
+      >
+        <p style={{ marginBottom: "12px", color: "#374151" }}>{forceGenerate?.message}</p>
+        <p style={{ marginBottom: "12px", color: "#b91c1c", fontWeight: 500 }}>
+          Overriding replaces the overlapping draft payroll with a new run for {periodStart} to {periodEnd}. Manual adjustments
+          already on that draft are kept. A finalized period can never be overridden.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px" }}>
+          Type <strong>Yes</strong> to confirm
+        </label>
+        <input
+          type="text"
+          value={forceConfirmText}
+          onChange={(e) => setForceConfirmText(e.target.value)}
           placeholder="Yes"
           style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "14px" }}
           autoFocus
