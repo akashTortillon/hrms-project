@@ -2,6 +2,8 @@ import Employee from "../models/employeeModel.js";
 import Asset from "../models/assetModel.js";
 import CompanyDocument from "../models/companyDocModel.js";
 import EmployeeDocument from "../models/employeeDocumentModel.js";
+import { buildEmployeeScopeFilter } from "../utils/managerScopeUtils.js";
+import { escapeRegex } from "../utils/stringUtils.js";
 
 export const globalSearch = async (req, res) => {
     try {
@@ -12,7 +14,8 @@ export const globalSearch = async (req, res) => {
             return res.status(400).json({ message: "Search query must be at least 2 characters long" });
         }
 
-        const searchRegex = new RegExp(query, "i");
+        // Escaped: the raw query was interpolated into a RegExp (injection / ReDoS).
+        const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
 
         // Permission checks
         const canViewAllEmployees = role === "Admin" || permissions.includes("ALL") || permissions.includes("VIEW_ALL_EMPLOYEES");
@@ -22,15 +25,18 @@ export const globalSearch = async (req, res) => {
         const searchPromises = [];
 
         // 1. Search Employees (If authorized)
+        // VIEW_ALL_EMPLOYEES is held by Managers/Finance Managers for pickers - it does
+        // not mean "may see the whole company". Scope exactly like the Employees page.
+        const scopeFilter = buildEmployeeScopeFilter(req.user);
         if (canViewAllEmployees) {
-            searchPromises.push(Employee.find({
-                $or: [
-                    { name: searchRegex },
-                    { code: searchRegex },
-                    { email: searchRegex },
-                    { phone: searchRegex }
+            const employeeQuery = {
+                $and: [
+                    { $or: [{ name: searchRegex }, { code: searchRegex }, { email: searchRegex }, { phone: searchRegex }] },
+                    ...(scopeFilter ? [scopeFilter] : [])
                 ]
-            }).select("name code email phone department role status avatar").limit(10));
+            };
+            searchPromises.push(Employee.find(employeeQuery)
+                .select("name code email phone department role status avatar").limit(10));
         } else {
             searchPromises.push(Promise.resolve([]));
         }
@@ -60,12 +66,17 @@ export const globalSearch = async (req, res) => {
             searchPromises.push(Promise.resolve([]));
         }
 
-        // 4. Search Employee Documents (If authorized)
+        // 4. Search Employee Documents (If authorized) - scoped to the same employees
+        // the requester may see, so a manager with MANAGE_DOCUMENTS can't read others'.
         if (canManageDocs) {
+            let scopedEmployeeIds = null;
+            if (scopeFilter) {
+                scopedEmployeeIds = (await Employee.find(scopeFilter).select("_id").lean()).map(e => e._id);
+            }
             searchPromises.push(EmployeeDocument.find({
-                $or: [
-                    { documentType: searchRegex },
-                    { documentNumber: searchRegex }
+                $and: [
+                    { $or: [{ documentType: searchRegex }, { documentNumber: searchRegex }] },
+                    ...(scopedEmployeeIds ? [{ employeeId: { $in: scopedEmployeeIds } }] : [])
                 ]
             })
                 .populate("employeeId", "name code")

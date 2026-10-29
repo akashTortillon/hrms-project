@@ -1,6 +1,6 @@
 
 import express from "express";
-import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, unfinalizePayroll, setPayrollAnchor, exportPayroll, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, removeEmployeeFromPayroll, getPayrollAuditLogs, getMyPayslips, downloadPayslip, getLatestFinalizedPeriod, getPayrollRuleHealth, startPayslipExport, getPayslipExportStatus, downloadPayslipExportFile } from "../controllers/payrollController.js";
+import { generatePayroll, getPayrollSummary, addAdjustment, finalizePayroll, unfinalizePayroll, setPayrollAnchor, exportPayroll, exportPayrollSheet, generateSIF, generateMOLReport, getPaymentHistory, removePayrollItem, removeEmployeeFromPayroll, getPayrollAuditLogs, getMyPayslips, downloadPayslip, getLatestFinalizedPeriod, getPayrollRuleHealth, startPayslipExport, getPayslipExportStatus, downloadPayslipExportFile } from "../controllers/payrollController.js";
 import { protect, hasPermission } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -25,6 +25,7 @@ router.post("/finalize", finalizePayroll);
 router.post("/unfinalize", unfinalizePayroll);
 router.post("/set-anchor", setPayrollAnchor);
 router.get("/export", exportPayroll);
+router.get("/export-sheet", exportPayrollSheet);
 router.get("/export-sif", generateSIF);
 router.get("/export-mol", generateMOLReport);
 router.post("/export-payslips/start", startPayslipExport);

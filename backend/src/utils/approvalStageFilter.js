@@ -8,8 +8,7 @@
 export const getApprovalStageFilter = (user = {}) => {
   const isHrApprover = user.role === "Admin"
     || /^HR/i.test(user.role || "")
-    || user.permissions?.includes("ALL")
-    || user.permissions?.includes("APPROVE_REQUESTS");
+    || user.permissions?.includes("ALL");
   const canApproveFinance = user.role === "Finance Manager"
     || /^Finance/i.test(user.role || "")
     || user.permissions?.includes("APPROVE_FINANCE_REQUESTS")

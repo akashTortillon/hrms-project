@@ -113,7 +113,18 @@ export const approveAppraisal = async (req, res) => {
       // to behave as before (included in payroll).
       const includeInPayroll = appraisal.includeInPayroll !== false;
 
-      const existing = employee.allowances.find((item) => item.typeName === appraisal.allowanceTypeName);
+      // A future effective date is honoured: it's stored as its own entry (payroll skips
+      // entries dated after the period end) instead of being merged into - and so applied
+      // immediately via - the allowance already in effect.
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      const isImmediate = new Date(effectiveDate) <= endOfToday;
+
+      const existing = isImmediate
+        ? employee.allowances.find(
+            (item) => item.typeName === appraisal.allowanceTypeName && new Date(item.effectiveDate) <= endOfToday
+          )
+        : null;
       if (existing) {
         existing.amount = toNumber(existing.amount) + increment;
         // Always sync the flag — if HR changes preference on a subsequent appraisal

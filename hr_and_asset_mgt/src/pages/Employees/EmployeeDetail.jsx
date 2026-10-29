@@ -62,6 +62,7 @@ import ConfirmProbationModal from "./ConfirmProbationModal.jsx";
 import SkipLoanMonthModal from "./SkipLoanMonthModal.jsx";
 import AdjustLoanModal from "./AdjustLoanModal.jsx";
 import ExtraPaymentModal from "./ExtraPaymentModal.jsx";
+import DeleteExtraPaymentModal from "./DeleteExtraPaymentModal.jsx";
 import AddExistingLoanModal from "./AddExistingLoanModal.jsx";
 import AddAllowanceModal from "./AddAllowanceModal.jsx";
 import { appraisalService } from "../../services/appraisalService";
@@ -197,6 +198,10 @@ export default function EmployeeDetail() {
     const [showExtraPaymentModal, setShowExtraPaymentModal] = useState(false);
     const [selectedLoanForExtraPayment, setSelectedLoanForExtraPayment] = useState(null);
     const [savingExtraPayment, setSavingExtraPayment] = useState(false);
+    // Per-loan "Active | Log" toggle (Log = deleted extra payments) + delete-confirm target.
+    const [loanLogView, setLoanLogView] = useState({});
+    const [extraPaymentToDelete, setExtraPaymentToDelete] = useState(null); // { loan, entry }
+    const [deletingExtraPayment, setDeletingExtraPayment] = useState(false);
     const [showAddExistingLoanModal, setShowAddExistingLoanModal] = useState(false);
     const [savingExistingLoan, setSavingExistingLoan] = useState(false);
 
@@ -207,6 +212,7 @@ export default function EmployeeDetail() {
         pendingRequests: 0
     });
     const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
+    const [leaveRecords, setLeaveRecords] = useState([]);
     const [leaveSummaryYear, setLeaveSummaryYear] = useState(new Date().getFullYear());
     const [leaveSummaryMonth, setLeaveSummaryMonth] = useState(0); // 0 = whole year
 
@@ -261,7 +267,11 @@ export default function EmployeeDetail() {
     const handleAddAllowance = async ({ typeName, amount, includeInPayroll }) => {
         setAllowanceSubmitting(true);
         try {
-            const today = new Date().toISOString().slice(0, 10);
+            // Local date parts: toISOString() would give yesterday's date early in the
+            // day for timezones ahead of UTC.
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, "0");
+            const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
             await appraisalService.applyAdjustment({
                 employee: effectiveId,
                 type: "ALLOWANCE",
@@ -457,6 +467,7 @@ export default function EmployeeDetail() {
             if (!isSelf) params.employeeId = effectiveId;
             const res = await getLeaveSummary(params);
             setLeaveSummary(res.data || []);
+            setLeaveRecords(res.records || []);
             setLeaveSummaryTotals(res.totals || {
                 sick: 0,
                 casual: 0,
@@ -618,6 +629,21 @@ export default function EmployeeDetail() {
             toast.error(error.response?.data?.message || "Failed to record extra payment");
         } finally {
             setSavingExtraPayment(false);
+        }
+    };
+
+    const handleDeleteExtraPayment = async (requestId, payload) => {
+        try {
+            setDeletingExtraPayment(true);
+            await updateRepaymentSchedule(requestId, payload);
+            toast.success("Extra payment deleted - see the loan's Log tab");
+            setExtraPaymentToDelete(null);
+            fetchEmployeeLoans();
+        } catch (error) {
+            console.error("Delete extra payment failed", error);
+            toast.error(error.response?.data?.message || "Failed to delete extra payment");
+        } finally {
+            setDeletingExtraPayment(false);
         }
     };
 
@@ -1733,8 +1759,12 @@ export default function EmployeeDetail() {
                             {(employee.salaryHistory && employee.salaryHistory.length > 0) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     {[...employee.salaryHistory]
-                                        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                                        .sort((a, b) => (new Date(b.effectiveDate) - new Date(a.effectiveDate)) || (new Date(b.createdAt || 0) - new Date(a.createdAt || 0)))
                                         .map((entry, index) => {
+                                            const fieldLabels = {
+                                                basicSalary: 'Basic', visaBase: 'Visa Base', workBase: 'Work Base', allowance: 'Allowance',
+                                                hra: 'HRA', accommodationAllowance: 'Accommodation', vehicleAllowance: 'Vehicle'
+                                            };
                                             const typeLabels = {
                                                 JOINING: 'Joining Salary',
                                                 APPRAISAL: 'Appraisal',
@@ -1750,6 +1780,20 @@ export default function EmployeeDetail() {
                                                         <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
                                                             Effective: {entry.effectiveDate ? new Date(entry.effectiveDate).toISOString().split('T')[0] : 'N/A'}
                                                             {entry.notes ? ` • ${entry.notes}` : ''}
+                                                        </div>
+                                                        {Array.isArray(entry.changes) && entry.changes.length > 0 && (
+                                                            <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                                {entry.changes.map((c) => (
+                                                                    <span key={c.field} style={{ background: '#f3f4f6', borderRadius: '6px', padding: '2px 8px' }}>
+                                                                        {fieldLabels[c.field] || c.field}: {Number(c.from).toLocaleString()} → {Number(c.to).toLocaleString()} AED
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+                                                            {entry.createdByName ? `By ${entry.createdByName}` : 'System'}
+                                                            {entry.createdAt ? ` • ${new Date(entry.createdAt).toLocaleString()}` : ''}
+                                                            {entry.applied === false ? ' • Scheduled (not yet applied)' : ''}
                                                         </div>
                                                     </div>
                                                     <div style={{ textAlign: 'right' }}>
@@ -1815,7 +1859,9 @@ export default function EmployeeDetail() {
                                                 </span>
                                             </div>
                                             <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                                                Approved: {new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}
+                                                {!['APPROVED', 'COMPLETED'].includes(loan.status)
+                                                    ? `Submitted: ${new Date(loan.createdAt || loan.updatedAt).toLocaleDateString()}`
+                                                    : `Approved: ${new Date(loan.approvedAt || loan.updatedAt).toLocaleDateString()}`}
                                             </div>
                                         
                                         </div>
@@ -1841,6 +1887,10 @@ export default function EmployeeDetail() {
                                             })()}
                                             {loan.isFullyPaid ? (
                                                 <span style={{ color: '#166534', fontSize: '12px', fontWeight: '500', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Paid Off</span>
+                                            ) : !['APPROVED', 'COMPLETED'].includes(loan.status) ? (
+                                                <span style={{ color: '#1d4ed8', fontSize: '12px', fontWeight: '500', background: '#dbeafe', padding: '2px 8px', borderRadius: '4px' }}>
+                                                    {{ MANAGER: 'Awaiting manager approval', FINANCE: 'Awaiting finance approval', HR: 'Awaiting HR approval' }[loan.currentApprovalStage] || 'Pending approval'}
+                                                </span>
                                             ) : (
                                                 <span style={{ color: '#854d0e', fontSize: '12px', fontWeight: '500', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Active</span>
                                             )}
@@ -1876,7 +1926,7 @@ export default function EmployeeDetail() {
                                             ))}
                                     </div>
 
-                                    {canManageRepayments && !loan.isFullyPaid && (
+                                    {canManageRepayments && !loan.isFullyPaid && loan.status === 'APPROVED' && (
                                         <div style={{ marginBottom: '14px', display: 'flex', gap: '8px' }}>
                                             <button
                                                 type="button"
@@ -1995,25 +2045,82 @@ export default function EmployeeDetail() {
                                         </div>
                                     )}
 
-                                    {/* Extra Payment History - written by the "Record Extra Payment" flow above */}
-                                    {loan.details?.extraPayments && loan.details.extraPayments.length > 0 && (
-                                        <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #e5e7eb' }}>
-                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px' }}>EXTRA PAYMENT HISTORY</div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {loan.details.extraPayments.map((entry, idx) => (
-                                                    <div key={idx} style={{ fontSize: '13px', color: '#374151', padding: '8px 10px', background: '#f0fdf4', borderRadius: '6px' }}>
-                                                        <div>
-                                                            <strong style={{ color: '#15803d' }}>+{entry.amount} AED</strong>
-                                                            {' '}(balance after: <strong style={{ color: '#1d4ed8' }}>{entry.remainingBalanceAfter} AED</strong>)
-                                                        </div>
-                                                        <div style={{ color: '#6b7280', marginTop: '2px' }}>
-                                                            "{entry.reason}" — {entry.recordedByName || 'Unknown'}, {entry.recordedAt ? new Date(entry.recordedAt).toLocaleString() : ''}
-                                                        </div>
+                                    {/* Extra Payment History - written by the "Record Extra Payment" flow above.
+                                        Deleted entries are kept in details.deletedExtraPayments and shown in the Log view. */}
+                                    {(() => {
+                                        const activeExtras = loan.details?.extraPayments || [];
+                                        const deletedExtras = loan.details?.deletedExtraPayments || [];
+                                        if (activeExtras.length === 0 && deletedExtras.length === 0) return null;
+                                        const showLog = canManageRepayments && !!loanLogView[loan._id];
+                                        const tabBtn = (active) => ({
+                                            border: 'none', borderBottom: active ? '2px solid #2563eb' : '2px solid transparent',
+                                            background: 'transparent', padding: '4px 10px', fontSize: '12px', fontWeight: 600,
+                                            color: active ? '#1d4ed8' : '#6b7280', cursor: 'pointer'
+                                        });
+                                        return (
+                                            <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #e5e7eb' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
+                                                    <button type="button" style={tabBtn(!showLog)} onClick={() => setLoanLogView((v) => ({ ...v, [loan._id]: false }))}>
+                                                        EXTRA PAYMENT HISTORY ({activeExtras.length})
+                                                    </button>
+                                                    {canManageRepayments && (
+                                                        <button type="button" style={tabBtn(showLog)} onClick={() => setLoanLogView((v) => ({ ...v, [loan._id]: true }))}>
+                                                            LOG ({deletedExtras.length})
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {!showLog ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                        {activeExtras.length === 0 && (
+                                                            <div style={{ fontSize: '13px', color: '#6b7280' }}>No extra payments.</div>
+                                                        )}
+                                                        {activeExtras.map((entry, idx) => (
+                                                            <div key={idx} style={{ fontSize: '13px', color: '#374151', padding: '8px 10px', background: '#f0fdf4', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                                                                <div>
+                                                                    <div>
+                                                                        <strong style={{ color: '#15803d' }}>+{entry.amount} AED</strong>
+                                                                        {' '}(balance after: <strong style={{ color: '#1d4ed8' }}>{entry.remainingBalanceAfter} AED</strong>)
+                                                                    </div>
+                                                                    <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                                        "{entry.reason}" — {entry.recordedByName || 'Unknown'}, {entry.recordedAt ? new Date(entry.recordedAt).toLocaleString() : ''}
+                                                                    </div>
+                                                                </div>
+                                                                {canManageRepayments && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setExtraPaymentToDelete({ loan, entry })}
+                                                                        style={{ border: '1px solid #dc2626', background: '#fef2f2', color: '#b91c1c', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                                                                    >
+                                                                        Delete
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                ))}
+                                                ) : (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                        {deletedExtras.length === 0 && (
+                                                            <div style={{ fontSize: '13px', color: '#6b7280' }}>No deleted entries.</div>
+                                                        )}
+                                                        {deletedExtras.slice().reverse().map((entry, idx) => (
+                                                            <div key={idx} style={{ fontSize: '13px', color: '#374151', padding: '8px 10px', background: '#fef2f2', borderRadius: '6px' }}>
+                                                                <div>
+                                                                    <strong style={{ color: '#b91c1c', textDecoration: 'line-through' }}>+{entry.amount} AED</strong>
+                                                                    {' '}<span style={{ color: '#991b1b', fontWeight: 600 }}>DELETED</span>
+                                                                </div>
+                                                                <div style={{ color: '#6b7280', marginTop: '2px' }}>
+                                                                    Originally: "{entry.reason}" — {entry.recordedByName || 'Unknown'}, {entry.recordedAt ? new Date(entry.recordedAt).toLocaleString() : ''}
+                                                                </div>
+                                                                <div style={{ color: '#7f1d1d', marginTop: '2px' }}>
+                                                                    Deleted by {entry.deletedByName || 'Unknown'}, {entry.deletedAt ? new Date(entry.deletedAt).toLocaleString() : ''} — "{entry.deleteReason}"
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
                             ))}
                             {loans.length === 0 && (
@@ -2087,6 +2194,43 @@ export default function EmployeeDetail() {
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {/* Itemized approved leaves - the type tiles above only ever showed
+                            counts. Request History caps at the latest 10 requests across ALL
+                            request types (not scoped to this employee's leave), so an older
+                            leave fell off it entirely. This lists every approved leave for the
+                            selected year/month right here, no separate tracking needed. */}
+                        {!leaveSummaryLoading && leaveRecords.length > 0 && (
+                            <div style={{ marginTop: '24px' }}>
+                                <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#1f2937', marginBottom: '12px' }}>Leave Records</h4>
+                                <div style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: '12px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                        <thead>
+                                            <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Type</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>From</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>To</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Days</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Paid</th>
+                                                <th style={{ padding: '10px 14px', fontWeight: '700', color: '#64748b' }}>Reason</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {leaveRecords.map((rec) => (
+                                                <tr key={rec._id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '10px 14px', fontWeight: '600', color: '#1f2937' }}>{rec.leaveType}{rec.isHalfDay ? ' (Half Day)' : ''}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.fromDate ? new Date(rec.fromDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.toDate ? new Date(rec.toDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.numberOfDays}</td>
+                                                    <td style={{ padding: '10px 14px', color: rec.isPaid ? '#15803d' : '#b91c1c', fontWeight: '600' }}>{rec.isPaid ? 'Paid' : 'Unpaid'}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#64748b' }}>{rec.reason || '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -2195,6 +2339,17 @@ export default function EmployeeDetail() {
                     }}
                     onSubmit={handleExtraPayment}
                     submitting={savingExtraPayment}
+                />
+            )}
+
+            {extraPaymentToDelete && (
+                <DeleteExtraPaymentModal
+                    show={!!extraPaymentToDelete}
+                    request={extraPaymentToDelete.loan}
+                    entry={extraPaymentToDelete.entry}
+                    onClose={() => setExtraPaymentToDelete(null)}
+                    onSubmit={handleDeleteExtraPayment}
+                    submitting={deletingExtraPayment}
                 />
             )}
 

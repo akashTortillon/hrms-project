@@ -11,6 +11,7 @@ import {
   approveDocumentRequest,
   rejectDocumentRequest,
   revokeLeaveRequest,
+  getMedicalDocumentUrl,
 } from "../../services/requestService";
 import "../../style/myRequests.css";
 import DocumentApproveModal from "./DocumentApproveModal.jsx";
@@ -62,7 +63,20 @@ export default function AdminRequests() {
   }, []);
   const currentRole = localStorage.getItem("userRole");
   const currentRoleLabel = String(currentRole || "");
-  const currentPermissions = currentUser?.permissions || [];
+  // The login response's "user" object never carries a `permissions` field
+  // (see authController.js) - permissions are stored separately under
+  // "userPermissions" (set in Login.jsx, re-synced in RoleContext.jsx). Reading
+  // from `currentUser?.permissions` here always silently returned [], so every
+  // permission-based fallback below only ever worked via an exact role-name
+  // string match - anyone whose role wasn't literally "Manager"/"Admin"/
+  // "HR..."/"Finance..." but held the right permission got no action buttons.
+  const currentPermissions = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("userPermissions") || "[]");
+    } catch {
+      return [];
+    }
+  }, []);
   const canActAsHr = currentRole === "Admin" || /^HR/i.test(currentRoleLabel) || currentPermissions.includes("ALL") || currentPermissions.includes("APPROVE_REQUESTS");
   const canActAsFinance = /^Finance/i.test(currentRoleLabel) || currentPermissions.includes("ALL") || currentPermissions.includes("APPROVE_FINANCE_REQUESTS");
   const isDesignatedManager = (req) => {
@@ -98,6 +112,10 @@ export default function AdminRequests() {
     isDesignatedFinanceManager(req)
   );
   const canShowActionButtons = (req) => {
+    // The backend computes this with the same helpers updateRequestStatus enforces
+    // (live employee fallback, permission rules) - authoritative. The id-compare
+    // logic below is only a fallback for responses that predate the field.
+    if (typeof req.canActNow === "boolean") return req.canActNow;
     if (req.currentApprovalStage === "MANAGER") return canActAsManager(req);
     if (req.currentApprovalStage === "FINANCE") return canShowFinanceButtons(req);
     if (req.currentApprovalStage === "HR") return canActAsHr;
@@ -357,6 +375,22 @@ export default function AdminRequests() {
      (✅ subType support added)
   ========================= */
 
+  // A LOCAL-storage url comes back as a relative path (e.g. "/leave-medical-
+  // documents/xyz.pdf") - same convention DocumentsTable.jsx's getFileUrl uses -
+  // so prefix it with the API origin before opening; an S3 url is already absolute.
+  const handleViewMedicalDocument = async (requestId) => {
+    try {
+      const { url } = await getMedicalDocumentUrl(requestId);
+      const resolvedUrl = /^https?:\/\//i.test(url)
+        ? url
+        : `${(import.meta.env.VITE_API_BASE || "").replace(/\/api\/?$/, "")}${url}`;
+      window.open(resolvedUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error("Failed to load medical document", err);
+      alert("Failed to load medical document. Please try again.");
+    }
+  };
+
   const renderRequestDetails = (req) => {
     const { details, requestType, subType } = req;
 
@@ -374,6 +408,17 @@ export default function AdminRequests() {
             )}
             {details.remarks && (
               <div className="request-remarks">Remarks: {details.remarks}</div>
+            )}
+            {details.hasMedicalDocument && (
+              <div className="request-medical-document">
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => handleViewMedicalDocument(req._id)}
+                >
+                  📄 View Medical Document
+                </button>
+              </div>
             )}
           </>
         );
@@ -498,6 +543,11 @@ export default function AdminRequests() {
                         Stage: {getStageLabel(req)}
                       </div>
                       {renderRequestDetails(req)}
+                      {req.alsoFinanceApprover && (
+                        <div style={{ fontSize: "12px", color: "#15803d", marginTop: "4px" }}>
+                          You are also this employee's designated Finance Manager - one approval covers both steps.
+                        </div>
+                      )}
                     </div>
 
                     <div className="request-actions">
@@ -509,6 +559,7 @@ export default function AdminRequests() {
                           {req.currentApprovalStage === "MANAGER"
                             ? "Waiting for manager approval"
                             : (req.currentApprovalStage === "FINANCE" ? "Waiting for finance approval" : "HR approval pending")}
+                          {req.awaitingApproverName ? ` — ${req.awaitingApproverName}` : ""}
                         </div>
                       ) : (
                         <>
