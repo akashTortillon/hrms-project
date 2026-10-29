@@ -421,7 +421,9 @@ import { deleteStoredFile, getSignedFileUrl, s3ObjectExists, storeUploadedFile }
 import { logActivity } from "../utils/activityLogger.js";
 import LeaveWallet from "../models/leaveWalletModel.js";
 import leaveWalletService from "../services/leaveWalletService.js";
-import { isManagerOfEmployee } from "../utils/managerScopeUtils.js";
+import { isManagerOfEmployee, isFinanceManagerOfEmployee } from "../utils/managerScopeUtils.js";
+import { escapeRegex } from "../utils/stringUtils.js";
+import { isEmployeeOnProbation, isLeaveTypeAllowedInProbation } from "../utils/probationUtils.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -487,19 +489,44 @@ const getNextPayrollCycle = (baseDate = new Date()) => {
 const getScheduleOverrides = (details = {}) =>
   Array.isArray(details.repaymentScheduleOverrides) ? details.repaymentScheduleOverrides : [];
 
+// HR-stage (final) approval of any request - leave, loan, salary advance, document - belongs to
+// Admin and HR roles only. APPROVE_REQUESTS deliberately does NOT count: a Finance Manager role
+// commonly carries it, which made Finance see (and be able to approve/revoke) every request's
+// HR stage and the whole company's request history instead of finishing at its own stage.
 const isHrApprover = (user = {}) =>
   user.role === "Admin"
   || /^HR/i.test(user.role || "")
-  || user.permissions?.includes("ALL")
-  || user.permissions?.includes("APPROVE_REQUESTS");
+  || Boolean(user.permissions?.includes("ALL"));
 
-const isFinanceApprover = (user = {}, request = {}) => {
+const isStrictHrApprover = isHrApprover;
+const isHrApproverForRequest = (user = {}) => isHrApprover(user);
+
+// Resolves `request`'s employee doc fresh - a live lookup, not the possibly-
+// stale designatedManager/designatedFinanceManager value stored on the request
+// itself at submission time. Mirrors createRequest's own User->Employee
+// resolution (Request has no direct `employee` ref, only `userId`).
+const getCurrentEmployeeForRequest = async (request) => {
+  if (!request.userId) return null;
+  const requestUser = await User.findById(request.userId).select("employeeId email");
+  if (requestUser?.employeeId) return Employee.findById(requestUser.employeeId).select("designatedManager designatedFinanceManager");
+  if (!requestUser?.email) return null;
+  return Employee.findOne({ email: { $regex: new RegExp(`^${escapeRegex(requestUser.email)}$`, "i") } }).select("designatedManager designatedFinanceManager");
+};
+
+const isFinanceApprover = async (user = {}, request = {}) => {
   const financeManagerId = request.designatedFinanceManager?.toString();
-  const isAssignedFinanceManager = financeManagerId && (
+  let isAssignedFinanceManager = financeManagerId && (
     financeManagerId === user._id?.toString()
     || financeManagerId === user.id?.toString()
     || (user.employeeId && financeManagerId === user.employeeId.toString())
   );
+
+  // Stale-snapshot fallback: the designated finance manager can be reassigned
+  // after the request was submitted, leaving the request's own snapshot stale.
+  if (!isAssignedFinanceManager) {
+    const employee = await getCurrentEmployeeForRequest(request);
+    isAssignedFinanceManager = isFinanceManagerOfEmployee(user, employee);
+  }
 
   return Boolean(
     isAssignedFinanceManager
@@ -512,13 +539,21 @@ const isFinanceApprover = (user = {}, request = {}) => {
   );
 };
 
-const isManagerApprover = (user = {}, request = {}) => {
+const isManagerApprover = async (user = {}, request = {}) => {
   const managerId = request.designatedManager?.toString();
-  const isAssignedManager = managerId && (
+  let isAssignedManager = managerId && (
     managerId === user._id?.toString()
     || managerId === user.id?.toString()
     || (user.employeeId && managerId === user.employeeId.toString())
   );
+
+  // Same stale-snapshot fallback (see getPendingRequestsForAdmin's matching
+  // fix for why the request needs to be visible in the first place too).
+  if (!isAssignedManager) {
+    const employee = await getCurrentEmployeeForRequest(request);
+    isAssignedManager = isManagerOfEmployee(user, employee);
+  }
+
   return Boolean(
     isAssignedManager
     && (user.role === "Manager" || user.permissions?.includes("APPROVE_MANAGER_REQUESTS"))
@@ -529,8 +564,6 @@ const formatPayrollCycle = (month, year) => {
   if (!month || !year) return "the configured payroll cycle";
   return `${String(month).padStart(2, "0")}/${year}`;
 };
-
-const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Finds the User account for a manager/finance-manager referenced by their
 // Employee._id, falling back to an email match (and healing the link) when their
@@ -595,15 +628,19 @@ const resolveFinanceRecipient = async (employee) => {
 /**
  * Helper to notify all Admins and HR (Authorized Users)
  */
-const notifyAdmins = async (title, message, link) => {
+const notifyAdmins = async (title, message, link, { hrOnly = false } = {}) => {
   try {
     // 1. Find roles that have 'APPROVE_REQUESTS' or 'ALL' permission
     const authorizedRoles = await Master.find({
       type: 'ROLE',
       permissions: { $in: ['APPROVE_REQUESTS', 'ALL'] }
-    }).select('name');
+    }).select('name permissions');
 
-    const roleNames = authorizedRoles.map(r => r.name);
+    // hrOnly (HR stage): skip non-HR roles that merely hold APPROVE_REQUESTS
+    // (e.g. Finance Manager) - they cannot act at that stage.
+    const roleNames = authorizedRoles
+      .filter(r => !hrOnly || /^HR/i.test(r.name || "") || r.permissions?.includes("ALL"))
+      .map(r => r.name);
 
     // 2. Add 'Admin' as it always has 'ALL' permission
     if (!roleNames.includes("Admin")) roleNames.push("Admin");
@@ -738,7 +775,7 @@ const sendSalaryAdvanceSubmissionEmail = async (request, employeeUser) => {
       return;
     }
 
-    const hrAdmins = await User.find({ role: { $in: ["HR Admin", "HR Manager", "Admin"] } });
+    const hrAdmins = await User.find({ role: { $regex: /^(admin|super admin|hr.*)$/i } });
     const financeTeam = await User.find({ role: { $in: ["Finance", "Finance Manager"] } });
 
     const toEmails = [
@@ -906,6 +943,18 @@ export const createRequest = async (req, res) => {
         });
       }
 
+      // "Include in probation?" (Masters > Leave Types): reject types HR has closed to
+      // probationers when the leave starts inside the probation period.
+      if (details.leaveTypeId && employee && isEmployeeOnProbation(employee, details.fromDate || details.startDate)) {
+        const requestedLeaveType = await Master.findOne({ _id: details.leaveTypeId, type: "LEAVE_TYPE" }).select("name metadata");
+        if (requestedLeaveType && !isLeaveTypeAllowedInProbation(requestedLeaveType)) {
+          return res.status(400).json({
+            success: false,
+            message: `${requestedLeaveType.name} is not available during probation.`
+          });
+        }
+      }
+
       // Wallet balance check — employees can't self-submit past their balance.
       // Advance leave (going negative before eligibility) is an HR-only action
       // via a separate endpoint, not this self-service submission.
@@ -1020,9 +1069,14 @@ export const createRequest = async (req, res) => {
     }
 
     const requestId = await generateRequestId();
-    const managerUser = requestType === "LEAVE" ? await resolveManagerRecipient(employee) : null;
+    // Loans specifically go Manager -> Finance (Item 1) - salary advances still skip
+    // straight to Finance, matching the client's exact wording ("the loan is
+    // approved... unnecessary here because manager and finance manager are the same
+    // person"), not a blanket change to every SALARY subType.
+    const isLoanRequest = requestType === "SALARY" && details?.subType === "loan";
+    const managerUser = (requestType === "LEAVE" || isLoanRequest) ? await resolveManagerRecipient(employee) : null;
     const financeUser = requestType === "SALARY" ? await resolveFinanceRecipient(employee) : null;
-    const requiresManagerApproval = requestType === "LEAVE" && Boolean(managerUser?._id);
+    const requiresManagerApproval = (requestType === "LEAVE" || isLoanRequest) && Boolean(managerUser?._id);
     const requiresFinanceApproval = requestType === "SALARY" && Boolean(financeUser?._id);
 
     const request = await Request.create({
@@ -1056,8 +1110,10 @@ export const createRequest = async (req, res) => {
       if (requiresManagerApproval && managerUser?._id) {
         createNotification({
           recipient: managerUser._id,
-          title: "Leave request awaiting manager approval",
-          message: `${employeeUser.name} submitted leave request ${request.requestId}.`,
+          title: isLoanRequest ? "Loan request awaiting manager approval" : "Leave request awaiting manager approval",
+          message: isLoanRequest
+            ? `${employeeUser.name} submitted a loan request (${request.requestId}).`
+            : `${employeeUser.name} submitted leave request ${request.requestId}.`,
           type: "REQUEST",
           link: "/app/requests"
         }).catch(e => console.error("Notify error:", e));
@@ -1072,7 +1128,8 @@ export const createRequest = async (req, res) => {
         notifyAdmins(
           `New ${requestType} Request`,
           `${employeeUser.name} submitted a new ${requestType.toLowerCase()} request (${request.requestId}).`,
-          `/app/requests`
+          `/app/requests`,
+          { hrOnly: true }
         ).catch(e => console.error("Notify error:", e));
       }
     }
@@ -1208,6 +1265,8 @@ export const getPendingRequestsForAdmin = async (req, res) => {
     let query = {};
     const isManagerOnlyRole = req.user.role === "Manager";
     const canApproveHr = !isManagerOnlyRole && isHrApprover(req.user);
+    // Loans/advances: the HR stage is Admin/HR only (see isStrictHrApprover).
+    const canApproveHrSalary = !isManagerOnlyRole && isStrictHrApprover(req.user);
     const canApproveFinance = (
       req.user.role === "Finance Manager"
       || /^Finance/i.test(req.user.role || "")
@@ -1251,29 +1310,88 @@ export const getPendingRequestsForAdmin = async (req, res) => {
       financeScope.push(req.user.employeeId);
     }
 
-    if (!canApproveHr && !canApproveFinance) {
+    // Stale-snapshot fallback: Request.designatedManager is resolved once at
+    // submission time and never re-resolved. If an employee's Employee.
+    // designatedManager was reassigned AFTER their request was submitted, the
+    // request's stored snapshot still points to the OLD manager - so it would
+    // never show up in the NEW manager's pending list at all (matching
+    // isManagerApprover's identical live-lookup fallback for the action-button
+    // check, which is moot if the request isn't even visible here first).
+    // Resolved per STAGE: someone who is only an employee's finance designee must not
+    // be handed that employee's MANAGER-stage request (they can't act on it - it showed
+    // as a dead "Waiting for manager approval" row), and vice versa. Both lists are
+    // identical for a person who holds both roles for the employee.
+    const reportUserIdsFor = async (field) => {
+      if (!req.user?.employeeId) return [];
+      const reports = await Employee.find({ [field]: req.user.employeeId }).select("_id email");
+      const reportEmployeeIds = reports.map((e) => e._id);
+      const reportEmails = reports.map((e) => e.email).filter(Boolean);
+      const reportUsers = await User.find({
+        $or: [
+          { employeeId: { $in: reportEmployeeIds } },
+          ...(reportEmails.length ? [{ email: { $in: reportEmails.map((e) => new RegExp(`^${escapeRegex(e)}$`, "i")) } }] : [])
+        ]
+      }).select("_id");
+      return reportUsers.map((u) => u._id);
+    };
+    const managerReportUserIds = await reportUserIdsFor("designatedManager");
+    const financeReportUserIds = await reportUserIdsFor("designatedFinanceManager");
+
+    if (!canApproveHr) {
+      // Was two mutually-exclusive branches (manager-only XOR finance-only) that only
+      // ever checked canApproveFinance to decide between them - a non-HR approver who
+      // holds BOTH permissions (exactly Item 1's same-person Manager+Finance case)
+      // fell into the finance-only branch and lost all visibility into their own
+      // MANAGER-stage pending requests, since canApproveManager was never consulted
+      // here at all.
+      const nonHrStageFilters = [];
+      if (canApproveManager) {
+        nonHrStageFilters.push({
+          currentApprovalStage: "MANAGER",
+          $or: [
+            { designatedManager: { $in: managerScope } },
+            { userId: { $in: managerReportUserIds } }
+          ]
+        });
+      }
+      if (canApproveFinance) {
+        nonHrStageFilters.push({
+          currentApprovalStage: "FINANCE",
+          $or: [
+            { designatedFinanceManager: { $in: financeScope } },
+            { userId: { $in: financeReportUserIds } }
+          ]
+        });
+      }
       query.$and = query.$and || [];
-      query.$and.push({
-        currentApprovalStage: "MANAGER",
-        designatedManager: { $in: managerScope }
-      });
-    } else if (!canApproveHr && canApproveFinance) {
-      query.$and = query.$and || [];
-      query.$and.push({
-        currentApprovalStage: "FINANCE",
-        designatedFinanceManager: { $in: financeScope }
-      });
+      query.$and.push({ $or: nonHrStageFilters.length ? nonHrStageFilters : [{ _id: null }] });
     } else if (!req.query.stage) {
-      const stageFilters = [{ currentApprovalStage: "HR" }];
+      const stageFilters = [
+        canApproveHrSalary
+          ? { currentApprovalStage: "HR" }
+          : { currentApprovalStage: "HR", requestType: { $ne: "SALARY" } }
+      ];
 
       if (canApproveManager) {
-        stageFilters.push({ currentApprovalStage: "MANAGER", designatedManager: { $in: managerScope } });
+        stageFilters.push({
+          currentApprovalStage: "MANAGER",
+          $or: [
+            { designatedManager: { $in: managerScope } },
+            { userId: { $in: managerReportUserIds } }
+          ]
+        });
       } else if (canApproveHr) {
         stageFilters.push({ currentApprovalStage: "MANAGER" });
       }
 
       if (canApproveFinance) {
-        stageFilters.push({ currentApprovalStage: "FINANCE", designatedFinanceManager: { $in: financeScope } });
+        stageFilters.push({
+          currentApprovalStage: "FINANCE",
+          $or: [
+            { designatedFinanceManager: { $in: financeScope } },
+            { userId: { $in: financeReportUserIds } }
+          ]
+        });
       } else if (canApproveHr) {
         stageFilters.push({ currentApprovalStage: "FINANCE" });
       }
@@ -1301,25 +1419,85 @@ export const getPendingRequestsForAdmin = async (req, res) => {
 
     const totalRequests = await Request.countDocuments(query);
 
-    const requests = await Request.find(query)
+    const findRequests = (q) => Request.find(q)
       .populate("userId", "name email department avatar role") // Added more user details
       .populate("designatedManager", "name role")
       .populate("designatedFinanceManager", "name role")
       .populate("managerApproval.actedBy", "name role")
       .populate("financeApproval.actedBy", "name role")
       .populate("hrApproval.actedBy", "name role")
-      .sort({ submittedAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
+      .sort({ submittedAt: -1 });
+
+    // The approvals page asks for this list with no paging params, and HR/Admin's query also
+    // pulls in every COMPLETED request (the "Requests History" panel). One newest-first page
+    // of 10 meant the 10 most recent items of ANY status filled it, so a request still waiting
+    // on someone but submitted a bit earlier (e.g. a loan waiting at the finance or HR stage)
+    // never appeared in the pending list at all. Without explicit paging: return EVERY request
+    // still awaiting action, plus the latest 100 completed ones for the history panel.
+    const explicitPaging = req.query.limit !== undefined || req.query.page !== undefined;
+    let requests;
+    if (explicitPaging) {
+      requests = await findRequests(query).skip(skip).limit(limitNum);
+    } else {
+      const [awaiting, history] = await Promise.all([
+        findRequests({ $and: [query, { currentApprovalStage: { $ne: "COMPLETED" } }] }),
+        findRequests({ $and: [query, { currentApprovalStage: "COMPLETED" }] }).limit(100)
+      ]);
+      requests = [...awaiting, ...history];
+    }
+
+    // The list is visible to more people than can actually act on each row (e.g. a
+    // finance-only designee sees the employee's MANAGER-stage loan; HR sees every
+    // stage). The UI used to re-derive "can this viewer act?" from a snapshot-only
+    // id compare, which diverged from the real check updateRequestStatus applies
+    // (live employee fallback, permission rules) - leaving a dead "Waiting for ..."
+    // badge where the backend would have accepted the click. Compute it here with
+    // the exact same helpers instead, and say who the row is waiting on.
+    const viewerId = (req.user._id || req.user.id)?.toString();
+    const data = await Promise.all(requests.map(async (doc) => {
+      const plain = doc.toObject();
+      // Helpers compare raw ids, but the response copy has them populated.
+      const raw = {
+        requestType: doc.requestType,
+        userId: doc.userId?._id || doc.userId,
+        designatedManager: doc.designatedManager?._id || doc.designatedManager,
+        designatedFinanceManager: doc.designatedFinanceManager?._id || doc.designatedFinanceManager
+      };
+      const isOwnRequest = raw.userId?.toString() === viewerId;
+      const stage = doc.currentApprovalStage;
+      let canActNow = false;
+      let alsoFinanceApprover = false;
+      if (!isOwnRequest) {
+        if (stage === "MANAGER") {
+          canActNow = await isManagerApprover(req.user, raw);
+          if (canActNow && doc.financeApproval?.status === "PENDING") {
+            alsoFinanceApprover = await isFinanceApprover(req.user, raw);
+          }
+        } else if (stage === "FINANCE") {
+          canActNow = await isFinanceApprover(req.user, raw);
+        } else if (stage === "HR") {
+          canActNow = isHrApproverForRequest(req.user, raw);
+        }
+      }
+      const awaiting = stage === "MANAGER" ? doc.designatedManager
+        : stage === "FINANCE" ? doc.designatedFinanceManager
+        : null;
+      return {
+        ...plain,
+        canActNow,
+        alsoFinanceApprover,
+        awaitingApproverName: awaiting?.name || null
+      };
+    }));
 
     res.status(200).json({
       success: true,
-      count: requests.length,
-      limit: limitNum,
+      count: data.length,
+      limit: explicitPaging ? limitNum : data.length,
       page: pageNum,
-      totalPages: Math.ceil(totalRequests / limitNum),
+      totalPages: explicitPaging ? Math.ceil(totalRequests / limitNum) : 1,
       totalDocs: totalRequests,
-      data: requests
+      data
     });
   } catch (error) {
     // console.error("Admin pending requests error:", error);
@@ -1353,9 +1531,9 @@ export const updateRequestStatus = async (req, res) => {
 
     const isManagerStage = request.currentApprovalStage === "MANAGER";
     const isFinanceStage = request.currentApprovalStage === "FINANCE";
-    const canApproveHr = isHrApprover(req.user);
-    const canApproveManager = isManagerApprover(req.user, request);
-    const canApproveFinance = isFinanceApprover(req.user, request);
+    const canApproveHr = isHrApproverForRequest(req.user, request);
+    const canApproveManager = await isManagerApprover(req.user, request);
+    const canApproveFinance = await isFinanceApprover(req.user, request);
     let salaryChangeNotification = null;
 
     if (isManagerStage && !canApproveManager) {
@@ -1378,14 +1556,68 @@ export const updateRequestStatus = async (req, res) => {
           actedAt: new Date(),
           remarks: req.body.remarks || ""
         };
+
+        // Loans specifically require Manager -> Finance (see createRequest) - unlike
+        // LEAVE, which always has financeApproval.status "SKIPPED" and so always goes
+        // straight to HR below. Collapse to a single click when the same person holds
+        // both the designated-manager and designated-finance-manager role for this
+        // employee (Item 1's original ask).
+        const loanNeedsFinanceApproval = request.financeApproval?.status === "PENDING";
+        const sameApproverHandlesFinance = loanNeedsFinanceApproval
+          ? await isFinanceApprover(req.user, request)
+          : false;
+
+        if (loanNeedsFinanceApproval && !sameApproverHandlesFinance) {
+          request.currentApprovalStage = "FINANCE";
+          request.status = "MANAGER_APPROVED";
+          await request.save();
+
+          await notifyFinanceApprovers(
+            "Loan request awaiting finance approval",
+            `Request ${request.requestId} has been approved by the manager and is awaiting finance approval.`,
+            "/app/requests",
+            request.designatedFinanceManager
+          );
+
+          try {
+            await createNotification({
+              recipient: request.userId,
+              title: "Manager Approved Request",
+              message: `Your request ${request.requestId} has been approved by your manager and forwarded to finance.`,
+              type: "REQUEST",
+              link: "/app/requests"
+            });
+          } catch (notifErr) {
+            console.error("Failed to notify employee of manager approval:", notifErr);
+          }
+
+          return res.json({
+            success: true,
+            message: "Request approved by manager and forwarded to finance",
+            data: request
+          });
+        }
+
+        // Same person is the designated manager AND finance manager for this employee: their
+        // one approval covers both stages, but HR still gives the final approval - a loan or
+        // leave never completes on a manager/finance approval alone.
+        if (sameApproverHandlesFinance) {
+          request.financeApproval = {
+            status: "APPROVED",
+            actedBy: req.user.id,
+            actedAt: new Date(),
+            remarks: "Auto-approved: same person is the designated Finance Manager for this employee."
+          };
+        }
+        request.status = sameApproverHandlesFinance ? "FINANCE_APPROVED" : "MANAGER_APPROVED";
         request.currentApprovalStage = "HR";
-        request.status = "MANAGER_APPROVED";
         await request.save();
 
         await notifyAdmins(
-          "Leave request awaiting HR approval",
-          `Request ${request.requestId} has been approved by the manager and is awaiting HR approval.`,
-          "/app/requests"
+          "Request awaiting HR approval",
+          `Request ${request.requestId} has been approved by the manager${sameApproverHandlesFinance ? " (also the designated finance manager)" : ""} and is awaiting HR approval.`,
+          "/app/requests",
+          { hrOnly: true }
         );
 
         // Notify the employee that the manager approved
@@ -1449,7 +1681,8 @@ export const updateRequestStatus = async (req, res) => {
         await notifyAdmins(
           "Salary request awaiting HR approval",
           `Request ${request.requestId} has been approved by finance and is awaiting HR approval.`,
-          "/app/requests"
+          "/app/requests",
+          { hrOnly: true }
         );
 
         try {
@@ -1964,7 +2197,7 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       });
     }
 
-    if (!["SKIP_MONTH", "ADJUST", "EXTRA_PAYMENT"].includes(action)) {
+    if (!["SKIP_MONTH", "ADJUST", "EXTRA_PAYMENT", "DELETE_EXTRA_PAYMENT"].includes(action)) {
       return res.status(400).json({
         success: false,
         message: "Invalid repayment schedule action."
@@ -1983,6 +2216,113 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Only loan and salary advance requests support repayment scheduling."
+      });
+    }
+
+    // Deleting an extra payment must work on a COMPLETED (fully repaid) loan too - the
+    // delete is what reopens it - so it is handled BEFORE the approved-only and
+    // isFullyPaid guards below, which apply to the other actions.
+    if (action === "DELETE_EXTRA_PAYMENT") {
+      const { extraPaymentRecordedAt, extraPaymentIndex } = req.body;
+      if (!["APPROVED", "COMPLETED"].includes(request.status)) {
+        return res.status(400).json({ success: false, message: "Extra payments can only be deleted on approved or completed loans." });
+      }
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ success: false, message: "A reason is required to delete an extra payment." });
+      }
+
+      const details = request.details || {};
+      const extras = Array.isArray(details.extraPayments) ? [...details.extraPayments] : [];
+      // Entries carry no _id (details is Mixed) - match on the exact recordedAt, falling
+      // back to the list index for any entry that lacks a timestamp.
+      let idx = -1;
+      if (extraPaymentRecordedAt) {
+        const target = new Date(extraPaymentRecordedAt).getTime();
+        idx = extras.findIndex((e) => e.recordedAt && new Date(e.recordedAt).getTime() === target);
+      } else if (Number.isInteger(Number(extraPaymentIndex))) {
+        idx = Number(extraPaymentIndex);
+      }
+      if (idx < 0 || idx >= extras.length) {
+        return res.status(404).json({ success: false, message: "Extra payment entry not found." });
+      }
+      // The onboarding "already repaid" opening entry is written at loan creation (same
+      // timestamp as the request itself) - the user-supplied reason can be anything, so
+      // identify it by position + creation time rather than by its text.
+      const isOpeningEntry = details.isPreExisting
+        && idx === 0
+        && extras[idx]?.recordedAt
+        && Math.abs(new Date(extras[idx].recordedAt) - new Date(request.createdAt)) < 60 * 1000;
+      if (isOpeningEntry) {
+        return res.status(400).json({ success: false, message: "The opening 'already repaid' entry of an existing loan cannot be deleted here." });
+      }
+
+      const [removed] = extras.splice(idx, 1);
+      const deletedEntry = {
+        ...removed,
+        deletedBy: req.user._id,
+        deletedByName: req.user.name || "",
+        deletedAt: new Date(),
+        deleteReason: reason.trim()
+      };
+
+      // Recompute everything derived from the extra-payment list.
+      const totalPayable = Number(details.totalRepaymentAmount) || Number(details.amount) || 0;
+      const existingDeductions = Array.isArray(request.payrollDeductions) ? request.payrollDeductions : [];
+      const payrollPaid = existingDeductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      let running = totalPayable - payrollPaid;
+      const rebuilt = extras
+        .slice()
+        .sort((a, b) => new Date(a.recordedAt || 0) - new Date(b.recordedAt || 0))
+        .map((e) => {
+          running = Math.max(0, running - (Number(e.amount) || 0));
+          return { ...e, remainingBalanceAfter: running };
+        });
+      const remainingAfter = Math.max(0, totalPayable - payrollPaid - rebuilt.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
+      const monthlyRepayment = Number(details.monthlyRepaymentAmount) || 0;
+      const additionalMonths = (remainingAfter > 0 && monthlyRepayment > 0) ? Math.ceil(remainingAfter / monthlyRepayment) : 0;
+
+      request.details = {
+        ...details,
+        extraPayments: rebuilt,
+        deletedExtraPayments: [...(Array.isArray(details.deletedExtraPayments) ? details.deletedExtraPayments : []), deletedEntry],
+        repaymentPeriod: existingDeductions.length + additionalMonths
+      };
+
+      if (remainingAfter > 0.01 && (request.isFullyPaid || request.status === "COMPLETED")) {
+        request.isFullyPaid = false;
+        request.status = "APPROVED";
+      }
+
+      await request.save();
+
+      logActivity({
+        req,
+        action: "DELETE",
+        module: "REQUESTS",
+        description: `Deleted extra payment of ${removed.amount} AED on loan ${request.requestId}: ${reason.trim()}`,
+        targetId: request._id,
+        targetName: request.requestId,
+        metadata: { deletedEntry, remainingAfter }
+      });
+
+      createNotification({
+        recipient: request.userId,
+        title: "Extra loan payment removed",
+        message: `An extra payment of ${removed.amount} AED recorded against your loan ${request.requestId} was removed: ${reason.trim()}`,
+        type: "REQUEST",
+        link: "/app/requests"
+      }).catch((error) => console.error("Notification error:", error));
+
+      const populatedAfterDelete = await Request.findById(request._id)
+        .populate("approvedBy", "name role")
+        .populate("managerApproval.actedBy", "name role")
+        .populate("financeApproval.actedBy", "name role")
+        .populate("hrApproval.actedBy", "name role");
+
+      return res.status(200).json({
+        success: true,
+        message: `Extra payment of ${removed.amount} AED deleted. Remaining balance: ${remainingAfter.toFixed(2)} AED.`,
+        data: populatedAfterDelete
       });
     }
 
@@ -2154,6 +2494,16 @@ export const updateSalaryRepaymentSchedule = async (req, res) => {
       }
 
       await request.save();
+
+      logActivity({
+        req,
+        action: "CREATE",
+        module: "REQUESTS",
+        description: `Recorded extra payment of ${amount} AED on loan ${request.requestId}: ${reason.trim()}`,
+        targetId: request._id,
+        targetName: request.requestId,
+        metadata: { extraPaymentEntry, remainingAfter }
+      });
 
       createNotification({
         recipient: request.userId,
@@ -2492,6 +2842,45 @@ export const downloadDocument = async (req, res) => {
       success: false,
       message: "Failed to download document"
     });
+  }
+};
+
+// Sick-leave medical document upload already writes details.medicalDocumentPath/
+// medicalDocumentUrl/medicalDocumentStorage/hasMedicalDocument at request-creation
+// time, but nothing previously read them back - modeled on downloadDocument above,
+// but with an EXPLICIT ownership/approver check that downloadDocument itself lacks
+// (a gap not worth copying here given a medical document is more sensitive).
+export const getMedicalDocumentUrl = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const request = await Request.findById(requestId);
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Request not found" });
+    }
+
+    const isOwner = request.userId?.toString() === (req.user._id || req.user.id)?.toString();
+    const canView = isOwner
+      || isHrApprover(req.user)
+      || await isManagerApprover(req.user, request)
+      || await isFinanceApprover(req.user, request);
+
+    if (!canView) {
+      return res.status(403).json({ success: false, message: "You do not have access to this document." });
+    }
+
+    if (!request.details?.hasMedicalDocument || !request.details?.medicalDocumentPath) {
+      return res.status(404).json({ success: false, message: "No medical document available for this request." });
+    }
+
+    const url = await getSignedFileUrl({
+      filePath: request.details.medicalDocumentPath,
+      fileUrl: request.details.medicalDocumentUrl,
+      storage: request.details.medicalDocumentStorage
+    });
+
+    res.json({ success: true, url });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to load medical document" });
   }
 };
 

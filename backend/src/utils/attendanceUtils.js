@@ -3,6 +3,7 @@ import Employee from "../models/employeeModel.js";
 import Request from "../models/requestModel.js";
 import User from "../models/userModel.js";
 import SystemSettings from "../models/systemSettingsModel.js";
+import { escapeRegex } from "./stringUtils.js";
 
 // Helper: Parse time to minutes (HH:MM) -> minutes
 export const toMinutes = (time) => {
@@ -37,6 +38,20 @@ export const computeShiftDayBucket = (dateStr, timeStr, transactionType, rules) 
   return transactionType === "OUT" ? oneDayBack() : dateStr;
 };
 
+// UAE local "today" (UTC+4, no DST) as YYYY-MM-DD - the calendar day attendance rows are
+// bucketed onto. Shared by the processor, the Incomplete sweep and the mass-complete flow.
+export const getUaeTodayDateStr = () => {
+  const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+  return uaeNow.toISOString().split("T")[0];
+};
+
+// Shifts YYYY-MM-DD by a whole number of days (calendar arithmetic in UTC, so no DST drift).
+export const shiftDateStr = (dateStr, days) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+};
+
 // Helper: Calculate duration between two times in HH:MM format
 export const calculateDuration = (start, end) => {
   if (!start || !end) return null;
@@ -54,9 +69,22 @@ export const calculateDuration = (start, end) => {
  * Get Shift Rules from Master
  */
 export const getShiftRules = async (shiftName) => {
-  const shiftMaster = await Master.findOne({ type: "SHIFT", name: shiftName });
+  // Case-insensitive, whitespace-trimmed match - employee.shift is free-text and
+  // the Shift Master's own name field has no dropdown/enum tying it to that value,
+  // so a rename, typo, or trailing space silently missed this exact-match lookup
+  // and fell all the way through to the hardcoded 09:00/09:15 default below with
+  // no indication anywhere - e.g. an employee whose real shift starts at 10:30
+  // would show "Late" at both 9:59 AND 10:30, purely because they were silently
+  // running against the wrong shift's rules.
+  const trimmedName = String(shiftName || "").trim();
+  const shiftMaster = trimmedName
+    ? await Master.findOne({ type: "SHIFT", name: new RegExp(`^${escapeRegex(trimmedName)}$`, "i") })
+    : null;
   if (shiftMaster && shiftMaster.metadata) {
     const meta = shiftMaster.metadata;
+    if (!meta.startTime) {
+      console.warn(`[attendanceUtils] Shift Master "${shiftMaster.name}" has no startTime configured - falling back to 09:00. Check Masters > HR Management > Shift.`);
+    }
     // Extract buffers from latePolicy if available, otherwise fallback to buffers or lateLimit
     let buffers = [];
     if (meta.latePolicy && Array.isArray(meta.latePolicy)) {
@@ -73,8 +101,14 @@ export const getShiftRules = async (shiftName) => {
       buffers: buffers.length > 0 ? buffers : ["09:15"]
     };
   }
-  // Default fallback
-  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [] };
+  console.warn(`[attendanceUtils] No Shift Master found matching "${shiftName}" - falling back to default shift rules (09:00-18:00, late limit 09:15). Check Masters > HR Management > Shift for a name/casing mismatch.`);
+  // `unresolved: true` tells callers this is a guessed default, not the employee's
+  // real configured schedule - a mismatched/misspelled employee.shift value was
+  // previously still compared against this hardcoded 09:00/09:15 default and could
+  // mark someone "Late" purely because their real shift (e.g. starting at 10:30)
+  // never matched any Shift Master, not because they were actually late. Callers
+  // should skip the Late determination entirely when this flag is set.
+  return { start: "09:00", end: "18:00", lateLimit: "09:15", buffers: ["09:15"], latePolicy: [], unresolved: true };
 };
 
 export const calculateLateTier = (checkInTime, rules) => {
@@ -94,7 +128,20 @@ export const calculateLateTier = (checkInTime, rules) => {
     const m = toMinutes(t);
     return m < shiftStartMin ? m + 24 * 60 : m;
   };
-  const checkInMin = normalize(checkInTime);
+
+  // The comment above only reasoned about BUFFERS, but this same normalize() was
+  // also applied unconditionally to checkInTime - for an ORDINARY same-day shift
+  // (e.g. 10:30-19:30), any check-in before the shift's own start (someone simply
+  // arriving early, or exactly on time at 09:59/10:00 for a 10:30 shift) has
+  // checkInMin < shiftStartMin too, so it got pushed into "next day" space and
+  // compared as if arriving ~24h late - the exact "Late at 9:59 for a 10:30 shift"
+  // bug this was meant to fix, just relocated from the wrong-shift-lookup bug to
+  // here. Only genuinely overnight-spanning shifts (end time wraps past midnight,
+  // i.e. end <= start) need the check-in itself normalized; for a normal same-day
+  // shift, arriving before start is unambiguously on time.
+  const shiftEndMin = rules.end ? toMinutes(rules.end) : null;
+  const isOvernightShift = shiftEndMin !== null && shiftEndMin <= shiftStartMin;
+  const checkInMin = isOvernightShift ? normalize(checkInTime) : toMinutes(checkInTime);
 
   // Ensure we have at least one buffer
   const buffers = rules.buffers || [rules.lateLimit];

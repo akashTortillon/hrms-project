@@ -8,21 +8,28 @@ import mongoose from "mongoose";
 import SystemSettings from "../models/systemSettingsModel.js";
 import * as XLSX from "xlsx";
 import PayrollAudit from "../models/payrollAuditModel.js";
+import PayslipExportJob from "../models/payslipExportJobModel.js";
 import PDFDocument from "pdfkit";
 import { PDFDocument as PDFLibDocument } from "pdf-lib";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { buildZipArchive } from "../utils/zip.js";
+import { storeUploadedFile, getSignedFileUrl } from "../utils/storage.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { holidaySetFromHolidays, isWeekOff, applyMonthlyFlexQuota } from "../utils/attendanceUtils.js";
 import { resolveCompanyLogoBuffer } from "./masterController.js";
+import { escapeRegex } from "../utils/stringUtils.js";
+import { amountToWordsAED } from "../utils/numberToWords.js";
+import { displayEmployeeCode } from "../utils/employeeCode.js";
+import { resolveEffectiveSalaryAsOf } from "../utils/salaryUtils.js";
+import { applyDuePendingSalaryChanges } from "./employeeController.js";
+import { isEmployeeOnProbation } from "../utils/probationUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, "")) || 0;
-const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Round to 2 decimal places (currency). Used so a payroll's totalAllowances /
 // totalDeductions / netSalary are always the exact sum of the 2dp-rounded line
@@ -35,6 +42,19 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 // rounded to 2dp first, then the total rounded - so "Total" always equals the sum
 // of the printed rows.
 const sumAmounts = (items = []) => round2((items || []).reduce((s, i) => s + round2(Number(i?.amount || 0)), 0));
+
+// True only if an active PAYROLL_RULE Master resolves to an automatic ABSENT_DAYS
+// deduction - mirrors the exact predicate generatePayroll's Dynamic Rule Engine
+// uses (including the legacy code==="LOP"/name-includes-"Unpaid" fallback for
+// rules with no explicit metadata.basis) so generatePayroll and getPayrollRuleHealth
+// can never disagree about whether absence actually reduces pay.
+const computeHasActiveAbsenceDeductionRule = (rules = []) => rules.some((rule) => {
+    const meta = rule.metadata || {};
+    if (!meta.isAutomatic || meta.category !== "DEDUCTION") return false;
+    let basis = meta.basis;
+    if (!basis && (rule.code === "LOP" || (rule.name && rule.name.includes("Unpaid")))) basis = "ABSENT_DAYS";
+    return basis === "ABSENT_DAYS";
+});
 
 const resolveCompanyLogoPath = (companyImage) => {
     if (!companyImage || /^https?:\/\//i.test(companyImage)) return null;
@@ -163,37 +183,6 @@ const hasScheduledSkip = (details = {}, month, year) => {
         && Number(entry.month) === Number(month)
         && Number(entry.year) === Number(year)
     );
-};
-
-const resolveEffectiveSalary = (employee, asOfDate) => {
-    const periodEnd = toDayEnd(asOfDate);
-    const history = [...(employee.salaryHistory || [])]
-        .filter(entry => entry.effectiveDate && new Date(entry.effectiveDate) <= periodEnd)
-        .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
-
-    const latest = history[0];
-    if (latest) {
-        return {
-            basicSalary: toNumber(latest.basicSalary),
-            visaBase: toNumber(latest.visaBase || latest.basicSalary),
-            workBase: toNumber(latest.workBase || latest.basicSalary),
-            ctc: toNumber(latest.ctc || latest.workBase || latest.basicSalary)
-        };
-    }
-
-    return {
-        basicSalary: toNumber(employee.basicSalary),
-        visaBase: toNumber(employee.visaBase || employee.basicSalary),
-        workBase: toNumber(employee.workBase || employee.basicSalary),
-        ctc: toNumber(employee.ctc || employee.workBase || employee.basicSalary)
-    };
-};
-
-const isEmployeeOnProbation = (employee, dateStr) => {
-    if (!employee?.probationEndDate) return false;
-    if (employee.probationStatus === "CONFIRMED") return false;
-    const checkDate = new Date(dateStr);
-    return checkDate <= new Date(employee.probationEndDate);
 };
 
 const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}, sickLeaveConfig = {}) => {
@@ -579,6 +568,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
     let lateCount = 0;
     let lateTier1 = 0, lateTier2 = 0, lateTier3 = 0;
     let unpaidLeavesCount = 0;
+    let sandwichLeavesCount = 0; // subset of unpaidLeavesCount: weekend/holiday between two absences
     let paidLeavesCount = 0;
     let halfPaidLeavesCount = 0;
 
@@ -615,7 +605,8 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
                 // lopDays++; // Removed to prevent double counting in generatePayroll (which adds Absent + Unpaid)
                 break;
             case 'SANDWICH_LEAVE': // Treated as Unpaid
-                unpaidLeavesCount++; // Or separate 'sandwichLeavesCount'?
+                unpaidLeavesCount++;
+                sandwichLeavesCount++;
                 // lopDays++; // Removed
                 break;
             case 'ABSENT':
@@ -646,6 +637,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         // Yes, my switch case matches this logic.
         daysAbsent: lopDays,
         unpaidLeaves: unpaidLeavesCount,
+        sandwichLeaves: sandwichLeavesCount,
         paidLeaves: paidLeavesCount,
         halfPaidLeaves: halfPaidLeavesCount,
         overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
@@ -705,9 +697,35 @@ export const validatePayrollGeneration = async (req, res) => {
 export const getLatestFinalizedPeriod = async (req, res) => {
     try {
         const latest = await getLatestFinalizedCycle();
-        res.json({ success: true, latestFinalized: latest });
+
+        // The period currently sitting as a DRAFT after the last finalized one (the one HR
+        // generated and hasn't finalized yet), so the Payroll page can reopen on it. Without
+        // this the "To" date reset to the end of the calendar month on every visit (31/10)
+        // even though the draft had been generated up to 25/10, and Regenerate then collided
+        // with the existing draft.
+        const draftQuery = { status: "DRAFT" };
+        if (latest?.periodEnd) draftQuery.periodStart = { $gt: latest.periodEnd };
+        const draft = await Payroll.findOne(draftQuery).sort({ periodEnd: -1 }).select("periodStart periodEnd");
+        const currentDraft = draft?.periodStart && draft?.periodEnd
+            ? { periodStartStr: formatYMD(toDayStart(draft.periodStart)), periodEndStr: formatYMD(toDayEnd(draft.periodEnd)) }
+            : null;
+
+        res.json({ success: true, latestFinalized: latest, currentDraft });
     } catch (error) {
         res.status(500).json({ message: "Failed to fetch latest finalized payroll period" });
+    }
+};
+
+// Cheap, read-only check so the dashboard can warn BEFORE generating payroll that
+// absence won't reduce pay. Uses the same computeHasActiveAbsenceDeductionRule
+// predicate generatePayroll's Dynamic Rule Engine is built on, so this can never
+// drift out of sync with what actually happens on Generate.
+export const getPayrollRuleHealth = async (req, res) => {
+    try {
+        const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
+        res.json({ hasActiveAbsenceDeductionRule: computeHasActiveAbsenceDeductionRule(rules) });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to check payroll rule health" });
     }
 };
 
@@ -777,6 +795,10 @@ export const setPayrollAnchor = async (req, res) => {
     }
 };
 
+// Admin or an HR role (HR, HR Manager, ...): may override payroll-period guards.
+const isAdminOrHr = (user = {}) =>
+    user.role === "Admin" || /^HR/i.test(user.role || "") || Boolean(user.permissions?.includes("ALL"));
+
 // --- API: Generate Payroll for a Month ---
 export const generatePayroll = async (req, res) => {
     try {
@@ -784,6 +806,11 @@ export const generatePayroll = async (req, res) => {
 
         if (!periodStartRaw || !periodEndRaw) {
             return res.status(400).json({ message: "periodStart and periodEnd are required." });
+        }
+
+        // `force` skips the overlapping-period guard below, so it is limited to Admin and HR.
+        if (force && !isAdminOrHr(req.user)) {
+            return res.status(403).json({ message: "Only Admin or HR can force payroll generation over an overlapping period." });
         }
 
         const periodStart = toDayStart(periodStartRaw);
@@ -817,11 +844,12 @@ export const generatePayroll = async (req, res) => {
         // (employee, periodStart, periodEnd), so it updates the existing docs in place
         // rather than creating a duplicate. Flagging that as a conflict would block routine
         // re-generation, not just genuine overlaps.
-        const overlapping = await Payroll.findOne({
+        const overlappingDocs = await Payroll.find({
             periodStart: { $lte: periodEnd },
             periodEnd: { $gte: periodStart },
             $nor: [{ periodStart, periodEnd }]
         }).select("periodStart periodEnd status employee");
+        const overlapping = overlappingDocs[0];
 
         if (overlapping && !force) {
             return res.status(409).json({
@@ -832,6 +860,22 @@ export const generatePayroll = async (req, res) => {
                 conflictPeriodEnd: formatYMD(overlapping.periodEnd),
                 conflictStatus: overlapping.status
             });
+        }
+
+        // Forcing replaces overlapping DRAFT runs (they are superseded by this one, see the
+        // delete after the bulkWrite below) - leaving them next to the new run listed the same
+        // employee twice for the month. A finalized/paid run can never be overridden: that is a
+        // double payment, un-finalize or delete it first.
+        const overlappingDraftIds = [];
+        if (overlapping && force) {
+            const locked = overlappingDocs.find(d => d.status !== "DRAFT");
+            if (locked) {
+                return res.status(409).json({
+                    message: `Requested period (${formatYMD(periodStart)} to ${formatYMD(periodEnd)}) overlaps a ${locked.status} payroll period `
+                        + `(${formatYMD(locked.periodStart)} to ${formatYMD(locked.periodEnd)}). A finalized period cannot be overridden - un-finalize or delete it first.`
+                });
+            }
+            overlappingDocs.forEach(d => overlappingDraftIds.push(d._id));
         }
 
         // Force-contiguous: the new period must start the day right after the last
@@ -853,7 +897,61 @@ export const generatePayroll = async (req, res) => {
 
         // 1. Fetch Active Employees & Rules
         const employees = await Employee.find({ status: "Active" });
+        // Future-dated increments are only applied lazily when a profile is opened; apply
+        // any that are now due so basic (resolved from history) and HRA/allowance (live
+        // fields) never disagree inside one payroll row.
+        for (const emp of employees) {
+            try {
+                await applyDuePendingSalaryChanges(emp);
+            } catch (err) {
+                console.error("applyDuePendingSalaryChanges failed for employee", emp._id.toString(), ":", err.message);
+            }
+        }
         const rules = await Master.find({ type: "PAYROLL_RULE", isActive: true });
+
+        // Regenerating an existing DRAFT period used to rebuild allowances/deductions
+        // purely from fresh AUTO calculation and unconditionally overwrite the whole
+        // arrays in the bulkWrite below - destroying any type:"MANUAL" item added via
+        // addAdjustment (or a loan override) since the draft was first created. Pull
+        // the current draft per employee up front so its MANUAL items can be carried
+        // forward into the freshly-computed arrays instead of being wiped.
+        // When forcing over overlapping drafts, their MANUAL items carry forward too (merged
+        // per employee, de-duplicated) so an adjustment made before regenerating isn't lost.
+        const existingDraftPayrolls = await Payroll.find({
+            status: "DRAFT",
+            $or: [{ periodStart, periodEnd }, ...(overlappingDraftIds.length ? [{ _id: { $in: overlappingDraftIds } }] : [])],
+            employee: { $in: employees.map(e => e._id) }
+        }).select("employee allowances deductions").lean();
+        const existingDraftByEmployee = new Map();
+        for (const p of existingDraftPayrolls) {
+            const key = p.employee.toString();
+            const prev = existingDraftByEmployee.get(key);
+            if (!prev) {
+                existingDraftByEmployee.set(key, p);
+                continue;
+            }
+            const mergeManual = (a = [], b = []) => {
+                const seen = new Set();
+                return [...a, ...b].filter(item => {
+                    if (item?.type !== "MANUAL") return true;
+                    const sig = JSON.stringify([item.name, item.amount, item.meta, item.reason]);
+                    if (seen.has(sig)) return false;
+                    seen.add(sig);
+                    return true;
+                });
+            };
+            existingDraftByEmployee.set(key, {
+                ...prev,
+                allowances: mergeManual(prev.allowances, p.allowances),
+                deductions: mergeManual(prev.deductions, p.deductions)
+            });
+        }
+
+        // Absence is always tracked correctly in attendanceSummary (shown on the
+        // payslip) regardless of this - but it only ever reduces pay if an active
+        // rule resolves to basis "ABSENT_DAYS" and category "DEDUCTION". Surfaced to
+        // the frontend so a misconfigured/missing rule doesn't fail silently.
+        const hasActiveAbsenceDeductionRule = computeHasActiveAbsenceDeductionRule(rules);
 
         // Fetch Shifts to map names to hours
         const shifts = await Master.find({ type: "SHIFT", isActive: true });
@@ -902,7 +1000,7 @@ export const generatePayroll = async (req, res) => {
         const payrollRecords = [];
 
         for (const emp of employees) {
-            const effectiveSalary = resolveEffectiveSalary(emp, periodEnd);
+            const effectiveSalary = resolveEffectiveSalaryAsOf(emp, periodEnd);
             // Use basicSalary, not visaBase. An appraisal splits the increment 50/30/20
             // across basicSalary/hra/allowance but adds the FULL increment to visaBase.
             // Paying visaBase as "Basic" while also paying the split hra/allowance double-
@@ -916,6 +1014,22 @@ export const generatePayroll = async (req, res) => {
             const deductionList = [];
             let totalAllowances = 0;
             let totalDeductions = 0;
+
+            // MANUAL items to carry forward from the existing draft (see fetch above).
+            const existingDraft = existingDraftByEmployee.get(emp._id.toString());
+            const preservedManualAllowances = (existingDraft?.allowances || []).filter(a => a.type === "MANUAL");
+            const preservedManualDeductions = (existingDraft?.deductions || []).filter(d => d.type === "MANUAL");
+            // A MANUAL loan-override deduction (addAdjustment tags it with
+            // `meta: "Req ID: <id>"`, same convention the AUTO loan deduction below
+            // uses) and a freshly-recomputed AUTO deduction for that SAME request would
+            // otherwise both end up in deductionList once regenerate stops wiping
+            // MANUAL items - double-deducting that loan. Skip the AUTO push for any
+            // Req ID already covered by a preserved MANUAL item.
+            const manuallyOverriddenLoanReqIds = new Set(
+                preservedManualDeductions
+                    .map(d => String(d.meta || "").match(/Req ID:\s*([A-Za-z0-9]+)/)?.[1])
+                    .filter(Boolean)
+            );
 
             // Derived Rates
             const dailySalary = basicSalary / 30; // Standard 30 days (basic-only: late tiers, OT)
@@ -960,8 +1074,8 @@ export const generatePayroll = async (req, res) => {
             // figure. Paying them out here as cash allowances contradicted that
             // convention (and the client's own expectation) - removed.
             const fixedAllowances = [
-                { name: "Housing Rent Allowance (HRA)", value: emp.hra },
-                { name: "Other Allowance", value: emp.allowance }
+                { name: "Housing Rent Allowance (HRA)", value: emp.hra, category: "FIXED_HRA" },
+                { name: "Other Allowance", value: emp.allowance, category: "FIXED_OTHER" }
             ];
 
             fixedAllowances.forEach(fa => {
@@ -971,6 +1085,7 @@ export const generatePayroll = async (req, res) => {
                         name: fa.name,
                         amount: amount,
                         type: "AUTO",
+                        category: fa.category,
                         meta: "Fixed Monthly Allowance"
                     });
                     totalAllowances += amount;
@@ -983,12 +1098,15 @@ export const generatePayroll = async (req, res) => {
                 // pre-existing entries (field absent / undefined) still pass through —
                 // no data migration required.
                 if (item.includeInPayroll === false) return;
+                // Future-dated allowances start counting only from their effective date.
+                if (item.effectiveDate && new Date(item.effectiveDate) > periodEnd) return;
                 const amount = Number(item.amount) || 0;
                 if (amount > 0) {
                     allowanceList.push({
                         name: item.typeName,
                         amount: amount,
                         type: "AUTO",
+                        category: "CUSTOM_ALLOWANCE",
                         meta: "Fixed Monthly Allowance"
                     });
                     totalAllowances += amount;
@@ -1139,7 +1257,13 @@ export const generatePayroll = async (req, res) => {
                         if (statValue > 0) {
                             const parts = [];
                             if (stats.daysAbsent > 0) parts.push(`${stats.daysAbsent} Absent`);
-                            if (stats.unpaidLeaves > 0) parts.push(`${stats.unpaidLeaves} Unpaid Leave`);
+                            // Show the weekend/holiday days that became unpaid (sandwich rule) on
+                            // their own: the attendance grid draws them as "W", so folding them
+                            // into "Unpaid Leave" made the deduction look like it disagreed with
+                            // the attendance sheet.
+                            const plainUnpaid = (stats.unpaidLeaves || 0) - (stats.sandwichLeaves || 0);
+                            if (plainUnpaid > 0) parts.push(`${plainUnpaid} Unpaid Leave`);
+                            if (stats.sandwichLeaves > 0) parts.push(`${stats.sandwichLeaves} Weekend/Holiday between absences`);
                             description = parts.join(' + ');
                         }
                     }
@@ -1270,6 +1394,10 @@ export const generatePayroll = async (req, res) => {
                     // But if we already Finalized a payroll for this month, generatePayroll shouldn't define it again?
                     // generatePayroll creates DRAFT. If previous finalized payroll exists for this month, user handles it.
 
+                    if (manuallyOverriddenLoanReqIds.has(req.requestId)) {
+                        continue;
+                    }
+
                     if (deductionAmount > 0) {
                         deductionList.push({
                             name: req.details?.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
@@ -1281,6 +1409,11 @@ export const generatePayroll = async (req, res) => {
                     }
                 }
             }
+
+            // Carry forward preserved MANUAL items now that the AUTO lists are final
+            // (the loan-dedup guard above already ran against manuallyOverriddenLoanReqIds).
+            allowanceList.push(...preservedManualAllowances);
+            deductionList.push(...preservedManualDeductions);
 
             // 4. Calculate Net — totals are the exact sum of the (already 2dp-rounded)
             // line items so the payslip's Total Allowances / Total Deductions always
@@ -1320,6 +1453,22 @@ export const generatePayroll = async (req, res) => {
         if (payrollRecords.length > 0) {
             await Payroll.bulkWrite(payrollRecords);
 
+            // Remove the overlapping drafts this forced run replaced (after the new run is
+            // safely written, so a failed generation never loses them).
+            if (overlappingDraftIds.length) {
+                const removed = await Payroll.deleteMany({ _id: { $in: overlappingDraftIds }, status: "DRAFT" });
+                PayrollAudit.create({
+                    action: "GENERATED",
+                    performedBy: req.user ? req.user._id : null,
+                    performedByName: req.user ? req.user.name : "System",
+                    month,
+                    year,
+                    periodStart,
+                    periodEnd,
+                    details: `Forced generation replaced ${removed.deletedCount} overlapping draft payroll record(s)`
+                }).catch(console.error);
+            }
+
             // AUDIT LOG
             await PayrollAudit.create({
                 action: "GENERATED",
@@ -1339,7 +1488,8 @@ export const generatePayroll = async (req, res) => {
             month,
             year,
             periodStart,
-            periodEnd
+            periodEnd,
+            hasActiveAbsenceDeductionRule
         });
 
     } catch (error) {
@@ -1838,6 +1988,152 @@ export const unfinalizePayroll = async (req, res) => {
     }
 };
 
+// ---- Shared payroll-report model + PDF renderer ----------------------------------
+// Excel and PDF exports read the SAME row arrays (buildWorkReportRows /
+// buildPayrollSheetRows) so the two formats can't drift apart.
+
+const isPdfRequest = (req) => String(req.query.format || "").toLowerCase() === "pdf";
+
+const sendReportPdf = (req, res, buffer, fileName) => {
+    const disposition = req.query.inline === "1" ? "inline" : "attachment";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
+    res.send(buffer);
+};
+
+// Location / Visa / WPS "work report" rows (11 columns) - used by exportPayroll's Excel
+// and PDF output.
+const buildWorkReportRows = (records) => {
+    let serialNo = 1;
+    return records.map((r) => {
+        const emp = r.employee || {};
+        const fixed = r.basicSalary || 0;
+        const net = r.netSalary || 0;
+        // Variable = Net - Fixed (allowances - deductions + OT), as in the original export.
+        const variable = net - fixed;
+        const lopDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
+        const paidLeaves = r.attendanceSummary ? (r.attendanceSummary.paidLeaves || 0) : 0;
+        return [
+            serialNo++,
+            emp.name || "Unknown",
+            emp.laborCardNumber || "Not Provided",
+            emp.personalId || "Not Provided",
+            emp.bankName || "Not Provided",
+            emp.iban || emp.bankAccount || "Not Provided",
+            lopDays,
+            paidLeaves,
+            fixed,
+            variable,
+            net
+        ];
+    });
+};
+
+const WORK_REPORT_HEADERS = [
+    "Sl.No", "NAME OF THE EMPLOYEE", "WORK PERMIT NO (8 DIGIT NO)", "PERSONAL NO (14 DIGIT NO)",
+    "BANK NAME", "FAB CARD NO(16 DIGITS) OR IBAN FOR PERSONAL", "LOP DAYS", "PAID LEAVES",
+    "Fixed", "Variable", "Total"
+];
+
+// Generic landscape-A4 table PDF: optional group-header row, wrapped cells, header row
+// repeated on every page, page numbers. `types` per column: "text" | "int" | "money".
+const renderReportPdf = ({ titleLines, groups = null, headers, rows, weights, types, fontSize = 8, footerLabels = null }) => new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margins: { top: 26, bottom: 6, left: 24, right: 24 }, bufferPages: true });
+    const chunks = [];
+    doc.on("data", (c) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const L = 24;
+    const W = doc.page.width - 48;
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const colW = weights.map((w) => (w / totalWeight) * W);
+    const colX = colW.map((_, i) => L + colW.slice(0, i).reduce((a, b) => a + b, 0));
+    const BEIGE = "#E8EEFF";
+    const ACCENT_DARK = "#1E3A8A";
+    const GRID = "#D1D5DB";
+    const INK = "#111827";
+    const pad = 3;
+    const bottomLimit = doc.page.height - 36;
+    const alignFor = (i) => (types[i] === "money" || types[i] === "int" ? "right" : "left");
+    const fmt = (v, t) => {
+        if (v === null || v === undefined || v === "") return "";
+        return t === "money" ? payslipMoney(v) : String(v);
+    };
+
+    let y = 26;
+    titleLines.forEach((line) => {
+        doc.font(line.bold ? "Helvetica-Bold" : "Helvetica").fontSize(line.size || 10).fillColor(line.color || INK)
+            .text(line.text, L, y, { width: W, align: "center", lineBreak: false });
+        y += (line.size || 10) + 5;
+    });
+    y += 6;
+
+    const drawHeader = () => {
+        let hy = y;
+        doc.font("Helvetica-Bold").fontSize(fontSize);
+        if (groups) {
+            const gh = 16;
+            groups.forEach((g) => {
+                const x = colX[g.from];
+                const w = colX[g.to] + colW[g.to] - x;
+                doc.rect(x, hy, w, gh).fillAndStroke(BEIGE, GRID);
+                doc.fillColor(ACCENT_DARK).text(g.label, x, hy + 4.5, { width: w, align: "center", lineBreak: false });
+            });
+            hy += gh;
+        }
+        const hh = Math.max(...headers.map((h, i) => doc.heightOfString(h, { width: colW[i] - 2 * pad }))) + 8;
+        headers.forEach((h, i) => {
+            doc.rect(colX[i], hy, colW[i], hh).fillAndStroke(BEIGE, GRID);
+            doc.fillColor(ACCENT_DARK).text(h, colX[i] + pad, hy + 4, { width: colW[i] - 2 * pad, align: "center" });
+        });
+        y = hy + hh;
+    };
+    drawHeader();
+
+    rows.forEach((row) => {
+        doc.font("Helvetica").fontSize(fontSize);
+        const cells = row.map((v, i) => fmt(v, types[i]));
+        const rh = Math.max(15, Math.max(...cells.map((c, i) => doc.heightOfString(c, { width: colW[i] - 2 * pad }))) + 6);
+        if (y + rh > bottomLimit) {
+            doc.addPage();
+            y = 26;
+            drawHeader();
+            doc.font("Helvetica").fontSize(fontSize);
+        }
+        cells.forEach((c, i) => {
+            doc.rect(colX[i], y, colW[i], rh).lineWidth(0.5).strokeColor(GRID).stroke();
+            doc.fillColor(INK).text(c, colX[i] + pad, y + 3, { width: colW[i] - 2 * pad, align: alignFor(i) });
+        });
+        y += rh;
+    });
+
+    if (footerLabels) {
+        if (y + 60 > bottomLimit) { doc.addPage(); y = 26; }
+        y += 40;
+        doc.save().lineWidth(0.8).strokeColor("#374151");
+        const half = W / 2;
+        footerLabels.forEach((label, i) => {
+            const x = L + i * half + 30;
+            doc.moveTo(x, y).lineTo(x + half - 100, y).stroke();
+        });
+        doc.restore();
+        footerLabels.forEach((label, i) => {
+            doc.font("Helvetica-Bold").fontSize(8).fillColor(ACCENT_DARK)
+                .text(label, L + i * half + 30, y + 5, { width: half - 100, align: "center", lineBreak: false });
+        });
+    }
+
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        doc.font("Helvetica").fontSize(7).fillColor("#6B7280");
+        doc.text(`Generated ${new Date().toLocaleString("en-GB")}`, L, doc.page.height - 22, { width: W / 2, align: "left", lineBreak: false });
+        doc.text(`Page ${i + 1} of ${range.count}`, L + W / 2, doc.page.height - 22, { width: W / 2, align: "right", lineBreak: false });
+    }
+    doc.end();
+});
+
 // --- API: Export Payroll to Excel ---
 export const exportPayroll = async (req, res) => {
     try {
@@ -1932,42 +2228,34 @@ export const exportPayroll = async (req, res) => {
         ];
         aoa.push(headerRowBottom);
 
-        // Data Rows
-        let serialNo = 1;
-        records.forEach(r => {
-            const emp = r.employee || {};
+        // Data Rows (shared with the PDF export below)
+        const dataRows = buildWorkReportRows(records);
 
-            // Calc Salary Components
-            const fixed = r.basicSalary || 0;
-            const net = r.netSalary || 0;
-            // Assuming Variable = Net - Fixed (includes allowances - deductions + OT)
-            // Ensure no negative variable if net < basic (e.g. absent) might look weird, but mathematically correct for "balancing"
-            let variable = net - fixed;
-
-            // Format to 2 decimals
-            // variable = parseFloat(variable.toFixed(2));
-
-            // "NO OF DAYS" -> Using LOP (Loss of Pay) or 0 if user wants "Days Absent"? 
-            // Image shows "0" for full salary. Let's assume it means "LOP Days".
-            // r.attendanceSummary might have daysAbsent.
-            const lopDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
-            const paidLeaves = r.attendanceSummary ? (r.attendanceSummary.paidLeaves || 0) : 0; // ✅ NEW
-
-            const row = [
-                serialNo++,                          // Sl.No
-                emp.name || "Unknown",               // Name
-                emp.laborCardNumber || "Not Provided",           // Work Permit
-                emp.personalId || "Not Provided",                // Personal No
-                emp.bankName || "Not Provided",                  // Bank Name
-                emp.iban || emp.bankAccount || "Not Provided",   // FAB/IBAN
-                lopDays,                             // LOP Days
-                paidLeaves,                          // Paid Leaves
-                fixed,                               // Fixed
-                variable,                            // Variable
-                net                                  // Total
-            ];
-            aoa.push(row);
-        });
+        if (isPdfRequest(req)) {
+            const pdf = await renderReportPdf({
+                titleLines: [
+                    { text: COMPANY_NAME, bold: true, size: 13 },
+                    { text: MOL_ID, size: 9 },
+                    { text: REPORT_TITLE, bold: true, size: 11, color: "#1E3A8A" }
+                ],
+                groups: [{ label: "Employee's Net Salary", from: 8, to: 10 }],
+                headers: WORK_REPORT_HEADERS,
+                rows: dataRows,
+                weights: [4, 20, 13, 14, 11, 21, 6, 6, 8, 8, 9],
+                types: ["int", "text", "text", "text", "text", "text", "int", "int", "money", "money", "money"],
+                fontSize: 7.5
+            });
+            PayrollAudit.create({
+                action: "EXPORTED",
+                performedBy: req.user ? req.user._id : null,
+                performedByName: req.user ? req.user.name : "System",
+                month,
+                year,
+                details: `Exported ${reportPrefix} PDF Report`
+            }).catch(console.error);
+            return sendReportPdf(req, res, pdf, `${reportPrefix.replace(/\s+/g, "_")}_${month}_${year}.pdf`);
+        }
+        dataRows.forEach((row) => aoa.push(row));
 
         // 2. Create Sheet
         const worksheet = XLSX.utils.aoa_to_sheet(aoa);
@@ -2044,6 +2332,172 @@ export const exportPayroll = async (req, res) => {
     }
 };
 
+// The two fixed allowance names generatePayroll always pushes as AUTO items (see
+// "2.2 FIXED EMPLOYEE ALLOWANCES" above) - excluded from the collapsed ADDITIONS
+// column below since they're already broken out into their own ALLOWANCE/HRA
+// columns, matching the client's template. Everything else (ad-hoc allowances,
+// overtime, manual adjustments) collapses into one ADDITIONS row.
+const FIXED_ALLOWANCE_NAMES = new Set(["Housing Rent Allowance (HRA)", "Other Allowance"]);
+
+// Turns a payroll's allowances/deductions array into one {name, amount, comments}
+// entry per line item, so the template's NAME/AMOUNT/COMMENTS column group can list
+// each addition/deduction on its own row instead of a single comma-joined total.
+const toSheetLines = (items = [], { exclude } = {}) => (exclude ? items.filter((i) => !exclude.has(i?.name)) : items)
+    .map((i) => ({
+        name: i?.name || "",
+        amount: round2(Number(i?.amount) || 0),
+        comments: i?.reason || (typeof i?.meta === "string" ? i.meta : "") || ""
+    }));
+
+const PAYROLL_SHEET_HEADERS = [
+    "ID", "NAME", "PERSONAL ID", "IBAN", "COMPANY", "BRANCH",
+    "BASIC", "ALLOWANCE", "HRA", "SALARY",
+    "NAME", "AMOUNT", "COMMENTS",
+    "NAME", "AMOUNT", "COMMENTS",
+    "NET SALARY"
+];
+
+// 17-value rows in the client's Payroll Sheet template (used by both the Excel and PDF
+// exports). Each employee gets one row per addition/deduction line (whichever list is
+// longer), with the employee/salary/net columns on the first row only - so every
+// allowance, overtime, absence, loan etc. shows with its own name, amount and comment.
+const buildPayrollSheetRows = (validRecords) => validRecords.flatMap((r) => {
+    const emp = r.employee || {};
+    const basicSalary = round2(r.basicSalary || 0);
+    const allowance = Number(emp.allowance) || 0;
+    const hra = Number(emp.hra) || 0;
+    const totalAllowances = round2(r.totalAllowances || 0);
+    const salary = round2(basicSalary + totalAllowances);
+    const additions = toSheetLines(r.allowances || [], { exclude: FIXED_ALLOWANCE_NAMES });
+    const deductions = toSheetLines(r.deductions || []);
+    const rowCount = Math.max(1, additions.length, deductions.length);
+
+    return Array.from({ length: rowCount }, (_, idx) => {
+        const add = additions[idx];
+        const ded = deductions[idx];
+        const first = idx === 0;
+        return [
+            first ? displayEmployeeCode(emp) : "",
+            first ? (emp.name || "") : "",
+            first ? (emp.personalId || "") : "",
+            first ? (emp.iban || emp.bankAccount || "") : "",
+            first ? (emp.company || "") : "",
+            first ? (emp.branch || "") : "",
+            first ? basicSalary : "",
+            first ? allowance : "",
+            first ? hra : "",
+            first ? salary : "",
+            add ? add.name : "",
+            add ? add.amount : (first ? 0 : ""),
+            add ? add.comments : "",
+            ded ? ded.name : "",
+            ded ? ded.amount : (first ? 0 : ""),
+            ded ? ded.comments : "",
+            first ? round2(r.netSalary || 0) : ""
+        ];
+    });
+});
+
+// --- API: Export "Payroll Sheet" (client-template-matched export, alongside the
+// existing exportPayroll WPS-format report - a different, non-WPS layout) ---
+export const exportPayrollSheet = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        if (!month || !year) {
+            return res.status(400).json({ message: "month and year are required." });
+        }
+
+        const records = await Payroll.find({ month, year }).populate({
+            path: "employee",
+            select: "name code systemCode personalId iban bankAccount company branch allowance hra"
+        });
+
+        const validRecords = records.filter((r) => r.employee);
+        if (!validRecords.length) {
+            return res.status(404).json({ message: "No payroll records found for this month." });
+        }
+
+        const aoa = [];
+        aoa.push(["PAYROLL SHEET"]);
+        aoa.push(["INFO", "", "", "", "", "", "SALARY DETAILS", "", "", "", "ADDITIONS", "", "", "DEDUCTIONS", "", "", "PAYABLE"]);
+        aoa.push(PAYROLL_SHEET_HEADERS);
+
+        const sheetRows = buildPayrollSheetRows(validRecords);
+
+        if (isPdfRequest(req)) {
+            const monthNames = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+            const pdf = await renderReportPdf({
+                titleLines: [
+                    { text: "PAYROLL SHEET", bold: true, size: 14 },
+                    { text: `Month: ${monthNames[parseInt(month, 10) - 1] || month} ${year}`, size: 10, color: "#1E3A8A" }
+                ],
+                groups: [
+                    { label: "INFO", from: 0, to: 5 },
+                    { label: "SALARY DETAILS", from: 6, to: 9 },
+                    { label: "ADDITIONS", from: 10, to: 12 },
+                    { label: "DEDUCTIONS", from: 13, to: 15 },
+                    { label: "PAYABLE", from: 16, to: 16 }
+                ],
+                headers: PAYROLL_SHEET_HEADERS,
+                rows: sheetRows,
+                weights: [8.5, 11.5, 11.5, 19, 8, 7.5, 8, 9.5, 7, 8.5, 6, 7.5, 9.5, 8.5, 8.5, 10, 8.5],
+                types: ["text", "text", "text", "text", "text", "text", "money", "money", "money", "money", "text", "money", "text", "text", "money", "text", "money"],
+                fontSize: 6.5,
+                footerLabels: ["PAYROLL VERIFICATION", "HR VERIFICATION"]
+            });
+            PayrollAudit.create({
+                action: "EXPORTED",
+                performedBy: req.user ? req.user._id : null,
+                performedByName: req.user ? req.user.name : "System",
+                month,
+                year,
+                details: "Exported Payroll Sheet PDF"
+            }).catch(console.error);
+            return sendReportPdf(req, res, pdf, `Payroll_Sheet_${month}_${year}.pdf`);
+        }
+        sheetRows.forEach((row) => aoa.push(row));
+
+        aoa.push([]);
+        aoa.push(["PAYROLL VERIFICATION", "", "", "", "", "", "", "", "HR VERIFICATION"]);
+
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        worksheet['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 16 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+            { s: { r: 1, c: 6 }, e: { r: 1, c: 9 } },
+            { s: { r: 1, c: 10 }, e: { r: 1, c: 12 } },
+            { s: { r: 1, c: 13 }, e: { r: 1, c: 15 } }
+        ];
+        worksheet['!cols'] = [
+            { wch: 12 }, { wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 14 },
+            { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+            { wch: 20 }, { wch: 12 }, { wch: 24 },
+            { wch: 20 }, { wch: 12 }, { wch: 24 },
+            { wch: 14 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Payroll_Sheet_${month}_${year}`);
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+        res.setHeader("Content-Disposition", `attachment; filename="Payroll_Sheet_${month}_${year}.xlsx"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        PayrollAudit.create({
+            action: "EXPORTED",
+            performedBy: req.user ? req.user._id : null,
+            performedByName: req.user ? req.user.name : "System",
+            month,
+            year,
+            details: "Exported Payroll Sheet"
+        }).catch(console.error);
+
+        res.send(buffer);
+    } catch (error) {
+        res.status(500).json({ message: "Export failed: " + error.message });
+    }
+};
+
 // --- API: Generate SIF File (WPS) ---
 export const generateSIF = async (req, res) => {
     try {
@@ -2071,7 +2525,7 @@ export const generateSIF = async (req, res) => {
         }
         // A bank payment file should only ever be built from finalized payroll -
         // was pulling DRAFT records too, contrary to this comment's own stated intent.
-        const records = await Payroll.find(query).populate("employee", "name code bankName laborCardNumber bankAccount iban agentId");
+        const records = await Payroll.find(query).populate("employee", "name code systemCode bankName laborCardNumber bankAccount iban agentId");
 
         if (!records || records.length === 0) {
             return res.status(404).json({ message: "No finalized payroll records found for this period. SIF can only be generated after Finalize." });
@@ -2113,7 +2567,7 @@ export const generateSIF = async (req, res) => {
         if (req.query.format === "json") {
             const previewData = records.map(r => ({
                 "Employee": r.employee?.name || "N/A",
-                "Code": r.employee?.code || "N/A",
+                "Code": displayEmployeeCode(r.employee) || "N/A",
                 "IBAN/Account": r.employee?.iban || r.employee?.bankAccount || "N/A",
                 "Total Net": (r.netSalary || 0).toFixed(2),
                 "Basic": (r.basicSalary || 0).toFixed(2),
@@ -2214,7 +2668,7 @@ export const generateMOLReport = async (req, res) => {
 
             return {
                 "Visa Company": emp.visaCompany || "N/A",
-                "Employee ID": emp.code,
+                "Employee ID": displayEmployeeCode(emp),
                 "Name": emp.name,
                 "Labor Card No.": emp.laborCardNumber || "N/A",
                 "Contract Basic": emp.basicSalary,
@@ -2252,7 +2706,7 @@ export const getPaymentHistory = async (req, res) => {
         const query = { year, status: "PROCESSED" };
         if (month) query.month = month;
         const records = await Payroll.find(query)
-            .populate("employee", "name code department");
+            .populate("employee", "name code systemCode department");
 
         if (records.length === 0) {
             return res.status(404).json({ message: month ? `No payment history found for ${month}/${year}` : `No payment history found for ${year}` });
@@ -2261,7 +2715,7 @@ export const getPaymentHistory = async (req, res) => {
         const historyData = records.map(r => ({
             "Month": r.month,
             "Year": r.year,
-            "Employee ID": r.employee?.code,
+            "Employee ID": displayEmployeeCode(r.employee),
             "Name": r.employee?.name,
             "Department": r.employee?.department,
             "Basic Salary": r.basicSalary,
@@ -2355,36 +2809,350 @@ export const getMyPayslips = async (req, res) => {
 };
 
 // --- API: Download Payslip PDF (Mobile) ---
-export const downloadPayslip = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const payroll = await Payroll.findById(id).populate("employee", "name code designation department company");
+// Resolves a company's payslip branding (logo + whether it gets the Leptis
+// Group letterhead) once per company name, cached in the Map the caller
+// provides - a bulk export loops many employees who often share a company, and
+// without this each one would re-hit S3/Mongo for the identical logo.
+const resolveCompanyBranding = async (companyName, brandingCache) => {
+    if (brandingCache.has(companyName)) return brandingCache.get(companyName);
 
-        if (!payroll) {
-            return res.status(404).json({ message: "Payslip not found" });
+    const companyMaster = companyName
+        ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
+        : null;
+    // Prefer this employee's own company logo (S3 URL from Masters > Company
+    // Structure, fetched as a Buffer) or a legacy local-file upload. No
+    // cross-tenant fallback to process.env.COMPANY_LOGO - if a company has no
+    // logo configured, the payslip renders with no logo rather than borrowing
+    // another tenant's.
+    const companyLogoSource = companyMaster?.image;
+    const companyLogoBuffer = await fetchRemoteLogoBuffer(companyLogoSource);
+    const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyLogoSource);
+    const LEPTIS_COMPANY_NAMES = ["LEPTIS HYPERMARKET LLC", "LEPTIS", "LEPTIS HYPERMARKET"];
+    const isLeptisCompany = LEPTIS_COMPANY_NAMES.some((n) => n.toLowerCase() === String(companyName).toLowerCase());
+
+    const branding = { companyLogoBuffer, companyLogoPath, isLeptisCompany };
+    brandingCache.set(companyName, branding);
+    return branding;
+};
+
+// Resolves the logo + display name for the employee's VISA company. The visaCompany value
+// is a name that may be a company (Masters > Company Structure) or a branch of one; a
+// branch resolves to its parent company's logo. Returns null when it can't be matched to
+// a company with a usable logo so the caller keeps the employee's own company branding.
+const resolveVisaCompanyBranding = async (visaCompanyName, brandingCache) => {
+    const name = String(visaCompanyName || "").trim();
+    if (!name) return null;
+    const cacheKey = `visa:${name.toLowerCase()}`;
+    if (brandingCache.has(cacheKey)) return brandingCache.get(cacheKey);
+
+    const byName = new RegExp(`^${escapeRegex(name)}$`, "i");
+    let companyMaster = await Master.findOne({ type: "COMPANY", name: byName }).lean();
+    if (!companyMaster) {
+        const branchMaster = await Master.findOne({ type: "BRANCH", name: byName, parentId: { $ne: null } }).lean();
+        if (branchMaster) {
+            companyMaster = await Master.findOne({ _id: branchMaster.parentId, type: "COMPANY" }).lean();
         }
+    }
 
-        // Verify Ownership (unless Admin)
-        // Assuming req.user is populated by protect middleware
-        if (req.user.role !== "Admin" && req.user.employeeId) {
-            if (payroll.employee._id.toString() !== req.user.employeeId.toString()) {
-                return res.status(403).json({ message: "Unauthorized access to this payslip" });
+    let result = null;
+    if (companyMaster) {
+        const companyLogoBuffer = await fetchRemoteLogoBuffer(companyMaster.image);
+        const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyMaster.image);
+        if (companyLogoBuffer || companyLogoPath) {
+            result = { companyName: companyMaster.name, companyLogoBuffer, companyLogoPath };
+        }
+    }
+    brandingCache.set(cacheKey, result);
+    return result;
+};
+
+// Employee fields buildPayslipPdfBuffer needs (accommodation/vehicle are rendered on the
+// slip only - see buildPayslipRows).
+const PAYSLIP_EMPLOYEE_FIELDS = "name code systemCode designation department company visaCompany accommodationAllowance vehicleAllowance";
+
+const payslipMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Row model for the payslip ("SALARY SLIP" layout). Presentation only - never
+// touches stored payroll figures:
+//  - Basic Salary, Housing Rent Allowance (HRA) and Other Allowance come from the
+//    payroll's own fixed allowance lines.
+//  - HRA and Other Allowance rows are always shown; every remaining allowance line
+//    (custom allowance types, manual adjustments) is its own row under its own name;
+//    overtime is kept as its own "Overtime" row so it stays visible.
+//  - Accommodation / Vehicle Expense are CTC-only and deliberately NOT part of the
+//    payroll's earnings (see generatePayroll). The slip layout still shows them in both
+//    columns, so they are added to Earnings AND Deductions in equal amounts at render
+//    time - Total Earnings / Total Deductions include them, Net Salary is unchanged.
+//  - Every payroll deduction is listed, "Salary Advance" lines included (they used to be
+//    hidden while still reducing net, so Earnings - Deductions never matched Net Salary
+//    and manual advance adjustments never showed up on the slip).
+const buildPayslipRows = (payroll) => {
+    const emp = payroll.employee || {};
+    const lines = payroll.allowances || [];
+    const sum = (arr) => round2(arr.reduce((s, a) => s + (Number(a?.amount) || 0), 0));
+    const isHraLine = (a) => a.category === "FIXED_HRA" || a.name === "Housing Rent Allowance (HRA)";
+    // A custom allowance type literally named "Other Allowance" keeps its CUSTOM category,
+    // so only the employee's own fixed field (FIXED_OTHER, or the legacy name match on
+    // snapshots that predate categories) counts as the fixed row.
+    const isOtherLine = (a) => a.category === "FIXED_OTHER" || (!a.category && a.name === "Other Allowance");
+    const hraLines = lines.filter(isHraLine);
+    const otherLines = lines.filter(isOtherLine);
+    const overtimeLines = lines.filter((a) => a.category === "OVERTIME");
+    const adhocLines = lines.filter((a) => !isHraLine(a) && !isOtherLine(a) && a.category !== "OVERTIME");
+
+    const accommodation = round2(Number(emp.accommodationAllowance) || 0);
+    const vehicle = round2(Number(emp.vehicleAllowance) || 0);
+    const basic = round2(payroll.basicSalary || 0);
+
+    // HRA and Other Allowance are always listed (even at 0) so the slip shows the
+    // employee's full fixed pay structure; each custom/manual allowance appears under its
+    // own name (lines sharing a name are summed into one row).
+    const earnings = [
+        { name: "Basic Salary", amount: basic },
+        { name: "Housing Rent Allowance (HRA)", amount: sum(hraLines) },
+        { name: "Other Allowance", amount: sum(otherLines) }
+    ];
+    const adhocByName = new Map();
+    for (const a of adhocLines) {
+        const key = String(a.name || "Allowance").trim() || "Allowance";
+        adhocByName.set(key, round2((adhocByName.get(key) || 0) + (Number(a.amount) || 0)));
+    }
+    for (const [name, amount] of adhocByName) {
+        if (amount) earnings.push({ name, amount });
+    }
+    if (sum(overtimeLines)) earnings.push({ name: "Overtime", amount: sum(overtimeLines) });
+    if (accommodation) earnings.push({ name: "Accommodation Expense", amount: accommodation });
+    if (vehicle) earnings.push({ name: "Vehicle Expense", amount: vehicle });
+
+    const deductions = [];
+    for (const d of payroll.deductions || []) {
+        // The absence deduction's NAME is whatever the admin called the Payroll Rule
+        // (e.g. "UNPAID"); its meta is the stable "<n> Absent" marker generatePayroll writes.
+        const isAbsent = /\babsent\b/i.test(String(d.meta || ""));
+        deductions.push({ name: isAbsent ? "Absent Deduction" : d.name, amount: round2(d.amount) });
+    }
+    if (accommodation) deductions.push({ name: "Accommodation Expense", amount: accommodation });
+    if (vehicle) deductions.push({ name: "Vehicle Expense", amount: vehicle });
+
+    const totalEarnings = round2(basic + (payroll.totalAllowances || 0) + accommodation + vehicle);
+    const totalDeductions = round2((payroll.totalDeductions || 0) + accommodation + vehicle);
+    return { earnings, deductions, totalEarnings, totalDeductions };
+};
+
+// Draws the "SALARY SLIP" layout onto a fresh, margin-less A4 PDFKit doc. Every
+// position is absolute (no auto page breaks), so vertical spacing is derived from
+// measured text heights and a compact mode keeps long slips (many lines, or the Leptis
+// letterhead's reserved top band) on one page.
+const drawPayslip = (doc, d) => {
+    const pageW = 595.28;
+    const L = 40;
+    const R = pageW - 40;
+    const W = R - L;
+    const ACCENT = "#2C5CFF";
+    const ACCENT_DARK = "#1E3A8A";
+    const ACCENT_LINE = "#BFD0FF";
+    const BEIGE = "#E8EEFF";
+    const BEIGE_LIGHT = "#FBF6EC";
+    const ROW_LINE = "#E5E7EB";
+    const INK = "#111827";
+    const MUTED = "#6B7280";
+    const RED = "#DC2626";
+
+    const { earnings, deductions, totalEarnings, totalDeductions } = d.rows;
+    const rowCount = Math.max(earnings.length, deductions.length, 5);
+    const letterhead = d.isLeptisCompany; // letterhead supplies its own logo/branding
+    const compact = letterhead || rowCount > 9;
+    const gap = compact ? 9 : 14;
+
+    // Measure the variable-height blocks up front so the table row height can be chosen
+    // to keep the whole slip on one page (and above the Leptis letterhead's footer band).
+    const colW = W / 4;
+    const fields = [
+        ["EMPLOYEE NAME", d.employee?.name || "Unknown"],
+        ["EMPLOYEE ID", displayEmployeeCode(d.employee) || "N/A"],
+        ["DESIGNATION", d.employee?.designation || "N/A"],
+        ["DEPARTMENT", d.employee?.department || "N/A"]
+    ];
+    doc.font("Helvetica-Bold").fontSize(11.5);
+    const valueH = Math.max(...fields.map(([, v]) => doc.heightOfString(String(v), { width: colW - 18 })));
+    const fieldsH = 10 + 13 + valueH + 6;
+    const words = amountToWordsAED(d.netSalary);
+    doc.font("Helvetica").fontSize(11);
+    const wordsH = doc.heightOfString(words, { width: W - 100 });
+    const stripH = Math.max(28, wordsH + 16);
+
+    const headH = 26;
+    const attHeadH = compact ? 19 : 23;
+    const attBodyH = compact ? 54 : 66;
+    const netH = compact ? 58 : 70;
+    const sigGap = compact ? 40 : 74;
+    const startY = letterhead ? 100 : 34;
+    const maxY = letterhead ? 744 : 806;
+    const fixedH = (letterhead ? 62 : 72) + 8 + (d.companyName ? 14 : 0) + fieldsH + 4 + gap
+        + attHeadH + attBodyH + gap + (headH * 2 + 2) + gap + 2 + netH + gap + stripH + sigGap + 20;
+    let rowH = 15;
+    for (const candidate of (compact ? [21, 19, 17, 15] : [27, 24, 21, 19, 17, 15])) {
+        rowH = candidate;
+        if (startY + fixedH + rowCount * candidate <= maxY) break;
+    }
+
+    const hRule = (y, color = ACCENT_LINE, width = 1) => {
+        doc.save().lineWidth(width).strokeColor(color).moveTo(L, y).lineTo(R, y).stroke().restore();
+    };
+
+    let y = startY;
+
+    // ---- Header: brand (left) | SALARY SLIP + month (right)
+    // Brand = the employee's OWN company logo (Masters > Company Structure). Only when
+    // that company has no (usable) logo does it fall back to the company name, so a
+    // payslip never goes out unbranded. Leptis payslips get the letterhead's branding.
+    if (!letterhead) {
+        let drewCompanyLogo = false;
+        const logoSource = d.companyLogoBuffer || d.companyLogoPath;
+        if (logoSource) {
+            try {
+                // fit keeps the aspect ratio inside a 200x58 box; PDFKit only reads
+                // PNG/JPEG, so any other format throws and drops to the fallback below.
+                doc.image(logoSource, L, y, { fit: [200, 58], align: "left", valign: "center" });
+                drewCompanyLogo = true;
+            } catch (imageError) {
+                console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
             }
         }
+        if (!drewCompanyLogo) {
+            // No usable company logo: print the company name as plain text so the slip is
+            // never unbranded, without borrowing another tenant's mark.
+            doc.font("Helvetica-Bold").fontSize(20).fillColor(ACCENT)
+                .text(String(d.companyName || "").toUpperCase(), L, y + 18, { width: 260, lineBreak: false, ellipsis: true });
+        }
+        doc.save().lineWidth(1).strokeColor(ACCENT_LINE).moveTo(300, y + 2).lineTo(300, y + 56).stroke().restore();
+    }
+    const titleX = letterhead ? L : 310;
+    const titleW = letterhead ? W : R - 310;
+    const titleAlign = letterhead ? "left" : "right";
+    doc.font("Helvetica-Bold").fontSize(letterhead ? 22 : 28).fillColor(INK)
+        .text("SALARY SLIP", titleX, y + (letterhead ? 0 : 2), { width: titleW, align: titleAlign, lineBreak: false });
+    doc.font("Helvetica").fontSize(letterhead ? 12 : 14).fillColor(MUTED)
+        .text(`Month: ${d.monthLabel}`, titleX, y + (letterhead ? 28 : 38), { width: titleW, align: titleAlign, lineBreak: false });
+    y += letterhead ? 62 : 72;
+    hRule(y);
+    y += 8;
 
+    // Employer line (legal entity the employee belongs to - the group header alone
+    // doesn't say which company is paying).
+    if (d.companyName) {
+        doc.font("Helvetica").fontSize(8.5).fillColor(MUTED).text(`Employer: ${d.companyName}`, L, y, { width: W, lineBreak: false });
+        y += 14;
+    }
+
+    // ---- Identity row
+    fields.forEach(([label, value], i) => {
+        const x = L + i * colW + (i === 0 ? 2 : 14);
+        doc.font("Helvetica").fontSize(7.5).fillColor(MUTED).text(label, x, y + 4, { width: colW - 18, characterSpacing: 0.3, lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(11.5).fillColor(INK).text(String(value), x, y + 17, { width: colW - 18 });
+        if (i > 0) doc.save().lineWidth(0.7).strokeColor(ACCENT_LINE).moveTo(L + i * colW, y + 2).lineTo(L + i * colW, y + fieldsH - 4).stroke().restore();
+    });
+    y += fieldsH + 4;
+    hRule(y);
+    y += gap;
+
+    // ---- Attendance summary
+    doc.font("Helvetica-Bold").fontSize(compact ? 13 : 15).fillColor(INK).text("Attendance Summary", L + 2, y, { lineBreak: false });
+    y += attHeadH;
+    hRule(y);
+    const att = d.attendanceSummary || {};
+    const attCols = [
+        ["Total Days", att.totalDays || 30, INK],
+        ["Present", att.daysPresent || 0, INK],
+        ["Absent", att.daysAbsent || 0, RED]
+    ];
+    const attW = W / 3;
+    attCols.forEach(([label, value, color], i) => {
+        const x = L + i * attW + (i === 0 ? 14 : 28);
+        doc.font("Helvetica").fontSize(10).fillColor(MUTED).text(label, x, y + 8, { lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(compact ? 22 : 28).fillColor(color).text(String(value), x, y + 22, { lineBreak: false });
+        if (i > 0) doc.save().lineWidth(0.7).strokeColor(ACCENT_LINE).moveTo(L + i * attW, y + 8).lineTo(L + i * attW, y + (compact ? 48 : 58)).stroke().restore();
+    });
+    y += attBodyH;
+    hRule(y);
+    y += gap;
+
+    // ---- Earnings | Deductions
+    const colGap = 12;
+    const tblW = (W - colGap) / 2;
+    const leftX = L;
+    const rightX = L + tblW + colGap;
+    const drawTable = (x, title, items, totalLabel, totalValue) => {
+        doc.rect(x, y, tblW, headH).fill(BEIGE);
+        doc.font("Helvetica-Bold").fontSize(11).fillColor(ACCENT_DARK).text(title, x + 8, y + 8, { lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(ACCENT_DARK).text("AMOUNT (AED)", x, y + 9, { width: tblW - 8, align: "right", lineBreak: false });
+        let ry = y + headH;
+        for (let i = 0; i < rowCount; i++) {
+            const item = items[i];
+            if (item) {
+                doc.font("Helvetica").fontSize(10).fillColor(INK)
+                    .text(item.name || "", x + 8, ry + (rowH - 10) / 2 - 1, { width: tblW - 100, height: rowH - 4, ellipsis: true, lineBreak: false });
+                doc.font("Helvetica").fontSize(10).fillColor(INK)
+                    .text(payslipMoney(item.amount), x, ry + (rowH - 10) / 2 - 1, { width: tblW - 8, align: "right", lineBreak: false });
+            }
+            doc.save().lineWidth(0.6).strokeColor(ROW_LINE).moveTo(x, ry + rowH).lineTo(x + tblW, ry + rowH).stroke().restore();
+            ry += rowH;
+        }
+        doc.rect(x, ry, tblW, headH + 2).fill(BEIGE_LIGHT);
+        doc.font("Helvetica-Bold").fontSize(11.5).fillColor(INK).text(totalLabel, x + 8, ry + 9, { lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(11.5).fillColor(INK).text(payslipMoney(totalValue), x, ry + 9, { width: tblW - 8, align: "right", lineBreak: false });
+        doc.save().lineWidth(0.7).strokeColor(ACCENT_LINE).rect(x, y, tblW, headH + rowCount * rowH + headH + 2).stroke().restore();
+        return ry + headH + 2;
+    };
+    const leftEnd = drawTable(leftX, "EARNINGS", earnings, "Total Earnings", totalEarnings);
+    drawTable(rightX, "DEDUCTIONS", deductions, "Total Deductions", totalDeductions);
+    y = leftEnd + gap + 2;
+    hRule(y);
+
+    // ---- Net salary payable
+    doc.font("Helvetica-Bold").fontSize(compact ? 16 : 19).fillColor(ACCENT_DARK).text("NET SALARY PAYABLE", L + 4, y + (compact ? 12 : 16), { lineBreak: false });
+    doc.font("Helvetica").fontSize(10.5).fillColor(MUTED).text("Final payout after deductions", L + 4, y + (compact ? 33 : 41), { lineBreak: false });
+    doc.save().lineWidth(1).strokeColor(ACCENT_LINE).moveTo(300, y + 10).lineTo(300, y + netH - 10).stroke().restore();
+    doc.font("Helvetica-Bold").fontSize(compact ? 24 : 30).fillColor(ACCENT_DARK)
+        .text(`${payslipMoney(d.netSalary)} AED`, 310, y + (compact ? 16 : 20), { width: R - 310 - 4, align: "right", lineBreak: false });
+    y += netH;
+    hRule(y);
+    y += gap;
+
+    // ---- In words
+    doc.rect(L, y, W, stripH).fill(BEIGE_LIGHT);
+    doc.font("Helvetica-Bold").fontSize(12).fillColor(ACCENT_DARK).text("In Words:", L + 12, y + (stripH - 12) / 2 - 1, { lineBreak: false });
+    doc.font("Helvetica").fontSize(11).fillColor(INK).text(words, L + 88, y + (stripH - wordsH) / 2, { width: W - 100 });
+    y += stripH;
+
+    // ---- Signatures
+    y += sigGap;
+    doc.save().lineWidth(0.8).strokeColor("#374151");
+    doc.moveTo(L + 26, y).lineTo(L + 196, y).stroke();
+    doc.moveTo(R - 196, y).lineTo(R - 26, y).stroke();
+    doc.restore();
+    doc.font("Helvetica").fontSize(8.5).fillColor(MUTED);
+    doc.text("EMPLOYEE SIGNATURE", L + 26, y + 6, { width: 170, align: "center", characterSpacing: 0.4, lineBreak: false });
+    doc.text("EMPLOYER SIGNATURE", R - 196, y + 6, { width: 170, align: "center", characterSpacing: 0.4, lineBreak: false });
+};
+
+// Builds one payslip PDF (PDFKit content, optionally merged onto the Leptis
+// Group letterhead via pdf-lib) and returns it as a Buffer - shared by the
+// single-payslip download below and the bulk ZIP export, so there is exactly
+// one place that draws a payslip. `payroll` must have `.employee` populated
+// with at least name/code/designation/department/company (same shape the
+// single-download query below fetches). `brandingCache` is a Map the caller
+// owns - pass a fresh one for a single call, or one shared Map across a loop.
+const buildPayslipPdfBuffer = async (payroll, brandingCache) => {
         const { employee, basicSalary, allowances, deductions, netSalary, attendanceSummary, month, year, periodStart, periodEnd } = payroll;
         const companyName = employee?.company || process.env.COMPANY_NAME || "Company";
-        const companyMaster = companyName
-            ? await Master.findOne({ type: "COMPANY", name: new RegExp(`^${escapeRegex(companyName)}$`, "i") }).lean()
-            : null;
-        // Prefer this employee's own company logo (S3 URL from Masters > Company
-        // Structure, fetched as a Buffer) or a legacy local-file upload. No
-        // cross-tenant fallback to process.env.COMPANY_LOGO - if a company has no
-        // logo configured, the payslip renders with no logo rather than borrowing
-        // another tenant's.
-        const companyLogoSource = companyMaster?.image;
-        const companyLogoBuffer = await fetchRemoteLogoBuffer(companyLogoSource);
-        const companyLogoPath = companyLogoBuffer ? null : resolveCompanyLogoPath(companyLogoSource);
+        const companyBranding = await resolveCompanyBranding(companyName, brandingCache);
+        const { isLeptisCompany } = companyBranding;
+        // Header logo + "Employer" follow the employee's VISA company (the entity that
+        // sponsors and pays them); employees without a resolvable visa company keep their
+        // own company's branding. The Leptis letterhead still keys off employee.company.
+        const visaBranding = await resolveVisaCompanyBranding(employee?.visaCompany, brandingCache);
+        const { companyLogoBuffer, companyLogoPath } = visaBranding || companyBranding;
         const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
         // "Period" used to always show just periodEnd's calendar month/year (e.g.
         // "August 2026"), even when the actual pay period (this app uses a rolling,
@@ -2400,250 +3168,31 @@ export const downloadPayslip = async (req, res) => {
         const periodStr = (!periodStart || !periodEnd || periodsSpanOneMonth)
             ? `${monthName} ${year}`
             : `${formatShortDate(periodStart)} – ${formatShortDate(periodEnd)}`;
-        const totalAllowances = payroll.totalAllowances || 0;
+        const rows = buildPayslipRows(payroll);
 
-        // Hide "Salary Advance" from the itemized list, but keep its value subtracted from Net Salary.
-        // For the visual "Total Deductions", we will subtract the advance so the math looks correct.
-        let displayDeductions = [];
-        let hiddenAdvanceAmount = 0;
-
-        (payroll.deductions || []).forEach(d => {
-            if (d.name && d.name.toLowerCase().includes("salary advance")) {
-                hiddenAdvanceAmount += d.amount;
-            } else {
-                displayDeductions.push(d);
-            }
-        });
-
-        const totalDeductions = (payroll.totalDeductions || 0) - hiddenAdvanceAmount;
-        const grossEarnings = basicSalary + totalAllowances;
-
-        // 1. Generate Content PDF using PDFKit
-        const doc = new PDFDocument({ size: "A4", margin: 50 });
+        // Margin-less doc: every element is positioned absolutely by drawPayslip,
+        // so PDFKit must not auto-insert pages when text lands near the bottom edge.
+        const doc = new PDFDocument({ size: "A4", margin: 0 });
         const buffers = [];
         doc.on("data", buffers.push.bind(buffers));
-
-        // Wait for doc to end
         const docEndPromise = new Promise((resolve) => {
-            doc.on("end", () => {
-                const pdfData = Buffer.concat(buffers);
-                resolve(pdfData);
-            });
+            doc.on("end", () => resolve(Buffer.concat(buffers)));
         });
 
-        // --- PDF Generated Content ---
-        const pageWidth = 595.28; // A4 width in points
-        const centerX = pageWidth / 2;
-
-        // Title
-        if (companyLogoBuffer || companyLogoPath) {
-            try {
-                doc.image(companyLogoBuffer || companyLogoPath, 50, 112, { fit: [90, 46], align: "left", valign: "center" });
-            } catch (imageError) {
-                console.warn("Unable to embed company logo in payslip PDF:", imageError.message);
-            }
-        }
-        // Company name/PAYSLIP/Period/employee-details box used to sit at hardcoded
-        // absolute Y coordinates with only ~17pt of clearance below the company name -
-        // a long company name wrapping to 2 lines would overlap "PAYSLIP" below it.
-        // Measure each block's actual rendered height (doc.heightOfString respects the
-        // currently-active font/size, so call it right after setting fontSize) and
-        // derive the next element's Y from it instead, so nothing overlaps regardless
-        // of how long the company name is.
-        const companyNameY = 138;
-        doc.fontSize(12).fillColor("#182d54");
-        const companyNameHeight = doc.heightOfString(companyName, { width: 280, align: "center" });
-        doc.text(companyName, centerX - 140, companyNameY, { align: "center", width: 280 });
-
-        const payslipY = companyNameY + companyNameHeight + 8;
-        doc.fontSize(16).fillColor("#404040");
-        const payslipHeight = doc.heightOfString("PAYSLIP", { width: 100, align: "center" });
-        doc.text("PAYSLIP", centerX - 50, payslipY, { align: "center", width: 100 });
-
-        const periodY = payslipY + payslipHeight + 4;
-        const periodText = `Period: ${periodStr}`;
-        doc.fontSize(12).fillColor("#646464");
-        const periodHeight = doc.heightOfString(periodText, { width: 200, align: "center" });
-        doc.text(periodText, centerX - 100, periodY, { align: "center", width: 200 });
-
-        // Employee Details Box - was a fixed-height (70pt) single-line row;
-        // doc.text() never wraps or truncates on its own, so a long value (e.g.
-        // "SHINDO VELIYANNURKARAN ANTONY") drew straight through into the next
-        // column's text with no gap at all ("...ANTONYEmployee ID: R143"). Fixed
-        // by giving each value a bounded `width` - pdfkit wraps to multiple
-        // lines on its own once width is set, same mechanism the company-name/
-        // PAYSLIP block above already uses. Row 2's Y and the box's own height
-        // are then derived from whichever of Name/Designation actually needed
-        // 2 lines, instead of a hardcoded 20pt gap that only fit one line.
-        doc.y = periodY + periodHeight + 9;
-        const startY = doc.y;
-
-        const rightColX = centerX + 10;
-        const leftValueWidth = rightColX - 140 - 10; // gap before the right column starts
-        const rightValueWidth = (pageWidth - 40) - (rightColX + 80); // gap before the page's right margin
-        const rowLineGap = 6; // clearance between row 1 (Name/ID) and row 2 (Designation/Department)
-
-        doc.fontSize(10).font("Helvetica-Bold");
-        const nameText = employee?.name || "Unknown";
-        const codeText = employee?.code || "N/A";
-        const row1Height = Math.max(
-            doc.heightOfString(nameText, { width: leftValueWidth }),
-            doc.heightOfString(codeText, { width: rightValueWidth })
-        );
-
-        const designationText = employee?.designation || "N/A";
-        const departmentText = employee?.department || "N/A";
-        const row2Height = Math.max(
-            doc.heightOfString(designationText, { width: leftValueWidth }),
-            doc.heightOfString(departmentText, { width: rightValueWidth })
-        );
-
-        const row2Y = startY + 10 + row1Height + rowLineGap;
-        const boxHeight = (row2Y - startY) + row2Height + 10; // + bottom padding
-
-        doc.rect(40, startY, pageWidth - 80, boxHeight).fill("#FAFAFA");
-        doc.fillColor("#000000");
-
-        // Left Column
-        doc.fontSize(10).font("Helvetica");
-        doc.text("Employee Name:", 50, startY + 10);
-        doc.font("Helvetica-Bold");
-        doc.text(nameText, 140, startY + 10, { width: leftValueWidth });
-
-        doc.font("Helvetica").text("Designation:", 50, row2Y);
-        doc.font("Helvetica-Bold");
-        doc.text(designationText, 140, row2Y, { width: leftValueWidth });
-
-        // Right Column
-        doc.font("Helvetica").text("Employee ID:", rightColX, startY + 10);
-        doc.font("Helvetica-Bold");
-        doc.text(codeText, rightColX + 80, startY + 10, { width: rightValueWidth });
-
-        doc.font("Helvetica").text("Department:", rightColX, row2Y);
-        doc.font("Helvetica-Bold");
-        doc.text(departmentText, rightColX + 80, row2Y, { width: rightValueWidth });
-
-        // Continue layout flow from the box's true bottom, not wherever the last
-        // text() call happened to land (which could under-report if the OTHER
-        // column wrapped instead).
-        doc.y = startY + boxHeight;
-
-        doc.moveDown(4);
-
-        // Attendance Summary Table
-        const attendanceY = doc.y + 20;
-        doc.font("Helvetica-Bold").fontSize(11).text("Attendance Summary", 40, attendanceY);
-        doc.moveDown(0.5);
-
-        // Simple Table Header
-        const tableTop = doc.y;
-        doc.rect(40, tableTop, pageWidth - 80, 20).fill("#F0F0F0");
-        doc.fillColor("#323232").fontSize(9);
-        doc.text("Total Days", 50, tableTop + 6);
-        doc.text("Present", 150, tableTop + 6);
-        doc.text("Absent", 250, tableTop + 6);
-        doc.text("Late", 350, tableTop + 6); // Late days count
-        doc.text("Overtime (Hrs)", 450, tableTop + 6);
-
-        // Table Body
-        doc.rect(40, tableTop + 20, pageWidth - 80, 20).stroke();
-        doc.fillColor("#000000").font("Helvetica");
-        doc.text(String(attendanceSummary?.totalDays || 30), 50, tableTop + 26);
-        doc.text(String(attendanceSummary?.daysPresent || 0), 150, tableTop + 26);
-        doc.text(String(attendanceSummary?.daysAbsent || 0), 250, tableTop + 26);
-        doc.text(String(attendanceSummary?.late || 0), 350, tableTop + 26);
-        doc.text(String(attendanceSummary?.overtimeHours || 0), 450, tableTop + 26);
-
-        doc.moveDown(3);
-
-        // Earnings & Deductions
-        const salaryY = doc.y + 20;
-
-        // Column geometry - two side-by-side blocks. Each amount is right-aligned
-        // inside a box; the box's x is its LEFT edge (pdfkit convention), not the
-        // desired right edge. The left column's amount box used to start at
-        // centerX-10 (already near the middle) and extend rightward with the SAME
-        // width as the right column, landing on top of/inside the Deductions block -
-        // and the right column's box started at pageWidth-50 and extended further
-        // right by that same width, running off the page entirely. Net effect:
-        // deduction amounts (both per-row and the Total Deductions figure) never
-        // rendered at all, and the earnings amount visually overlapped into the
-        // Deductions column. Both boxes now start at their own column's left edge
-        // and share one width so they end exactly at the divider / right margin.
-        const amountColWidth = centerX - 60;
-        const leftAmountX = 50;
-        const rightAmountX = centerX + 10;
-
-        // Headers
-        doc.rect(40, salaryY, (pageWidth - 80) / 2, 20).fill("#182d54");
-        doc.rect(centerX, salaryY, (pageWidth - 80) / 2, 20).fill("#182d54");
-
-        doc.fillColor("#FFFFFF").font("Helvetica-Bold");
-        doc.text("Earnings", 50, salaryY + 6);
-        doc.text("Amount (AED)", leftAmountX, salaryY + 6, { align: "right", width: amountColWidth });
-
-        doc.text("Deductions", centerX + 10, salaryY + 6);
-        doc.text("Amount (AED)", rightAmountX, salaryY + 6, { align: "right", width: amountColWidth });
-
-        // Rows
-        let currentY = salaryY + 20;
-        doc.fillColor("#000000").font("Helvetica");
-
-        const earnings = [
-            { name: "Basic Salary", amount: basicSalary },
-            ...(allowances || []).map(a => ({ name: a.name, amount: a.amount }))
-        ];
-        const deductionList = displayDeductions;
-        const maxRows = Math.max(earnings.length, deductionList.length);
-
-        for (let i = 0; i < maxRows; i++) {
-            const earn = earnings[i];
-            const ded = deductionList[i];
-
-            if (earn) {
-                doc.text(earn.name, 50, currentY + 6);
-                doc.text(earn.amount.toFixed(2), leftAmountX, currentY + 6, { align: "right", width: amountColWidth });
-            }
-            if (ded) {
-                doc.text(ded.name, centerX + 10, currentY + 6);
-                doc.text(ded.amount.toFixed(2), rightAmountX, currentY + 6, { align: "right", width: amountColWidth });
-            }
-
-            // Draw line
-            doc.moveTo(40, currentY + 20).lineTo(pageWidth - 40, currentY + 20).strokeColor("#E5E7EB").stroke();
-            currentY += 20;
-        }
-
-        // Totals Row
-        doc.rect(40, currentY, (pageWidth - 80), 25).fill("#F3F4F6");
-        doc.fillColor("#000000").font("Helvetica-Bold");
-
-        doc.text("Total Earnings", 50, currentY + 8);
-        doc.text(grossEarnings.toFixed(2), leftAmountX, currentY + 8, { align: "right", width: amountColWidth });
-
-        doc.text("Total Deductions", centerX + 10, currentY + 8);
-        doc.text(totalDeductions.toFixed(2), rightAmountX, currentY + 8, { align: "right", width: amountColWidth });
-
-        currentY += 35;
-
-        // Net Pay
-        doc.rect(40, currentY, pageWidth - 80, 30).fill("#F0FDF4"); // Light Green
-        doc.rect(40, currentY, pageWidth - 80, 30).strokeColor("#16A34A").lineWidth(2).stroke();
-
-        doc.fillColor("#15803D").font("Helvetica-Bold").fontSize(14);
-        doc.text("NET SALARY PAYABLE", 60, currentY + 8);
-        doc.text(`${netSalary.toFixed(2)} AED`, pageWidth - 200, currentY + 8, { align: "right", width: 150 });
-
-        // Footer / Signatures
-        const footerY = currentY + 60;
-        doc.lineWidth(1).strokeColor("#374151");
-
-        doc.moveTo(60, footerY).lineTo(200, footerY).stroke();
-        doc.fontSize(10).fillColor("#6B7280").text("Employee Signature", 60, footerY + 5, { width: 140, align: "center" });
-
-        doc.moveTo(pageWidth - 200, footerY).lineTo(pageWidth - 60, footerY).stroke();
-        doc.text("Employer Signature", pageWidth - 200, footerY + 5, { width: 140, align: "center" });
-
+        drawPayslip(doc, {
+            employee,
+            // Header shows the visa company's logo, else the employee's own company logo
+            // (company name text only as fallback).
+            companyName: visaBranding?.companyName || employee?.company || "",
+            companyLogoBuffer,
+            companyLogoPath,
+            attendanceSummary,
+            netSalary,
+            rows,
+            monthLabel: new Date(year, month - 1).toLocaleString("en-US", { month: "short" }) + ` ${year}`,
+            periodRangeText: (!periodsSpanOneMonth && periodStart && periodEnd) ? periodStr : "",
+            isLeptisCompany
+        });
         doc.end();
 
         const contentPdfBuffer = await docEndPromise;
@@ -2656,15 +3205,11 @@ export const downloadPayslip = async (req, res) => {
         // Only apply it for Leptis employees; every other company gets the plain
         // PDFKit content page above, which already carries that company's own name
         // and logo (from Masters > Company Structure).
-        const LEPTIS_COMPANY_NAMES = ["LEPTIS HYPERMARKET LLC", "LEPTIS", "LEPTIS HYPERMARKET"];
-        const isLeptisCompany = LEPTIS_COMPANY_NAMES.some((n) => n.toLowerCase() === String(companyName).toLowerCase());
         const templatePath = path.join(__dirname, "../assets/templates/Letter_Head_-_Group_2023.pdf");
 
         // Non-Leptis companies (or if the template file is missing) get the plain content PDF.
         if (!isLeptisCompany || !fs.existsSync(templatePath)) {
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
-            return res.send(contentPdfBuffer);
+            return contentPdfBuffer;
         }
 
         const templateBytes = fs.readFileSync(templatePath);
@@ -2686,14 +3231,230 @@ export const downloadPayslip = async (req, res) => {
 
         // Serialize
         const pdfBytes = await templatePdf.save();
-        const finalBuffer = Buffer.from(pdfBytes);
+        return Buffer.from(pdfBytes);
+};
+
+// Single payslip PDF download - self-service (employee downloading their own)
+// and admin/HR (downloading any employee's). No status gate here deliberately
+// (unlike getMyPayslips' PROCESSED-only filter) - once you have the id, a
+// DRAFT payslip can be previewed too.
+export const downloadPayslip = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const payroll = await Payroll.findById(id).populate("employee", PAYSLIP_EMPLOYEE_FIELDS);
+
+        if (!payroll) {
+            return res.status(404).json({ message: "Payslip not found" });
+        }
+
+        // Admin / HR / ALL / payroll managers may open any payslip; everyone else only
+        // their own. (This used to waive only role === "Admin" - an HR user with a linked
+        // employee record was 403'd on others' payslips, while a non-admin user with NO
+        // employee link skipped the check entirely.)
+        const canViewAnyPayslip = req.user.role === "Admin"
+            || /^HR/i.test(req.user.role || "")
+            || req.user.permissions?.includes("ALL")
+            || req.user.permissions?.includes("MANAGE_PAYROLL");
+        if (!canViewAnyPayslip) {
+            const ownEmployeeId = req.user.employeeId?.toString();
+            if (!ownEmployeeId || payroll.employee?._id?.toString() !== ownEmployeeId) {
+                return res.status(403).json({ message: "Unauthorized access to this payslip" });
+            }
+        }
+
+        const pdfBuffer = await buildPayslipPdfBuffer(payroll, new Map());
+        const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
 
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="Payslip_${monthName}_${year}.pdf"`);
-        res.send(finalBuffer);
-
+        const disposition = req.query.inline === "1" ? "inline" : "attachment";
+        res.setHeader("Content-Disposition", `${disposition}; filename="Payslip_${monthName}_${payroll.year}.pdf"`);
+        res.send(pdfBuffer);
     } catch (error) {
         // console.error(error);
         res.status(500).json({ message: "PDF Generation Failed: " + error.message });
+    }
+};
+
+// Bulk payslip export - one ZIP containing every PROCESSED employee's payslip
+// PDF for a period, available once Finalize has run.
+//
+// This used to be a single synchronous request: query, build every PDF, zip,
+// send. Confirmed failing in production with an nginx 504 Gateway Time-out -
+// building N PDFs (each with its own S3 logo fetch on a cache miss) can run
+// long enough on a real company's headcount that the reverse proxy kills the
+// connection before the response finishes (same failure mode already fixed
+// for the DB backup - see backupController.js's identical comment). A bounded-
+// concurrency loop alone only shaves time off; it doesn't remove the ceiling.
+// Split into start/status/download so the client never holds one long-lived
+// request open - the job keeps running server-side regardless.
+export const startPayslipExport = async (req, res) => {
+    try {
+        const { month, year, periodStart, periodEnd } = req.query;
+
+        // month is optional - the UI's "All months" option omits it, meaning
+        // "every finalized month in this year", not a single period.
+        const query = { status: "PROCESSED" };
+        if (periodStart && periodEnd) {
+            query.periodStart = toDayStart(periodStart);
+            query.periodEnd = toDayEnd(periodEnd);
+        } else if (year) {
+            query.year = Number(year);
+            if (month) query.month = Number(month);
+        } else {
+            return res.status(400).json({ message: "year (or periodStart and periodEnd) is required." });
+        }
+
+        // Cheap existence check up front - a genuinely empty period should 404
+        // immediately, not spin up a job that would just fail a moment later.
+        const recordCount = await Payroll.countDocuments(query);
+        if (recordCount === 0) {
+            const message = (month && !periodStart)
+                ? "There is no payroll for this particular month."
+                : "No finalized payroll records found for this period. Payslips can only be exported after Finalize.";
+            return res.status(404).json({ message });
+        }
+
+        const job = await PayslipExportJob.create({
+            status: "pending",
+            requestedBy: req.user?._id,
+            requestedByName: req.user?.name,
+            month: month ? Number(month) : undefined,
+            year: year ? Number(year) : undefined,
+            periodStart: periodStart ? toDayStart(periodStart) : undefined,
+            periodEnd: periodEnd ? toDayEnd(periodEnd) : undefined
+        });
+
+        res.status(202).json({ jobId: job._id, status: "pending" });
+
+        // Fire-and-forget: runs after the response is already sent, fully
+        // decoupled from this request/response cycle.
+        setImmediate(() => runPayslipExportJob(job._id, query, { month, year, periodStart, periodEnd }));
+    } catch (error) {
+        res.status(500).json({ message: "Failed to start payslip export: " + error.message });
+    }
+};
+
+async function runPayslipExportJob(jobId, query, rawParams) {
+    const { month, year, periodStart, periodEnd } = rawParams;
+    try {
+        await PayslipExportJob.findByIdAndUpdate(jobId, { status: "running", startedAt: new Date() });
+
+        const records = await Payroll.find(query).populate("employee", PAYSLIP_EMPLOYEE_FIELDS);
+
+        const brandingCache = new Map();
+        const zipEntries = [];
+        const failures = [];
+
+        // Bounded concurrency - one PDF (each with its own S3 logo fetch, on a
+        // cache miss) at a time was needlessly slow for a large batch; this
+        // doesn't remove the timeout risk on its own (that's what the job
+        // split above is for) but still keeps the job itself fast.
+        const CONCURRENCY = 5;
+        let nextIndex = 0;
+        const worker = async () => {
+            while (true) {
+                const i = nextIndex++;
+                if (i >= records.length) return;
+                const record = records[i];
+                try {
+                    const pdfBuffer = await buildPayslipPdfBuffer(record, brandingCache);
+                    const safeCode = String(record.employee?.code || record.employee?._id || "employee").replace(/[^a-z0-9_-]+/gi, "_");
+                    const monthName = new Date(record.year, record.month - 1).toLocaleString('default', { month: 'long' });
+                    zipEntries.push({ name: `Payslip_${safeCode}_${monthName}_${record.year}.pdf`, content: pdfBuffer });
+                } catch (buildError) {
+                    failures.push({ employeeCode: record.employee?.code, employeeName: record.employee?.name, error: buildError.message });
+                }
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, records.length) }, worker));
+
+        if (zipEntries.length === 0) {
+            await PayslipExportJob.findByIdAndUpdate(jobId, {
+                status: "failed",
+                error: "Failed to build any payslips for this period.",
+                completedAt: new Date()
+            });
+            return;
+        }
+
+        const archive = buildZipArchive(zipEntries);
+
+        const filenamePeriod = periodStart && periodEnd
+            ? `${periodStart}_${periodEnd}`
+            : (month ? `${month}_${year}` : `All_${year}`);
+        const fileName = `Payslips_${filenamePeriod}.zip`;
+
+        const stored = await storeUploadedFile({
+            file: { buffer: archive, mimetype: "application/zip", originalname: fileName },
+            folder: "payslip-exports",
+            preferS3: true
+        });
+
+        await PayslipExportJob.findByIdAndUpdate(jobId, {
+            status: "ready",
+            s3Key: stored.filePath,
+            fileName,
+            fileSize: archive.length,
+            employeeCount: zipEntries.length,
+            skippedCount: failures.length,
+            completedAt: new Date()
+        });
+
+        PayrollAudit.create({
+            action: "PAYSLIPS_EXPORTED",
+            month: month ? Number(month) : records[0]?.month,
+            year: year ? Number(year) : records[0]?.year,
+            details: `Exported ${zipEntries.length} payslip(s) as ZIP${failures.length ? `, ${failures.length} skipped` : ""}`
+        }).catch(console.error);
+    } catch (error) {
+        console.error("[payrollController] Payslip export job failed:", error);
+        // Double-guarded, same as backupController.js's runBackupJob - a Mongo
+        // hiccup while recording the failure itself must never leave the job
+        // silently stuck in "running" forever, and must never throw inside a
+        // setImmediate callback (unhandled rejection would crash the process).
+        await PayslipExportJob.findByIdAndUpdate(jobId, {
+            status: "failed",
+            error: error.message,
+            completedAt: new Date()
+        }).catch(() => {});
+    }
+}
+
+export const getPayslipExportStatus = async (req, res) => {
+    try {
+        const job = await PayslipExportJob.findById(req.params.jobId);
+        if (!job) return res.status(404).json({ message: "Export job not found" });
+
+        res.json({
+            jobId: job._id,
+            status: job.status,
+            employeeCount: job.employeeCount,
+            skippedCount: job.skippedCount,
+            fileSize: job.fileSize,
+            error: job.error
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch export status: " + error.message });
+    }
+};
+
+export const downloadPayslipExportFile = async (req, res) => {
+    try {
+        const job = await PayslipExportJob.findById(req.params.jobId);
+        if (!job) return res.status(404).json({ message: "Export job not found" });
+        if (job.status !== "ready") return res.status(409).json({ message: "Export is not ready yet" });
+
+        // Return the URL as JSON, not a redirect - see backupController.js's
+        // downloadBackupFile for why (bucket CORS would otherwise need to
+        // allowlist whatever origin calls this via fetch/XHR).
+        const url = await getSignedFileUrl({
+            filePath: job.s3Key,
+            storage: "S3",
+            expiresIn: 300,
+            downloadFilename: job.fileName
+        });
+        res.json({ url });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to generate download link: " + error.message });
     }
 };

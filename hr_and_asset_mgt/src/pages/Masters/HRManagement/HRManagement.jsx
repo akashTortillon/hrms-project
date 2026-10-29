@@ -548,6 +548,16 @@ export default function HRManagement() {
                                 />
                                 <label htmlFor="leaveCarryForward" className="text-sm font-medium text-gray-700">Carry Forward Balance</label>
                             </div>
+                            <div className="form-group flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="leaveIncludeInProbation"
+                                    checked={leaveTypeState.includeInProbation !== false}
+                                    onChange={(e) => setLeaveTypeState({ ...leaveTypeState, includeInProbation: e.target.checked })}
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <label htmlFor="leaveIncludeInProbation" className="text-sm font-medium text-gray-700">Include in probation?</label>
+                            </div>
                         </div>
 
                         <div className="form-group">

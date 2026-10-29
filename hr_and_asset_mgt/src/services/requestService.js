@@ -91,6 +91,14 @@ export const downloadDocument = async (requestId) => {
   return response.data;
 };
 
+// Returns { success, url } - url may be S3-signed (absolute) or a LOCAL-storage
+// relative path (needs the API origin prefixed before opening, same convention
+// as DocumentsTable.jsx's getFileUrl).
+export const getMedicalDocumentUrl = async (requestId) => {
+  const response = await api.get(`${REQUEST_API}/${requestId}/medical-document`);
+  return response.data;
+};
+
 // ✅ Admin – approve / reject request (FIXED)
 export const updateRequestStatus = async (id, payload) => {
   const response = await api.put(

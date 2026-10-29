@@ -70,6 +70,7 @@ import {
   approveDocumentRequest,
   rejectDocumentRequest,
   downloadDocument,
+  getMedicalDocumentUrl,
   getEmployeeRequests,
   getLeaveSummary
 } from "../controllers/requestController.js";
@@ -183,6 +184,13 @@ router.get(
   "/:requestId/download",
   protect,
   downloadDocument
+);
+
+// GET /api/requests/:requestId/medical-document
+router.get(
+  "/:requestId/medical-document",
+  protect,
+  getMedicalDocumentUrl
 );
 
 export default router;
