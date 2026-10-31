@@ -232,6 +232,40 @@ import {
   uaeDateStr
 } from "../utils/attendanceUtils.js";
 
+const DATE_STR_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_RANGE_DAYS = 62;
+
+// YYYY-MM-DD shifted by a whole number of days (UTC arithmetic, no DST drift).
+const addDaysToDateStr = (dateStr, days) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+};
+
+// Resolves the list of YYYY-MM-DD days a monthly view/export covers. Either a calendar
+// month (month + year) or an explicit from/to range - the range exists because attendance
+// cycles don't follow calendar months (e.g. 22nd to 22nd). Returns { error } on bad input.
+const resolveDateWindow = ({ month, year, from, to }) => {
+  if (from || to) {
+    if (!from || !to) return { error: "Both from and to dates are required" };
+    const valid = (d) => DATE_STR_RE.test(d) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d);
+    if (!valid(from) || !valid(to)) return { error: "Dates must be valid YYYY-MM-DD values" };
+    if (to < from) return { error: "'to' date must be on or after 'from' date" };
+    const days = [];
+    for (let d = from; d <= to; d = addDaysToDateStr(d, 1)) {
+      days.push(d);
+      if (days.length > MAX_RANGE_DAYS) return { error: `Date range cannot exceed ${MAX_RANGE_DAYS} days` };
+    }
+    return { days, start: from, end: to, isRange: true };
+  }
+
+  if (!month || !year) return { error: "Month and Year are required" };
+  const mm = String(month).padStart(2, "0");
+  const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => `${year}-${mm}-${String(i + 1).padStart(2, "0")}`);
+  return { days, start: days[0], end: days[days.length - 1], isRange: false };
+};
+
 /**
  * SYNC Biometrics
  * Manually trigger biometric data synchronization
@@ -504,20 +538,14 @@ export const getDailyAttendance = async (req, res) => {
  */
 export const getMonthlyAttendance = async (req, res) => {
   try {
-    const { month, year } = req.query;
+    const { month, year, from, to } = req.query;
 
-    if (!month || !year) {
-      return res.status(400).json({ message: "Month and Year are required" });
+    // Calendar month, or an explicit from/to range (e.g. 22nd -> 22nd pay cycle).
+    const window = resolveDateWindow({ month, year, from, to });
+    if (window.error) {
+      return res.status(400).json({ message: window.error });
     }
-
-    const startDate = `${year}-${month.padStart(2, "0")}-01`;
-    // Calculate end date properly
-    const nextMonth = new Date(parseInt(year), parseInt(month), 1); // Month is 0-indexed in Date constructor? No, wait. 
-    // Actually, simple string match is safer for YYYY-MM prefix if we store as String.
-    // But let's stick to the stored Date String format YYYY-MM-DD.
-
-    // Construct regex or range query
-    const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+    const days = window.days;
 
     // Get employees (Personalized for users without VIEW_ALL_ATTENDANCE permission)
     const canViewAll = req.user.role === "Admin" || req.user.permissions.includes("ALL") || req.user.permissions.includes("VIEW_ALL_ATTENDANCE");
@@ -548,7 +576,7 @@ export const getMonthlyAttendance = async (req, res) => {
 
     const employees = await Employee.find(employeeQuery).sort({ code: 1 });
     const attendanceRecords = await Attendance.find({
-      date: { $regex: regex }
+      date: { $gte: window.start, $lte: window.end }
     }).populate("editedBy", "name"); // ✅ Populate Editor
 
     // Get Holidays + company-wide default week-off day
@@ -563,12 +591,6 @@ export const getMonthlyAttendance = async (req, res) => {
     attendanceRecords.forEach(rec => {
       if (!attendanceMap[rec.employee]) attendanceMap[rec.employee] = {};
       attendanceMap[rec.employee][rec.date] = rec;
-    });
-
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => {
-      const d = i + 1;
-      return `${year}-${month.padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
     });
 
     const result = employees.map(emp => {
@@ -1075,7 +1097,7 @@ export const getEmployeeAttendanceHistory = async (req, res) => {
  */
 export const exportAttendance = async (req, res) => {
   try {
-    const { view, date, month, year, department, shift, search } = req.query;
+    const { view, date, month, year, from, to, department, shift, search } = req.query;
 
     // 1. Fetch Employees (with Filters)
     let matchStage = { status: "Active" };
@@ -1101,12 +1123,14 @@ export const exportAttendance = async (req, res) => {
     let headers = [];
     let cols = [];
 
-    if (view === "month" && month && year) {
-      // --- MONTHLY EXPORT ---
-      const startDate = `${year}-${month.padStart(2, "0")}-01`;
-      const regex = new RegExp(`^${year}-${month.padStart(2, "0")}`);
+    const exportWindow = view === "month" ? resolveDateWindow({ month, year, from, to }) : null;
+    if (exportWindow?.error && (from || to || (month && year))) {
+      return res.status(400).json({ message: exportWindow.error });
+    }
 
-      const attendanceRecords = await Attendance.find({ date: { $regex: regex } });
+    if (view === "month" && exportWindow && !exportWindow.error) {
+      // --- MONTHLY EXPORT (calendar month, or from/to range) ---
+      const attendanceRecords = await Attendance.find({ date: { $gte: exportWindow.start, $lte: exportWindow.end } });
       const holidaySet = await getHolidaysSet();
       const exportSettings = await SystemSettings.findOne().select("defaultWorkingDayType defaultWeekOffDays");
       const exportDefault = { workingDayType: exportSettings?.defaultWorkingDayType, weekOffDays: exportSettings?.defaultWeekOffDays };
@@ -1120,8 +1144,15 @@ export const exportAttendance = async (req, res) => {
         attendanceMap[rec.employee][rec.date] = rec;
       });
 
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+      const days = exportWindow.days;
+      // Column headers: plain day numbers inside one calendar month; "DD-MMM" once the
+      // range crosses months (22..31 then 01..21 would otherwise repeat day numbers and
+      // collapse into duplicate keys).
+      const crossesMonths = days[0].slice(0, 7) !== days[days.length - 1].slice(0, 7);
+      const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const dayLabel = (dateKey) => crossesMonths
+        ? `${dateKey.slice(8, 10)}-${MONTH_ABBR[parseInt(dateKey.slice(5, 7), 10) - 1]}`
+        : String(parseInt(dateKey.slice(8, 10), 10));
 
       // Build Matrix
       finalRows = employees.map(emp => {
@@ -1135,8 +1166,8 @@ export const exportAttendance = async (req, res) => {
         const empAttendance = attendanceMap[emp._id] || {};
         let present = 0, late = 0, absent = 0, leave = 0;
 
-        const dayList = days.map(d => {
-          const dateKey = `${year}-${month.padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const dayList = days.map(dateKey => {
+          const d = dateKey;
           const record = empAttendance[dateKey];
           const dateObj = new Date(dateKey);
           const isEmployeeWeekOff = isWeekOff(dateObj, emp, exportDefault);
@@ -1171,7 +1202,7 @@ export const exportAttendance = async (req, res) => {
                     status === "Weekend" ? "W" :
                       status === "Flex Off" ? "F" : status;
 
-          row[String(d)] = cellValue;
+          row[dayLabel(d)] = cellValue;
 
           // Stats
           if (status === "Present") present++;
@@ -1195,7 +1226,7 @@ export const exportAttendance = async (req, res) => {
         return row;
       }).filter(r => r !== null);
 
-      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(String)];
+      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(dayLabel)];
 
     } else {
       // --- DAILY EXPORT ---
@@ -1255,8 +1286,8 @@ export const exportAttendance = async (req, res) => {
 
     const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-    const cleanupName = (view === "month" && month)
-      ? `Attendance_${month}-${year}`
+    const cleanupName = (view === "month" && exportWindow && !exportWindow.error)
+      ? (exportWindow.isRange ? `Attendance_${exportWindow.start}_to_${exportWindow.end}` : `Attendance_${month}-${year}`)
       : `Attendance_${date}`;
 
     res.setHeader("Content-Disposition", `attachment; filename="${cleanupName}.xlsx"`);

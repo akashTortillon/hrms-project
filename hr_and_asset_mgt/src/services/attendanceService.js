@@ -38,10 +38,13 @@ export const syncBiometrics = async () => {
 };
 
 // ✅ Get Monthly Attendance
-export const getMonthlyAttendance = async (month, year) => {
-  const res = await api.get(`${ATTENDANCE_API}/monthly`, {
-    params: { month, year }
-  });
+// Pass { from, to } (YYYY-MM-DD) to view a custom range such as the 22nd -> 22nd cycle;
+// without them the calendar month/year is used.
+export const getMonthlyAttendance = async (month, year, range = {}) => {
+  const params = range.from && range.to
+    ? { from: range.from, to: range.to }
+    : { month, year };
+  const res = await api.get(`${ATTENDANCE_API}/monthly`, { params });
   return res.data;
 };
 

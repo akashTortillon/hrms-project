@@ -1,3 +1,4 @@
+import { buildCycleRange, enumerateDays } from "./attendanceDateUtils.js";
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -65,6 +66,10 @@ function Attendance() {
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "10");
   const selectedStatus = searchParams.get("status") || "";
+  // Monthly view custom range (e.g. 22nd -> 22nd); both must be set to take effect.
+  const rangeFrom = searchParams.get("from") || "";
+  const rangeTo = searchParams.get("to") || "";
+  const rangeActive = Boolean(rangeFrom && rangeTo);
   const searchQuery = searchParams.get("search") || "";
 
   // Data State
@@ -227,11 +232,16 @@ function Attendance() {
   const fetchMonthlyData = async () => {
     setLoading(true);
     try {
-      const data = await getMonthlyAttendance(selectedMonth.toString(), selectedYear.toString());
+      const data = await getMonthlyAttendance(
+        selectedMonth.toString(),
+        selectedYear.toString(),
+        rangeActive ? { from: rangeFrom, to: rangeTo } : {}
+      );
       setMonthlyRecords(data);
     } catch (error) {
       console.error("Failed to fetch monthly data", error);
-      toast.error("Failed to load monthly records");
+      toast.error(error.response?.data?.message || "Failed to load monthly records");
+      setMonthlyRecords([]);
     } finally {
       setLoading(false);
     }
@@ -261,6 +271,7 @@ function Attendance() {
         date: selectedDate,
         month: selectedMonth,
         year: selectedYear,
+        ...(viewMode === "month" && rangeActive ? { from: rangeFrom, to: rangeTo } : {}),
         department: selectedDepartment,
         shift: selectedShift,
         branch: selectedBranch
@@ -274,7 +285,7 @@ function Attendance() {
       link.href = url;
 
       const filename = viewMode === "month"
-        ? `Attendance_${selectedMonth}-${selectedYear}.xlsx`
+        ? (rangeActive ? `Attendance_${rangeFrom}_to_${rangeTo}.xlsx` : `Attendance_${selectedMonth}-${selectedYear}.xlsx`)
         : `Attendance_${selectedDate}.xlsx`;
 
       link.setAttribute('download', filename);
@@ -347,7 +358,10 @@ function Attendance() {
     const searchMatch = !q
       || record.name?.toLowerCase().includes(q)
       || record.code?.toLowerCase().includes(q);
-    return deptMatch && shiftMatch && branchMatch && searchMatch;
+    // "Has Status": keep employees with at least one day of that status in the range.
+    const statusMatch = !selectedStatus
+      || Object.values(record.attendance || {}).some((day) => day.status === selectedStatus);
+    return deptMatch && shiftMatch && branchMatch && searchMatch && statusMatch;
   });
 
   // "Self" scope - daily rows key off `employeeId`, monthly rows key off `_id`
@@ -391,9 +405,17 @@ function Attendance() {
         selectedDate={selectedDate}
         onDateChange={(d) => updateParams({ date: d, page: 1 })}
         selectedMonth={selectedMonth}
-        setSelectedMonth={(m) => updateParams({ month: m })}
+        setSelectedMonth={(m) => updateParams({ month: m, from: "", to: "" })}
         selectedYear={selectedYear}
-        setSelectedYear={(y) => updateParams({ year: y })}
+        setSelectedYear={(y) => updateParams({ year: y, from: "", to: "" })}
+        rangeFrom={rangeFrom}
+        rangeTo={rangeTo}
+        onRangeChange={(from, to) => updateParams({ from, to })}
+        onCycleRange={() => {
+          const { from, to } = buildCycleRange(selectedMonth, selectedYear, 22);
+          updateParams({ from, to });
+        }}
+        onClearRange={() => updateParams({ from: "", to: "" })}
         departments={isEmployee ? [] : departments}
         shifts={isEmployee ? [] : shifts}
         branches={isEmployee ? [] : branches}
@@ -420,6 +442,8 @@ function Attendance() {
         records={visibleRecords}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
+        days={viewMode === "month" && rangeActive ? enumerateDays(rangeFrom, rangeTo) : null}
+        rangeLabel={viewMode === "month" && rangeActive ? `${rangeFrom} to ${rangeTo}` : ""}
         onEdit={hasPermission("MANAGE_ATTENDANCE") ? openAttendanceModal : null}
         onShowPunches={openPunchModal}
         loading={loading}
