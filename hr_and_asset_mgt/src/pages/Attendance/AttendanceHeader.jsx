@@ -3,7 +3,7 @@ import SvgIcon from "../../components/svgIcon/svgView.jsx";
 import AppButton from "../../components/reusable/Button";
 import "../../style/Attendance.css";
 
-export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading, onExport, onBulkMark, selfOnly, setSelfOnly }) {
+export default function AttendanceHeader({ viewMode, setViewMode, onSync, loading, onExport, onBulkMark, onIncompleteMass, selfOnly, setSelfOnly }) {
   return (
     <div className="attendance-header">
       <div className="attendance-header-left">
@@ -55,6 +55,12 @@ export default function AttendanceHeader({ viewMode, setViewMode, onSync, loadin
           <AppButton variant="primary" onClick={onExport}>
             <SvgIcon name="download" size={16} />
             <span>Export Report</span>
+          </AppButton>
+        )}
+
+        {onIncompleteMass && (
+          <AppButton variant="secondary" onClick={onIncompleteMass}>
+            <span>Incomplete → Present</span>
           </AppButton>
         )}
 

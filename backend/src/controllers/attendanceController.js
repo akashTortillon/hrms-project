@@ -266,6 +266,176 @@ const resolveDateWindow = ({ month, year, from, to }) => {
   return { days, start: days[0], end: days[days.length - 1], isRange: false };
 };
 
+// UAE calendar "today" (attendance rows are bucketed by UAE date).
+const getUaeTodayDateStr = () => uaeDateStr(new Date());
+
+// A shift with no matching Master comes back from getShiftRules as a 00:00-00:00 calendar
+// day (no real end-of-shift time), so it cannot be used to stand in for a missing check-out.
+const hasRealShiftEnd = (rules) => !(rules.start === "00:00" && rules.end === "00:00");
+
+/**
+ * GET incomplete attendance for a day (?date=YYYY-MM-DD, default today): rows already
+ * marked Incomplete, plus - for today only - a check-in with no check-out yet.
+ */
+export const getIncompleteAttendance = async (req, res) => {
+  try {
+    const today = getUaeTodayDateStr();
+    const date = req.query.date || today;
+    if (!DATE_STR_RE.test(date)) {
+      return res.status(400).json({ message: "date must be YYYY-MM-DD" });
+    }
+
+    const statusFilter = date === today ? ["Incomplete", "Present", "Late"] : ["Incomplete"];
+    const records = await Attendance.find({ date, status: { $in: statusFilter } })
+      .populate("employee", "name code department branch shift status");
+
+    const rulesCache = new Map();
+    const getRules = async (shiftName) => {
+      if (!rulesCache.has(shiftName)) rulesCache.set(shiftName, await getShiftRules(shiftName));
+      return rulesCache.get(shiftName);
+    };
+
+    const rows = [];
+    for (const rec of records) {
+      const emp = rec.employee;
+      if (!emp || emp.status !== "Active") continue;
+      const isIncomplete = rec.status === "Incomplete";
+      const lonePunchToday = !isIncomplete && rec.checkIn && !rec.checkOut;
+      if (!isIncomplete && !lonePunchToday) continue;
+
+      const shiftName = rec.shift || emp.shift || "Day Shift";
+      const rules = await getRules(shiftName);
+      let canComplete = true;
+      let reason = "";
+      if (!rec.checkIn) {
+        canComplete = false;
+        reason = "No check-in recorded";
+      } else if (!hasRealShiftEnd(rules)) {
+        canComplete = false;
+        reason = `Shift "${shiftName}" is not configured in Masters`;
+      }
+
+      rows.push({
+        attendanceId: rec._id,
+        employeeId: emp._id,
+        name: emp.name,
+        code: emp.code,
+        department: emp.department,
+        branch: emp.branch,
+        shift: shiftName,
+        checkIn: rec.checkIn || "-",
+        checkOut: rec.checkOut || "-",
+        status: rec.status,
+        shiftEnd: hasRealShiftEnd(rules) ? rules.end : null,
+        canComplete,
+        reason
+      });
+    }
+
+    rows.sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true }));
+    res.json({ date, count: rows.length, data: rows });
+  } catch (error) {
+    console.error("Get incomplete attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * POST mass-complete: mark selected Incomplete employees Present (or Late, per the shift's
+ * late policy) for a day, setting the check-out to the END OF THEIR OWN SHIFT - they never
+ * badged out, so the scheduled shift end is the agreed stand-in. Rows are flagged
+ * isManuallyEdited so the biometric processor never overwrites them.
+ * Body: { date, employeeIds: [], reason? }
+ */
+export const massCompleteAttendance = async (req, res) => {
+  try {
+    const { date, employeeIds, reason } = req.body || {};
+    const today = getUaeTodayDateStr();
+
+    if (!date || !DATE_STR_RE.test(date)) {
+      return res.status(400).json({ message: "date is required (YYYY-MM-DD)" });
+    }
+    if (date > today) {
+      return res.status(400).json({ message: "Cannot complete attendance for a future date" });
+    }
+    if (!Array.isArray(employeeIds) || !employeeIds.length) {
+      return res.status(400).json({ message: "Select at least one employee" });
+    }
+    if (employeeIds.length > 500) {
+      return res.status(400).json({ message: "Too many employees in one request (max 500)" });
+    }
+    if (employeeIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      return res.status(400).json({ message: "Invalid employee id in selection" });
+    }
+
+    const editReason = (reason && String(reason).trim()) || "Mass update: incomplete attendance marked present (checkout set to shift end)";
+    const results = [];
+    const rulesCache = new Map();
+
+    for (const employeeId of [...new Set(employeeIds.map(String))]) {
+      const record = await Attendance.findOne({ employee: employeeId, date }).populate("employee", "name code shift");
+      const label = record?.employee?.name || employeeId;
+
+      if (!record) {
+        results.push({ employeeId, name: label, success: false, message: "No attendance record for this date" });
+        continue;
+      }
+      // Only rows this flow is meant for: Incomplete, or (today) a lone check-in still
+      // Present/Late. Anything else (Absent, On Leave, complete rows) is left untouched.
+      const isIncomplete = record.status === "Incomplete";
+      const lonePunchToday = date === today && ["Present", "Late"].includes(record.status) && record.checkIn && !record.checkOut;
+      if (!isIncomplete && !lonePunchToday) {
+        results.push({ employeeId, name: label, success: false, message: `Not incomplete (status: ${record.status})` });
+        continue;
+      }
+      if (!record.checkIn) {
+        results.push({ employeeId, name: label, success: false, message: "No check-in recorded" });
+        continue;
+      }
+
+      const shiftName = record.shift || record.employee?.shift || "Day Shift";
+      if (!rulesCache.has(shiftName)) rulesCache.set(shiftName, await getShiftRules(shiftName));
+      const rules = rulesCache.get(shiftName);
+      if (!hasRealShiftEnd(rules)) {
+        results.push({ employeeId, name: label, success: false, message: `Shift "${shiftName}" is not configured in Masters` });
+        continue;
+      }
+
+      const lateTier = calculateLateTier(record.checkIn, rules);
+      record.checkOut = rules.end;
+      record.status = lateTier > 0 ? "Late" : "Present";
+      record.lateTier = lateTier;
+      record.workHours = calculateDuration(record.checkIn, rules.end);
+      record.isManuallyEdited = true;
+      record.editedBy = req.user._id;
+      record.editedAt = new Date();
+      record.editReason = editReason;
+      await record.save();
+
+      results.push({
+        employeeId,
+        name: label,
+        success: true,
+        status: record.status,
+        checkOut: record.checkOut,
+        message: `Marked ${record.status}, check-out ${record.checkOut}`
+      });
+    }
+
+    const updated = results.filter((r) => r.success).length;
+    res.json({
+      success: true,
+      message: `${updated} of ${results.length} employee(s) updated`,
+      updated,
+      skipped: results.length - updated,
+      results
+    });
+  } catch (error) {
+    console.error("Mass complete attendance error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 /**
  * SYNC Biometrics
  * Manually trigger biometric data synchronization
@@ -597,7 +767,7 @@ export const getMonthlyAttendance = async (req, res) => {
       const empAttendance = attendanceMap[emp._id] || {};
       const attendanceData = {};
 
-      let present = 0, late = 0, absent = 0, leave = 0;
+      let present = 0, late = 0, absent = 0, leave = 0, incomplete = 0;
 
       // Two passes: first resolve each day's raw status, then (for a workingDayType
       // 2 employee) convert their first 2 no-record "Absent" days per period into
@@ -661,6 +831,7 @@ export const getMonthlyAttendance = async (req, res) => {
           // but the total `leave` will render correctly on the dashboard visually (e.g. 1.5).
         }
         else if (status === "Absent") absent++;
+        else if (status === "Incomplete") incomplete++;
         // Weekends/Holidays/Flex Off don't count towards absent
       });
 
@@ -671,7 +842,7 @@ export const getMonthlyAttendance = async (req, res) => {
         department: emp.department,
         branch: emp.branch,
         shift: emp.shift || "Day Shift",
-        stats: { present, late, absent, leave },
+        stats: { present, late, absent, leave, incomplete },
         attendance: attendanceData
       };
     });

@@ -39,82 +39,57 @@
 //   },
 // ];
 
-// export default function AttendanceStats() {
-//   return (
-//     <div className="attendance-stats">
-//       {attendanceStatsConfig.map((stat) => (
-//         <StatCard
-//           key={stat.title}
-//           title={stat.title}
-//           value={stat.value}
-//           percentage={stat.percentage}
-//           icon={stat.icon}
-//           iconColor={stat.iconColor}
-//           footerLabel={stat.footerLabel}
-//         />
-//       ))}
-//     </div>
-//   );
-// }
+const pct = (part, whole) => `${whole ? Math.round((part / whole) * 100) : 0}%`;
 
-
-import { useEffect, useState } from "react";
-import StatCard from "../../components/reusable/StatCard";
-// import { getAttendanceStats } from "../../services/attendanceService";
-import "../../style/Attendance.css";
-
-export default function AttendanceStats({ stats }) {
+/**
+ * Daily view: one card per status for the selected date (clicking a card filters the
+ * table to that status). Monthly view: totals of employee-days across the visible range;
+ * "Incomplete" shows its share of attended days (Present + Late + Incomplete) so HR can
+ * see at a glance how much of the period has missing check-outs.
+ */
+export default function AttendanceStats({ stats, viewMode = "day", monthlyStats = null, selectedStatus = "", onSelectStatus = null }) {
   if (!stats) return null;
 
-  const config = [
-    {
-      title: "Present",
-      value: stats.present,
-      subtext: `${stats.total ? Math.round((stats.present / stats.total) * 100) : 0}%`,
-      iconName: "circle-tick",
-      colorVariant: "green",
-    },
-    {
-      title: "Late",
-      value: stats.late,
-      subtext: `${stats.total ? Math.round((stats.late / stats.total) * 100) : 0}%`,
-      iconName: "exclamation",
-      colorVariant: "orange",
-    },
-    {
-      title: "Absent",
-      value: stats.absent,
-      subtext: `${stats.total ? Math.round((stats.absent / stats.total) * 100) : 0}%`,
-      iconName: "circle-xmark",
-      colorVariant: "red",
-    },
-    {
-      title: "On Leave",
-      value: stats.leave,
-      subtext: `${stats.total ? Math.round((stats.leave / stats.total) * 100) : 0}%`,
-      iconName: "calendar",
-      colorVariant: "orange",
-    },
-    {
-      title: "Total",
-      value: stats.total,
-      iconName: "clock (1)",
-      colorVariant: "blue",
-      subtext: "Employees",
-    },
-  ];
+  const toggle = (status) => (onSelectStatus ? () => onSelectStatus(selectedStatus === status ? "" : status) : undefined);
+
+  let config;
+  if (viewMode === "month" && monthlyStats) {
+    const attended = monthlyStats.present + monthlyStats.late + monthlyStats.incomplete;
+    config = [
+      { title: "Present Days", value: monthlyStats.present, subtext: pct(monthlyStats.present, attended), iconName: "circle-tick", colorVariant: "green", status: "Present" },
+      { title: "Late Days", value: monthlyStats.late, subtext: pct(monthlyStats.late, attended), iconName: "exclamation", colorVariant: "orange", status: "Late" },
+      { title: "Absent Days", value: monthlyStats.absent, iconName: "circle-xmark", colorVariant: "red", status: "Absent" },
+      { title: "Incomplete Days", value: monthlyStats.incomplete, subtext: `${pct(monthlyStats.incomplete, attended)} of attended`, iconName: "exclamation", colorVariant: "red", status: "Incomplete" },
+      { title: "On Leave Days", value: monthlyStats.leave, iconName: "calendar", colorVariant: "orange", status: "On Leave" },
+      { title: "Employees", value: monthlyStats.employees, iconName: "clock (1)", colorVariant: "blue", subtext: "In view" },
+    ];
+  } else {
+    config = [
+      { title: "Present", value: stats.present, subtext: pct(stats.present, stats.total), iconName: "circle-tick", colorVariant: "green", status: "Present" },
+      { title: "Late", value: stats.late, subtext: pct(stats.late, stats.total), iconName: "exclamation", colorVariant: "orange", status: "Late" },
+      { title: "Absent", value: stats.absent, subtext: pct(stats.absent, stats.total), iconName: "circle-xmark", colorVariant: "red", status: "Absent" },
+      { title: "Incomplete", value: stats.incomplete || 0, subtext: pct(stats.incomplete || 0, stats.total), iconName: "exclamation", colorVariant: "red", status: "Incomplete" },
+      { title: "On Leave", value: stats.leave, subtext: pct(stats.leave, stats.total), iconName: "calendar", colorVariant: "orange", status: "On Leave" },
+      { title: "Total", value: stats.total, iconName: "clock (1)", colorVariant: "blue", subtext: "Employees" },
+    ];
+  }
 
   return (
     <div className="attendance-stats">
       {config.map((stat) => (
-        <StatCard
+        <div
           key={stat.title}
-          title={stat.title}
-          value={stat.value}
-          subtext={stat.subtext}
-          iconName={stat.iconName}
-          colorVariant={stat.colorVariant}
-        />
+          style={selectedStatus && stat.status === selectedStatus ? { outline: "2px solid var(--color-primary, #c8902a)", outlineOffset: "2px", borderRadius: "16px" } : undefined}
+        >
+          <StatCard
+            title={stat.title}
+            value={stat.value}
+            subtext={stat.subtext}
+            iconName={stat.iconName}
+            colorVariant={stat.colorVariant}
+            onClick={stat.status ? toggle(stat.status) : undefined}
+          />
+        </div>
       ))}
     </div>
   );

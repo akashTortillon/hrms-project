@@ -1,5 +1,10 @@
 const pad = (n) => String(n).padStart(2, "0");
 
+// Today's calendar date in the UAE (UTC+4) as YYYY-MM-DD. Attendance rows are bucketed by
+// UAE date, and toISOString() on the browser's "now" gives the wrong day between 00:00 and
+// 04:00 UAE time.
+export const getUaeToday = () => new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().split("T")[0];
+
 // The "22nd to 22nd" attendance cycle that ENDS in the given month: previous month's
 // `day` through this month's `day` (e.g. month 10/2026 -> 2026-09-22 .. 2026-10-22).
 export const buildCycleRange = (month, year, day = 22) => {

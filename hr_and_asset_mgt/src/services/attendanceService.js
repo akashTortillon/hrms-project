@@ -57,6 +57,18 @@ export const exportAttendanceReport = async (filters) => {
   return res.data;
 };
 
+// ✅ Employees with Incomplete attendance (check-in, no check-out) for a day
+export const getIncompleteAttendance = async (date) => {
+  const res = await api.get(`${ATTENDANCE_API}/incomplete`, { params: { date } });
+  return res.data;
+};
+
+// ✅ Mark selected Incomplete employees Present, check-out = end of their shift
+export const massCompleteAttendance = async (data) => {
+  const res = await api.post(`${ATTENDANCE_API}/mass-complete`, data);
+  return res.data;
+};
+
 // ✅ Get Employee Attendance History
 export const getEmployeeAttendanceHistory = async (employeeId, month, year) => {
   const res = await api.get(`${ATTENDANCE_API}/history/${employeeId}`, {

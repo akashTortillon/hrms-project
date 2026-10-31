@@ -118,6 +118,7 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
                       <div className="stats-cell-content">
                         <div style={{ color: '#16a34a', fontWeight: 'bold' }}>P: {emp.stats?.present || 0}</div>
                         <div style={{ color: '#dc2626', fontWeight: 'bold' }}>A: {emp.stats?.absent || 0}</div>
+                        <div style={{ color: '#ea580c', fontWeight: 'bold' }}>I: {emp.stats?.incomplete || 0}</div>
                         <div style={{ color: '#d97706', fontWeight: 'bold' }}>L: {emp.stats?.late || 0}</div>
                       </div>
                     </td>
