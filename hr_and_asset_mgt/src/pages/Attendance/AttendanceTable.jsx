@@ -16,7 +16,7 @@ const toMinutes = (time) => {
    Component
    ========================= */
 
-export default function AttendanceTable({ date, records = [], onEdit, onShowPunches, loading, viewMode = "day", daysInMonth, year, month }) {
+export default function AttendanceTable({ date, records = [], onEdit, onShowPunches, loading, viewMode = "day", daysInMonth, year, month, days: dayKeys = null, rangeLabel = "" }) {
   const handleEditClick = (row) => {
     if (onEdit) {
       onEdit(row);
@@ -63,13 +63,21 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
   };
 
   if (viewMode === "month") {
-    // Generate days array
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    // Columns are full YYYY-MM-DD keys so a custom range (22nd -> 22nd) can span two
+    // months; without an explicit list fall back to the calendar month.
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const days = dayKeys && dayKeys.length
+      ? dayKeys
+      : Array.from({ length: daysInMonth }, (_, i) => `${year}-${pad2(month)}-${pad2(i + 1)}`);
+    const columnCount = days.length;
+    const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     return (
       <div className="attendance-table-card monthly-view">
         <div className="attendance-table-header">
-          <h3>Monthly Attendance - {new Date(year, month - 1).toLocaleString('default', { month: 'long' })} {year}</h3>
+          <h3>
+            Monthly Attendance - {rangeLabel || `${new Date(year, month - 1).toLocaleString('default', { month: 'long' })} ${year}`}
+          </h3>
         </div>
 
         <div className="table-responsive">
@@ -78,12 +86,16 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
               <tr>
                 <th className="sticky-col-header">Employee</th>
                 <th className="stats-col-header">Stats</th>
-                {days.map(d => {
-                  const dateObj = new Date(year, month - 1, d);
+                {days.map((dateKey, idx) => {
+                  const [y, m, dd] = dateKey.split('-').map(Number);
+                  const dateObj = new Date(y, m - 1, dd);
                   const isSunday = dateObj.getDay() === 0;
+                  // Show the month on the first column and whenever it changes.
+                  const showMonth = idx === 0 || dd === 1;
                   return (
-                    <th key={d} className={`day-col-header ${isSunday ? 'header-sunday' : ''}`}>
-                      <div className="day-number">{d}</div>
+                    <th key={dateKey} className={`day-col-header ${isSunday ? 'header-sunday' : ''}`}>
+                      {showMonth && <div className="day-name">{MONTH_ABBR[m - 1]}</div>}
+                      <div className="day-number">{dd}</div>
                       <div className="day-name">{dateObj.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
                     </th>
                   );
@@ -92,9 +104,9 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={daysInMonth + 2} className="text-center p-4">Loading...</td></tr>
+                <tr><td colSpan={columnCount + 2} className="text-center p-4">Loading...</td></tr>
               ) : records.length === 0 ? (
-                <tr><td colSpan={daysInMonth + 2} className="text-center p-4">No records found</td></tr>
+                <tr><td colSpan={columnCount + 2} className="text-center p-4">No records found</td></tr>
               ) : (
                 records.map(emp => (
                   <tr key={emp._id}>
@@ -106,12 +118,11 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
                       <div className="stats-cell-content">
                         <div style={{ color: '#16a34a', fontWeight: 'bold' }}>P: {emp.stats?.present || 0}</div>
                         <div style={{ color: '#dc2626', fontWeight: 'bold' }}>A: {emp.stats?.absent || 0}</div>
+                        <div style={{ color: '#ea580c', fontWeight: 'bold' }}>I: {emp.stats?.incomplete || 0}</div>
                         <div style={{ color: '#d97706', fontWeight: 'bold' }}>L: {emp.stats?.late || 0}</div>
                       </div>
                     </td>
-                    {days.map(d => {
-                      // Construct key yyyy-mm-dd
-                      const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    {days.map(dateKey => {
                       const record = emp.attendance[dateKey] || {};
                       const status = record.status;
 
@@ -120,8 +131,8 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
                       // correctly per employee per day - trust record.status instead of
                       // re-deriving/overriding it here (this used to force every Sunday
                       // to "Weekend" even when the backend had correctly said "Holiday").
-                      const dateObj = new Date(year, month - 1, d);
-                      const isSunday = dateObj.getDay() === 0;
+                      const [cy, cm, cd] = dateKey.split('-').map(Number);
+                      const isSunday = new Date(cy, cm - 1, cd).getDay() === 0;
 
                       // Define styles for the letter itself
                       let color = '#374151'; // default gray
@@ -139,7 +150,7 @@ export default function AttendanceTable({ date, records = [], onEdit, onShowPunc
                       const abbr = status ? getStatusAbbr(status) : "-";
 
                       return (
-                        <td key={d} className={`status-cell ${isSunday ? 'cell-sunday' : ''}`} style={{ textAlign: 'center', padding: '0' }}>
+                        <td key={dateKey} className={`status-cell ${isSunday ? 'cell-sunday' : ''}`} style={{ textAlign: 'center', padding: '0' }}>
                           {status && (
                             <div
                               style={{

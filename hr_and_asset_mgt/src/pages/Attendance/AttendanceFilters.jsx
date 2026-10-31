@@ -26,8 +26,15 @@ export default function AttendanceFilters({
   selectedStatus,
   setSelectedStatus,
   showSearch = true,
-  showStatusFilter = true
+  showStatusFilter = true,
+  // Monthly view From-To range (YYYY-MM-DD). Empty = use the month/year selectors.
+  rangeFrom = "",
+  rangeTo = "",
+  onRangeChange = null,
+  onCycleRange = null,
+  onClearRange = null
 }) {
+  const rangeActive = Boolean(rangeFrom && rangeTo);
   return (
     <div className="attendance-filters">
       {viewMode === "day" ? (
@@ -73,6 +80,50 @@ export default function AttendanceFilters({
               ))}
             </select>
           </div>
+          {onRangeChange && (
+            <>
+              <div className="filter-group">
+                <label className="filter-label">From</label>
+                <input
+                  type="date"
+                  className="filter-input"
+                  value={rangeFrom}
+                  max={rangeTo || undefined}
+                  onChange={(e) => onRangeChange(e.target.value, rangeTo)}
+                />
+              </div>
+              <div className="filter-group">
+                <label className="filter-label">To</label>
+                <input
+                  type="date"
+                  className="filter-input"
+                  value={rangeTo}
+                  min={rangeFrom || undefined}
+                  onChange={(e) => onRangeChange(rangeFrom, e.target.value)}
+                />
+              </div>
+              <div className="filter-group" style={{ justifyContent: "flex-end" }}>
+                <label className="filter-label">&nbsp;</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {onCycleRange && (
+                    <button
+                      type="button"
+                      className="attendance-tab"
+                      title="Use the 22nd of the previous month to the 22nd of the selected month"
+                      onClick={onCycleRange}
+                    >
+                      22nd → 22nd
+                    </button>
+                  )}
+                  {rangeActive && onClearRange && (
+                    <button type="button" className="attendance-tab" onClick={onClearRange}>
+                      Clear range
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
       {showDepartmentFilter && (
@@ -124,9 +175,9 @@ export default function AttendanceFilters({
       )}
 
       {/* NEW: Status Filter */}
-      {viewMode === "day" && showStatusFilter && (
+      {showStatusFilter && (
         <div className="filter-group">
-          <label className="filter-label">Status</label>
+          <label className="filter-label">{viewMode === "month" ? "Has Status" : "Status"}</label>
           <select
             className="filter-input filter-select"
             value={selectedStatus}

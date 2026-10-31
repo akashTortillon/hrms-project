@@ -1,3 +1,4 @@
+import { buildCycleRange, enumerateDays } from "./attendanceDateUtils.js";
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -10,6 +11,7 @@ import Pagination from "../../components/reusable/Pagination"; // ✅ New
 
 import AttendanceEditModal from "./AttendanceEditModal";
 import BulkAttendanceModal from "./BulkAttendanceModal";
+import IncompleteMassPresentModal from "./IncompleteMassPresentModal";
 import AttendancePunchDetailsModal from "./AttendancePunchDetailsModal";
 import {
   getDailyAttendance,
@@ -65,13 +67,17 @@ function Attendance() {
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "10");
   const selectedStatus = searchParams.get("status") || "";
+  // Monthly view custom range (e.g. 22nd -> 22nd); both must be set to take effect.
+  const rangeFrom = searchParams.get("from") || "";
+  const rangeTo = searchParams.get("to") || "";
+  const rangeActive = Boolean(rangeFrom && rangeTo);
   const searchQuery = searchParams.get("search") || "";
 
   // Data State
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [monthlyRecords, setMonthlyRecords] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({ present: 0, late: 0, absent: 0, leave: 0, total: 0 });
+  const [stats, setStats] = useState({ present: 0, late: 0, absent: 0, incomplete: 0, leave: 0, total: 0 });
   const [paginationInfo, setPaginationInfo] = useState({ totalPages: 1, totalRecords: 0 }); // ✅ New
 
   // Filter Options State
@@ -83,6 +89,7 @@ function Attendance() {
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
 
   // Punch-details modal (break icon) state
   const [showPunchModal, setShowPunchModal] = useState(false);
@@ -161,6 +168,7 @@ function Attendance() {
             present: response.summary.Present || 0,
             late: response.summary.Late || 0,
             absent: response.summary.Absent || 0,
+            incomplete: response.summary.Incomplete || 0,
             leave: response.summary["On Leave"] || 0,
             total: response.summary.total || 0
           });
@@ -205,11 +213,12 @@ function Attendance() {
 
       // Legacy Stat Calculation (Only if backend didn't provide summary)
       if (!response.summary && Array.isArray(response)) {
-        const newStats = { present: 0, late: 0, absent: 0, leave: 0, total: formattedRecords.length };
+        const newStats = { present: 0, late: 0, absent: 0, incomplete: 0, leave: 0, total: formattedRecords.length };
         formattedRecords.forEach(r => {
           if (r.status === 'Present') newStats.present++;
           else if (r.status === 'Late') newStats.late++;
           else if (r.status === 'Absent') newStats.absent++;
+          else if (r.status === 'Incomplete') newStats.incomplete++;
           else if (r.status === 'On Leave') newStats.leave++;
         });
         setStats(newStats);
@@ -227,11 +236,16 @@ function Attendance() {
   const fetchMonthlyData = async () => {
     setLoading(true);
     try {
-      const data = await getMonthlyAttendance(selectedMonth.toString(), selectedYear.toString());
+      const data = await getMonthlyAttendance(
+        selectedMonth.toString(),
+        selectedYear.toString(),
+        rangeActive ? { from: rangeFrom, to: rangeTo } : {}
+      );
       setMonthlyRecords(data);
     } catch (error) {
       console.error("Failed to fetch monthly data", error);
-      toast.error("Failed to load monthly records");
+      toast.error(error.response?.data?.message || "Failed to load monthly records");
+      setMonthlyRecords([]);
     } finally {
       setLoading(false);
     }
@@ -261,6 +275,7 @@ function Attendance() {
         date: selectedDate,
         month: selectedMonth,
         year: selectedYear,
+        ...(viewMode === "month" && rangeActive ? { from: rangeFrom, to: rangeTo } : {}),
         department: selectedDepartment,
         shift: selectedShift,
         branch: selectedBranch
@@ -274,7 +289,7 @@ function Attendance() {
       link.href = url;
 
       const filename = viewMode === "month"
-        ? `Attendance_${selectedMonth}-${selectedYear}.xlsx`
+        ? (rangeActive ? `Attendance_${rangeFrom}_to_${rangeTo}.xlsx` : `Attendance_${selectedMonth}-${selectedYear}.xlsx`)
         : `Attendance_${selectedDate}.xlsx`;
 
       link.setAttribute('download', filename);
@@ -347,7 +362,10 @@ function Attendance() {
     const searchMatch = !q
       || record.name?.toLowerCase().includes(q)
       || record.code?.toLowerCase().includes(q);
-    return deptMatch && shiftMatch && branchMatch && searchMatch;
+    // "Has Status": keep employees with at least one day of that status in the range.
+    const statusMatch = !selectedStatus
+      || Object.values(record.attendance || {}).some((day) => day.status === selectedStatus);
+    return deptMatch && shiftMatch && branchMatch && searchMatch && statusMatch;
   });
 
   // "Self" scope - daily rows key off `employeeId`, monthly rows key off `_id`
@@ -367,10 +385,23 @@ function Attendance() {
         if (r.status === "Present") acc.present++;
         else if (r.status === "Late") acc.late++;
         else if (r.status === "Absent") acc.absent++;
+        else if (r.status === "Incomplete") acc.incomplete++;
         else if (r.status === "On Leave") acc.leave++;
         return acc;
-      }, { present: 0, late: 0, absent: 0, leave: 0, total: 0 })
+      }, { present: 0, late: 0, absent: 0, incomplete: 0, leave: 0, total: 0 })
     : stats;
+
+  // Monthly cards: employee-days summed over whoever is on screen for the visible range.
+  const monthlyStats = viewMode === "month"
+    ? visibleRecords.reduce((acc, r) => {
+        acc.present += r.stats?.present || 0;
+        acc.late += r.stats?.late || 0;
+        acc.absent += r.stats?.absent || 0;
+        acc.incomplete += r.stats?.incomplete || 0;
+        acc.leave += r.stats?.leave || 0;
+        return acc;
+      }, { present: 0, late: 0, absent: 0, incomplete: 0, leave: 0, employees: visibleRecords.length })
+    : null;
 
   return (
     <div>
@@ -381,19 +412,34 @@ function Attendance() {
         loading={loading}
         onExport={isEmployee ? null : handleExport}
         onBulkMark={hasPermission("MANAGE_ATTENDANCE") ? () => setShowBulkModal(true) : null}
+        onIncompleteMass={hasPermission("MANAGE_ATTENDANCE") ? () => setShowIncompleteModal(true) : null}
         selfOnly={selfOnly}
         setSelfOnly={(v) => updateParams({ scope: v ? "self" : "" })}
       />
-      <AttendanceStats stats={displayStats} />
+      <AttendanceStats
+        stats={displayStats}
+        viewMode={viewMode}
+        monthlyStats={monthlyStats}
+        selectedStatus={isEmployee ? "" : selectedStatus}
+        onSelectStatus={isEmployee ? null : (st) => updateParams({ status: st, page: 1 })}
+      />
 
       <AttendanceFilters
         viewMode={viewMode}
         selectedDate={selectedDate}
         onDateChange={(d) => updateParams({ date: d, page: 1 })}
         selectedMonth={selectedMonth}
-        setSelectedMonth={(m) => updateParams({ month: m })}
+        setSelectedMonth={(m) => updateParams({ month: m, from: "", to: "" })}
         selectedYear={selectedYear}
-        setSelectedYear={(y) => updateParams({ year: y })}
+        setSelectedYear={(y) => updateParams({ year: y, from: "", to: "" })}
+        rangeFrom={rangeFrom}
+        rangeTo={rangeTo}
+        onRangeChange={(from, to) => updateParams({ from, to })}
+        onCycleRange={() => {
+          const { from, to } = buildCycleRange(selectedMonth, selectedYear, 22);
+          updateParams({ from, to });
+        }}
+        onClearRange={() => updateParams({ from: "", to: "" })}
         departments={isEmployee ? [] : departments}
         shifts={isEmployee ? [] : shifts}
         branches={isEmployee ? [] : branches}
@@ -420,6 +466,8 @@ function Attendance() {
         records={visibleRecords}
         viewMode={viewMode}
         daysInMonth={viewMode === "month" ? new Date(selectedYear, selectedMonth, 0).getDate() : 0}
+        days={viewMode === "month" && rangeActive ? enumerateDays(rangeFrom, rangeTo) : null}
+        rangeLabel={viewMode === "month" && rangeActive ? `${rangeFrom} to ${rangeTo}` : ""}
         onEdit={hasPermission("MANAGE_ATTENDANCE") ? openAttendanceModal : null}
         onShowPunches={openPunchModal}
         loading={loading}
@@ -447,6 +495,13 @@ function Attendance() {
         date={selectedDate}
         onClose={() => setShowModal(false)}
         onSave={handleSaveAttendance}
+      />
+
+      <IncompleteMassPresentModal
+        isOpen={showIncompleteModal}
+        initialDate={viewMode === "day" ? selectedDate : ""}
+        onClose={() => setShowIncompleteModal(false)}
+        onSuccess={() => (viewMode === "day" ? fetchAttendanceData() : fetchMonthlyData())}
       />
 
       <BulkAttendanceModal
