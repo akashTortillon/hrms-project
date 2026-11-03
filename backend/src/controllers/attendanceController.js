@@ -1331,6 +1331,7 @@ export const exportAttendance = async (req, res) => {
           "Employee ID": emp.code,
           "Name": emp.name,
           "Department": emp.department,
+          "Branch": emp.branch || "-",
           "Shift": emp.shift || "Day Shift"
         };
 
@@ -1397,7 +1398,7 @@ export const exportAttendance = async (req, res) => {
         return row;
       }).filter(r => r !== null);
 
-      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(dayLabel)];
+      headers = ["Employee ID", "Name", "Department", "Branch", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(dayLabel)];
 
     } else {
       // --- DAILY EXPORT ---
@@ -1427,6 +1428,7 @@ export const exportAttendance = async (req, res) => {
           "Employee ID": emp.code,
           "Name": emp.name,
           "Department": emp.department,
+          "Branch": emp.branch || "-",
           "Shift": effectiveShift,
           "Check In": record?.checkIn || "-",
           "Check Out": record?.checkOut || "-",
@@ -1444,6 +1446,7 @@ export const exportAttendance = async (req, res) => {
       { wch: 12 }, // ID 
       { wch: 25 }, // Name
       { wch: 20 }, // Dept
+      { wch: 18 }, // Branch
       { wch: 15 }, // Shift
       { wch: 10 }, // Stats/CheckIn
       { wch: 10 },
