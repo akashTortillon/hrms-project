@@ -38,6 +38,15 @@ export const computeShiftDayBucket = (dateStr, timeStr, transactionType, rules) 
   return transactionType === "OUT" ? oneDayBack() : dateStr;
 };
 
+// Sortable position of a check-out within its shift-day: a next-day check-out (01:18 after a
+// 09:00 start) is LATER than a same-day one (22:00), which plain "HH:MM" string order gets wrong.
+export const checkOutOrderKey = (time, nextDay = false) => (nextDay ? 24 * 60 : 0) + toMinutes(time);
+
+// For manual entries (no punch dates to look at): a check-out earlier on the clock than the
+// check-in can only be the next calendar day - same assumption calculateDuration makes.
+export const isCheckOutNextDay = (checkIn, checkOut) =>
+  !!(checkIn && checkOut && toMinutes(checkOut) < toMinutes(checkIn));
+
 // UAE local "today" (UTC+4, no DST) as YYYY-MM-DD - the calendar day attendance rows are
 // bucketed onto. Shared by the processor, the Incomplete sweep and the mass-complete flow.
 export const getUaeTodayDateStr = () => {

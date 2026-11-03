@@ -228,7 +228,8 @@ import {
   holidaySetFromHolidays,
   applyMonthlyFlexQuota,
   getUaeTodayDateStr,
-  shiftDateStr
+  shiftDateStr,
+  isCheckOutNextDay
 } from "../utils/attendanceUtils.js";
 
 const DATE_STR_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -431,6 +432,7 @@ export const getDailyAttendance = async (req, res) => {
         shift: record?.shift || emp.shift || "Day Shift",
         checkIn: record?.checkIn || "-",
         checkOut: record?.checkOut || "-",
+        checkOutNextDay: !!record?.checkOutNextDay,
         workHours: record?.workHours || "-",
         status: calculatedStatus,
         avatar: emp.avatar,
@@ -798,6 +800,7 @@ export const massCompleteAttendance = async (req, res) => {
 
       const lateTier = calculateLateTier(record.checkIn, rules);
       record.checkOut = rules.end;
+      record.checkOutNextDay = isCheckOutNextDay(record.checkIn, rules.end);
       record.status = lateTier > 0 ? "Late" : "Present";
       record.lateTier = lateTier;
       record.workHours = calculateDuration(record.checkIn, rules.end);
@@ -890,6 +893,7 @@ export const markAttendanceBulk = async (req, res) => {
         shift: shift || "Day Shift",
         checkIn: checkIn || null,
         checkOut: checkOut || null,
+        checkOutNextDay: isCheckOutNextDay(checkIn, checkOut),
         status: resolvedStatus,
         lateTier,
         workHours
@@ -953,6 +957,7 @@ export const markAttendance = async (req, res) => {
       checkIn: checkIn || null,
       checkOut: checkOut || null,
       checkOut: checkOut || null,
+      checkOutNextDay: isCheckOutNextDay(checkIn, checkOut),
       status,
       lateTier,
       workHours
@@ -1000,6 +1005,7 @@ export const updateAttendance = async (req, res) => {
         shift,
         checkIn,
         checkOut,
+        checkOutNextDay: isCheckOutNextDay(checkIn, checkOut),
         status,
         workHours,
         // ✅ Track Edit
@@ -1268,6 +1274,7 @@ export const exportAttendance = async (req, res) => {
           "Employee ID": displayEmployeeCode(emp),
           "Name": emp.name,
           "Department": emp.department,
+          "Branch": emp.branch || "-",
           "Shift": emp.shift || "Day Shift"
         };
 
@@ -1337,7 +1344,7 @@ export const exportAttendance = async (req, res) => {
         return row;
       }).filter(r => r !== null);
 
-      headers = ["Employee ID", "Name", "Department", "Shift", "Present", "Late", "Absent", "Incomplete", "Leave", ...days.map(dayLabel)];
+      headers = ["Employee ID", "Name", "Department", "Branch", "Shift", "Present", "Late", "Absent", "Incomplete", "Leave", ...days.map(dayLabel)];
 
     } else {
       // --- DAILY EXPORT ---
@@ -1367,6 +1374,7 @@ export const exportAttendance = async (req, res) => {
           "Employee ID": displayEmployeeCode(emp),
           "Name": emp.name,
           "Department": emp.department,
+          "Branch": emp.branch || "-",
           "Shift": effectiveShift,
           "Check In": record?.checkIn || "-",
           "Check Out": record?.checkOut || "-",
@@ -1384,6 +1392,7 @@ export const exportAttendance = async (req, res) => {
       { wch: 12 }, // ID 
       { wch: 25 }, // Name
       { wch: 20 }, // Dept
+      { wch: 18 }, // Branch
       { wch: 15 }, // Shift
       { wch: 10 }, // Stats/CheckIn
       { wch: 10 },

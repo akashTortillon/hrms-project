@@ -97,7 +97,7 @@ async function main() {
     const key = `${code}_${shiftDate}`;
 
     if (!grouped.has(key)) {
-      grouped.set(key, { badgeNumber: code, date: shiftDate, checkIn: null, checkOut: null });
+      grouped.set(key, { badgeNumber: code, date: shiftDate, checkIn: null, checkOut: null, checkOutNextDay: false });
     }
     const g = grouped.get(key);
     // transactions are pre-sorted by (badgeNumber, timestamp) ascending, so within a key
@@ -109,6 +109,7 @@ async function main() {
       if (!g.checkIn) g.checkIn = timeStr;
     } else if (txn.transactionType === "OUT") {
       g.checkOut = timeStr;
+      g.checkOutNextDay = dateStr !== shiftDate;
     }
   }
   console.log(`Recomputed ${grouped.size} true employee-shift-day check-in/check-out pairs from raw punches.`);
@@ -137,6 +138,7 @@ async function main() {
 
     if (existing) {
       const noChange = existing.checkIn === g.checkIn && existing.checkOut === g.checkOut &&
+        !!existing.checkOutNextDay === g.checkOutNextDay &&
         existing.status === status && existing.lateTier === lateTier && existing.workHours === workHours;
       if (noChange) { skippedNoChange++; continue; }
 
@@ -149,6 +151,7 @@ async function main() {
       if (LIVE) {
         existing.checkIn = g.checkIn;
         existing.checkOut = g.checkOut;
+        existing.checkOutNextDay = g.checkOutNextDay;
         existing.status = status;
         existing.lateTier = lateTier;
         existing.workHours = workHours;
@@ -165,7 +168,7 @@ async function main() {
       if (LIVE) {
         await Attendance.create({
           employee: employee._id, date: g.date, shift: shiftName,
-          checkIn: g.checkIn, checkOut: g.checkOut, status, lateTier, workHours
+          checkIn: g.checkIn, checkOut: g.checkOut, checkOutNextDay: g.checkOutNextDay, status, lateTier, workHours
         });
       }
       created++;

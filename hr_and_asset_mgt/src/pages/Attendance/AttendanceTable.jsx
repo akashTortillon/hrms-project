@@ -237,7 +237,12 @@ export default function AttendanceTable({ date, records = [], onEdit, loading, v
 
                     <td>{row.shift}</td>
                     <td>{row.checkIn || "-"}</td>
-                    <td>{row.checkOut || "-"}</td>
+                    <td>
+                      {row.checkOut || "-"}
+                      {row.checkOutNextDay && row.checkOut && row.checkOut !== "-" && (
+                        <span className="next-day-badge">Next day</span>
+                      )}
+                    </td>
                     <td>{workHours}</td>
 
                     <td>

@@ -9,8 +9,20 @@ import {
   isLeave,
   toMinutes,
   getUaeTodayDateStr,
-  shiftDateStr
+  shiftDateStr,
+  computeShiftDayBucket,
+  checkOutOrderKey
 } from "../utils/attendanceUtils.js";
+
+// A shift-day is over once its calendar date is past - except overnight shifts (start >
+// end), whose check-out lands on the next calendar day, so yesterday's row stays open
+// (same one-day grace as markStaleLoneCheckinsIncomplete).
+const isShiftDayOver = (date, rules) => {
+  const today = getUaeTodayDateStr();
+  if (date >= today) return false;
+  const overnight = toMinutes(rules.start) > toMinutes(rules.end);
+  return !(overnight && date >= shiftDateStr(today, -1));
+};
 
 class AttendanceProcessor {
   /**
@@ -77,9 +89,44 @@ class AttendanceProcessor {
       return stats;
     }
 
-    // 1. Group transactions by Employee Code (Badge Number) + Date
-    const grouped = {};
+    // 1. Collect badge codes and fetch employees BEFORE grouping - placing a punch on the
+    // right shift-day (step 2) needs the employee's shift start/end. Some employees never
+    // got badgeNumber backfilled and instead have the device's badge value sitting in `code`
+    // (e.g. code: "R106") - fall back to matching on `code` for those.
     const employeeCodes = new Set();
+    for (const txn of transactions) {
+      if (!txn.badgeNumber || !txn.timestamp) continue;
+      employeeCodes.add(txn.badgeNumber.trim());
+    }
+
+    const codesArray = Array.from(employeeCodes);
+    const employeesList = await Employee.find({
+      $or: [
+        { badgeNumber: { $in: codesArray } },
+        { code: { $in: codesArray } }
+      ]
+    });
+    const leaveMap = await getApprovedLeavesMap(employeesList);
+
+    // First employee in list order wins per badge value, badgeNumber or code alike.
+    const employeeByBadge = new Map();
+    for (const e of employeesList) {
+      for (const v of [e.badgeNumber, e.code]) {
+        const k = v && v.trim();
+        if (k && !employeeByBadge.has(k)) employeeByBadge.set(k, e);
+      }
+    }
+
+    const shiftRulesCache = new Map();
+    const getRulesCached = async (shiftName) => {
+      if (!shiftRulesCache.has(shiftName)) {
+        shiftRulesCache.set(shiftName, await getShiftRules(shiftName));
+      }
+      return shiftRulesCache.get(shiftName);
+    };
+
+    // 2. Group transactions by Employee Code (Badge Number) + shift-day
+    const grouped = {};
 
     for (const txn of transactions) {
       if (!txn.badgeNumber || !txn.timestamp) continue;
@@ -93,17 +140,23 @@ class AttendanceProcessor {
       const dateStr = uaeTime.toISOString().split("T")[0];
       const timeStr = uaeTime.toISOString().split("T")[1].substring(0, 5); // HH:MM, UAE local
       const code = txn.badgeNumber.trim();
-      const key = `${code}_${dateStr}`;
 
-      employeeCodes.add(code);
+      // A shift that runs past midnight (e.g. 09:00-03:00) has its check-out on the NEXT
+      // calendar date; bucketing by raw date would split one shift across two rows. Anchor
+      // the punch to the shift-day instead. Unmapped badges keep the raw date (skipped below).
+      const employee = employeeByBadge.get(code);
+      const rules = employee ? await getRulesCached(employee.shift || "Day Shift") : null;
+      const shiftDate = rules ? computeShiftDayBucket(dateStr, timeStr, txn.transactionType, rules) : dateStr;
+      const key = `${code}_${shiftDate}`;
 
       if (!grouped[key]) {
         grouped[key] = {
           badgeNumber: code,
           employeeName: txn.rawData?.EmployeeName || null, // Capture name from BioCloud
-          date: dateStr,
+          date: shiftDate,
           checkIn: null,
-          checkOut: null
+          checkOut: null,
+          checkOutNextDay: false
         };
       }
 
@@ -113,32 +166,20 @@ class AttendanceProcessor {
           grouped[key].checkIn = timeStr;
         }
       } else if (txn.transactionType === "OUT") {
-        // Keep latest check-out
-        if (!grouped[key].checkOut || timeStr > grouped[key].checkOut) {
+        // Keep latest check-out - a next-day punch is later than any same-day one
+        const nextDay = dateStr !== shiftDate;
+        if (!grouped[key].checkOut ||
+            checkOutOrderKey(timeStr, nextDay) > checkOutOrderKey(grouped[key].checkOut, grouped[key].checkOutNextDay)) {
           grouped[key].checkOut = timeStr;
+          grouped[key].checkOutNextDay = nextDay;
         }
       }
     }
 
-    // 2. Fetch employees by badgeNumber field for matching. Some employees never got
-    // badgeNumber backfilled and instead have the device's badge value sitting in `code`
-    // (e.g. code: "R106") - fall back to matching on `code` for those.
-    const codesArray = Array.from(employeeCodes);
-    const employeesList = await Employee.find({
-      $or: [
-        { badgeNumber: { $in: codesArray } },
-        { code: { $in: codesArray } }
-      ]
-    });
-    const leaveMap = await getApprovedLeavesMap(employeesList);
-
     // 3. Process each grouped record
     for (const key in grouped) {
       const record = grouped[key];
-      const employee = employeesList.find(e =>
-        (e.badgeNumber && e.badgeNumber.trim() === record.badgeNumber) ||
-        (e.code && e.code.trim() === record.badgeNumber)
-      );
+      const employee = employeeByBadge.get(record.badgeNumber);
 
       if (!employee) {
         console.warn(`[AttendanceProcessor] Employee with badge number ${record.badgeNumber} not found.`);
@@ -192,10 +233,16 @@ class AttendanceProcessor {
         const mergedCheckIn = [record.checkIn, existingRecord.checkIn]
           .filter(Boolean)
           .sort()[0] ?? null;
-        const mergedCheckOut = [record.checkOut, existingRecord.checkOut]
-          .filter(Boolean)
-          .sort()
-          .pop() ?? null;
+        // Latest check-out, next-day aware: "01:18" next day beats "22:00" same day.
+        const outCandidates = [
+          { time: record.checkOut, nextDay: record.checkOutNextDay },
+          { time: existingRecord.checkOut, nextDay: !!existingRecord.checkOutNextDay }
+        ].filter(c => c.time);
+        const latestOut = outCandidates.sort(
+          (a, b) => checkOutOrderKey(b.time, b.nextDay) - checkOutOrderKey(a.time, a.nextDay)
+        )[0];
+        const mergedCheckOut = latestOut?.time ?? null;
+        const mergedCheckOutNextDay = latestOut ? latestOut.nextDay : false;
 
         let mergedStatus = "Absent";
         let mergedLateTier = 0;
@@ -204,10 +251,10 @@ class AttendanceProcessor {
           mergedStatus = mergedLateTier > 0 ? "Late" : "Present";
           // A checked-in employee with no checkout on a day that's already over never
           // came back to badge out - flag it instead of quietly calling it Present/Late.
-          if (!mergedCheckOut && record.date < getUaeTodayDateStr()) {
+          if (!mergedCheckOut && isShiftDayOver(record.date, rules)) {
             mergedStatus = "Incomplete";
           }
-        } else if (mergedCheckOut && record.date < getUaeTodayDateStr()) {
+        } else if (mergedCheckOut && isShiftDayOver(record.date, rules)) {
           // Mirror image of the above: a checkout with no matching check-in ever
           // recorded (missed/failed IN punch, or a mis-synced OUT-only device event).
           // Previously fell through to the "Absent" default, which is wrong - the
@@ -220,6 +267,7 @@ class AttendanceProcessor {
         if (
           existingRecord.checkIn === mergedCheckIn &&
           existingRecord.checkOut === mergedCheckOut &&
+          !!existingRecord.checkOutNextDay === mergedCheckOutNextDay &&
           existingRecord.status === mergedStatus &&
           existingRecord.lateTier === mergedLateTier &&
           existingRecord.workHours === mergedWorkHours
@@ -238,6 +286,7 @@ class AttendanceProcessor {
         // Update existing record
         existingRecord.checkIn = mergedCheckIn;
         existingRecord.checkOut = mergedCheckOut;
+        existingRecord.checkOutNextDay = mergedCheckOutNextDay;
         existingRecord.status = mergedStatus;
         existingRecord.lateTier = mergedLateTier;
         existingRecord.workHours = mergedWorkHours;
@@ -252,10 +301,10 @@ class AttendanceProcessor {
         if (record.checkIn) {
           lateTier = calculateLateTier(record.checkIn, rules);
           status = lateTier > 0 ? "Late" : "Present";
-          if (!record.checkOut && record.date < getUaeTodayDateStr()) {
+          if (!record.checkOut && isShiftDayOver(record.date, rules)) {
             status = "Incomplete";
           }
-        } else if (record.checkOut && record.date < getUaeTodayDateStr()) {
+        } else if (record.checkOut && isShiftDayOver(record.date, rules)) {
           // Checkout with no check-in ever recorded - same "clearly not Absent" case
           // as the merge-branch above, just for the first transaction seen for this
           // employee+date (no existing record to merge against yet).
@@ -270,6 +319,7 @@ class AttendanceProcessor {
           shift: shiftName,
           checkIn: record.checkIn,
           checkOut: record.checkOut,
+          checkOutNextDay: record.checkOutNextDay,
           status,
           lateTier,
           workHours
