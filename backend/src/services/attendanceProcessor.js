@@ -196,7 +196,7 @@ class AttendanceProcessor {
       // arriving in its own batch) could silently overwrite an already-correct earlier
       // check-in. BiometricTransaction is the actual source of truth; re-deriving from
       // it every time sidesteps the whole "reconcile partial batches" problem.
-      const { checkIn, checkOut } = await this._recomputeShiftDay(record.badgeNumber, record.date, rules);
+      const { checkIn, checkOut, checkOutNextDay } = await this._recomputeShiftDay(record.badgeNumber, record.date, rules);
 
       let status = "Absent";
       let lateTier = 0;
@@ -227,6 +227,7 @@ class AttendanceProcessor {
         if (
           existingRecord.checkIn === checkIn &&
           existingRecord.checkOut === checkOut &&
+          !!existingRecord.checkOutNextDay === checkOutNextDay &&
           existingRecord.status === status &&
           existingRecord.lateTier === lateTier &&
           existingRecord.workHours === workHours
@@ -237,6 +238,7 @@ class AttendanceProcessor {
 
         existingRecord.checkIn = checkIn;
         existingRecord.checkOut = checkOut;
+        existingRecord.checkOutNextDay = checkOutNextDay;
         existingRecord.status = status;
         existingRecord.lateTier = lateTier;
         existingRecord.workHours = workHours;
@@ -250,6 +252,7 @@ class AttendanceProcessor {
           shift: shiftName,
           checkIn,
           checkOut,
+          checkOutNextDay,
           status,
           lateTier,
           workHours
@@ -287,6 +290,7 @@ class AttendanceProcessor {
 
     let checkIn = null;
     let checkOut = null;
+    let checkOutNextDay = false;
     for (const txn of txns) {
       const uaeTime = new Date(new Date(txn.timestamp).getTime() + 4 * 60 * 60 * 1000);
       const dateStr = uaeTime.toISOString().split("T")[0];
@@ -298,9 +302,10 @@ class AttendanceProcessor {
         if (!checkIn) checkIn = timeStr; // txns sorted ascending - first IN is earliest
       } else if (txn.transactionType === "OUT") {
         checkOut = timeStr; // every OUT overwrites - last one wins as latest
+        checkOutNextDay = dateStr !== shiftDate; // punched on the calendar day after the shift started
       }
     }
-    return { checkIn, checkOut };
+    return { checkIn, checkOut, checkOutNextDay };
   }
 }
 

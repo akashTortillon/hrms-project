@@ -28,6 +28,13 @@ const attendanceSchema = new mongoose.Schema(
       default: null
     },
 
+    // True when checkOut was punched on the calendar day AFTER `date` (shifts that run past
+    // midnight), so the table can flag e.g. "01:18 Next day".
+    checkOutNextDay: {
+      type: Boolean,
+      default: false
+    },
+
     workHours: {
       type: String, // "8h 45m"
       default: null

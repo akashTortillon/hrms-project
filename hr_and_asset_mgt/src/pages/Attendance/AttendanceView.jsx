@@ -186,6 +186,7 @@ function Attendance() {
         shift: record.shift || "Day Shift",
         checkIn: record.checkIn,
         checkOut: record.checkOut,
+        checkOutNextDay: record.checkOutNextDay || false,
         workHours: record.workHours,
         status: record.status || "Present",
         statusClass: getStatusClass(record.status || "Present"),
