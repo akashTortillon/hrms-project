@@ -37,7 +37,10 @@ const TO_DATE = argValue("to");
 const DB_URI = argValue("uri") || process.env.DB_URL;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const ymd = (d) => new Date(d).toISOString().split("T")[0];
+const ymd = (d) => {
+  const t = d ? new Date(d) : null;
+  return t && !isNaN(t) ? t.toISOString().split("T")[0] : "?";
+};
 
 async function main() {
   for (const [name, v] of [["from", FROM_DATE], ["to", TO_DATE]]) {
@@ -56,15 +59,17 @@ async function main() {
 
   const periods = await Payroll.aggregate([
     { $match: filter },
-    { $group: { _id: { s: "$periodStart", e: "$periodEnd" }, records: { $sum: 1 } } },
-    { $sort: { "_id.s": 1 } }
+    // Older drafts may have no periodStart/periodEnd (pre rolling-period) - keep month/year too
+    { $group: { _id: { s: "$periodStart", e: "$periodEnd", m: "$month", y: "$year" }, records: { $sum: 1 } } },
+    { $sort: { "_id.y": 1, "_id.m": 1, "_id.s": 1 } }
   ]);
   const total = periods.reduce((n, p) => n + p.records, 0);
 
   console.log("\n=== DRAFT payroll periods ===");
   if (!periods.length) console.log("(none)");
   for (const p of periods) {
-    console.log(`${ymd(p._id.s)} to ${ymd(p._id.e)}: ${p.records} record(s)`);
+    const legacy = !p._id.s || !p._id.e ? ` [no period dates, month ${p._id.m}/${p._id.y}]` : "";
+    console.log(`${ymd(p._id.s)} to ${ymd(p._id.e)}${legacy}: ${p.records} record(s)`);
   }
 
   const kept = await Payroll.countDocuments({ status: { $in: ["PROCESSED", "PAID"] } });
