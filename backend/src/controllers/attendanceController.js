@@ -1336,7 +1336,7 @@ export const exportAttendance = async (req, res) => {
         };
 
         const empAttendance = attendanceMap[emp._id] || {};
-        let present = 0, late = 0, absent = 0, leave = 0;
+        let present = 0, late = 0, absent = 0, leave = 0, incomplete = 0;
 
         const dayList = days.map(dateKey => {
           const d = dateKey;
@@ -1384,11 +1384,13 @@ export const exportAttendance = async (req, res) => {
             leave += duration;
           }
           else if (status === "Absent") absent++;
+          else if (status === "Incomplete") incomplete++;
         });
 
         row["Present"] = present;
         row["Late"] = late;
         row["Absent"] = absent;
+        row["Incomplete"] = incomplete;
         row["Leave"] = leave;
 
         // Determine if row matches Shift Filter (if applied)
@@ -1398,7 +1400,7 @@ export const exportAttendance = async (req, res) => {
         return row;
       }).filter(r => r !== null);
 
-      headers = ["Employee ID", "Name", "Department", "Branch", "Shift", "Present", "Late", "Absent", "Leave", ...days.map(dayLabel)];
+      headers = ["Employee ID", "Name", "Department", "Branch", "Shift", "Present", "Late", "Absent", "Incomplete", "Leave", ...days.map(dayLabel)];
 
     } else {
       // --- DAILY EXPORT ---
