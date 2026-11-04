@@ -137,6 +137,29 @@ export default function SystemSettings() {
         />
       </MastersCard>
 
+      {/* Payroll Rules */}
+      <MastersCard
+        title="Payroll Rules"
+        description="Applies to the next payroll generated; existing drafts keep their figures until regenerated"
+      >
+        <div className="toggle-list">
+          <div className="toggle-item">
+            <div>
+              <div className="toggle-title">Sandwich Rule</div>
+              <div className="toggle-desc">
+                Deduct a weekend/holiday that falls between two absences as unpaid leave
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settings.sandwichRuleEnabled !== false}
+              onChange={(e) => handleSettingsChange("sandwichRuleEnabled", e.target.checked)}
+              className="toggle-switch"
+            />
+          </div>
+        </div>
+      </MastersCard>
+
       {/* Notification Engine */}
       <MastersCard
         title="Notification Engine"
