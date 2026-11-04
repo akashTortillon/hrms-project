@@ -437,7 +437,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         ["PRESENT", "PAID_LEAVE", "HALF_PAID_LEAVE"].includes(item.status)
     );
 
-    // --- PHASE 2: APPLY SANDWICH RULE ---
+    // --- PHASE 2: APPLY SANDWICH RULE --- (skipped when System Settings > Sandwich Rule is OFF)
     // Rule: If (ABSENT) -> [WEEKEND/HOLIDAY] -> (ABSENT), then [WEEKEND/HOLIDAY] becomes (UNPAID_LEAVE/SANDWICH)
 
     // Helper to get status for any date (including outside current month)
@@ -486,7 +486,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
     const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
     const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
 
-    if (hasAnyWorkedOrApprovedDay) {
+    if (hasAnyWorkedOrApprovedDay && settings?.sandwichRuleEnabled !== false) {
         console.log(`[DEBUG] Employee ${employeeId} (${startStr} to ${endStr}) - Starting Sandwich Check (With Boundary Scan)`);
 
         let i = 0;

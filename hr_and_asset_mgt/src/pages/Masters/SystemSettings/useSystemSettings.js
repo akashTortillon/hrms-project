@@ -116,7 +116,8 @@ export default function useSystemSettings() {
                     currency: data.currency,
                     dateFormat: data.dateFormat,
                     timezone: data.timezone,
-                    fiscalYearStart: data.fiscalYearStart
+                    fiscalYearStart: data.fiscalYearStart,
+                    sandwichRuleEnabled: data.sandwichRuleEnabled !== false
                 });
                 setHolidays(data.holidays || []);
                 setAllowanceTypes(data.allowanceTypes || []);
