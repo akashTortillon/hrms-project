@@ -68,12 +68,13 @@ export const getSettings = async (req, res) => {
 export const updateGlobalSettings = async (req, res) => {
     try {
         const settings = await getSettingsDoc();
-        const { currency, dateFormat, timezone, fiscalYearStart } = req.body;
+        const { currency, dateFormat, timezone, fiscalYearStart, sandwichRuleEnabled } = req.body;
 
         if (currency) settings.currency = currency;
         if (dateFormat) settings.dateFormat = dateFormat;
         if (timezone) settings.timezone = timezone;
         if (fiscalYearStart) settings.fiscalYearStart = fiscalYearStart;
+        if (typeof sandwichRuleEnabled === "boolean") settings.sandwichRuleEnabled = sandwichRuleEnabled;
 
         await settings.save();
         res.status(200).json(settings);

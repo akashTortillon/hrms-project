@@ -26,6 +26,9 @@ const systemSettingsSchema = new mongoose.Schema({
     // wins over this. See employeeModel.js for what 0/2/4/8 mean.
     defaultWorkingDayType: { type: Number, enum: [0, 2, 4, 8], default: 4 },
     defaultWeekOffDays: { type: [Number], default: [0] },
+    // Payroll "sandwich rule": a weekend/holiday between two absences is deducted as unpaid.
+    // ON by default so existing payroll results don't change; a client can switch it off.
+    sandwichRuleEnabled: { type: Boolean, default: true },
     holidays: [holidaySchema],
     notifications: [notificationSchema],
     allowanceTypes: [allowanceTypeSchema]
