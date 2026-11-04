@@ -24,6 +24,11 @@ router.get("/companies/:id/logo", getCompanyLogoProxy);
 router.get("/:type", (req, res, next) => {
     const sensitiveTypes = ["roles", "payroll-rules", "workflow-templates"];
     if (sensitiveTypes.includes(req.params.type)) {
+        // The Add/Edit Employee forms need the role list. Let anyone who can manage
+        // employees read it (read-only); everything else still needs MANAGE_MASTERS.
+        if (req.params.type === "roles" && req.user?.permissions?.includes("MANAGE_EMPLOYEES")) {
+            return next();
+        }
         return hasPermission("MANAGE_MASTERS")(req, res, next);
     }
     next();
