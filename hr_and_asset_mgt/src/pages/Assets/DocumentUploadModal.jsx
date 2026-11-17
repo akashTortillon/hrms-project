@@ -11,16 +11,24 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
 
   const documents = asset?.documents || [];
 
+  // The modal says "Max 5MB" - actually enforce it before uploading (the server enforces it too).
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const acceptFile = (file) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Only PDF, JPG, and PNG files are allowed');
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      alert(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum size is 5MB.`);
+      return;
+    }
+    setSelectedFile(file);
+  };
+
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-      if (allowedTypes.includes(file.type)) {
-        setSelectedFile(file);
-      } else {
-        alert('Only PDF, JPG, and PNG files are allowed');
-      }
-    }
+    if (file) acceptFile(file);
   };
 
   const handleDragOver = (e) => {
@@ -38,14 +46,7 @@ export default function DocumentUploadModal({ onClose, onUpload, onDelete, onDow
     setDragActive(false);
 
     const file = e.dataTransfer.files[0];
-    if (file) {
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-      if (allowedTypes.includes(file.type)) {
-        setSelectedFile(file);
-      } else {
-        alert('Only PDF, JPG, and PNG files are allowed');
-      }
-    }
+    if (file) acceptFile(file);
   };
 
   const handleUpload = async () => {

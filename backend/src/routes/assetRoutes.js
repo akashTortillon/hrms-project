@@ -32,6 +32,34 @@ import multer from "multer";
 const router = express.Router();
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
+// Asset documents: the UI promises "PDF, JPG, PNG (Max 5MB)" - enforce it here too, with a
+// clear JSON error instead of an opaque failure.
+const ASSET_DOC_MAX_BYTES = 5 * 1024 * 1024;
+const ASSET_DOC_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+const assetDocumentUpload = multer({
+   storage: multer.memoryStorage(),
+   limits: { fileSize: ASSET_DOC_MAX_BYTES },
+   fileFilter: (req, file, cb) => {
+      if (ASSET_DOC_TYPES.includes(file.mimetype)) return cb(null, true);
+      const err = new Error("Only PDF, JPG and PNG files are allowed");
+      err.code = "INVALID_FILE_TYPE";
+      cb(err);
+   }
+});
+const handleAssetDocumentUpload = (req, res, next) => {
+   assetDocumentUpload.single("document")(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === "LIMIT_FILE_SIZE") {
+         return res.status(413).json({ message: "File is too large. Maximum size is 5MB." });
+      }
+      if (err.code === "INVALID_FILE_TYPE") {
+         return res.status(400).json({ message: err.message });
+      }
+      console.error("Asset document upload error:", err);
+      return res.status(400).json({ message: "File upload error: " + err.message });
+   });
+};
+
 /* =========================
    IMPORT/EXPORT ROUTES
 ========================= */
@@ -101,7 +129,7 @@ router.put("/:id/amc", protect, hasPermission("MANAGE_ASSETS"), updateAmcDetails
    DOCUMENT ROUTES
 ========================= */
 // Uploading asset docs should probably be restricted to managers
-router.post("/:id/documents", protect, hasPermission("MANAGE_ASSETS"), memoryUpload.single("document"), uploadDocument);
+router.post("/:id/documents", protect, hasPermission("MANAGE_ASSETS"), handleAssetDocumentUpload, uploadDocument);
 router.delete("/:id/documents/:documentId", protect, hasPermission("MANAGE_ASSETS"), deleteDocument);
 router.get("/:id/documents/:documentId/download", protect, downloadDocument); // Viewing might be open
 

@@ -362,6 +362,11 @@ function Assets() {
       toast.success(response.message || "Document uploaded successfully");
       fetchAssets();
     } catch (error) {
+      // 413 can come from the web server (HTML body, no JSON message) - say what it means.
+      if (error.response?.status === 413) {
+        toast.error(error.response?.data?.message || "File is too large to upload. Maximum size is 5MB.");
+        return;
+      }
       toast.error(error.response?.data?.message || error.message || "Failed to upload document");
     }
   };
