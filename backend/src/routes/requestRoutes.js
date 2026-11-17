@@ -60,6 +60,7 @@ import express from "express";
 import multer from "multer";
 import {
   createRequest,
+  getLeavePreview,
   getMyRequests,
   withdrawRequest,
   getPendingRequestsForAdmin,
@@ -91,6 +92,10 @@ router.post("/", protect, memoryUpload.single("document"), createRequest);
 // Get logged-in user's requests
 // GET /api/requests/my-requests
 router.get("/my-requests", protect, getMyRequests);
+
+// Working-day preview for the leave form (weekly offs/holidays excluded)
+// GET /api/requests/leave-preview?from=&to=|days=&half=
+router.get("/leave-preview", protect, getLeavePreview);
 
 // Withdraw a pending request
 // PATCH /api/requests/:id/withdraw

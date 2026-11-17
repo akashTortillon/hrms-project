@@ -185,7 +185,7 @@ const hasScheduledSkip = (details = {}, month, year) => {
     );
 };
 
-const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}, sickLeaveConfig = {}) => {
+const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}, sickLeaveConfig = {}, isOffDay = null) => {
     if (!leaveInfo) return null;
 
     if (isEmployeeOnProbation(employee, dateStr)) {
@@ -208,7 +208,21 @@ const resolveLeaveDayStatus = (employee, leaveInfo, dateStr, leaveRules = {}, si
         // in every sick day already used earlier in the same calendar year (see
         // getApprovedLeavesMap's priorSickDaysThisYear) so the pay tiers are cumulative
         // per year, not reset every time a new sick leave is submitted.
-        const rawDayIndex = Math.floor((currentDate - new Date(leaveInfo.start)) / (1000 * 60 * 60 * 24)) + 1;
+        // Weekly offs/holidays inside the leave are not leave days, so they must not burn through
+        // the paid/half-paid thresholds: count only real leave days up to and including this one.
+        let rawDayIndex = Math.floor((currentDate - new Date(leaveInfo.start)) / (1000 * 60 * 60 * 24)) + 1;
+        if (typeof isOffDay === "function") {
+            let counted = 0;
+            const cursor = new Date(leaveInfo.start);
+            cursor.setHours(12, 0, 0, 0);
+            const last = new Date(dateStr);
+            last.setHours(12, 0, 0, 0);
+            for (let guard = 0; cursor <= last && guard < 800; guard++) {
+                if (!isOffDay(cursor)) counted++;
+                cursor.setDate(cursor.getDate() + 1);
+            }
+            rawDayIndex = Math.max(1, counted);
+        }
         const dayIndex = (leaveInfo.priorSickDaysThisYear || 0) + rawDayIndex;
         const totalDays = Number(leaveInfo.numberOfDays || rawDayIndex || 1);
 
@@ -366,11 +380,23 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
 
     let totalOvertimeHours = 0;
 
+    // Weekly-off/holiday test usable for any Date (sick-leave day counting, sandwich scan).
+    const isOffDayFn = (dObj) => {
+        const y = dObj.getFullYear();
+        const m = String(dObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dObj.getDate()).padStart(2, '0');
+        return holidaySet.has(`${y}-${m}-${dd}`) || isWeekOff(dObj, employee, workingDayDefault);
+    };
+
     for (let i = 0; i < totalDaysInPeriod; i++) {
         const day = i + 1;
         const dateObj = addDays(rangeStart, i);
         const dateStr = formatYMD(dateObj);
         const isEmployeeWeekOff = isWeekOff(dateObj, employee, workingDayDefault);
+        // A weekly off / company holiday is never a leave day, even inside an approved leave
+        // period (or when an older request still left an "On Leave" row on it).
+        const isOffDay = isEmployeeWeekOff || holidaySet.has(dateStr);
+        let leaveFraction = 1;
 
         let status = 'UNKNOWN'; // PRESENT, LATE, ABSENT, HOLIDAY, WEEKEND, PAID_LEAVE, HALF_PAID_LEAVE, UNPAID_LEAVE
         let isLate = false;
@@ -397,22 +423,27 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
                     }
                 }
             } else if (recStatus === 'On Leave') {
-                const mappedLeaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
-                if (mappedLeaveInfo) {
-                    status = resolveLeaveDayStatus(employee, mappedLeaveInfo, dateStr, leaveRules, sickLeaveConfig);
-                } else if (record.leavePayStatus === "HALF_PAID") status = 'HALF_PAID_LEAVE';
-                else if (record.isPaid === false || record.leavePayStatus === "UNPAID") status = 'UNPAID_LEAVE';
-                else status = 'PAID_LEAVE';
+                if (isOffDay) {
+                    // leave row on a weekly off/holiday: falls through to HOLIDAY/WEEKEND below
+                } else {
+                    leaveFraction = Number(record.leaveDuration) === 0.5 ? 0.5 : 1;
+                    const mappedLeaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
+                    if (mappedLeaveInfo) {
+                        status = resolveLeaveDayStatus(employee, mappedLeaveInfo, dateStr, leaveRules, sickLeaveConfig, isOffDayFn);
+                    } else if (record.leavePayStatus === "HALF_PAID") status = 'HALF_PAID_LEAVE';
+                    else if (record.isPaid === false || record.leavePayStatus === "UNPAID") status = 'UNPAID_LEAVE';
+                    else status = 'PAID_LEAVE';
+                }
             } else {
                 status = 'ABSENT';
             }
         }
 
         // B. Check Approved Leave (Override if no present record)
-        if (status === 'UNKNOWN' || status === 'ABSENT') {
+        if ((status === 'UNKNOWN' || status === 'ABSENT') && !isOffDay) {
             const leaveInfo = getLeaveInfo(employeeId, dateStr, leaveMap);
             if (leaveInfo) {
-                status = resolveLeaveDayStatus(employee, leaveInfo, dateStr, leaveRules, sickLeaveConfig);
+                status = resolveLeaveDayStatus(employee, leaveInfo, dateStr, leaveRules, sickLeaveConfig, isOffDayFn);
             }
         }
 
@@ -429,7 +460,8 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
             dateStr,
             status,
             isLate,
-            lateTier
+            lateTier,
+            fraction: leaveFraction
         });
     }
 
@@ -447,19 +479,24 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         const d = String(dObj.getDate()).padStart(2, '0');
         const dStr = `${y}-${m}-${d}`;
 
+        const offDay = isOffDayFn(dObj);
+
         // 1. Check Log
         if (logMap[dStr]) {
             const r = logMap[dStr];
             if (r.status === 'Present' || r.status === 'Late') return 'PRESENT';
             if (r.status === 'On Leave') {
-                const mappedLeaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
-                if (mappedLeaveInfo) {
-                    return resolveLeaveDayStatus(employee, mappedLeaveInfo, dStr, leaveRules, sickLeaveConfig);
+                if (!offDay) {
+                    const mappedLeaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
+                    if (mappedLeaveInfo) {
+                        return resolveLeaveDayStatus(employee, mappedLeaveInfo, dStr, leaveRules, sickLeaveConfig, isOffDayFn);
+                    }
+                    if (r.leavePayStatus === "HALF_PAID") return 'HALF_PAID_LEAVE';
+                    return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
                 }
-                if (r.leavePayStatus === "HALF_PAID") return 'HALF_PAID_LEAVE';
-                return r.isPaid === false ? 'UNPAID_LEAVE' : 'PAID_LEAVE';
+            } else {
+                return 'ABSENT';
             }
-            return 'ABSENT';
         }
 
         // 2. Check Leave Map (Assume we fetched enough? Or just basic check)
@@ -468,9 +505,9 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         // getApprovedLeavesMap fetches ALL approved leaves for the employee ideally?
         // or ensure we requested enough. User's 'getApprovedLeavesMap' implementation fetches ALL matching user. 
         // So safe to assume we have it.
-        const leaveInfo = getLeaveInfo(employeeId, dStr, leaveMap);
+        const leaveInfo = offDay ? null : getLeaveInfo(employeeId, dStr, leaveMap);
         if (leaveInfo) {
-            return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules, sickLeaveConfig);
+            return resolveLeaveDayStatus(employee, leaveInfo, dStr, leaveRules, sickLeaveConfig, isOffDayFn);
         }
 
         // 3. Fallback — Holiday takes precedence over Weekend (same reasoning as the
@@ -601,7 +638,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
                 console.log(`[DEBUG] Day ${d.day} is ${d.status} (+Paid)`);
                 break;
             case 'UNPAID_LEAVE':
-                unpaidLeavesCount++;
+                unpaidLeavesCount += (d.fraction || 1);
                 // lopDays++; // Removed to prevent double counting in generatePayroll (which adds Absent + Unpaid)
                 break;
             case 'SANDWICH_LEAVE': // Treated as Unpaid

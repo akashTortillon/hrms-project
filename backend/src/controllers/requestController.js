@@ -424,6 +424,8 @@ import leaveWalletService from "../services/leaveWalletService.js";
 import { isManagerOfEmployee, isFinanceManagerOfEmployee } from "../utils/managerScopeUtils.js";
 import { escapeRegex } from "../utils/stringUtils.js";
 import { isEmployeeOnProbation, isLeaveTypeAllowedInProbation } from "../utils/probationUtils.js";
+import { getLeaveCalendarContext, countLeaveDays, leaveDatesForCount, listLeaveDates } from "../utils/attendanceUtils.js";
+import { round2 } from "../utils/roundUtils.js";
 
 const safeJsonParse = (value, fallback = {}) => {
   if (!value) return fallback;
@@ -700,7 +702,7 @@ const notifyFinanceApprovers = async (title, message, link, designatedFinanceMan
   }
 };
 
-const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true, isHalfDay = false, leavePayStatus = "FULLY_PAID") => {
+const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, isPaid = true, isHalfDay = false, leavePayStatus = "FULLY_PAID", leaveDates = null) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
 
@@ -709,11 +711,22 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
     throw new Error("Employee not found for leave request");
   }
 
-  const start = new Date(fromDate);
-  const end = new Date(toDate);
+  // Only the real leave dates get an "On Leave" row - weekly offs/holidays inside the range
+  // are left alone. Requests created before this rule have no stored dates, so derive them.
+  const dates = Array.isArray(leaveDates) && leaveDates.length
+    ? leaveDates
+    : listLeaveDates(fromDate, toDate, employee, await getLeaveCalendarContext());
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().split("T")[0];
+  const marked = [];
+  const skippedPunchDates = [];
+  for (const dateStr of dates) {
+    // A day the employee actually badged in is kept as worked (the punch wins): never wipe
+    // real check-in/out data to write a leave row. Such a day is not debited from the wallet.
+    const existing = await Attendance.findOne({ employee: employee._id, date: dateStr });
+    if (existing && existing.status !== "On Leave" && existing.checkIn) {
+      skippedPunchDates.push(dateStr);
+      continue;
+    }
 
     await Attendance.findOneAndUpdate(
       { employee: employee._id, date: dateStr },
@@ -732,7 +745,9 @@ const markLeaveAttendance = async (userId, fromDate, toDate, leaveType = null, i
       },
       { upsert: true, new: true }
     );
+    marked.push(dateStr);
   }
+  return { marked, skippedPunchDates };
 };
 
 // Generate next request ID (REQ001, REQ002, etc.)
@@ -935,11 +950,21 @@ export const createRequest = async (req, res) => {
         });
       }
 
-      const numberOfDays = getLeaveDays(details);
+      // Weekly offs and company holidays inside the range are NOT leave days: they are not
+      // counted, not debited from the wallet and get no "On Leave" row. Without an Employee
+      // record (no weekly-off settings to read) fall back to plain calendar days.
+      const leaveCtx = await getLeaveCalendarContext();
+      const leaveCalc = employee
+        ? countLeaveDays(details.fromDate, details.toDate, employee, leaveCtx, { isHalfDay: !!details.isHalfDay })
+        : null;
+      const calendarDays = getLeaveDays(details);
+      const numberOfDays = round2(leaveCalc ? leaveCalc.days : calendarDays);
       if (!numberOfDays) {
         return res.status(400).json({
           success: false,
-          message: "Unable to calculate leave days for the selected dates"
+          message: calendarDays
+            ? "The selected dates are all weekly offs or holidays - there is no leave day to apply for."
+            : "Unable to calculate leave days for the selected dates"
         });
       }
 
@@ -1035,6 +1060,10 @@ export const createRequest = async (req, res) => {
       }
 
       details.numberOfDays = numberOfDays;
+      if (leaveCalc) {
+        details.leaveDates = leaveCalc.dates;
+        details.offDaysExcluded = round2(calendarDays - numberOfDays);
+      }
       details.medicalDocumentRequired = sickLeave && numberOfDays > 1;
       details.hasMedicalDocument = Boolean(storedMedicalDoc);
       details.medicalDocumentPath = storedMedicalDoc?.filePath || "";
@@ -1149,6 +1178,47 @@ export const createRequest = async (req, res) => {
 };
 
 // Get all requests for the current user
+// GET /api/requests/leave-preview?from=YYYY-MM-DD&(to=YYYY-MM-DD | days=N)&half=1
+// Working-day preview for the leave form: weekly offs and company holidays inside the range
+// are not leave days. Given `to` returns the count; given `days` returns the matching to-date.
+export const getLeavePreview = async (req, res) => {
+  try {
+    const { from, to, days, half } = req.query;
+    if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(String(from))) {
+      return res.status(400).json({ success: false, message: "from (YYYY-MM-DD) is required" });
+    }
+    const employeeUser = await User.findById(req.user.id);
+    const employee = employeeUser?.employeeId
+      ? await Employee.findById(employeeUser.employeeId)
+      : await Employee.findOne({ email: { $regex: new RegExp(`^${escapeRegex(employeeUser?.email || "")}$`, "i") } });
+    const ctx = await getLeaveCalendarContext();
+    const isHalfDay = half === "1" || half === "true";
+
+    if (days !== undefined && days !== "" && !isHalfDay) {
+      const wanted = round2(Number(days));
+      if (!(wanted > 0)) return res.status(400).json({ success: false, message: "days must be greater than 0" });
+      const dates = leaveDatesForCount(from, wanted, employee, ctx);
+      const toDate = dates.length ? dates[dates.length - 1] : from;
+      return res.json({ success: true, from, toDate, numberOfDays: round2(dates.length), dates });
+    }
+
+    const toDate = to && /^\d{4}-\d{2}-\d{2}$/.test(String(to)) ? String(to) : from;
+    const calc = countLeaveDays(from, toDate, employee, ctx, { isHalfDay });
+    const calendarDays = getLeaveDays({ fromDate: from, toDate, isHalfDay });
+    return res.json({
+      success: true,
+      from,
+      toDate,
+      numberOfDays: round2(calc.days),
+      offDaysExcluded: round2(Math.max(0, calendarDays - calc.days)),
+      dates: calc.dates
+    });
+  } catch (error) {
+    console.error("Leave preview error:", error);
+    res.status(500).json({ success: false, message: "Unable to calculate leave days" });
+  }
+};
+
 export const getMyRequests = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1789,37 +1859,60 @@ export const updateRequestStatus = async (req, res) => {
         // toDate off request.details unconditionally - landing the override after those
         // calls would silently mark/debit the wrong day count.
         const approvedDaysOverride = req.body.approvedDays !== undefined && req.body.approvedDays !== null && req.body.approvedDays !== ""
-          ? Number(req.body.approvedDays)
+          ? round2(Number(req.body.approvedDays))
+          : null;
+
+        // Employee + calendar needed to keep weekly offs/holidays out of the approved days.
+        const leaveUser = await User.findById(request.userId);
+        const leaveEmployee = leaveUser?.employeeId
+          ? await Employee.findById(leaveUser.employeeId)
+          : (leaveUser?.email ? await Employee.findOne({ email: leaveUser.email }) : null);
+        const leaveCtx = await getLeaveCalendarContext();
+
+        let leaveDates = Array.isArray(request.details.leaveDates) && request.details.leaveDates.length
+          ? request.details.leaveDates
           : null;
 
         if (approvedDaysOverride && approvedDaysOverride > 0 && !request.details.isHalfDay
           && approvedDaysOverride !== request.details.numberOfDays) {
+          // The N approved days are the first N real leave days from the start date (weekly
+          // offs/holidays are skipped), so toDate is the last of those - not start + N - 1.
+          leaveDates = leaveDatesForCount(request.details.fromDate, approvedDaysOverride, leaveEmployee, leaveCtx);
           // Reassign the whole `details` object (not a nested in-place mutation) - `details`
           // is a Mongoose Mixed field, so mutating a nested property alone isn't reliably
           // detected as a change and can silently fail to persist on save().
           request.details = {
             ...request.details,
-            toDate: addDaysToYMD(request.details.fromDate, approvedDaysOverride - 1),
+            toDate: leaveDates.length ? leaveDates[leaveDates.length - 1] : addDaysToYMD(request.details.fromDate, approvedDaysOverride - 1),
             numberOfDays: approvedDaysOverride,
+            leaveDates,
             approvedDaysAdjustedBy: req.user.id,
             approvedDaysAdjustedAt: new Date()
           };
         }
 
         const { fromDate, toDate, leaveType, leaveTypeId, numberOfDays, isPaid, isHalfDay, leavePayStatus } = request.details;
+        let punchSkipped = 0;
         if (fromDate && toDate) {
-          await markLeaveAttendance(
+          const markResult = await markLeaveAttendance(
             request.userId,
             fromDate,
             toDate,
             leaveType,
             isPaid,
             isHalfDay,
-            leavePayStatus === "HALF_PAID" ? "HALF_PAID" : (leavePayStatus === "UNPAID" ? "UNPAID" : "FULLY_PAID")
+            leavePayStatus === "HALF_PAID" ? "HALF_PAID" : (leavePayStatus === "UNPAID" ? "UNPAID" : "FULLY_PAID"),
+            leaveDates
           );
+          // Days the employee actually worked (real punches) are not leave: not debited.
+          punchSkipped = markResult.skippedPunchDates.length;
+          if (punchSkipped) {
+            request.details = { ...request.details, punchSkippedDates: markResult.skippedPunchDates };
+          }
         }
+        const debitDays = round2(Math.max(0, (Number(numberOfDays) || 0) - punchSkipped * (isHalfDay ? 0.5 : 1)));
 
-        if (leaveTypeId && numberOfDays) {
+        if (leaveTypeId && debitDays > 0) {
           const employeeUserForWallet = await User.findById(request.userId);
           const employeeForWallet = employeeUserForWallet?.employeeId
             ? await Employee.findById(employeeUserForWallet.employeeId)
@@ -1828,7 +1921,7 @@ export const updateRequestStatus = async (req, res) => {
             await leaveWalletService.debitWallet({
               employeeId: employeeForWallet._id,
               leaveTypeId,
-              days: numberOfDays,
+              days: debitDays,
               transactionType: "LEAVE_TAKEN",
               remarks: `Leave request ${request.requestId} approved`,
               requestId: request._id,
@@ -2011,11 +2104,14 @@ export const revokeLeave = async (req, res) => {
     }
 
     let walletCredited = false;
-    if (employee && leaveTypeId && numberOfDays) {
+    // Mirror of the approval debit: punched (worked) days were never debited.
+    const creditDays = round2(Math.max(0, (Number(numberOfDays) || 0)
+      - ((request.details?.punchSkippedDates || []).length) * (request.details?.isHalfDay ? 0.5 : 1)));
+    if (employee && leaveTypeId && creditDays > 0) {
       await leaveWalletService.creditWallet({
         employeeId: employee._id,
         leaveTypeId,
-        days: numberOfDays,
+        days: creditDays,
         transactionType: "LEAVE_REVOKED",
         remarks: `Leave request ${request.requestId} revoked: ${reason.trim()}`,
         requestId: request._id,

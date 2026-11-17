@@ -36,6 +36,13 @@ export const createRequest = async (requestData) => {
   return response.data;
 };
 
+// Working-day preview (weekly offs/holidays are not leave days). Pass { from, to } to count
+// days, or { from, days } to get the matching to-date. Add half: true for a half-day.
+export const getLeavePreview = async (params) => {
+  const response = await api.get(`${REQUEST_API}/leave-preview`, { params });
+  return response.data;
+};
+
 // Get all requests for current user
 export const getMyRequests = async (params = {}) => {
   const response = await api.get(`${REQUEST_API}/my-requests`, { params });

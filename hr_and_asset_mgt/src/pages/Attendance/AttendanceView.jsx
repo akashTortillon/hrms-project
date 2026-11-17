@@ -35,6 +35,8 @@ const getStatusClass = (status) => {
     Absent: "status-absent",
     "On Leave": "status-leave",
     Incomplete: "status-incomplete",
+    Weekend: "status-weekend",
+    Holiday: "status-holiday",
   };
   return statusMap[status] || "status-present";
 };

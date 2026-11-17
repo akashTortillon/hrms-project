@@ -202,6 +202,78 @@ export const holidaySetFromHolidays = (holidays = []) => {
 };
 
 // Helper: Get Holidays Set
+// ---- Leave calendar helpers --------------------------------------------------------------
+// A weekly off or company holiday that falls INSIDE an approved leave period is not a leave
+// day: it is not counted, not debited from the leave wallet and gets no "On Leave" row.
+// All of these work on plain YYYY-MM-DD strings with UTC arithmetic so the result never
+// depends on the server's timezone.
+
+const ymdToUtcDate = (ymd) => new Date(`${String(ymd).slice(0, 10)}T00:00:00Z`);
+
+export const addDaysYMD = (ymd, days) => {
+  const d = ymdToUtcDate(ymd);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+};
+
+// Weekly-off test for a YYYY-MM-DD string (same rules as isWeekOff, UTC weekday).
+export const isWeekOffYMD = (ymd, employee, systemDefault = {}) =>
+  isWeekOff({ getDay: () => ymdToUtcDate(ymd).getUTCDay() }, employee, systemDefault);
+
+// Holiday set + company default week-off settings, loaded once per request.
+export const getLeaveCalendarContext = async () => {
+  const settings = await SystemSettings.findOne().select("holidays defaultWorkingDayType defaultWeekOffDays");
+  return {
+    holidaySet: holidaySetFromHolidays(settings?.holidays || []),
+    systemDefault: {
+      workingDayType: settings?.defaultWorkingDayType,
+      weekOffDays: settings?.defaultWeekOffDays
+    }
+  };
+};
+
+// The dates inside [fromYMD, toYMD] that really count as leave (not weekly off, not holiday).
+export const listLeaveDates = (fromYMD, toYMD, employee, ctx = {}) => {
+  const from = String(fromYMD || "").slice(0, 10);
+  const to = String(toYMD || fromYMD || "").slice(0, 10);
+  if (!from || ymdToUtcDate(from).toString() === "Invalid Date" || ymdToUtcDate(to).toString() === "Invalid Date" || to < from) {
+    return [];
+  }
+  const holidaySet = ctx.holidaySet || new Set();
+  const dates = [];
+  for (let d = from; d <= to; d = addDaysYMD(d, 1)) {
+    if (holidaySet.has(d)) continue;
+    if (isWeekOffYMD(d, employee, ctx.systemDefault)) continue;
+    dates.push(d);
+    if (dates.length > 400) break; // safety net against absurd ranges
+  }
+  return dates;
+};
+
+// Leave-day count for a request. Half-day = 0.5 on the start date (0 if that date is a
+// weekly off/holiday). Returns { days, dates }.
+export const countLeaveDays = (fromYMD, toYMD, employee, ctx = {}, { isHalfDay = false } = {}) => {
+  if (isHalfDay) {
+    const dates = listLeaveDates(fromYMD, fromYMD, employee, ctx);
+    return { days: dates.length ? 0.5 : 0, dates };
+  }
+  const dates = listLeaveDates(fromYMD, toYMD, employee, ctx);
+  return { days: dates.length, dates };
+};
+
+// First `count` leave dates starting at fromYMD (used when HR approves fewer/more days than
+// requested): walks forward day by day, skipping weekly offs/holidays.
+export const leaveDatesForCount = (fromYMD, count, employee, ctx = {}) => {
+  const holidaySet = ctx.holidaySet || new Set();
+  const dates = [];
+  let d = String(fromYMD).slice(0, 10);
+  for (let guard = 0; dates.length < Math.ceil(count) && guard < 800; guard++, d = addDaysYMD(d, 1)) {
+    if (holidaySet.has(d) || isWeekOffYMD(d, employee, ctx.systemDefault)) continue;
+    dates.push(d);
+  }
+  return dates;
+};
+
 export const getHolidaysSet = async () => {
   const settings = await SystemSettings.findOne();
   return holidaySetFromHolidays(settings?.holidays || []);

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import "../../style/SubmitRequestModal.css";
 
 import SvgIcon from "../../components/svgIcon/svgView";
-import { createRequest } from "../../services/requestService.js";
+import { createRequest, getLeavePreview } from "../../services/requestService.js";
 import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
 import { getMyWallets } from "../../services/leaveWalletService.js";
 import { toast } from "react-toastify";
@@ -26,8 +26,32 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
     numberOfDays: "",
     fromDate: "",
     toDate: "",
+    offDaysExcluded: 0, // weekly offs/holidays inside the range (not leave days)
     reason: ""
   });
+
+  // Weekly offs and company holidays inside the range are not leave days, so the day count
+  // (and the to-date for "N days") comes from the server, which knows the employee's off
+  // days. The local calendar-day maths stays as an instant estimate while this loads.
+  const syncLeaveRange = async ({ from, to, days, half }) => {
+    if (!from) return;
+    try {
+      const res = await getLeavePreview({ from, ...(days ? { days } : { to: to || from }), ...(half ? { half: 1 } : {}) });
+      if (!res?.success) return;
+      setLeaveForm((prev) => {
+        if (prev.fromDate !== from) return prev; // user moved on while this was loading
+        return {
+          ...prev,
+          toDate: days ? res.toDate : prev.toDate,
+          // typing N days: keep the user's own input, only the to-date comes from the server
+          numberOfDays: days ? prev.numberOfDays : String(res.numberOfDays),
+          offDaysExcluded: res.offDaysExcluded ?? 0
+        };
+      });
+    } catch {
+      /* keep the local estimate; the server recalculates on submit anyway */
+    }
+  };
 
   const [salaryForm, setSalaryForm] = useState({
     amount: "",
@@ -308,11 +332,17 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                       from.setDate(from.getDate() + days - 1);
                       const toDate = from.toISOString().split('T')[0];
                       setLeaveForm({ ...leaveForm, numberOfDays: e.target.value, toDate });
+                      syncLeaveRange({ from: leaveForm.fromDate, days });
                     } else {
                       setLeaveForm({ ...leaveForm, numberOfDays: e.target.value });
                     }
                   }}
                 />
+                {Number(leaveForm.offDaysExcluded) > 0 && !leaveForm.isHalfDay && (
+                  <p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                    {leaveForm.offDaysExcluded} weekly off/holiday day(s) in this range are not counted as leave.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -330,6 +360,13 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                       // If half day enabled and fromDate is set, sync toDate
                       toDate: (checked && leaveForm.fromDate) ? leaveForm.fromDate : leaveForm.toDate
                     });
+                    if (leaveForm.fromDate) {
+                      syncLeaveRange({
+                        from: leaveForm.fromDate,
+                        to: checked ? leaveForm.fromDate : (leaveForm.toDate || leaveForm.fromDate),
+                        half: checked
+                      });
+                    }
                   }}
                   style={{ width: "16px", height: "16px" }}
                 />
@@ -353,6 +390,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                       toDate = d.toISOString().split('T')[0];
                     }
                     setLeaveForm({ ...leaveForm, fromDate: from, toDate });
+                    if (from && toDate) syncLeaveRange({ from, to: toDate, half: leaveForm.isHalfDay });
                   }}
                   style={{
                     width: "100%",
@@ -380,6 +418,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                       if (diff > 0) days = String(diff);
                     }
                     setLeaveForm({ ...leaveForm, toDate, numberOfDays: days });
+                    if (leaveForm.fromDate && toDate) syncLeaveRange({ from: leaveForm.fromDate, to: toDate });
                   }}
                   style={{
                     width: "100%",
