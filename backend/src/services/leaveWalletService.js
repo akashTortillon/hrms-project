@@ -1,6 +1,7 @@
 import LeaveWallet from "../models/leaveWalletModel.js";
 import LeaveLedger from "../models/leaveLedgerModel.js";
 import { getDailySalary } from "../utils/salaryUtils.js";
+import { round2 } from "../utils/roundUtils.js";
 
 const getOrCreateWallet = async (employeeId, leaveTypeId) => {
   let wallet = await LeaveWallet.findOne({ employee: employeeId, leaveType: leaveTypeId });
@@ -16,8 +17,9 @@ const creditWallet = async ({ employeeId, leaveTypeId, days, transactionType, re
   const wallet = await getOrCreateWallet(employeeId, leaveTypeId);
   const balanceBefore = wallet.balanceDays;
 
-  wallet.creditedDays += days;
-  wallet.balanceDays += days;
+  days = round2(days);
+  wallet.creditedDays = round2(wallet.creditedDays + days);
+  wallet.balanceDays = round2(wallet.balanceDays + days);
   wallet.lastCreditDate = new Date();
 
   // If this credit clears (or partially clears) a negative balance from an advance
@@ -26,15 +28,16 @@ const creditWallet = async ({ employeeId, leaveTypeId, days, transactionType, re
   // (pendingDeductionAmount / pendingDeductionDays), never recomputed at current salary —
   // it must equal what was actually deducted, even if salary changed since then.
   if (balanceBefore < 0) {
-    const offset = Math.min(days, -balanceBefore);
+    const offset = round2(Math.min(days, -balanceBefore));
     if (offset > 0) {
       const ratePerDay = wallet.pendingDeductionDays > 0 ? wallet.pendingDeductionAmount / wallet.pendingDeductionDays : 0;
-      const offsetAmount = Math.min(offset, wallet.pendingDeductionDays) * ratePerDay;
+      // rate stays raw (it is a repeating decimal); only the stored amounts are rounded
+      const offsetAmount = round2(Math.min(offset, wallet.pendingDeductionDays) * ratePerDay);
 
-      wallet.pendingRefundDays += offset;
-      wallet.pendingRefundAmount += offsetAmount;
-      wallet.pendingDeductionDays = Math.max(0, wallet.pendingDeductionDays - offset);
-      wallet.pendingDeductionAmount = Math.max(0, wallet.pendingDeductionAmount - offsetAmount);
+      wallet.pendingRefundDays = round2(wallet.pendingRefundDays + offset);
+      wallet.pendingRefundAmount = round2(wallet.pendingRefundAmount + offsetAmount);
+      wallet.pendingDeductionDays = round2(Math.max(0, wallet.pendingDeductionDays - offset));
+      wallet.pendingDeductionAmount = round2(Math.max(0, wallet.pendingDeductionAmount - offsetAmount));
 
       await LeaveLedger.create({
         employee: employeeId,
@@ -90,8 +93,9 @@ const expireBalance = async ({ employeeId, leaveTypeId, remarks = "" }) => {
 // and writes the matching ledger entry.
 const debitWallet = async ({ employeeId, leaveTypeId, days, transactionType, remarks = "", requestId = null, createdBy = null }) => {
   const wallet = await getOrCreateWallet(employeeId, leaveTypeId);
-  wallet.usedDays += days;
-  wallet.balanceDays -= days;
+  days = round2(days);
+  wallet.usedDays = round2(wallet.usedDays + days);
+  wallet.balanceDays = round2(wallet.balanceDays - days);
   await wallet.save();
 
   await LeaveLedger.create({
@@ -120,10 +124,10 @@ const grantAdvanceLeave = async ({ employeeId, leaveTypeId, days, employee, rema
 
   const now = new Date();
   const dailySalary = getDailySalary(employee, now.getMonth() + 1, now.getFullYear());
-  const deductionAmount = Number((dailySalary * days).toFixed(2));
+  const deductionAmount = round2(dailySalary * days);
 
-  wallet.pendingDeductionDays += days;
-  wallet.pendingDeductionAmount += deductionAmount;
+  wallet.pendingDeductionDays = round2(wallet.pendingDeductionDays + days);
+  wallet.pendingDeductionAmount = round2(wallet.pendingDeductionAmount + deductionAmount);
   await wallet.save();
 
   return { wallet, deductionAmount, dailySalary };

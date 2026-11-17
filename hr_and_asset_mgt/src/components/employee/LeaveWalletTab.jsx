@@ -13,6 +13,7 @@ import { useRole } from "../../contexts/RoleContext.jsx";
 import CustomModal from "../reusable/CustomModal.jsx";
 import AppButton from "../reusable/Button.jsx";
 import "../../style/LeaveWalletTab.css";
+import { round2 } from "../../utils/round.js";
 
 const CARD_COLORS = ["#eff6ff", "#f0fdf4", "#fefce8", "#fdf4ff", "#fff7ed", "#f0f9ff"];
 const CARD_TEXT = ["#1d4ed8", "#15803d", "#a16207", "#7e22ce", "#c2410c", "#0c4a6e"];
@@ -202,24 +203,24 @@ export default function LeaveWalletTab({ employeeId }) {
 
                 <div className="wallet-balance-row">
                   <span className="wallet-balance-number" style={{ color: w.balanceDays < 0 ? "#dc2626" : tc }}>
-                    {w.balanceDays}
+                    {round2(w.balanceDays)}
                   </span>
                   <span className="wallet-balance-label">days remaining</span>
                 </div>
                 <div className="wallet-meta">
-                  {w.creditedDays} credited · {w.usedDays} used
+                  {round2(w.creditedDays)} credited · {round2(w.usedDays)} used
                 </div>
                 {w.overrideDays != null && (
                   <div className="wallet-override-note">Custom allocation: {w.overrideDays}/cycle</div>
                 )}
                 {w.pendingDeductionAmount > 0 && (
                   <div className="wallet-banner owed">
-                    <span>Salary deduction owed: <strong>{w.pendingDeductionAmount.toFixed(2)}</strong> ({w.pendingDeductionDays}d) — apply via Payroll</span>
+                    <span>Salary deduction owed: <strong>{round2(w.pendingDeductionAmount).toFixed(2)}</strong> ({round2(w.pendingDeductionDays)}d) — apply via Payroll</span>
                   </div>
                 )}
                 {w.pendingRefundAmount > 0 && (
                   <div className="wallet-banner refund">
-                    <span>Refund pending: <strong>{w.pendingRefundAmount.toFixed(2)}</strong> ({w.pendingRefundDays}d)</span>
+                    <span>Refund pending: <strong>{round2(w.pendingRefundAmount).toFixed(2)}</strong> ({round2(w.pendingRefundDays)}d)</span>
                     {canManage && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleClearRefund(w.leaveTypeId); }}

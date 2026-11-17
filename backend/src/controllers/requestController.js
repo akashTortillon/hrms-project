@@ -3158,21 +3158,20 @@ export const getLeaveSummary = async (req, res) => {
       status: "APPROVED"
     };
 
-    // Filter by year, and optionally by a specific month within that year.
+    // Filter by year, and optionally by a specific month within that year - by the LEAVE
+    // dates (details.fromDate), not by when the request happened to be submitted.
+    let leavePrefix = null;
     if (year) {
       const monthNum = month ? parseInt(month, 10) : null;
-      if (monthNum && monthNum >= 1 && monthNum <= 12) {
-        const startOfMonth = new Date(Date.UTC(Number(year), monthNum - 1, 1, 0, 0, 0, 0));
-        const endOfMonth = new Date(Date.UTC(Number(year), monthNum, 0, 23, 59, 59, 999));
-        matchQuery.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
-      } else {
-        const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
-        const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
-        matchQuery.createdAt = { $gte: startOfYear, $lte: endOfYear };
-      }
+      leavePrefix = (monthNum && monthNum >= 1 && monthNum <= 12)
+        ? `${year}-${String(monthNum).padStart(2, "0")}`
+        : `${year}`;
     }
 
-    const leaveRequests = await Request.find(matchQuery);
+    const leaveRequestsAll = await Request.find(matchQuery);
+    const leaveRequests = leavePrefix
+      ? leaveRequestsAll.filter((r) => String(r.details?.fromDate || r.details?.startDate || "").startsWith(leavePrefix))
+      : leaveRequestsAll;
     const pendingRequests = await Request.countDocuments({
       userId: targetUserId,
       requestType: "LEAVE",
@@ -3186,14 +3185,14 @@ export const getLeaveSummary = async (req, res) => {
     for (const req of leaveRequests) {
       const details = req.details || {};
       const leaveType = details.leaveType || details.leaveTypeId || "Other";
-      const days = parseFloat(details.numberOfDays || 1);
+      const days = round2(parseFloat(details.numberOfDays || 1));
 
       if (!summary[leaveType]) {
         summary[leaveType] = { type: leaveType, count: 0, totalDays: 0 };
       }
       summary[leaveType].count += 1;
-      summary[leaveType].totalDays += days;
-      totalDays += days;
+      summary[leaveType].totalDays = round2(summary[leaveType].totalDays + days);
+      totalDays = round2(totalDays + days);
     }
 
     // Previously bucketed into hardcoded sick/casual/annual/unpaid tiles via substring
@@ -3218,7 +3217,7 @@ export const getLeaveSummary = async (req, res) => {
         leaveType: r.details?.leaveType || r.details?.leaveTypeId || "Other",
         fromDate: r.details?.fromDate || null,
         toDate: r.details?.toDate || null,
-        numberOfDays: parseFloat(r.details?.numberOfDays || 1),
+        numberOfDays: round2(parseFloat(r.details?.numberOfDays || 1)),
         isHalfDay: !!r.details?.isHalfDay,
         isPaid: r.details?.isPaid !== false,
         reason: r.details?.reason || "",

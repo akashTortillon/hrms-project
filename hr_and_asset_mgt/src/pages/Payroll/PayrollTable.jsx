@@ -5,6 +5,7 @@ import AdjustmentModal from "./AdjustmentModal";
 import CTCModal from "./CTCModal.jsx";
 import { toast } from "react-toastify";
 import { payrollService } from "../../services/payrollService";
+import { fmtMoney } from "../../utils/round.js";
 
 export default function PayrollEmployeesTable({ employees = [], loading, onRefresh, isFinalized, onExport, activeTab, setActiveTab }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -97,10 +98,10 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
                   <div className="p-emp-name">{record.employee?.name || "Unknown"}</div>
                   <div style={{ fontSize: '11px', color: '#64748b' }}>{record.employee?.code}</div>
                 </td>
-                <td className="p-salary">{(record.basicSalary || 0).toLocaleString()} AED</td>
-                <td style={{ color: '#10b981' }}>+{(record.totalAllowances || 0).toLocaleString()} AED</td>
-                <td style={{ color: '#f43f5e' }}>-{(record.totalDeductions || 0).toLocaleString()} AED</td>
-                <td className="p-salary" style={{ fontWeight: '700' }}>{(record.netSalary || 0).toLocaleString()} AED</td>
+                <td className="p-salary">{fmtMoney(record.basicSalary || 0)} AED</td>
+                <td style={{ color: '#10b981' }}>+{fmtMoney(record.totalAllowances || 0)} AED</td>
+                <td style={{ color: '#f43f5e' }}>-{fmtMoney(record.totalDeductions || 0)} AED</td>
+                <td className="p-salary" style={{ fontWeight: '700' }}>{fmtMoney(record.netSalary || 0)} AED</td>
                 <td style={{ position: 'relative' }}>
                    <button className="action-dots-btn" onClick={(e) => toggleMenu(e, record._id)}>
                      &#8942;

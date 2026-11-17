@@ -17,6 +17,7 @@ import "../../style/myRequests.css";
 import DocumentApproveModal from "./DocumentApproveModal.jsx";
 import SalaryApproveModal from "./SalaryApproveModal.jsx";
 import LeaveApproveModal from "./LeaveApproveModal.jsx";
+import { round2 } from "../../utils/round.js";
 
 export default function AdminRequests() {
   const [requests, setRequests] = useState([]);
@@ -401,7 +402,7 @@ export default function AdminRequests() {
             <div className="request-type">{details.leaveType}</div>
             <div className="request-dates">
               {details.fromDate} to {details.toDate} (
-              {details.numberOfDays || "N/A"} days)
+              {details.numberOfDays ? round2(details.numberOfDays) : "N/A"} days)
             </div>
             {details.reason && (
               <div className="request-reason">Reason: {details.reason}</div>

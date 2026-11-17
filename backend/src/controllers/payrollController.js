@@ -25,6 +25,7 @@ import { displayEmployeeCode } from "../utils/employeeCode.js";
 import { resolveEffectiveSalaryAsOf } from "../utils/salaryUtils.js";
 import { applyDuePendingSalaryChanges } from "./employeeController.js";
 import { isEmployeeOnProbation } from "../utils/probationUtils.js";
+import { round2 } from "../utils/roundUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +38,6 @@ const toNumber = (value) => Number(String(value || 0).replace(/[^0-9.-]+/g, ""))
 // each line item was stored rounded, so e.g. a 980.00 manual deduction could show
 // up in the total as 979.997 once an auto item with a repeating-decimal amount
 // (anything derived from basicSalary / 30) had been added and later removed.
-const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 // Sum a payslip's line items the same way the payslip renders them: each amount
 // rounded to 2dp first, then the total rounded - so "Total" always equals the sum
 // of the printed rows.
@@ -677,7 +677,7 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
         sandwichLeaves: sandwichLeavesCount,
         paidLeaves: paidLeavesCount,
         halfPaidLeaves: halfPaidLeavesCount,
-        overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+        overtimeHours: round2(totalOvertimeHours),
         late: lateCount,
         lateTier1,
         lateTier2,
@@ -1097,7 +1097,7 @@ export const generatePayroll = async (req, res) => {
                 const halfPayDeduction = stats.halfPaidLeaves * (absenceDailySalary / 2);
                 deductionList.push({
                     name: "Sick Leave Half Pay Adjustment",
-                    amount: parseFloat(halfPayDeduction.toFixed(2)),
+                    amount: round2(halfPayDeduction),
                     type: "AUTO",
                     meta: `${stats.halfPaidLeaves} day(s) at half pay`
                 });
@@ -1120,7 +1120,7 @@ export const generatePayroll = async (req, res) => {
                 if (amount > 0) {
                     allowanceList.push({
                         name: fa.name,
-                        amount: amount,
+                        amount: round2(amount),
                         type: "AUTO",
                         category: fa.category,
                         meta: "Fixed Monthly Allowance"
@@ -1141,7 +1141,7 @@ export const generatePayroll = async (req, res) => {
                 if (amount > 0) {
                     allowanceList.push({
                         name: item.typeName,
-                        amount: amount,
+                        amount: round2(amount),
                         type: "AUTO",
                         category: "CUSTOM_ALLOWANCE",
                         meta: "Fixed Monthly Allowance"
@@ -1219,7 +1219,7 @@ export const generatePayroll = async (req, res) => {
                 if (penaltyAmount > 0) {
                     deductionList.push({
                         name: "Late Penalty (Shift Policy)",
-                        amount: parseFloat(penaltyAmount.toFixed(2)),
+                        amount: round2(penaltyAmount),
                         type: "AUTO",
                         meta: penaltyDescParts.join(', ')
                     });
@@ -1351,7 +1351,7 @@ export const generatePayroll = async (req, res) => {
                 if (amount > 0) {
                     const entry = {
                         name: rule.name,
-                        amount: parseFloat(amount.toFixed(2)),
+                        amount: round2(amount),
                         type: "AUTO",
                         meta: description
                     };
@@ -1405,16 +1405,16 @@ export const generatePayroll = async (req, res) => {
 
                     // Logic: Deduction Amount
                     let deductionAmount = 0;
-                    const alreadyPaid = req.payrollDeductions ? req.payrollDeductions.reduce((sum, d) => sum + d.amount, 0) : 0;
-                    const remaining = totalPayable - alreadyPaid;
+                    const alreadyPaid = round2(req.payrollDeductions ? req.payrollDeductions.reduce((sum, d) => sum + d.amount, 0) : 0);
+                    const remaining = round2(totalPayable - alreadyPaid);
 
                     if (remaining <= 0) continue; // Should be handled by isFullyPaid, but safety check
 
                     if (req.details?.subType === "salary_advance") {
                         // Assumption: One-time deduction unless period > 1 specified
                         if (period > 1) {
-                            const installment = totalPayable / period;
-                            deductionAmount = Math.min(installment, remaining);
+                            const installment = round2(totalPayable / period);
+                            deductionAmount = round2(Math.min(installment, remaining));
                         } else {
                             deductionAmount = remaining; // Full deduction
                         }
@@ -1422,8 +1422,8 @@ export const generatePayroll = async (req, res) => {
                         // Prefer the monthly repayment amount fixed at approval time; fall back to
                         // totalPayable/period division for loans approved before that field existed.
                         const monthlyRepaymentAmount = Number(req.details?.monthlyRepaymentAmount) || 0;
-                        const installment = monthlyRepaymentAmount > 0 ? monthlyRepaymentAmount : (totalPayable / period);
-                        deductionAmount = Math.min(installment, remaining);
+                        const installment = round2(monthlyRepaymentAmount > 0 ? monthlyRepaymentAmount : (totalPayable / period));
+                        deductionAmount = round2(Math.min(installment, remaining));
                     }
 
                     // Check if this specific month/year was already deducted (idempotency for re-runs)
@@ -1438,9 +1438,9 @@ export const generatePayroll = async (req, res) => {
                     if (deductionAmount > 0) {
                         deductionList.push({
                             name: req.details?.subType === 'loan' ? `Loan Repayment (${req.requestId})` : `Salary Advance (${req.requestId})`,
-                            amount: parseFloat(deductionAmount.toFixed(2)),
+                            amount: round2(deductionAmount),
                             type: "AUTO",
-                            meta: `Req ID: ${req.requestId} | Remaining: ${parseFloat((remaining - deductionAmount).toFixed(2))}`
+                            meta: `Req ID: ${req.requestId} | Remaining: ${round2((remaining - deductionAmount))}`
                         });
                         totalDeductions += deductionAmount;
                     }
@@ -1611,10 +1611,10 @@ export const getPayrollSummary = async (req, res) => {
             records: paginatedRecords,
             stats: {
                 count: totalRecords,
-                totalBasic,
-                totalAllowances,
-                totalDeductions,
-                totalNet
+                totalBasic: round2(totalBasic),
+                totalAllowances: round2(totalAllowances),
+                totalDeductions: round2(totalDeductions),
+                totalNet: round2(totalNet)
             },
             pagination: {
                 current: pageNum,
@@ -2044,10 +2044,10 @@ const buildWorkReportRows = (records) => {
     let serialNo = 1;
     return records.map((r) => {
         const emp = r.employee || {};
-        const fixed = r.basicSalary || 0;
-        const net = r.netSalary || 0;
+        const fixed = round2(r.basicSalary || 0);
+        const net = round2(r.netSalary || 0);
         // Variable = Net - Fixed (allowances - deductions + OT), as in the original export.
-        const variable = net - fixed;
+        const variable = round2(net - fixed);
         const lopDays = r.attendanceSummary ? (r.attendanceSummary.daysAbsent + r.attendanceSummary.unpaidLeaves) : 0;
         const paidLeaves = r.attendanceSummary ? (r.attendanceSummary.paidLeaves || 0) : 0;
         return [
@@ -2401,8 +2401,8 @@ const PAYROLL_SHEET_HEADERS = [
 const buildPayrollSheetRows = (validRecords) => validRecords.flatMap((r) => {
     const emp = r.employee || {};
     const basicSalary = round2(r.basicSalary || 0);
-    const allowance = Number(emp.allowance) || 0;
-    const hra = Number(emp.hra) || 0;
+    const allowance = round2(Number(emp.allowance) || 0);
+    const hra = round2(Number(emp.hra) || 0);
     const totalAllowances = round2(r.totalAllowances || 0);
     const salary = round2(basicSalary + totalAllowances);
     const additions = toSheetLines(r.allowances || [], { exclude: FIXED_ALLOWANCE_NAMES });
@@ -2631,7 +2631,7 @@ export const generateSIF = async (req, res) => {
                 const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
                 const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
 
-                sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${r.basicSalary},${r.totalAllowances},0\n`;
+                sifContent += `EDR,${empId},${agentId},${account},${startDate},${endDate},30,${amount},${round2(r.basicSalary).toFixed(2)},${round2(r.totalAllowances).toFixed(2)},0\n`;
             });
 
             return {
@@ -2708,8 +2708,8 @@ export const generateMOLReport = async (req, res) => {
                 "Employee ID": displayEmployeeCode(emp),
                 "Name": emp.name,
                 "Labor Card No.": emp.laborCardNumber || "N/A",
-                "Contract Basic": emp.basicSalary,
-                "Net Paid": payRecord ? payRecord.netSalary : 0,
+                "Contract Basic": round2(emp.basicSalary),
+                "Net Paid": payRecord ? round2(payRecord.netSalary) : 0,
                 "Payment Status": isPaid ? "PAID" : "UNPAID / PENDING",
                 "Month": `${month}/${year}`
             };
@@ -2755,10 +2755,10 @@ export const getPaymentHistory = async (req, res) => {
             "Employee ID": displayEmployeeCode(r.employee),
             "Name": r.employee?.name,
             "Department": r.employee?.department,
-            "Basic Salary": r.basicSalary,
-            "Allowances": r.totalAllowances,
-            "Deductions": r.totalDeductions,
-            "Net Paid": r.netSalary,
+            "Basic Salary": round2(r.basicSalary),
+            "Allowances": round2(r.totalAllowances),
+            "Deductions": round2(r.totalDeductions),
+            "Net Paid": round2(r.netSalary),
             "Processed Date": r.updatedAt ? r.updatedAt.toISOString().slice(0, 10) : "N/A"
         }));
 

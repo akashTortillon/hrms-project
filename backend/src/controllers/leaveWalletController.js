@@ -5,6 +5,7 @@ import Employee from "../models/employeeModel.js";
 import User from "../models/userModel.js";
 import Master from "../models/masterModel.js";
 import leaveWalletService from "../services/leaveWalletService.js";
+import { round2 } from "../utils/roundUtils.js";
 import { isEmployeeOnProbation, isLeaveTypeAllowedInProbation } from "../utils/probationUtils.js";
 
 // GET /api/leave-wallet/employee/:employeeId
@@ -93,13 +94,13 @@ export const createMigrationEntry = async (req, res) => {
       return res.status(400).json({ success: false, message: "employeeId, leaveTypeId, openingCredit and usedDays are required" });
     }
 
-    const credit = Number(openingCredit);
-    const used = Number(usedDays);
+    const credit = round2(Number(openingCredit));
+    const used = round2(Number(usedDays));
 
     const wallet = await leaveWalletService.getOrCreateWallet(employeeId, leaveTypeId);
-    wallet.creditedDays += credit;
-    wallet.usedDays += used;
-    wallet.balanceDays += (credit - used);
+    wallet.creditedDays = round2(wallet.creditedDays + credit);
+    wallet.usedDays = round2(wallet.usedDays + used);
+    wallet.balanceDays = round2(wallet.balanceDays + (credit - used));
     await wallet.save();
 
     await LeaveLedger.create({
@@ -283,11 +284,11 @@ export const bulkImportBalances = async (req, res) => {
 
         const leaveType = leaveTypeByName.get(col.toLowerCase());
         const wallet = await leaveWalletService.getOrCreateWallet(employee._id, leaveType._id);
-        const delta = targetBalance - wallet.balanceDays;
+        const delta = round2(targetBalance - wallet.balanceDays);
 
         if (delta !== 0) {
-          wallet.creditedDays += delta;
-          wallet.balanceDays = targetBalance;
+          wallet.creditedDays = round2(wallet.creditedDays + delta);
+          wallet.balanceDays = round2(targetBalance);
           await wallet.save();
 
           await LeaveLedger.create({
@@ -336,7 +337,7 @@ export const adjustBalance = async (req, res) => {
       return res.status(400).json({ success: false, message: "A reason is required for a manual balance adjustment" });
     }
 
-    const delta = Number(days);
+    const delta = round2(Number(days));
     const wallet = delta > 0
       ? await leaveWalletService.creditWallet({
         employeeId,

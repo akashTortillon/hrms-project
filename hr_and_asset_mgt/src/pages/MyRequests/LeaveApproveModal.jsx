@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import AppButton from "../../components/reusable/Button.jsx";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
+import { round2 } from "../../utils/round.js";
 
 export default function LeaveApproveModal({ show, request, onClose, onApprove }) {
     const [approvedDays, setApprovedDays] = useState(0);
@@ -8,7 +9,7 @@ export default function LeaveApproveModal({ show, request, onClose, onApprove })
 
     useEffect(() => {
         if (request && request.details) {
-            setApprovedDays(request.details.numberOfDays || 0);
+            setApprovedDays(round2(request.details.numberOfDays || 0));
         }
     }, [request]);
 
@@ -28,7 +29,7 @@ export default function LeaveApproveModal({ show, request, onClose, onApprove })
     if (!request) return null;
 
     const isHalfDay = Boolean(request.details?.isHalfDay);
-    const requestedDays = request.details?.numberOfDays || 0;
+    const requestedDays = round2(request.details?.numberOfDays || 0);
     const daysChanged = !isHalfDay && Number(approvedDays) !== Number(requestedDays);
 
     const modalFooter = (

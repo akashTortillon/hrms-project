@@ -1,6 +1,7 @@
 import StatCard from "../../components/reusable/StatCard";
 import "../../style/Payroll.css";
 import SvgIcon from "../../components/svgIcon/svgView";
+import { fmtMoney } from "../../utils/round.js";
 
 export default function PayrollSummaryCards({ stats, periodStart, periodEnd, setPeriodEnd, onExportWPS, hasAbsenceDeductionRule = true }) {
   // Rolling pay period, force-contiguous: "From" is always locked/auto-computed by
@@ -10,7 +11,7 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
   const cards = [
     {
       title: "Most recent payroll",
-      amount: `${(stats?.totalNet || 0).toLocaleString()} AED`,
+      amount: `${fmtMoney(stats?.totalNet || 0)} AED`,
       trend: stats?.lastMonthComparison || "+2.4%",
       trendTerm: "vs last month",
       icon: "users",
@@ -33,7 +34,7 @@ export default function PayrollSummaryCards({ stats, periodStart, periodEnd, set
     },
     {
         title: "Total Deductions",
-        amount: `${(stats?.totalDeductions || 0).toLocaleString()} AED`,
+        amount: `${fmtMoney(stats?.totalDeductions || 0)} AED`,
         trend: "For this month",
         icon: "dollar",
         color: "#f43f5e"

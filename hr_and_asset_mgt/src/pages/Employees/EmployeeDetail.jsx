@@ -77,6 +77,8 @@ import WorkflowTab from "../../components/employee/WorkflowTab";
 import WarningsTab from "../../components/employee/WarningsTab.jsx";
 import LeaveWalletTab from "../../components/employee/LeaveWalletTab.jsx";
 import ChangePasswordModal from "../Authentication/ChangePasswordModal.jsx";
+import { fmtMoney, round2 } from "../../utils/round.js";
+
 
 const resolveUploadedAssetUrl = (url) => {
     if (!url) return "";
@@ -289,7 +291,7 @@ export default function EmployeeDetail() {
     };
 
     const handleDeleteAllowance = async (allowance) => {
-        if (!window.confirm(`Remove the "${allowance.typeName}" allowance (${Number(allowance.amount).toLocaleString()} AED)?`)) {
+        if (!window.confirm(`Remove the "${allowance.typeName}" allowance (${fmtMoney(allowance.amount)} AED)?`)) {
             return;
         }
         try {
@@ -1632,7 +1634,7 @@ export default function EmployeeDetail() {
                                     <div key={label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ fontSize: '13px', color: '#6b7280' }}>{label}</span>
                                         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
-                                            {value ? `${Number(value).toLocaleString()} AED` : fallback}
+                                            {value ? `${fmtMoney(value)} AED` : fallback}
                                         </span>
                                     </div>
                                 ))}
@@ -1649,7 +1651,7 @@ export default function EmployeeDetail() {
                                         </span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                             <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
-                                                {Number(item.amount).toLocaleString()} AED
+                                                {fmtMoney(item.amount)} AED
                                             </span>
                                             {canEdit && (
                                                 <button
@@ -1668,7 +1670,7 @@ export default function EmployeeDetail() {
                                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '14px', fontWeight: '700', color: '#1d4ed8' }}>Total Salary</span>
                                     <span style={{ fontSize: '22px', fontWeight: '800', color: '#1e40af' }}>
-                                        {employee.totalSalary ? `${Number(employee.totalSalary).toLocaleString()} AED` : 'N/A'}
+                                        {employee.totalSalary ? `${fmtMoney(employee.totalSalary)} AED` : 'N/A'}
                                     </span>
                                 </div>
                             </div>
@@ -1729,7 +1731,7 @@ export default function EmployeeDetail() {
                                                 ESTIMATED GRATUITY
                                             </div>
                                             <div style={{ fontSize: '28px', fontWeight: '800', color: gratuity.gratuityAmount > 0 ? '#15803d' : '#92400e' }}>
-                                                {gratuity.gratuityAmount.toLocaleString()} AED
+                                                {fmtMoney(gratuity.gratuityAmount)} AED
                                             </div>
                                             {gratuity.gratuityNote && (
                                                 <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>
@@ -1784,7 +1786,7 @@ export default function EmployeeDetail() {
                                                             <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                                 {entry.changes.map((c) => (
                                                                     <span key={c.field} style={{ background: '#f3f4f6', borderRadius: '6px', padding: '2px 8px' }}>
-                                                                        {fieldLabels[c.field] || c.field}: {Number(c.from).toLocaleString()} → {Number(c.to).toLocaleString()} AED
+                                                                        {fieldLabels[c.field] || c.field}: {fmtMoney(c.from)} → {fmtMoney(c.to)} AED
                                                                     </span>
                                                                 ))}
                                                             </div>
@@ -1798,11 +1800,11 @@ export default function EmployeeDetail() {
                                                     <div style={{ textAlign: 'right' }}>
                                                         {Number(entry.incrementAmount) > 0 && (
                                                             <div style={{ fontSize: '13px', fontWeight: '700', color: '#15803d' }}>
-                                                                +{Number(entry.incrementAmount).toLocaleString()} AED
+                                                                +{fmtMoney(entry.incrementAmount)} AED
                                                             </div>
                                                         )}
                                                         <div style={{ fontSize: '13px', color: '#374151' }}>
-                                                            Basic: {Number(entry.basicSalary || 0).toLocaleString()} AED
+                                                            Basic: {fmtMoney(entry.basicSalary || 0)} AED
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2188,7 +2190,7 @@ export default function EmployeeDetail() {
                                     return (
                                         <div key={item.type} style={{ background: bg, borderRadius: '12px', padding: '20px', border: `1px solid ${bg}` }}>
                                             <div style={{ fontSize: '13px', color: tc, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>{item.type}</div>
-                                            <div style={{ fontSize: '32px', fontWeight: '800', color: tc }}>{item.totalDays}</div>
+                                            <div style={{ fontSize: '32px', fontWeight: '800', color: tc }}>{round2(item.totalDays)}</div>
                                             <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>days • {item.count} request{item.count !== 1 ? 's' : ''}</div>
                                         </div>
                                     );
@@ -2222,7 +2224,7 @@ export default function EmployeeDetail() {
                                                     <td style={{ padding: '10px 14px', fontWeight: '600', color: '#1f2937' }}>{rec.leaveType}{rec.isHalfDay ? ' (Half Day)' : ''}</td>
                                                     <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.fromDate ? new Date(rec.fromDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                                                     <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.toDate ? new Date(rec.toDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{rec.numberOfDays}</td>
+                                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{round2(rec.numberOfDays)}</td>
                                                     <td style={{ padding: '10px 14px', color: rec.isPaid ? '#15803d' : '#b91c1c', fontWeight: '600' }}>{rec.isPaid ? 'Paid' : 'Unpaid'}</td>
                                                     <td style={{ padding: '10px 14px', color: '#64748b' }}>{rec.reason || '—'}</td>
                                                 </tr>

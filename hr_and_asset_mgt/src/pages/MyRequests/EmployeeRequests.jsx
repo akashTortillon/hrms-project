@@ -8,6 +8,7 @@ import { getMyRequests, withdrawRequest, downloadDocument, getMedicalDocumentUrl
 import { toast } from "react-toastify";
 import SvgIcon from "../../components/svgIcon/svgView";
 import Card from "../../components/reusable/Card";
+import { round2 } from "../../utils/round.js";
 
 /* ----------------------------------
    ✅ STATUS TEXT HELPER (DYNAMIC)
@@ -128,7 +129,7 @@ export default function EmployeeRequests() {
         ["APPROVED", "COMPLETED"].includes(req.status)
       ) {
         const leaveType = req.details?.leaveType;
-        const days = Number(req.details?.numberOfDays || 0);
+        const days = round2(Number(req.details?.numberOfDays || 0));
 
         if (usage[leaveType] !== undefined) {
           usage[leaveType] += days;
@@ -219,7 +220,7 @@ export default function EmployeeRequests() {
   const getRequestDetails = (request) => {
     if (request.requestType === "LEAVE") {
       const days = request.details.numberOfDays
-        ? ` (${request.details.numberOfDays} days)`
+        ? ` (${round2(request.details.numberOfDays)} days)`
         : "";
       return `${request.details.fromDate} to ${request.details.toDate}${days}`;
     }

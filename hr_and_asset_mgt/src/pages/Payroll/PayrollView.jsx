@@ -11,6 +11,7 @@ import { getCompanies, getBranches } from "../../services/masterService.js";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import CustomButton from "../../components/reusable/Button.jsx";
 import { useRole } from "../../contexts/RoleContext";
+import { fmtMoney } from "../../utils/round.js";
 
 // Reusable filter section (Original logic + New Style)
 function PayrollFilters({ filters, setFilters, companies, branches }) {
@@ -98,10 +99,10 @@ function WorkReportTable({ records, reportType, loading, month, year, filters })
                   {record.employee?.[companyKey]}
                 </span>
               </td>
-              <td className="p-salary">{(record.basicSalary || 0).toLocaleString()} AED</td>
-              <td style={{ color: '#10b981' }}>+{(record.totalAllowances || 0).toLocaleString()} AED</td>
-              <td style={{ color: '#f43f5e' }}>-{(record.totalDeductions || 0).toLocaleString()} AED</td>
-              <td className="p-salary" style={{ fontWeight: '700' }}>{(record.netSalary || 0).toLocaleString()} AED</td>
+              <td className="p-salary">{fmtMoney(record.basicSalary || 0)} AED</td>
+              <td style={{ color: '#10b981' }}>+{fmtMoney(record.totalAllowances || 0)} AED</td>
+              <td style={{ color: '#f43f5e' }}>-{fmtMoney(record.totalDeductions || 0)} AED</td>
+              <td className="p-salary" style={{ fontWeight: '700' }}>{fmtMoney(record.netSalary || 0)} AED</td>
             </tr>
           ))}
         </tbody>

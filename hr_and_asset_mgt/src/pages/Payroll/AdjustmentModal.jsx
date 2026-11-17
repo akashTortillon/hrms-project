@@ -6,6 +6,7 @@ import { payrollService } from "../../services/payrollService";
 import SvgIcon from "../../components/svgIcon/svgView";
 import DeleteConfirmationModal from "../../components/reusable/DeleteConfirmationModal";
 import "../../style/AdjustmentModal.css";
+import { round2 } from "../../utils/round.js";
 
 export default function AdjustmentModal({ show, onClose, employees = [], onSuccess, initialRecord, isFinalized }) {
     const [formData, setFormData] = useState({
@@ -207,7 +208,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                             {selectedRecord.allowances.map(item => (
                                                 <li key={item._id} className="adjustment-item">
                                                     <span>
-                                                        {item.name} ({item.amount})
+                                                        {item.name} ({round2(item.amount)})
                                                         {describeItemMeta(item) && (
                                                             <div style={{ fontSize: '11px', color: '#9ca3af' }}>{describeItemMeta(item)}</div>
                                                         )}
@@ -235,7 +236,7 @@ export default function AdjustmentModal({ show, onClose, employees = [], onSucce
                                             {selectedRecord.deductions.map(item => (
                                                 <li key={item._id} className="adjustment-item">
                                                     <span>
-                                                        {item.name} ({item.amount})
+                                                        {item.name} ({round2(item.amount)})
                                                         {describeItemMeta(item) && (
                                                             <div style={{ fontSize: '11px', color: '#9ca3af' }}>{describeItemMeta(item)}</div>
                                                         )}

@@ -6,6 +6,7 @@ import { createRequest, getLeavePreview } from "../../services/requestService.js
 import { leaveTypeService } from "../../services/masterService.js"; // ✅ Import leaveTypeService
 import { getMyWallets } from "../../services/leaveWalletService.js";
 import { toast } from "react-toastify";
+import { round2 } from "../../utils/round.js";
 
 export default function SubmitRequestModal({ onClose, onSuccess }) {
   const [activeType, setActiveType] = useState("leave");
@@ -313,7 +314,7 @@ export default function SubmitRequestModal({ onClose, onSuccess }) {
                     margin: "6px 0 0 0", fontSize: "12px",
                     color: selectedBalance.balanceDays < 0 ? "#dc2626" : "#6b7280"
                   }}>
-                    Available balance: <strong>{selectedBalance.balanceDays} day(s)</strong>
+                    Available balance: <strong>{round2(selectedBalance.balanceDays)} day(s)</strong>
                   </p>
                 )}
               </div>
