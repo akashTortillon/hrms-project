@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { payrollService } from "../../services/payrollService";
 import { fmtMoney } from "../../utils/round.js";
 
-export default function PayrollEmployeesTable({ employees = [], loading, onRefresh, isFinalized, onExport, activeTab, setActiveTab }) {
+export default function PayrollEmployeesTable({ employees = [], loading, onRefresh, isFinalized, onExport, activeTab, setActiveTab, totals = null }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -123,6 +123,19 @@ export default function PayrollEmployeesTable({ employees = [], loading, onRefre
               </tr>
             ))}
           </tbody>
+          {/* Grand Total over the WHOLE filtered set (server stats), not just this page */}
+          {!loading && employees.length > 0 && totals && (
+            <tfoot>
+              <tr className="payroll-grand-total-row" style={{ fontWeight: 700, background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                <td>GRAND TOTAL{totals.count ? ` (${totals.count} employee${totals.count === 1 ? '' : 's'})` : ''}</td>
+                <td className="p-salary">{fmtMoney(totals.totalBasic || 0)} AED</td>
+                <td style={{ color: '#10b981' }}>+{fmtMoney(totals.totalAllowances || 0)} AED</td>
+                <td style={{ color: '#f43f5e' }}>-{fmtMoney(totals.totalDeductions || 0)} AED</td>
+                <td className="p-salary">{fmtMoney(totals.totalNet || 0)} AED</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

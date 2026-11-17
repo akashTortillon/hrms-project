@@ -11,7 +11,7 @@ import { getCompanies, getBranches } from "../../services/masterService.js";
 import CustomModal from "../../components/reusable/CustomModal.jsx";
 import CustomButton from "../../components/reusable/Button.jsx";
 import { useRole } from "../../contexts/RoleContext";
-import { fmtMoney } from "../../utils/round.js";
+import { fmtMoney, round2 } from "../../utils/round.js";
 
 // Reusable filter section (Original logic + New Style)
 function PayrollFilters({ filters, setFilters, companies, branches }) {
@@ -106,6 +106,17 @@ function WorkReportTable({ records, reportType, loading, month, year, filters })
             </tr>
           ))}
         </tbody>
+        {!loading && filtered.length > 0 && (
+          <tfoot>
+            <tr style={{ fontWeight: 700, background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+              <td colSpan="2">GRAND TOTAL ({filtered.length} employee{filtered.length === 1 ? '' : 's'})</td>
+              <td className="p-salary">{fmtMoney(filtered.reduce((s, r) => s + round2(r.basicSalary || 0), 0))} AED</td>
+              <td style={{ color: '#10b981' }}>+{fmtMoney(filtered.reduce((s, r) => s + round2(r.totalAllowances || 0), 0))} AED</td>
+              <td style={{ color: '#f43f5e' }}>-{fmtMoney(filtered.reduce((s, r) => s + round2(r.totalDeductions || 0), 0))} AED</td>
+              <td className="p-salary">{fmtMoney(filtered.reduce((s, r) => s + round2(r.netSalary || 0), 0))} AED</td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
@@ -660,6 +671,7 @@ function Payroll() {
                     onRefresh={fetchPayroll}
                     isFinalized={isFinalized}
                     companies={companies}
+                    totals={stats}
                 />
 
                 <PayrollPagination

@@ -2074,7 +2074,30 @@ const WORK_REPORT_HEADERS = [
 
 // Generic landscape-A4 table PDF: optional group-header row, wrapped cells, header row
 // repeated on every page, page numbers. `types` per column: "text" | "int" | "money".
-const renderReportPdf = ({ titleLines, groups = null, headers, rows, weights, types, fontSize = 8, footerLabels = null }) => new Promise((resolve, reject) => {
+// Grand Total row for a tabular report: `label` in labelCol and the rounded column sums in
+// sumCols (every other cell blank). Each value is rounded before it is added, so the total
+// always equals the sum of the printed (2dp) rows.
+const buildGrandTotalRow = (rows, sumCols, { labelCol = 1, label = "GRAND TOTAL", width } = {}) => {
+    const w = width || (rows[0] ? rows[0].length : 0);
+    const row = Array(w).fill("");
+    row[labelCol] = label;
+    sumCols.forEach((c) => {
+        row[c] = round2(rows.reduce((sum, r) => sum + round2(Number(r[c]) || 0), 0));
+    });
+    return row;
+};
+
+// Show money cells with 2 decimals in Excel (number format only - the values are already rounded).
+const applyMoneyFormat = (worksheet, cols, fromRow, toRow) => {
+    cols.forEach((c) => {
+        for (let r = fromRow; r <= toRow; r++) {
+            const cell = worksheet[XLSX.utils.encode_cell({ r, c })];
+            if (cell && cell.t === "n") cell.z = "#,##0.00";
+        }
+    });
+};
+
+const renderReportPdf = ({ titleLines, groups = null, headers, rows, weights, types, fontSize = 8, footerLabels = null, totalRow = null }) => new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margins: { top: 26, bottom: 6, left: 24, right: 24 }, bufferPages: true });
     const chunks = [];
     doc.on("data", (c) => chunks.push(c));
@@ -2144,6 +2167,25 @@ const renderReportPdf = ({ titleLines, groups = null, headers, rows, weights, ty
         });
         y += rh;
     });
+
+    // Grand Total row, drawn bold on the beige header colour. Same page-break rule as the data
+    // rows so it is never stranded without its header on a new page.
+    if (totalRow) {
+        doc.font("Helvetica-Bold").fontSize(fontSize);
+        const cells = totalRow.map((v, i) => fmt(v, types[i]));
+        const rh = Math.max(16, Math.max(...cells.map((c, i) => doc.heightOfString(c, { width: colW[i] - 2 * pad }))) + 7);
+        if (y + rh > bottomLimit) {
+            doc.addPage();
+            y = 26;
+            drawHeader();
+            doc.font("Helvetica-Bold").fontSize(fontSize);
+        }
+        cells.forEach((c, i) => {
+            doc.rect(colX[i], y, colW[i], rh).lineWidth(0.5).fillAndStroke(BEIGE, GRID);
+            doc.fillColor(GOLD_DARK).text(c, colX[i] + pad, y + 3.5, { width: colW[i] - 2 * pad, align: alignFor(i) });
+        });
+        y += rh;
+    }
 
     if (footerLabels) {
         if (y + 60 > bottomLimit) { doc.addPage(); y = 26; }
@@ -2267,6 +2309,8 @@ export const exportPayroll = async (req, res) => {
 
         // Data Rows (shared with the PDF export below)
         const dataRows = buildWorkReportRows(records);
+        // cols: 6 LOP days, 7 paid leaves, 8 fixed, 9 variable, 10 total
+        const grandTotalRow = buildGrandTotalRow(dataRows, [6, 7, 8, 9, 10], { labelCol: 1, width: 11 });
 
         if (isPdfRequest(req)) {
             const pdf = await renderReportPdf({
@@ -2278,6 +2322,7 @@ export const exportPayroll = async (req, res) => {
                 groups: [{ label: "Employee's Net Salary", from: 8, to: 10 }],
                 headers: WORK_REPORT_HEADERS,
                 rows: dataRows,
+                totalRow: grandTotalRow,
                 weights: [4, 20, 13, 14, 11, 21, 6, 6, 8, 8, 9],
                 types: ["int", "text", "text", "text", "text", "text", "int", "int", "money", "money", "money"],
                 fontSize: 7.5
@@ -2293,19 +2338,21 @@ export const exportPayroll = async (req, res) => {
             return sendReportPdf(req, res, pdf, `${reportPrefix.replace(/\s+/g, "_")}_${month}_${year}.pdf`);
         }
         dataRows.forEach((row) => aoa.push(row));
+        aoa.push(grandTotalRow);
 
         // 2. Create Sheet
         const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        applyMoneyFormat(worksheet, [8, 9, 10], 6, aoa.length - 1);
 
         // 3. Define Merges
         // s: start, e: end. r: row, c: col (0-indexed)
         const merges = [
-            // Header: Company Name (Row 0, Cols A-J)
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-            // Header: MOL ID (Row 1, Cols A-J)
-            { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
-            // Header: Report Title (Row 2, Cols A-J)
-            { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
+            // Header: Company Name (Row 0, Cols A-K)
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+            // Header: MOL ID (Row 1, Cols A-K)
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
+            // Header: Report Title (Row 2, Cols A-K)
+            { s: { r: 2, c: 0 }, e: { r: 2, c: 10 } },
 
             // Table Headers (Row 4 & 5)
             // Sl.No (A5:A6) -> r4,c0 to r5,c0
@@ -2322,8 +2369,10 @@ export const exportPayroll = async (req, res) => {
             { s: { r: 4, c: 5 }, e: { r: 5, c: 5 } },
             // NO OF DAYS
             { s: { r: 4, c: 6 }, e: { r: 5, c: 6 } },
-            // Employee's Net Salary (H5:J5) -> Horizontal Merge
-            { s: { r: 4, c: 7 }, e: { r: 4, c: 9 } }
+            // PAID LEAVES (H5:H6)
+            { s: { r: 4, c: 7 }, e: { r: 5, c: 7 } },
+            // Employee's Net Salary (I5:K5) -> Horizontal Merge over Fixed / Variable / Total
+            { s: { r: 4, c: 8 }, e: { r: 4, c: 10 } }
         ];
 
         worksheet['!merges'] = merges;
@@ -2337,9 +2386,10 @@ export const exportPayroll = async (req, res) => {
             { wch: 10 }, // Bank Name
             { wch: 25 }, // FAB/IBAN
             { wch: 10 }, // No Of Days
-            { wch: 10 }, // Fixed
-            { wch: 10 }, // Variable
-            { wch: 10 }  // Total
+            { wch: 10 }, // Paid Leaves
+            { wch: 12 }, // Fixed
+            { wch: 12 }, // Variable
+            { wch: 12 }  // Total
         ];
 
         // 5. Build Workbook
@@ -2460,6 +2510,8 @@ export const exportPayrollSheet = async (req, res) => {
         aoa.push(PAYROLL_SHEET_HEADERS);
 
         const sheetRows = buildPayrollSheetRows(validRecords);
+        // cols: 6 basic, 7 allowance, 8 hra, 9 salary, 11 additions amount, 14 deductions amount, 16 net
+        const sheetGrandTotal = buildGrandTotalRow(sheetRows, [6, 7, 8, 9, 11, 14, 16], { labelCol: 1, width: 17 });
 
         if (isPdfRequest(req)) {
             const monthNames = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
@@ -2477,6 +2529,7 @@ export const exportPayrollSheet = async (req, res) => {
                 ],
                 headers: PAYROLL_SHEET_HEADERS,
                 rows: sheetRows,
+                totalRow: sheetGrandTotal,
                 weights: [8.5, 11.5, 11.5, 19, 8, 7.5, 8, 9.5, 7, 8.5, 6, 7.5, 9.5, 8.5, 8.5, 10, 8.5],
                 types: ["text", "text", "text", "text", "text", "text", "money", "money", "money", "money", "text", "money", "text", "text", "money", "text", "money"],
                 fontSize: 6.5,
@@ -2493,11 +2546,13 @@ export const exportPayrollSheet = async (req, res) => {
             return sendReportPdf(req, res, pdf, `Payroll_Sheet_${month}_${year}.pdf`);
         }
         sheetRows.forEach((row) => aoa.push(row));
+        aoa.push(sheetGrandTotal);
 
         aoa.push([]);
         aoa.push(["PAYROLL VERIFICATION", "", "", "", "", "", "", "", "HR VERIFICATION"]);
 
         const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        applyMoneyFormat(worksheet, [6, 7, 8, 9, 11, 14, 16], 3, 3 + sheetRows.length);
         worksheet['!merges'] = [
             { s: { r: 0, c: 0 }, e: { r: 0, c: 16 } },
             { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
@@ -2719,7 +2774,20 @@ export const generateMOLReport = async (req, res) => {
         // flat company-wide list - sort so each sponsor's employees sit together.
         reportData.sort((a, b) => String(a["Visa Company"]).localeCompare(String(b["Visa Company"])) || String(a.Name).localeCompare(String(b.Name)));
 
+        // Grand Total row (rounded sums of the printed 2dp values)
+        reportData.push({
+            "Visa Company": "GRAND TOTAL",
+            "Employee ID": "",
+            "Name": `${reportData.length} employee(s)`,
+            "Labor Card No.": "",
+            "Contract Basic": round2(reportData.reduce((sum, r) => sum + round2(r["Contract Basic"]), 0)),
+            "Net Paid": round2(reportData.reduce((sum, r) => sum + round2(r["Net Paid"]), 0)),
+            "Payment Status": "",
+            "Month": ""
+        });
+
         const worksheet = XLSX.utils.json_to_sheet(reportData);
+        applyMoneyFormat(worksheet, [4, 5], 1, reportData.length);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "MOL_Report");
 
@@ -2768,9 +2836,25 @@ export const getPaymentHistory = async (req, res) => {
         const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         const workbook = XLSX.utils.book_new();
 
+        // Grand Total row for a set of history rows (rounded sums of the printed 2dp values).
+        const historyTotalRow = (rows, label) => ({
+            "Month": "",
+            "Year": "",
+            "Employee ID": "",
+            "Name": label,
+            "Department": "",
+            "Basic Salary": round2(rows.reduce((sum, r) => sum + round2(r["Basic Salary"]), 0)),
+            "Allowances": round2(rows.reduce((sum, r) => sum + round2(r["Allowances"]), 0)),
+            "Deductions": round2(rows.reduce((sum, r) => sum + round2(r["Deductions"]), 0)),
+            "Net Paid": round2(rows.reduce((sum, r) => sum + round2(r["Net Paid"]), 0)),
+            "Processed Date": ""
+        });
+
         if (month) {
-            // Single month requested - one flat sheet, unchanged from before.
-            const worksheet = XLSX.utils.json_to_sheet(historyData);
+            // Single month requested - one flat sheet with a Grand Total row at the end.
+            const rowsWithTotal = [...historyData, historyTotalRow(historyData, "GRAND TOTAL")];
+            const worksheet = XLSX.utils.json_to_sheet(rowsWithTotal);
+            applyMoneyFormat(worksheet, [5, 6, 7, 8], 1, rowsWithTotal.length);
             XLSX.utils.book_append_sheet(workbook, worksheet, `History_${month}_${year}`);
         } else {
             // "All months" - was one flat sheet mixing every month together with no
@@ -2784,11 +2868,17 @@ export const getPaymentHistory = async (req, res) => {
             for (const m of Object.keys(byMonth).map(Number).sort((a, b) => a - b)) {
                 const title = `PAYMENT HISTORY - ${MONTH_NAMES[m - 1]?.toUpperCase() || m} ${year}`;
                 const worksheet = XLSX.utils.aoa_to_sheet([[title], []]);
-                XLSX.utils.sheet_add_json(worksheet, byMonth[m], { origin: -1 });
+                const monthRows = [...byMonth[m], historyTotalRow(byMonth[m], "GRAND TOTAL")];
+                XLSX.utils.sheet_add_json(worksheet, monthRows, { origin: -1 });
+                applyMoneyFormat(worksheet, [5, 6, 7, 8], 3, 3 + monthRows.length);
                 // Sheet names are capped at 31 chars and can't repeat - month names are
                 // always short/unique within one year's workbook.
                 XLSX.utils.book_append_sheet(workbook, worksheet, MONTH_NAMES[m - 1] || `Month ${m}`);
             }
+            // Year-wide Grand Total across every month in this export.
+            const yearSheet = XLSX.utils.json_to_sheet([historyTotalRow(historyData, `GRAND TOTAL ${year} (all months)`)]);
+            applyMoneyFormat(yearSheet, [5, 6, 7, 8], 1, 1);
+            XLSX.utils.book_append_sheet(workbook, yearSheet, "Grand Total");
         }
 
         const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
