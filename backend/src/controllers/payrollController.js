@@ -523,6 +523,19 @@ const getAttendanceStats = async (employee, periodStart, periodEnd, preFetchedSe
     const isAbsentOrLOP = (s) => s === 'ABSENT' || s === 'UNPAID_LEAVE' || s === 'SANDWICH_LEAVE';
     const isGap = (s) => s === 'WEEKEND' || s === 'HOLIDAY';
 
+    // An employee with NO worked day and NO paid leave in the whole cycle earned nothing, so
+    // the weekly offs/holidays in it are not paid either (they used to stay paid because this
+    // rule was skipped when there was no worked day - leaving e.g. 4 paid Sundays on a fully
+    // absent employee, and the "Full month" deduction below never firing). Follows the same
+    // System Settings > Sandwich Rule switch as the normal sandwich check.
+    if (!hasAnyWorkedOrApprovedDay
+        && settings?.sandwichRuleEnabled !== false
+        && dayStatuses.some((item) => isAbsentOrLOP(item.status))) {
+        dayStatuses.forEach((item) => {
+            if (isGap(item.status)) item.status = 'SANDWICH_LEAVE';
+        });
+    }
+
     if (hasAnyWorkedOrApprovedDay && settings?.sandwichRuleEnabled !== false) {
         console.log(`[DEBUG] Employee ${employeeId} (${startStr} to ${endStr}) - Starting Sandwich Check (With Boundary Scan)`);
 
@@ -3197,7 +3210,8 @@ const drawKayzanPayslip = (doc, d) => {
     const attCols = [
         ["Total Days", att.totalDays || 30, INK],
         ["Present", att.daysPresent || 0, INK],
-        ["Absent", att.daysAbsent || 0, RED]
+        // Absent + unpaid (incl. unpaid weekly offs/holidays) so Present + Absent = Total Days
+        ["Absent", (att.daysAbsent || 0) + (att.unpaidLeaves || 0), RED]
     ];
     const attW = W / 3;
     attCols.forEach(([label, value, color], i) => {
